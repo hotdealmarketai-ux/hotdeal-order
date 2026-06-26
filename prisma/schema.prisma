@@ -1,0 +1,79 @@
+// 핫딜마켓 발주 플랫폼 — Prisma schema
+// roles/categories/status 는 문자열 + 앱 레벨 상수(src/lib/constants.ts)로 관리.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique // 아이디
+  passwordHash String
+  // role: APPLICANT | MERCHANT_HOTDEAL | MERCHANT_SEOBU | VENDOR_SEOBU | VENDOR_JANGHEUNG | VENDOR_CHAEUMCHAE | ADMIN_SAEROP
+  role         String   @default("APPLICANT")
+  // status: PENDING | APPROVED | REJECTED
+  status       String   @default("PENDING")
+
+  storeName    String // 상호명
+  phone        String // 연락처
+  address      String // 업장 소재지
+  businessCert String? // 사업자등록증 파일 경로/URL
+
+  orders       Order[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+
+  category    String // FRUIT | VEG | TOOL | TOFU
+  vendorRole  String // 목적지 업자 role (조회 편의를 위한 비정규화)
+  pickupTime  String? // 서부일광 타 소매업자 전용
+
+  status      String      @default("RECEIVED") // RECEIVED | DONE
+  rawText     String      @default("") // 점주가 입력한 원본(직렬화)
+  aiSummary   String      @default("") // AI 사무적 요약(전체 노트)
+  aiProcessed Boolean     @default(false)
+  aiEngine    String      @default("none") // claude | rule | none
+
+  items       OrderItem[]
+  createdAt   DateTime    @default(now())
+
+  @@index([vendorRole, createdAt])
+  @@index([userId, createdAt])
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sortOrder Int    @default(0)
+
+  // 점주 원본
+  rawName String @default("") // 품목
+  rawQty  String @default("") // 수량
+  rawNote String @default("") // 부연설명(등급/다이 등 요청)
+
+  // AI 정리본 (사무적/정갈하게)
+  name String @default("") // 정리된 품목
+  qty  String @default("") // 정리된 수량
+  note String @default("") // 정리된 부연설명
+}
+
+// 재고현황 — 새롭(본사)이 작성, 핫딜마켓 가맹점만 열람
+model InventoryItem {
+  id        String   @id @default(cuid())
+  name      String
+  status    String   @default("") // 상태/수량 텍스트
+  memo      String   @default("")
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+}
