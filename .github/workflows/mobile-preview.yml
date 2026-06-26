@@ -1,0 +1,91 @@
+name: mobile-preview
+
+# 모바일에서 앱을 확인하기 위한 임시 공개 미리보기.
+# GitHub Actions 러너(오픈 인터넷)에서 앱+Postgres를 띄우고
+# cloudflared 임시 터널로 공개 URL을 만든 뒤 로그에 출력한다.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/virtual-address-info-e9blls
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hotdeal_order
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/hotdeal_order?schema=public
+      AUTH_TRUST_HOST: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Generate auth secret
+        run: echo "AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma migrate + generate + seed
+        run: |
+          npx prisma migrate deploy
+          npx prisma generate
+          npx tsx prisma/seed.ts
+
+      - name: Build
+        run: npm run build
+
+      - name: Start app
+        run: |
+          nohup npm run start > app.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:4300/login >/dev/null 2>&1 && { echo "app up"; break; }
+            sleep 2
+          done
+          curl -sf -o /dev/null -w "health: %{http_code}\n" http://localhost:4300/login || (cat app.log; exit 1)
+
+      - name: Open public tunnel
+        run: |
+          curl -sSL -o cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+          chmod +x cloudflared
+          nohup ./cloudflared tunnel --url http://localhost:4300 --no-autoupdate > cf.log 2>&1 &
+          URL=""
+          for i in $(seq 1 40); do
+            URL=$(grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" cf.log | head -1)
+            [ -n "$URL" ] && break
+            sleep 2
+          done
+          if [ -z "$URL" ]; then echo "tunnel failed"; cat cf.log; exit 1; fi
+          {
+            echo "## 📱 모바일 미리보기 URL"
+            echo ""
+            echo "**$URL**"
+            echo ""
+            echo "테스트 계정 (비밀번호 모두 \`test1234\`): hotdeal / saerop / seobu / jangheung / chaeumchae / sample"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "======================================================"
+          echo "MOBILE_PREVIEW_URL=$URL"
+          echo "======================================================"
+          # 잡을 살려두고 URL을 주기적으로 다시 출력(로그 tail에서 쉽게 찾도록)
+          while true; do
+            echo "MOBILE_PREVIEW_URL=$URL  (login: hotdeal / test1234)"
+            sleep 30
+          done
