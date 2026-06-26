@@ -16,21 +16,27 @@ export type AppUser = {
 };
 
 export async function getCurrentUser(): Promise<AppUser | null> {
-  const session = await auth();
-  const uid = session?.user?.id;
-  if (!uid) return null;
-  const u = await prisma.user.findUnique({ where: { id: uid } });
-  if (!u) return null;
-  return {
-    id: u.id,
-    username: u.username,
-    role: u.role as Role,
-    status: u.status as Status,
-    storeName: u.storeName,
-    phone: u.phone,
-    address: u.address,
-    businessCert: u.businessCert,
-  };
+  try {
+    const session = await auth();
+    const uid = session?.user?.id;
+    if (!uid) return null;
+    const u = await prisma.user.findUnique({ where: { id: uid } });
+    if (!u) return null;
+    return {
+      id: u.id,
+      username: u.username,
+      role: u.role as Role,
+      status: u.status as Status,
+      storeName: u.storeName,
+      phone: u.phone,
+      address: u.address,
+      businessCert: u.businessCert,
+    };
+  } catch (err) {
+    // DB 미연결/장애 시 앱이 죽지 않고 비로그인으로 처리(로그인 화면 표시)
+    console.error("[session] getCurrentUser failed (DB 연결 확인):", err);
+    return null;
+  }
 }
 
 /** 로그인 필수 — 아니면 /login 으로 */
