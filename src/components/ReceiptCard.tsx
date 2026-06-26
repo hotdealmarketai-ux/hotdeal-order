@@ -110,7 +110,7 @@ export function ReceiptCard(props: {
             className="btn btn--ghost"
             onClick={() => window.print()}
           >
-            🖨 장끼 출력
+            장끼 출력
           </button>
           <p className="hint center">도트 프린터 연동은 추후 활성화됩니다.</p>
         </div>

@@ -25,7 +25,6 @@ export default async function ApprovalsPage() {
 
         {pending.length === 0 ? (
           <div className="empty">
-            <div className="empty__ic">✅</div>
             <p>대기 중인 가입 신청이 없어요.</p>
           </div>
         ) : (

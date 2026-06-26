@@ -7,11 +7,11 @@ import { canViewInventory, type Role } from "@/lib/constants";
 export function BottomNav({ role }: { role: Role }) {
   const path = usePathname();
   const items = [
-    { href: "/order", label: "발주", ic: "📝" },
+    { href: "/order", label: "발주" },
     ...(canViewInventory(role)
-      ? [{ href: "/inventory", label: "재고현황", ic: "📦" }]
+      ? [{ href: "/inventory", label: "재고현황" }]
       : []),
-    { href: "/mypage", label: "마이", ic: "👤" },
+    { href: "/mypage", label: "마이" },
   ];
 
   return (
@@ -24,9 +24,6 @@ export function BottomNav({ role }: { role: Role }) {
             href={it.href}
             className={`bottomnav__item ${active ? "is-active" : ""}`}
           >
-            <span className="ic" aria-hidden>
-              {it.ic}
-            </span>
             <span>{it.label}</span>
           </Link>
         );

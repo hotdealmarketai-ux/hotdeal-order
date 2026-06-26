@@ -51,7 +51,6 @@ export default async function AdminOrders(props: {
 
         {orders.length === 0 ? (
           <div className="empty">
-            <div className="empty__ic">📋</div>
             <p>발주가 없어요.</p>
           </div>
         ) : (
@@ -63,8 +62,7 @@ export default async function AdminOrders(props: {
                   <div className="row__main">
                     <div className="row__title">{o.user.storeName}</div>
                     <div className="row__sub">
-                      {formatKDateTime(o.createdAt)} · {cat.icon}
-                      {cat.label} → {cat.vendorLabel} · {o._count.items}건
+                      {formatKDateTime(o.createdAt)} · {cat.label} → {cat.vendorLabel} · {o._count.items}건
                     </div>
                   </div>
                   <span className="row__chev">›</span>

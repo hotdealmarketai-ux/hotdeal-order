@@ -81,7 +81,6 @@ export function OrderForm({
               className={`cattab ${active === c ? "is-active" : ""}`}
               onClick={() => setActive(c)}
             >
-              <span aria-hidden>{CATEGORIES[c].icon}</span>
               {CATEGORIES[c].label}
             </button>
           ))}

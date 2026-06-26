@@ -44,7 +44,6 @@ export default async function AdminInventory() {
         <div className="section-label">등록된 재고</div>
         {items.length === 0 ? (
           <div className="empty">
-            <div className="empty__ic">📦</div>
             <p>등록된 재고가 없어요.</p>
           </div>
         ) : (

@@ -21,7 +21,6 @@ export interface CategoryDef {
   label: string; // 화면 표기
   vendorLabel: string; // 받는 업자 이름
   vendorRole: Role; // 목적지 업자 role
-  icon: string; // 이모지(어르신 직관성)
   desc: string;
 }
 
@@ -31,7 +30,6 @@ export const CATEGORIES: Record<Category, CategoryDef> = {
     label: "과일",
     vendorLabel: "서부일광",
     vendorRole: "VENDOR_SEOBU",
-    icon: "🍎",
     desc: "청과 (서부일광)",
   },
   VEG: {
@@ -39,7 +37,6 @@ export const CATEGORIES: Record<Category, CategoryDef> = {
     label: "야채",
     vendorLabel: "장흥",
     vendorRole: "VENDOR_JANGHEUNG",
-    icon: "🥬",
     desc: "채소 (장흥)",
   },
   TOOL: {
@@ -47,7 +44,6 @@ export const CATEGORIES: Record<Category, CategoryDef> = {
     label: "공구",
     vendorLabel: "새롭",
     vendorRole: "ADMIN_SAEROP",
-    icon: "🛒",
     desc: "공동구매 (새롭 본사)",
   },
   TOFU: {
@@ -55,7 +51,6 @@ export const CATEGORIES: Record<Category, CategoryDef> = {
     label: "두부·콩나물",
     vendorLabel: "채움채",
     vendorRole: "VENDOR_CHAEUMCHAE",
-    icon: "🫛",
     desc: "두부·콩나물·순두부·숙주 (채움채)",
   },
 };

@@ -29,7 +29,6 @@ export default async function InventoryPage() {
 
         {items.length === 0 ? (
           <div className="empty">
-            <div className="empty__ic">📦</div>
             <p>아직 등록된 재고가 없어요.</p>
           </div>
         ) : (

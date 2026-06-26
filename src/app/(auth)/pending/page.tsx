@@ -14,8 +14,11 @@ export default async function PendingPage() {
     <div className="app">
       <div className="page" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <div className="center" style={{ padding: "20px 0 28px" }}>
-          <div style={{ fontSize: 56 }}>{rejected ? "🚫" : "⏳"}</div>
-          <h1 className="h1" style={{ marginTop: 12 }}>
+          <div
+            className={`statusring ${rejected ? "statusring--rejected" : ""}`}
+            aria-hidden
+          />
+          <h1 className="h1" style={{ marginTop: 20 }}>
             {rejected ? "가입이 반려되었어요" : "승인 대기 중이에요"}
           </h1>
           <p className="lead" style={{ marginTop: 8 }}>

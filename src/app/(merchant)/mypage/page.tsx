@@ -57,7 +57,6 @@ export default async function MyPage(props: {
         <div className="section-label">지난 발주</div>
         {orders.length === 0 ? (
           <div className="empty">
-            <div className="empty__ic">🧾</div>
             <p>아직 발주 내역이 없어요.</p>
           </div>
         ) : (
@@ -68,7 +67,7 @@ export default async function MyPage(props: {
                 <Link href={`/order/${o.id}`} className="row" key={o.id}>
                   <div className="row__main">
                     <div className="row__title">
-                      {cat.icon} {cat.label} · {o._count.items}건
+                      {cat.label} · {o._count.items}건
                     </div>
                     <div className="row__sub">
                       {formatKDate(o.createdAt)} · {cat.vendorLabel}

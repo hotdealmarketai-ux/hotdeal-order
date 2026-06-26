@@ -10,7 +10,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   // 어르신 확대 가능하도록 maximumScale 제한하지 않음
-  themeColor: "#ffffff",
+  themeColor: "#f4f2ee",
 };
 
 export default function RootLayout({

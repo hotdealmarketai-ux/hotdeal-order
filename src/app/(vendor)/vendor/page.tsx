@@ -27,7 +27,6 @@ export default async function VendorPage() {
 
         {orders.length === 0 ? (
           <div className="empty">
-            <div className="empty__ic">🧾</div>
             <p>아직 들어온 발주가 없어요.</p>
           </div>
         ) : (

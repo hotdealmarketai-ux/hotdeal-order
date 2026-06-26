@@ -16,25 +16,22 @@ export default async function AdminHome() {
   const menu = [
     {
       href: "/admin/approvals",
-      ic: "✅",
       title: "가입 승인",
       sub: pending > 0 ? `${pending}건 대기 중` : "대기 없음",
       badge: pending > 0 ? pending : undefined,
     },
-    { href: "/admin/orders", ic: "📋", title: "전체 발주", sub: `총 ${totalOrders}건` },
+    { href: "/admin/orders", title: "전체 발주", sub: `총 ${totalOrders}건` },
     {
       href: "/admin/orders?scope=hotdeal",
-      ic: "🏪",
       title: "핫딜마켓 발주만 보기",
       sub: `${hotdealOrders}건`,
     },
     {
       href: "/admin/orders?scope=saerop",
-      ic: "🛒",
       title: "공구 발주 (새롭 직접)",
       sub: `${toolOrders}건`,
     },
-    { href: "/admin/inventory", ic: "📦", title: "재고현황 작성", sub: "핫딜 가맹점에 노출" },
+    { href: "/admin/inventory", title: "재고현황 작성", sub: "핫딜 가맹점에 노출" },
   ];
 
   return (
@@ -51,9 +48,6 @@ export default async function AdminHome() {
         <div className="list">
           {menu.map((m) => (
             <Link href={m.href} className="row" key={m.href}>
-              <span style={{ fontSize: 24 }} aria-hidden>
-                {m.ic}
-              </span>
               <div className="row__main">
                 <div className="row__title">{m.title}</div>
                 <div className="row__sub">{m.sub}</div>
