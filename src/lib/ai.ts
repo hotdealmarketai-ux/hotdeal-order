@@ -160,3 +160,116 @@ export async function normalizeOrder(input: NormalizeInput): Promise<NormalizeRe
   }
   return ruleNormalize(input);
 }
+
+// ============================================================
+//  집계 발주서 — 여러 지점 주문을 품종별로 묶고 합산
+// ============================================================
+export interface AggLine {
+  store: string;
+  qty: string;
+  note: string;
+}
+export interface AggGroup {
+  product: string;
+  total: string;
+  lines: AggLine[];
+}
+export interface AggregateResult {
+  engine: "claude" | "rule";
+  groups: AggGroup[];
+  summary: string;
+}
+export interface AggregateInput {
+  categoryLabel: string;
+  lines: { store: string; name: string; qty: string; note: string }[];
+}
+
+/** 규칙기반 집계 — 동일 품목명끼리만 묶음(보수적). 키 없을 때. */
+export function ruleAggregate(input: AggregateInput): AggregateResult {
+  const map = new Map<string, AggLine[]>();
+  for (const l of input.lines) {
+    const key = tidy(l.name) || "(미지정)";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push({ store: l.store, qty: tidy(l.qty), note: tidy(l.note) });
+  }
+  const groups: AggGroup[] = [...map.entries()]
+    .map(([product, lines]) => ({ product, total: "", lines }))
+    .sort((a, b) => b.lines.length - a.lines.length);
+  return {
+    engine: "rule",
+    groups,
+    summary: `${input.categoryLabel} 집계 · 품목 ${groups.length}종 / 지점 발주 ${input.lines.length}건`,
+  };
+}
+
+const AGG_SYSTEM_PROMPT = `여러 지점에서 들어온 발주를 하나의 '집계 발주서'로 취합하는 도매 보조원입니다.
+입력은 여러 지점의 발주 품목 목록(지점명·품목·수량·요청)입니다.
+
+수행할 일:
+1) 같은 품종끼리 묶으세요. 표기가 조금 달라도 실제 같은 품종이면 한 그룹(예: "사과"·"부사"·"부사사과"는 부사 사과 한 그룹), 다른 품종이면 분리(부사 vs 홍로 vs 시나노골드는 별도).
+2) 각 그룹마다: 표준 품목명(product), 지점별 내역(lines: 지점명 store·수량 qty·요청 note), 단위가 일관되면 합산 총량(total). 예: 3다이+5다이+2다이 → total "10다이". 단위가 섞여 합산이 애매하면 total은 ""로 두고 지점별 내역만.
+3) 서로 다른 품종은 절대 합치지 마세요. 등급(특/상/고당도)이 다르면 그룹 안 note로 구분하거나 별도 그룹.
+4) 없는 품목을 추측으로 만들지 말고 입력에 있는 것만 취합. 수량은 단위가 같을 때만 합산.
+
+결과는 순수 JSON만:
+{"groups":[{"product":"표준 품목명","total":"합산 총량 또는 빈 문자열","lines":[{"store":"지점명","qty":"수량","note":"요청"}]}],"summary":"한 줄 요약"}`;
+
+async function claudeAggregate(input: AggregateInput): Promise<AggregateResult> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("no key");
+  const { default: Anthropic } = await import("@anthropic-ai/sdk");
+  const client = new Anthropic({ apiKey });
+  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+
+  const payload = { category: input.categoryLabel, lines: input.lines.slice(0, 400) };
+  const msg = await client.messages.create({
+    model,
+    max_tokens: 4000,
+    system: AGG_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `다음 발주들을 품종별로 취합해 JSON으로만 답하세요.\n${JSON.stringify(payload, null, 2)}`,
+      },
+    ],
+  });
+  const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+  const parsed = extractJson(text) as {
+    groups?: {
+      product?: string;
+      total?: string;
+      lines?: { store?: string; qty?: string; note?: string }[];
+    }[];
+    summary?: string;
+  };
+  const groups: AggGroup[] = (parsed.groups ?? [])
+    .map((g) => ({
+      product: tidy(g.product ?? ""),
+      total: tidy(g.total ?? ""),
+      lines: (g.lines ?? []).map((l) => ({
+        store: tidy(l.store ?? ""),
+        qty: tidy(l.qty ?? ""),
+        note: tidy(l.note ?? ""),
+      })),
+    }))
+    .filter((g) => g.product || g.lines.length);
+  if (groups.length === 0 && input.lines.length > 0) throw new Error("empty aggregate");
+  return {
+    engine: "claude",
+    groups,
+    summary: tidy(parsed.summary ?? "") || `${input.categoryLabel} 집계 · 품목 ${groups.length}종`,
+  };
+}
+
+/** 메인 진입점 — 항상 결과 보장(폴백) */
+export async function aggregateOrders(input: AggregateInput): Promise<AggregateResult> {
+  if (input.lines.length === 0) {
+    return { engine: "rule", groups: [], summary: `${input.categoryLabel} 집계 · 발주 없음` };
+  }
+  try {
+    if (process.env.ANTHROPIC_API_KEY) return await claudeAggregate(input);
+  } catch (err) {
+    console.error("[ai] claude aggregate failed, falling back to rule:", err);
+  }
+  return ruleAggregate(input);
+}

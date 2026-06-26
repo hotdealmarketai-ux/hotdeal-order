@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { formatKDateTime } from "@/lib/format";
 import { ReceiptCard } from "@/components/ReceiptCard";
+import { confirmOrderAction } from "@/app/actions/vendor";
 
 export default async function VendorOrderDetail(props: {
   params: Promise<{ id: string }>;
@@ -29,6 +30,31 @@ export default async function VendorOrderDetail(props: {
         <div className="topbar__title">발주서</div>
       </header>
       <div className="page">
+        {order.confirmed ? (
+          <div
+            className="card card--flat"
+            style={{
+              marginBottom: 14,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span className="badge badge--ok">발주 확인됨</span>
+            <form action={confirmOrderAction}>
+              <input type="hidden" name="orderId" value={order.id} />
+              <input type="hidden" name="next" value="false" />
+              <button className="linkbtn">확인 취소</button>
+            </form>
+          </div>
+        ) : (
+          <form action={confirmOrderAction} style={{ marginBottom: 14 }}>
+            <input type="hidden" name="orderId" value={order.id} />
+            <input type="hidden" name="next" value="true" />
+            <button className="btn btn--primary">발주 확인</button>
+          </form>
+        )}
+
         <div className="card card--flat" style={{ marginBottom: 14 }}>
           <div className="kv">
             <span className="kv__k">상호명</span>

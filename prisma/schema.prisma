@@ -39,6 +39,8 @@ model Order {
   pickupTime  String? // 서부일광 타 소매업자 전용
 
   status      String      @default("RECEIVED") // RECEIVED | DONE
+  confirmed   Boolean     @default(false) // 업자가 '발주 확인' 눌렀는지
+  confirmedAt DateTime?
   rawText     String      @default("") // 점주가 입력한 원본(직렬화)
   aiSummary   String      @default("") // AI 사무적 요약(전체 노트)
   aiProcessed Boolean     @default(false)
