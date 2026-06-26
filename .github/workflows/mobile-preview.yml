@@ -9,6 +9,10 @@ on:
     branches:
       - claude/virtual-address-info-e9blls
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   preview:
     runs-on: ubuntu-latest
@@ -84,8 +88,19 @@ jobs:
           echo "======================================================"
           echo "MOBILE_PREVIEW_URL=$URL"
           echo "======================================================"
-          # 잡을 살려두고 URL을 주기적으로 다시 출력(로그 tail에서 쉽게 찾도록)
+          # 실행 중인 잡의 로그는 외부에서 못 읽으므로, URL을 GitHub 이슈로 게시한다.
+          BODY="모바일 미리보기 URL: $URL\n\n테스트 계정(비번 모두 test1234): hotdeal / saerop / seobu / jangheung / chaeumchae / sample\n\n이 미리보기는 임시이며 워크플로 실행 중에만 살아 있습니다."
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues" \
+            -d "{\"title\":\"📱 mobile-preview URL\",\"body\":\"${BODY}\"}" \
+            -o issue.json -w "issue create: %{http_code}\n" || true
+          cat issue.json | head -c 400 || true
+          # 잡을 살려두고 URL을 주기적으로 다시 출력
           while true; do
             echo "MOBILE_PREVIEW_URL=$URL  (login: hotdeal / test1234)"
             sleep 30
           done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
