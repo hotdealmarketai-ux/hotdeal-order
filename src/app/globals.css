@@ -579,6 +579,129 @@ a {
   color: #fff;
   box-shadow: var(--shadow-pill);
 }
+.cattab__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--fg-2);
+  font-size: 12.5px;
+  font-weight: 800;
+  line-height: 1;
+}
+.cattab.is-active .cattab__count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* ---- 발주 마감 카운트다운 ---- */
+.countdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+  margin-bottom: 18px;
+}
+.countdown__label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: -0.01em;
+}
+.countdown__time {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--fg);
+  font-weight: 800;
+}
+.countdown__num {
+  font-size: 27px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.countdown__unit {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.countdown--soon {
+  border-color: var(--warn-bg);
+  background: var(--warn-bg);
+}
+.countdown--soon .countdown__num {
+  color: var(--warn);
+}
+.countdown--closed .countdown__time {
+  font-size: 19px;
+  color: var(--danger);
+}
+
+/* ---- 발주 확인 패널 ---- */
+.confirm {
+  margin-top: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 18px;
+}
+.confirm__title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--fg);
+  margin-bottom: 12px;
+}
+.confirm__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.confirm__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.confirm__cat {
+  font-weight: 800;
+  color: var(--fg);
+  min-width: 64px;
+}
+.confirm__dest {
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--muted);
+  font-weight: 700;
+}
+.confirm__n {
+  font-weight: 800;
+  color: var(--fg-2);
+}
+.confirm__hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.confirm__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.confirm__actions > * {
+  flex: 1;
+}
 
 /* ---- 큰 카테고리 카드(홈) ---- */
 .catgrid {

@@ -7,6 +7,12 @@ export function kstToday(): string {
   return new Date(Date.now() + KST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/** 특정 인스턴트가 속한 KST 날짜 YYYY-MM-DD */
+export function kstDateOf(d: Date | string): string {
+  const date = typeof d === "string" ? new Date(d) : d;
+  return new Date(date.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
 /** YYYY-MM-DD(KST) 형식 검증 + 보정. 잘못되면 오늘로. */
 export function normalizeDateStr(s?: string | null): string {
   if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) return s;

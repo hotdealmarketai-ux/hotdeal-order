@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { CATEGORIES, ROLE_LABEL, type Category } from "@/lib/constants";
+import {
+  CATEGORIES,
+  CATEGORY_ORDER,
+  ROLE_LABEL,
+  type Category,
+} from "@/lib/constants";
 import { formatKDate } from "@/lib/format";
+import { kstDateOf, labelDate } from "@/lib/date";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export default async function MyPage(props: {
@@ -16,6 +22,34 @@ export default async function MyPage(props: {
     include: { _count: { select: { items: true } } },
     orderBy: { createdAt: "desc" },
   });
+
+  // 핫딜마켓 가맹점은 한 번에 4종을 발주하므로 '발주한 날짜'로 묶어서 보여준다
+  const groupByDate = user.role === "MERCHANT_HOTDEAL";
+  const dayGroups: {
+    date: string;
+    cats: Category[];
+    items: number;
+  }[] = [];
+  if (groupByDate) {
+    const map = new Map<string, { date: string; cats: Category[]; items: number }>();
+    for (const o of orders) {
+      const d = kstDateOf(o.createdAt);
+      let g = map.get(d);
+      if (!g) {
+        g = { date: d, cats: [], items: 0 };
+        map.set(d, g);
+        dayGroups.push(g);
+      }
+      const c = o.category as Category;
+      if (!g.cats.includes(c)) g.cats.push(c);
+      g.items += o._count.items;
+    }
+    for (const g of dayGroups) {
+      g.cats.sort(
+        (a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b),
+      );
+    }
+  }
 
   return (
     <>
@@ -58,6 +92,25 @@ export default async function MyPage(props: {
         {orders.length === 0 ? (
           <div className="empty">
             <p>아직 발주 내역이 없어요.</p>
+          </div>
+        ) : groupByDate ? (
+          <div className="list">
+            {dayGroups.map((g) => (
+              <Link
+                href={`/order/day/${g.date}`}
+                className="row"
+                key={g.date}
+              >
+                <div className="row__main">
+                  <div className="row__title">{labelDate(g.date)}</div>
+                  <div className="row__sub">
+                    {g.cats.map((c) => CATEGORIES[c].label).join(" · ")} · 총{" "}
+                    {g.items}건
+                  </div>
+                </div>
+                <span className="row__chev">›</span>
+              </Link>
+            ))}
           </div>
         ) : (
           <div className="list">

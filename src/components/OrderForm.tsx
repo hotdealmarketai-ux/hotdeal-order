@@ -1,11 +1,15 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { createOrderAction, type OrderFormState } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, type Category } from "@/lib/constants";
 
 type Row = { id: number; name: string; qty: string; note: string };
+
+function isFilled(r: Row) {
+  return !!(r.name.trim() || r.qty.trim() || r.note.trim());
+}
 
 export function OrderForm({
   categories,
@@ -24,6 +28,8 @@ export function OrderForm({
     return init;
   });
   const [pickup, setPickup] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [localError, setLocalError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
     createOrderAction,
     {},
@@ -38,6 +44,7 @@ export function OrderForm({
   }
 
   function updateRow(id: number, field: keyof Row, value: string) {
+    setConfirming(false);
     setRowsByCat((prev) => {
       const list = prev[active].map((r) =>
         r.id === id ? { ...r, [field]: value } : r,
@@ -54,36 +61,57 @@ export function OrderForm({
     });
   }
 
-  const itemsForSubmit = rows
-    .filter((r) => r.name.trim() || r.qty.trim() || r.note.trim())
-    .map((r) => ({ name: r.name, qty: r.qty, note: r.note }));
+  // 모든 카테고리에서 채워진 줄을 모아 한 번에 발주
+  const payload = useMemo(
+    () =>
+      categories
+        .map((c) => ({
+          category: c,
+          items: (rowsByCat[c] ?? [])
+            .filter(isFilled)
+            .map((r) => ({ name: r.name, qty: r.qty, note: r.note })),
+        }))
+        .filter((g) => g.items.length > 0),
+    [categories, rowsByCat],
+  );
+
+  const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
+  const countByCat = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const g of payload) m[g.category] = g.items.length;
+    return m;
+  }, [payload]);
 
   const cat = CATEGORIES[active];
+  const multi = categories.length > 1;
 
   return (
     <form action={formAction}>
-      <input type="hidden" name="category" value={active} />
-      <input type="hidden" name="items" value={JSON.stringify(itemsForSubmit)} />
+      <input type="hidden" name="payload" value={JSON.stringify(payload)} />
       {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
 
-      {state?.error && (
+      {(state?.error || localError) && (
         <div className="notice notice--error" style={{ marginBottom: 12 }}>
-          {state.error}
+          {state?.error || localError}
         </div>
       )}
 
-      {categories.length > 1 && (
+      {multi && (
         <div className="cattabs">
-          {categories.map((c) => (
-            <button
-              type="button"
-              key={c}
-              className={`cattab ${active === c ? "is-active" : ""}`}
-              onClick={() => setActive(c)}
-            >
-              {CATEGORIES[c].label}
-            </button>
-          ))}
+          {categories.map((c) => {
+            const n = countByCat[c] ?? 0;
+            return (
+              <button
+                type="button"
+                key={c}
+                className={`cattab ${active === c ? "is-active" : ""}`}
+                onClick={() => setActive(c)}
+              >
+                {CATEGORIES[c].label}
+                {n > 0 && <span className="cattab__count">{n}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -109,7 +137,7 @@ export function OrderForm({
       <div className="section-label">발주 품목</div>
 
       {rows.map((r, i) => {
-        const filled = !!(r.name || r.qty || r.note);
+        const filled = isFilled(r);
         return (
           <div className="orderline" key={r.id}>
             <div className="orderline__idx">
@@ -146,11 +174,59 @@ export function OrderForm({
         );
       })}
 
-      <p className="hint">칸을 채우면 다음 줄이 자동으로 생겨요. 필요한 만큼 적으세요.</p>
+      <p className="hint">
+        칸을 채우면 다음 줄이 자동으로 생겨요.
+        {multi && " 종류(과일·야채·공구·두부)를 위에서 바꿔가며 모두 적을 수 있어요."}
+      </p>
 
-      <div style={{ marginTop: 18 }}>
-        <SubmitButton pendingText="AI가 정리 중…">발주하기</SubmitButton>
-      </div>
+      {!confirming ? (
+        <div style={{ marginTop: 18 }}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => {
+              if (totalItems === 0) {
+                setLocalError("발주할 품목을 한 개 이상 입력하세요.");
+                return;
+              }
+              setLocalError("");
+              setConfirming(true);
+            }}
+          >
+            발주하기
+          </button>
+        </div>
+      ) : (
+        <div className="confirm">
+          <div className="confirm__title">이대로 발주할까요?</div>
+          <div className="confirm__list">
+            {payload.map((g) => (
+              <div className="confirm__row" key={g.category}>
+                <span className="confirm__cat">{CATEGORIES[g.category].label}</span>
+                <span className="confirm__dest">
+                  {CATEGORIES[g.category].vendorLabel}
+                </span>
+                <span className="confirm__n">{g.items.length}건</span>
+              </div>
+            ))}
+          </div>
+          {multi && (
+            <p className="confirm__hint">
+              위 {payload.length}개 종류가 한 번에 발주됩니다.
+            </p>
+          )}
+          <div className="confirm__actions">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => setConfirming(false)}
+            >
+              다시 볼게요
+            </button>
+            <SubmitButton pendingText="AI가 정리 중…">네, 발주할게요</SubmitButton>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
