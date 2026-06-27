@@ -6,8 +6,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Vercel-Neon 통합이 만든 변수명 사용(앱 런타임/빌드가 직접 읽음).
+  // 로컬은 .env 에서 같은 이름으로 로컬 Postgres 를 가리킴.
+  url       = env("hotdealorder_POSTGRES_PRISMA_URL") // pooled (앱)
+  directUrl = env("hotdealorder_DATABASE_URL_UNPOOLED") // direct (마이그레이션)
 }
 
 model User {

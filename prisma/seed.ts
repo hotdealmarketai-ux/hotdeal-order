@@ -93,23 +93,24 @@ async function main() {
     },
   });
 
-  // ---- 재고현황(새롭이 작성, 핫딜 점주 열람) ----
-  await prisma.inventoryItem.deleteMany();
-  await prisma.inventoryItem.createMany({
-    data: [
-      { name: "샤인머스캣", status: "넉넉", memo: "오늘 물량 좋음", sortOrder: 1 },
-      { name: "부사 사과", status: "보통", memo: "특/상 위주", sortOrder: 2 },
-      { name: "감귤", status: "부족", memo: "오후 입고 예정", sortOrder: 3 },
-      { name: "대추방울토마토", status: "넉넉", memo: "", sortOrder: 4 },
-    ],
-  });
+  // ---- 재고현황 — 비어있을 때만 생성(운영에서 매 빌드 안전) ----
+  if ((await prisma.inventoryItem.count()) === 0) {
+    await prisma.inventoryItem.createMany({
+      data: [
+        { name: "샤인머스캣", status: "넉넉", memo: "오늘 물량 좋음", sortOrder: 1 },
+        { name: "부사 사과", status: "보통", memo: "특/상 위주", sortOrder: 2 },
+        { name: "감귤", status: "부족", memo: "오후 입고 예정", sortOrder: 3 },
+        { name: "대추방울토마토", status: "넉넉", memo: "", sortOrder: 4 },
+      ],
+    });
+  }
 
   // ---- 샘플 발주(서부일광 inbox 확인용) ----
   const hotdeal = await prisma.user.findUnique({ where: { username: "hotdeal" } });
   const sample = await prisma.user.findUnique({ where: { username: "sample" } });
-  await prisma.order.deleteMany();
+  const hasOrders = (await prisma.order.count()) > 0;
 
-  if (hotdeal) {
+  if (!hasOrders && hotdeal) {
     await prisma.order.create({
       data: {
         userId: hotdeal.id,
@@ -145,7 +146,7 @@ async function main() {
     });
   }
 
-  if (sample) {
+  if (!hasOrders && sample) {
     await prisma.order.create({
       data: {
         userId: sample.id,
