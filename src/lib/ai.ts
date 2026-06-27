@@ -301,15 +301,11 @@ export async function aggregateOrders(input: AggregateInput): Promise<AggregateR
 }
 
 // ============================================================
-//  경매 입찰 목록 — 오늘 발주 기반 (AI, 전략 없이 입찰 수량만)
+//  경매 입찰 안내 — 오늘 발주 기반 (AI, 정중한 입찰 요청 문장)
 // ============================================================
-export interface ReportBid {
-  item: string; // 입찰 항목(품목+종류/등급) 예: "부사 사과 특", "B급 사과", "샤인머스캣"
-  qty: string; // 입찰 수량
-}
 export interface AuctionReportResult {
   engine: "claude" | "rule";
-  bids: ReportBid[];
+  sentences: string[]; // "사과는 9다이 입찰해주시면 됩니다." 형태의 문장들
 }
 export interface ReportInput {
   contextLabel: string;
@@ -317,33 +313,35 @@ export interface ReportInput {
   lines: { store: string; name: string; qty: string; note: string }[];
 }
 
-/** 규칙기반 레포트(키 없을 때) — 집계 기반 단순 목록. */
+/** 규칙기반(키 없을 때) — 집계 기반 문장. */
 export function ruleReport(input: ReportInput): AuctionReportResult {
   const agg = ruleAggregate({ categoryLabel: input.contextLabel, lines: input.lines });
-  const bids: ReportBid[] = [];
+  const sentences: string[] = [];
   for (const f of agg.fruits) {
     for (const v of f.varieties) {
       const label =
         v.variety && v.variety !== "일반" ? `${v.variety} ${f.fruit}` : f.fruit;
-      bids.push({ item: label, qty: v.total || `${v.lines.length}건` });
+      const qty = v.total || `${v.lines.length}건`;
+      sentences.push(`${label} ${qty} 입찰해주시면 됩니다.`);
     }
   }
-  return { engine: "rule", bids };
+  return { engine: "rule", sentences };
 }
 
-const REPORT_SYSTEM_PROMPT = `청과 중매인을 위해, 들어온 발주를 토대로 '오늘 경매에서 입찰할 목록'만 만드는 도구입니다.
-전략·설명·문장·조언·미사여구 전부 금지. 오직 '무엇을 몇 개 입찰할지' 목록만.
+const REPORT_SYSTEM_PROMPT = `청과 중매인에게 '오늘 경매에서 입찰할 양'을 정중한 문장으로 전달하는 도구입니다.
+전략·설명·조언·미사여구 금지. 입찰 요청 문장만.
 
 규칙:
 - 들어온 발주량 = 입찰 수량. 발주 없는 건 제외.
-- 각 줄 = {item: 입찰 항목, qty: 입찰 수량}.
-- item은 '품목 + 종류/등급'을 짧은 명사구로. 예) "부사 사과 특", "부사 사과", "시나노골드", "샤인머스캣", "B급 사과". 품종·등급 없으면 그냥 품목명("사과").
-- 같은 항목끼리 합산(단위 일관 시). 단위가 섞이면 "11다이 + 4건"처럼 간단히만.
+- 품목/종류/등급별로 각각 '한 문장'씩.
+- 문장 형식: "[항목]은/는 [수량] 입찰해주시면 됩니다." (조사 은/는 자연스럽게)
+  예) "사과(부사 특)는 9다이 입찰해주시면 됩니다.", "샤인머스캣은 4다이 입찰해주시면 됩니다.", "감귤은 5다이 입찰해주시면 됩니다."
+- 같은 항목끼리 합산(단위 일관 시). 단위가 섞이면 "11다이 4건"처럼 간단히만.
 - 과일 분류 정확히: 부사·홍로·시나노골드=사과, 거봉·샤인머스캣·어텀크리스피=포도, 한라봉·천혜향=감귤.
 - 같은 과일끼리 인접하도록 정렬.
 
 결과는 순수 JSON만:
-{"bids":[{"item":"부사 사과 특","qty":"9다이"},{"item":"부사 사과","qty":"3다이"},{"item":"시나노골드","qty":"3박스"},{"item":"샤인머스캣","qty":"4다이"}]}`;
+{"sentences":["부사 사과(특)는 3다이 입찰해주시면 됩니다.","부사 사과는 6다이 입찰해주시면 됩니다.","시나노골드는 3박스 입찰해주시면 됩니다.","샤인머스캣은 4다이 입찰해주시면 됩니다."]}`;
 
 async function claudeReport(input: ReportInput): Promise<AuctionReportResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -360,23 +358,23 @@ async function claudeReport(input: ReportInput): Promise<AuctionReportResult> {
     messages: [
       {
         role: "user",
-        content: `다음 발주를 토대로 오늘 경매 입찰 목록을 JSON으로만 만드세요.\n${JSON.stringify(payload, null, 2)}`,
+        content: `다음 발주를 토대로 오늘 경매 입찰 안내 문장을 JSON으로만 만드세요.\n${JSON.stringify(payload, null, 2)}`,
       },
     ],
   });
   const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-  const parsed = extractJson(text) as { bids?: { item?: string; qty?: string }[] };
-  const bids: ReportBid[] = (parsed.bids ?? [])
-    .map((b) => ({ item: tidy(b.item ?? ""), qty: tidy(b.qty ?? "") }))
-    .filter((b) => b.item);
-  if (bids.length === 0 && input.lines.length > 0) throw new Error("empty report");
-  return { engine: "claude", bids };
+  const parsed = extractJson(text) as { sentences?: string[] };
+  const sentences = (parsed.sentences ?? [])
+    .map((s) => tidy(s))
+    .filter((s) => s.length > 0);
+  if (sentences.length === 0 && input.lines.length > 0) throw new Error("empty report");
+  return { engine: "claude", sentences };
 }
 
 /** 메인 진입점 — 항상 결과 보장(폴백) */
 export async function auctionReport(input: ReportInput): Promise<AuctionReportResult> {
   if (input.lines.length === 0) {
-    return { engine: "rule", bids: [] };
+    return { engine: "rule", sentences: [] };
   }
   try {
     if (process.env.ANTHROPIC_API_KEY) return await claudeReport(input);

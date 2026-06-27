@@ -88,7 +88,7 @@ async function ReportSection({
 
   const report = await auctionReport({ contextLabel: vendorLabel, dateLabel, lines });
 
-  if (report.bids.length === 0) {
+  if (report.sentences.length === 0) {
     return (
       <div className="empty">
         <p>이 날짜에 입찰할 발주가 없어요.</p>
@@ -100,20 +100,25 @@ async function ReportSection({
     <>
       <div className="card">
         <div className="section-label" style={{ margin: "0 0 12px" }}>
-          오늘 입찰 목록 · {report.bids.length}개
+          오늘 입찰 안내
         </div>
-        {report.bids.map((b, i) => (
-          <div className="aggline" key={i}>
-            <span className="aggline__store" style={{ color: "var(--fg)", fontWeight: 600 }}>
-              {b.item}
-            </span>
-            <span className="aggline__qty">{b.qty}</span>
-          </div>
+        {report.sentences.map((s, i) => (
+          <p
+            key={i}
+            style={{
+              margin: i > 0 ? "11px 0 0" : "0",
+              fontSize: 16,
+              lineHeight: 1.7,
+              color: "var(--fg)",
+            }}
+          >
+            {s}
+          </p>
         ))}
       </div>
 
       <p className="hint center" style={{ marginTop: 14 }}>
-        ※ 들어온 발주량 기준 입찰 수량이에요. 현장 시세·물량 보고 최종 판단하세요.
+        ※ 들어온 발주량 기준이에요. 현장 시세·물량 보고 최종 판단하세요.
       </p>
     </>
   );
