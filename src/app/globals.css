@@ -410,6 +410,20 @@ a {
   filter: none;
   opacity: 1;
 }
+/* 라벨 위 둥근 네모 박스 (활성=검정 채움, 비활성=연한 박스) */
+.bottomnav__box {
+  width: 38px;
+  height: 32px;
+  border-radius: 12px;
+  background: var(--chip);
+  transition: background 0.15s ease, transform 0.06s ease;
+}
+.bottomnav__item.is-active .bottomnav__box {
+  background: var(--black);
+}
+.bottomnav__item:active .bottomnav__box {
+  transform: scale(0.92);
+}
 
 /* ---- 영수증 ---- */
 .receipt {

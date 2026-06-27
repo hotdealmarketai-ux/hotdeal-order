@@ -20,6 +20,7 @@ export function AdminNav() {
             href={it.href}
             className={`bottomnav__item ${active ? "is-active" : ""}`}
           >
+            <span className="bottomnav__box" aria-hidden />
             <span>{it.label}</span>
           </Link>
         );
