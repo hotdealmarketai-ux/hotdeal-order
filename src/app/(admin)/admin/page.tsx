@@ -21,7 +21,7 @@ export default async function AdminHome() {
     },
     { href: "/admin/orders", title: "전체 발주 목록", sub: `총 ${totalOrders}건` },
     {
-      href: "/admin/orders?scope=hotdeal",
+      href: "/admin/hotdeal",
       title: "핫딜마켓 발주관리",
       sub: `${hotdealOrders}건`,
     },
