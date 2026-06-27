@@ -74,9 +74,11 @@ export default async function VendorPage(props: {
           </div>
         )}
 
-        <div style={{ marginTop: 22 }}>
-          <LogoutButton />
-        </div>
+        {user.role !== "ADMIN_SAEROP" ? (
+          <div style={{ marginTop: 22 }}>
+            <LogoutButton />
+          </div>
+        ) : null}
       </div>
     </>
   );

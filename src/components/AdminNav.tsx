@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 export function AdminNav() {
   const path = usePathname();
   const items = [
-    { href: "/vendor", label: "공구 발주", match: "/vendor" },
+    { href: "/vendor", label: "공동구매 발주", match: "/vendor" },
     { href: "/admin", label: "관리", match: "/admin" },
   ];
 

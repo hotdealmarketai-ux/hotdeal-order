@@ -25,7 +25,7 @@ export default async function AdminHome() {
       title: "핫딜마켓 발주관리",
       sub: `${hotdealOrders}건`,
     },
-    { href: "/admin/inventory", title: "재고", sub: "핫딜 가맹점에 노출" },
+    { href: "/admin/inventory", title: "재고", sub: "" },
   ];
 
   return (
@@ -44,7 +44,7 @@ export default async function AdminHome() {
             <Link href={m.href} className="row" key={m.href}>
               <div className="row__main">
                 <div className="row__title">{m.title}</div>
-                <div className="row__sub">{m.sub}</div>
+                {m.sub ? <div className="row__sub">{m.sub}</div> : null}
               </div>
               {m.badge ? (
                 <span className="badge badge--wait">{m.badge}</span>
