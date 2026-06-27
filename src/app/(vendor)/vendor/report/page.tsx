@@ -91,51 +91,29 @@ async function ReportSection({
   if (report.bids.length === 0) {
     return (
       <div className="empty">
-        <p>이 날짜에 분석할 발주가 없어요.</p>
+        <p>이 날짜에 입찰할 발주가 없어요.</p>
       </div>
     );
   }
 
   return (
     <>
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div className="section-label" style={{ margin: "0 0 10px" }}>
-          오늘 입찰 수량
+      <div className="card">
+        <div className="section-label" style={{ margin: "0 0 12px" }}>
+          오늘 입찰 목록 · {report.bids.length}개
         </div>
         {report.bids.map((b, i) => (
           <div className="aggline" key={i}>
-            <span className="aggline__store">
-              {b.fruit}
-              {b.tag ? ` · ${b.tag}` : ""}
+            <span className="aggline__store" style={{ color: "var(--fg)", fontWeight: 600 }}>
+              {b.item}
             </span>
             <span className="aggline__qty">{b.qty}</span>
           </div>
         ))}
       </div>
 
-      {report.paragraphs.length > 0 ? (
-        <div className="card">
-          <div className="section-label" style={{ margin: "0 0 12px" }}>
-            경매 진행 레포트
-          </div>
-          {report.paragraphs.map((p, i) => (
-            <p
-              key={i}
-              style={{
-                margin: i > 0 ? "12px 0 0" : "0",
-                fontSize: 15,
-                lineHeight: 1.75,
-                color: "var(--fg-2)",
-              }}
-            >
-              {p}
-            </p>
-          ))}
-        </div>
-      ) : null}
-
       <p className="hint center" style={{ marginTop: 14 }}>
-        ※ 발주량 기준 AI 정리입니다. 현장 시세·물량 보고 최종 판단하세요.
+        ※ 들어온 발주량 기준 입찰 수량이에요. 현장 시세·물량 보고 최종 판단하세요.
       </p>
     </>
   );

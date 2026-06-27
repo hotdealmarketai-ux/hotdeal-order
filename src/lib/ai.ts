@@ -301,17 +301,15 @@ export async function aggregateOrders(input: AggregateInput): Promise<AggregateR
 }
 
 // ============================================================
-//  경매 입찰 레포트 — 오늘 발주 기반 (AI, 사무적 1문서)
+//  경매 입찰 목록 — 오늘 발주 기반 (AI, 전략 없이 입찰 수량만)
 // ============================================================
 export interface ReportBid {
-  fruit: string; // 과일(품목)
+  item: string; // 입찰 항목(품목+종류/등급) 예: "부사 사과 특", "B급 사과", "샤인머스캣"
   qty: string; // 입찰 수량
-  tag: string; // 핵심 한 단어(고당도/특/일반) 또는 ""
 }
 export interface AuctionReportResult {
   engine: "claude" | "rule";
   bids: ReportBid[];
-  paragraphs: string[]; // 사무적 보고서 본문(문단 배열)
 }
 export interface ReportInput {
   contextLabel: string;
@@ -319,40 +317,33 @@ export interface ReportInput {
   lines: { store: string; name: string; qty: string; note: string }[];
 }
 
-/** 규칙기반 레포트(키 없을 때) — 집계 기반 최소형. */
+/** 규칙기반 레포트(키 없을 때) — 집계 기반 단순 목록. */
 export function ruleReport(input: ReportInput): AuctionReportResult {
   const agg = ruleAggregate({ categoryLabel: input.contextLabel, lines: input.lines });
-  const bids: ReportBid[] = agg.fruits.map((f) => ({
-    fruit: f.fruit,
-    qty: f.total || `${f.varieties.reduce((n, v) => n + v.lines.length, 0)}건`,
-    tag: "",
-  }));
-  const list = bids.map((b) => `${b.fruit} ${b.qty}`).join(", ");
-  return {
-    engine: "rule",
-    bids,
-    paragraphs: [
-      `${input.dateLabel} 기준 입찰 대상은 ${list || "없음"} 입니다.`,
-      "들어온 발주량만큼 확보하고, 등급·요청 사항을 반영해 낙찰하시기 바랍니다.",
-    ],
-  };
+  const bids: ReportBid[] = [];
+  for (const f of agg.fruits) {
+    for (const v of f.varieties) {
+      const label =
+        v.variety && v.variety !== "일반" ? `${v.variety} ${f.fruit}` : f.fruit;
+      bids.push({ item: label, qty: v.total || `${v.lines.length}건` });
+    }
+  }
+  return { engine: "rule", bids };
 }
 
-const REPORT_SYSTEM_PROMPT = `청과 중매인을 위한 '오늘 경매 입찰 레포트'를 사무적인 업무 문서체로 작성하는 전문가입니다.
-핵심: 들어온 발주량 = 오늘 확보(낙찰)할 양. 발주 없는 품목은 사지 않음.
-입력: 여러 지점의 발주(지점·품목·수량·요청).
+const REPORT_SYSTEM_PROMPT = `청과 중매인을 위해, 들어온 발주를 토대로 '오늘 경매에서 입찰할 목록'만 만드는 도구입니다.
+전략·설명·문장·조언·미사여구 전부 금지. 오직 '무엇을 몇 개 입찰할지' 목록만.
 
-출력 2가지:
-1) bids — 과일(품목)별 입찰 수량. 수량 중심으로 깔끔하게.
-   {fruit 과일명, qty 입찰 수량(단위 일관 시 합산, 아니면 종류별 합 간단히), tag 핵심 한 단어(고당도/특/일반 등, 없으면 "")}
-   과일 분류 정확히: 부사·홍로·시나노골드=사과, 거봉·샤인머스캣·어텀크리스피=포도, 한라봉·천혜향=감귤.
-2) paragraphs — 위 입찰 내역 기반 보고서 본문을 '문단 배열'로(2~4개 문단).
-   업무 문서 톤. 군더더기·감탄사·이모지·미사여구 금지. 숫자(수량)와 핵심 등급/요청만 사무적으로.
-   구성 예: [총괄 1문단] → [주요 품목 입찰 방향 1~2문단] → [유의사항 1문단].
+규칙:
+- 들어온 발주량 = 입찰 수량. 발주 없는 건 제외.
+- 각 줄 = {item: 입찰 항목, qty: 입찰 수량}.
+- item은 '품목 + 종류/등급'을 짧은 명사구로. 예) "부사 사과 특", "부사 사과", "시나노골드", "샤인머스캣", "B급 사과". 품종·등급 없으면 그냥 품목명("사과").
+- 같은 항목끼리 합산(단위 일관 시). 단위가 섞이면 "11다이 + 4건"처럼 간단히만.
+- 과일 분류 정확히: 부사·홍로·시나노골드=사과, 거봉·샤인머스캣·어텀크리스피=포도, 한라봉·천혜향=감귤.
+- 같은 과일끼리 인접하도록 정렬.
 
-추측으로 없는 품목을 만들지 마세요.
 결과는 순수 JSON만:
-{"bids":[{"fruit":"사과","qty":"9다이","tag":"고당도"},{"fruit":"포도","qty":"7박스","tag":""}],"paragraphs":["오늘 경매는 사과와 포도 물량이 가장 많아 두 품목을 우선 확보한다.","사과 9다이는 고당도 요청분을 먼저 낙찰한 뒤 일반분을 시세에 맞춰 확보한다.","수입 품목은 경락가 확인 후 신속히 처리한다."]}`;
+{"bids":[{"item":"부사 사과 특","qty":"9다이"},{"item":"부사 사과","qty":"3다이"},{"item":"시나노골드","qty":"3박스"},{"item":"샤인머스캣","qty":"4다이"}]}`;
 
 async function claudeReport(input: ReportInput): Promise<AuctionReportResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -364,40 +355,28 @@ async function claudeReport(input: ReportInput): Promise<AuctionReportResult> {
   const payload = { date: input.dateLabel, lines: input.lines.slice(0, 400) };
   const msg = await client.messages.create({
     model,
-    max_tokens: 4000,
+    max_tokens: 3000,
     system: REPORT_SYSTEM_PROMPT,
     messages: [
       {
         role: "user",
-        content: `다음 발주를 토대로 오늘 경매 입찰 레포트를 JSON으로만 만드세요.\n${JSON.stringify(payload, null, 2)}`,
+        content: `다음 발주를 토대로 오늘 경매 입찰 목록을 JSON으로만 만드세요.\n${JSON.stringify(payload, null, 2)}`,
       },
     ],
   });
   const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-  const parsed = extractJson(text) as {
-    bids?: { fruit?: string; qty?: string; tag?: string }[];
-    paragraphs?: string[];
-  };
+  const parsed = extractJson(text) as { bids?: { item?: string; qty?: string }[] };
   const bids: ReportBid[] = (parsed.bids ?? [])
-    .map((b) => ({
-      fruit: tidy(b.fruit ?? ""),
-      qty: tidy(b.qty ?? ""),
-      tag: tidy(b.tag ?? ""),
-    }))
-    .filter((b) => b.fruit);
-  const paragraphs = (parsed.paragraphs ?? [])
-    .map((p) => tidy(p))
-    .filter((p) => p.length > 0);
-  if (bids.length === 0 && paragraphs.length === 0 && input.lines.length > 0) {
-    throw new Error("empty report");
-  }
-  return { engine: "claude", bids, paragraphs };
+    .map((b) => ({ item: tidy(b.item ?? ""), qty: tidy(b.qty ?? "") }))
+    .filter((b) => b.item);
+  if (bids.length === 0 && input.lines.length > 0) throw new Error("empty report");
+  return { engine: "claude", bids };
 }
 
 /** 메인 진입점 — 항상 결과 보장(폴백) */
 export async function auctionReport(input: ReportInput): Promise<AuctionReportResult> {
   if (input.lines.length === 0) {
-    return { engine: "rule", bids: [], paragraphs: ["들어온 발주가 없어요."] };
+    return { engine: "rule", bids: [] };
   }
   try {
     if (process.env.ANTHROPIC_API_KEY) return await claudeReport(input);
