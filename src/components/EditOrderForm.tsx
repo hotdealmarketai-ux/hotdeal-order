@@ -1,0 +1,179 @@
+"use client";
+
+import { useActionState, useMemo, useRef, useState } from "react";
+import { updateOrderAction, type OrderFormState } from "@/app/actions/order";
+import { SubmitButton } from "./SubmitButton";
+
+type Row = { id: number; name: string; qty: string; note: string };
+
+function isFilled(r: Row) {
+  return !!(r.name.trim() || r.qty.trim() || r.note.trim());
+}
+
+export function EditOrderForm({
+  orderId,
+  initialItems,
+  needsPickup,
+  initialPickup,
+}: {
+  orderId: string;
+  initialItems: { name: string; qty: string; note: string }[];
+  needsPickup: boolean;
+  initialPickup?: string;
+}) {
+  const uid = useRef(0);
+  const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
+
+  const [rows, setRows] = useState<Row[]>(() => {
+    const seed = initialItems.map((it) => ({
+      id: ++uid.current,
+      name: it.name,
+      qty: it.qty,
+      note: it.note,
+    }));
+    return [...seed, newRow()];
+  });
+  const [pickup, setPickup] = useState(initialPickup ?? "");
+  const [confirming, setConfirming] = useState(false);
+  const [localError, setLocalError] = useState("");
+  const [state, formAction] = useActionState<OrderFormState, FormData>(
+    updateOrderAction,
+    {},
+  );
+
+  function withTrailingEmpty(list: Row[]): Row[] {
+    const last = list[list.length - 1];
+    if (!last || last.name || last.qty || last.note) return [...list, newRow()];
+    return list;
+  }
+
+  function updateRow(id: number, field: keyof Row, value: string) {
+    setConfirming(false);
+    setRows((prev) =>
+      withTrailingEmpty(
+        prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
+      ),
+    );
+  }
+
+  function removeRow(id: number) {
+    setRows((prev) => {
+      let list = prev.filter((r) => r.id !== id);
+      if (list.length === 0) list = [newRow()];
+      return withTrailingEmpty(list);
+    });
+  }
+
+  const items = useMemo(
+    () =>
+      rows
+        .filter(isFilled)
+        .map((r) => ({ name: r.name, qty: r.qty, note: r.note })),
+    [rows],
+  );
+
+  return (
+    <form action={formAction}>
+      <input type="hidden" name="orderId" value={orderId} />
+      <input type="hidden" name="items" value={JSON.stringify(items)} />
+      {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
+
+      {(state?.error || localError) && (
+        <div className="notice notice--error" style={{ marginBottom: 12 }}>
+          {state?.error || localError}
+        </div>
+      )}
+
+      {needsPickup && (
+        <div className="field">
+          <label className="label" htmlFor="pickup">
+            픽업 시간
+          </label>
+          <input
+            id="pickup"
+            className="input"
+            value={pickup}
+            onChange={(e) => setPickup(e.target.value)}
+            placeholder="오전 7시 30분"
+          />
+        </div>
+      )}
+
+      <div className="section-label">발주 품목</div>
+
+      {rows.map((r, i) => {
+        const filled = isFilled(r);
+        return (
+          <div className="orderline" key={r.id}>
+            <div className="orderline__idx">
+              <span className="orderline__num">{i + 1}</span>
+              {filled && (
+                <button
+                  type="button"
+                  className="linkbtn linkbtn--danger"
+                  onClick={() => removeRow(r.id)}
+                >
+                  삭제
+                </button>
+              )}
+            </div>
+            <input
+              className="input orderline__name"
+              value={r.name}
+              onChange={(e) => updateRow(r.id, "name", e.target.value)}
+              placeholder="품목"
+            />
+            <input
+              className="input"
+              value={r.qty}
+              onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+              placeholder="수량"
+            />
+            <input
+              className="input orderline__note"
+              value={r.note}
+              onChange={(e) => updateRow(r.id, "note", e.target.value)}
+              placeholder="설명"
+            />
+          </div>
+        );
+      })}
+
+      {!confirming ? (
+        <div style={{ marginTop: 18 }}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => {
+              if (items.length === 0) {
+                setLocalError("발주할 품목을 한 개 이상 입력하세요.");
+                return;
+              }
+              setLocalError("");
+              setConfirming(true);
+            }}
+          >
+            수정 완료
+          </button>
+        </div>
+      ) : (
+        <div className="confirm">
+          <div className="confirm__title">이대로 수정할까요?</div>
+          <p className="confirm__hint">
+            수정하면 발주 받는 곳에 &lsquo;발주수정&rsquo;으로 다시 표시됩니다.
+          </p>
+          <div className="confirm__actions">
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => setConfirming(false)}
+            >
+              다시 볼게요
+            </button>
+            <SubmitButton pendingText="AI가 정리 중…">네, 수정할게요</SubmitButton>
+          </div>
+        </div>
+      )}
+    </form>
+  );
+}

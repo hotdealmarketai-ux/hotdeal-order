@@ -28,13 +28,15 @@ export default async function VendorSummary(props: {
           {labelDate(date)} · {VENDOR_LABEL[user.role as Role] ?? ""}
         </p>
 
-        <Link
-          href={`/vendor/report?date=${date}`}
-          className="btn btn--primary"
-          style={{ marginBottom: 16 }}
-        >
-          경매 입찰 전략 레포트 생성
-        </Link>
+        {user.role === "VENDOR_SEOBU" && (
+          <Link
+            href={`/vendor/report?date=${date}`}
+            className="btn btn--primary"
+            style={{ marginBottom: 16 }}
+          >
+            발주 레포트 생성
+          </Link>
+        )}
 
         <Suspense fallback={<AggLoading />}>
           <AggregateSection
@@ -86,7 +88,12 @@ async function AggregateSection({
     })),
   );
 
-  const agg = await aggregateOrders({ categoryLabel: vendorLabel, lines });
+  // 과일·야채는 상세 분류(produce), 공구·두부류는 같으면 묶기(simple)
+  const mode =
+    vendorRole === "VENDOR_SEOBU" || vendorRole === "VENDOR_JANGHEUNG"
+      ? "produce"
+      : "simple";
+  const agg = await aggregateOrders({ categoryLabel: vendorLabel, lines }, mode);
 
   if (agg.fruits.length === 0) {
     return (
@@ -100,7 +107,6 @@ async function AggregateSection({
     <>
       <div className="notice notice--ai" style={{ marginBottom: 14 }}>
         지점 발주 {orders.length}건을 품목 {agg.fruits.length}종으로 묶었어요.
-        {agg.engine === "claude" ? " (AI 취합)" : ""}
       </div>
       <div className="stack">
         {agg.fruits.map((f, i) => (

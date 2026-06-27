@@ -29,20 +29,24 @@ export default async function MyPage(props: {
     date: string;
     cats: Category[];
     items: number;
+    orders: number;
+    confirmed: number;
   }[] = [];
   if (groupByDate) {
-    const map = new Map<string, { date: string; cats: Category[]; items: number }>();
+    const map = new Map<string, (typeof dayGroups)[number]>();
     for (const o of orders) {
       const d = kstDateOf(o.createdAt);
       let g = map.get(d);
       if (!g) {
-        g = { date: d, cats: [], items: 0 };
+        g = { date: d, cats: [], items: 0, orders: 0, confirmed: 0 };
         map.set(d, g);
         dayGroups.push(g);
       }
       const c = o.category as Category;
       if (!g.cats.includes(c)) g.cats.push(c);
       g.items += o._count.items;
+      g.orders += 1;
+      if (o.confirmed) g.confirmed += 1;
     }
     for (const g of dayGroups) {
       g.cats.sort(
@@ -108,7 +112,13 @@ export default async function MyPage(props: {
                     {g.items}건
                   </div>
                 </div>
-                <span className="row__chev">›</span>
+                {g.confirmed >= g.orders ? (
+                  <span className="badge badge--ok">준비 중</span>
+                ) : g.confirmed > 0 ? (
+                  <span className="badge badge--mute">일부 확인</span>
+                ) : (
+                  <span className="row__chev">›</span>
+                )}
               </Link>
             ))}
           </div>
@@ -126,7 +136,11 @@ export default async function MyPage(props: {
                       {formatKDate(o.createdAt)} · {cat.vendorLabel}
                     </div>
                   </div>
-                  <span className="row__chev">›</span>
+                  {o.confirmed ? (
+                    <span className="badge badge--ok">준비 중</span>
+                  ) : (
+                    <span className="row__chev">›</span>
+                  )}
                 </Link>
               );
             })}

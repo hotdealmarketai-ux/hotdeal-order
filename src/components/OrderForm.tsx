@@ -14,9 +14,11 @@ function isFilled(r: Row) {
 export function OrderForm({
   categories,
   needsPickup,
+  locked = false,
 }: {
   categories: Category[];
   needsPickup: boolean;
+  locked?: boolean;
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -61,7 +63,6 @@ export function OrderForm({
     });
   }
 
-  // 모든 카테고리에서 채워진 줄을 모아 한 번에 발주
   const payload = useMemo(
     () =>
       categories
@@ -90,143 +91,150 @@ export function OrderForm({
       <input type="hidden" name="payload" value={JSON.stringify(payload)} />
       {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
 
+      {locked && (
+        <div className="notice notice--mute" style={{ marginBottom: 14 }}>
+          지금은 발주 가능 시간이 아니에요. 발주 시작 시간에 다시 입력해 주세요.
+        </div>
+      )}
+
       {(state?.error || localError) && (
         <div className="notice notice--error" style={{ marginBottom: 12 }}>
           {state?.error || localError}
         </div>
       )}
 
-      {multi && (
-        <div className="cattabs">
-          {categories.map((c) => {
-            const n = countByCat[c] ?? 0;
-            return (
-              <button
-                type="button"
-                key={c}
-                className={`cattab ${active === c ? "is-active" : ""}`}
-                onClick={() => setActive(c)}
-              >
-                {CATEGORIES[c].label}
-                {n > 0 && <span className="cattab__count">{n}</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="notice notice--info" style={{ marginBottom: 14 }}>
-        받는 곳 · <b>{cat.vendorLabel}</b> &nbsp;({cat.desc})
-      </div>
-
-      {needsPickup && (
-        <div className="field">
-          <label className="label" htmlFor="pickup">
-            픽업 시간
-          </label>
-          <input
-            id="pickup"
-            className="input"
-            value={pickup}
-            onChange={(e) => setPickup(e.target.value)}
-            placeholder="예) 오전 7시 / 8시 30분"
-          />
-        </div>
-      )}
-
-      <div className="section-label">발주 품목</div>
-
-      {rows.map((r, i) => {
-        const filled = isFilled(r);
-        return (
-          <div className="orderline" key={r.id}>
-            <div className="orderline__idx">
-              <span className="orderline__num">{i + 1}</span>
-              {filled && (
+      <fieldset
+        disabled={locked}
+        style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
+      >
+        {multi && (
+          <div className="cattabs">
+            {categories.map((c) => {
+              const n = countByCat[c] ?? 0;
+              return (
                 <button
                   type="button"
-                  className="linkbtn linkbtn--danger"
-                  onClick={() => removeRow(r.id)}
+                  key={c}
+                  className={`cattab ${active === c ? "is-active" : ""}`}
+                  onClick={() => setActive(c)}
                 >
-                  삭제
+                  {CATEGORIES[c].label}
+                  {n > 0 && <span className="cattab__count">{n}</span>}
                 </button>
-              )}
-            </div>
-            <input
-              className="input orderline__name"
-              value={r.name}
-              onChange={(e) => updateRow(r.id, "name", e.target.value)}
-              placeholder="품목 (예: 사과)"
-            />
-            <input
-              className="input"
-              value={r.qty}
-              onChange={(e) => updateRow(r.id, "qty", e.target.value)}
-              placeholder="수량"
-            />
-            <input
-              className="input orderline__note"
-              value={r.note}
-              onChange={(e) => updateRow(r.id, "note", e.target.value)}
-              placeholder="부연설명 (등급·다이·요청 등)"
-            />
+              );
+            })}
           </div>
-        );
-      })}
+        )}
 
-      <p className="hint">
-        칸을 채우면 다음 줄이 자동으로 생겨요.
-        {multi && " 종류(과일·야채·공구·두부)를 위에서 바꿔가며 모두 적을 수 있어요."}
-      </p>
-
-      {!confirming ? (
-        <div style={{ marginTop: 18 }}>
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => {
-              if (totalItems === 0) {
-                setLocalError("발주할 품목을 한 개 이상 입력하세요.");
-                return;
-              }
-              setLocalError("");
-              setConfirming(true);
-            }}
-          >
-            발주하기
-          </button>
+        <div className="notice notice--info" style={{ marginBottom: 14 }}>
+          받는 곳 · <b>{cat.vendorLabel}</b>
         </div>
-      ) : (
-        <div className="confirm">
-          <div className="confirm__title">이대로 발주할까요?</div>
-          <div className="confirm__list">
-            {payload.map((g) => (
-              <div className="confirm__row" key={g.category}>
-                <span className="confirm__cat">{CATEGORIES[g.category].label}</span>
-                <span className="confirm__dest">
-                  {CATEGORIES[g.category].vendorLabel}
-                </span>
-                <span className="confirm__n">{g.items.length}건</span>
-              </div>
-            ))}
+
+        {needsPickup && (
+          <div className="field">
+            <label className="label" htmlFor="pickup">
+              픽업 시간
+            </label>
+            <input
+              id="pickup"
+              className="input"
+              value={pickup}
+              onChange={(e) => setPickup(e.target.value)}
+              placeholder="오전 7시 30분"
+            />
           </div>
-          {multi && (
-            <p className="confirm__hint">
-              위 {payload.length}개 종류가 한 번에 발주됩니다.
-            </p>
-          )}
-          <div className="confirm__actions">
+        )}
+
+        <div className="section-label">발주 품목</div>
+
+        {rows.map((r, i) => {
+          const filled = isFilled(r);
+          return (
+            <div className="orderline" key={r.id}>
+              <div className="orderline__idx">
+                <span className="orderline__num">{i + 1}</span>
+                {filled && (
+                  <button
+                    type="button"
+                    className="linkbtn linkbtn--danger"
+                    onClick={() => removeRow(r.id)}
+                  >
+                    삭제
+                  </button>
+                )}
+              </div>
+              <input
+                className="input orderline__name"
+                value={r.name}
+                onChange={(e) => updateRow(r.id, "name", e.target.value)}
+                placeholder="품목"
+              />
+              <input
+                className="input"
+                value={r.qty}
+                onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+                placeholder="수량"
+              />
+              <input
+                className="input orderline__note"
+                value={r.note}
+                onChange={(e) => updateRow(r.id, "note", e.target.value)}
+                placeholder="설명"
+              />
+            </div>
+          );
+        })}
+
+        {!confirming ? (
+          <div style={{ marginTop: 18 }}>
             <button
               type="button"
-              className="btn btn--ghost"
-              onClick={() => setConfirming(false)}
+              className="btn btn--primary"
+              disabled={locked}
+              onClick={() => {
+                if (totalItems === 0) {
+                  setLocalError("발주할 품목을 한 개 이상 입력하세요.");
+                  return;
+                }
+                setLocalError("");
+                setConfirming(true);
+              }}
             >
-              다시 볼게요
+              발주하기
             </button>
-            <SubmitButton pendingText="AI가 정리 중…">네, 발주할게요</SubmitButton>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="confirm">
+            <div className="confirm__title">이대로 발주할까요?</div>
+            <div className="confirm__list">
+              {payload.map((g) => (
+                <div className="confirm__row" key={g.category}>
+                  <span className="confirm__cat">{CATEGORIES[g.category].label}</span>
+                  <span className="confirm__dest">
+                    {CATEGORIES[g.category].vendorLabel}
+                  </span>
+                  <span className="confirm__n">{g.items.length}건</span>
+                </div>
+              ))}
+            </div>
+            {multi && (
+              <p className="confirm__hint">
+                위 {payload.length}개 종류가 한 번에 발주됩니다.
+              </p>
+            )}
+            <div className="confirm__actions">
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => setConfirming(false)}
+              >
+                다시 볼게요
+              </button>
+              <SubmitButton pendingText="AI가 정리 중…">네, 발주할게요</SubmitButton>
+            </div>
+          </div>
+        )}
+      </fieldset>
     </form>
   );
 }

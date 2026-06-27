@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { requireVendor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { VENDOR_LABEL, type Role } from "@/lib/constants";
@@ -10,6 +11,8 @@ export default async function VendorReport(props: {
   searchParams: Promise<{ date?: string }>;
 }) {
   const user = await requireVendor();
+  // 발주 레포트는 경매에 나가는 서부일광(청과)만
+  if (user.role !== "VENDOR_SEOBU") notFound();
   const { date: dateParam } = await props.searchParams;
   const date = normalizeDateStr(dateParam);
   const isToday = date === kstToday();
@@ -24,10 +27,10 @@ export default async function VendorReport(props: {
         >
           ‹
         </Link>
-        <div className="topbar__title">경매 입찰 레포트</div>
+        <div className="topbar__title">발주 레포트</div>
       </header>
       <div className="page">
-        <h1 className="h1">오늘 경매 입찰 레포트</h1>
+        <h1 className="h1">오늘 발주 레포트</h1>
         <p className="lead">
           {labelDate(date)}
           {isToday ? " (오늘)" : ""} · {VENDOR_LABEL[user.role as Role] ?? ""}
@@ -100,7 +103,7 @@ async function ReportSection({
     <>
       <div className="card">
         <div className="section-label" style={{ margin: "0 0 12px" }}>
-          오늘 입찰 안내
+          오늘 발주 준비 정리
         </div>
         {report.sentences.map((s, i) => (
           <p

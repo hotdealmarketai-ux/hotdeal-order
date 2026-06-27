@@ -37,6 +37,18 @@ export function labelDate(dateStr: string): string {
   }).format(d);
 }
 
+/** 표시용 풀 라벨: YYYY-MM-DD -> "2026년 6월 27일 토요일" */
+export function fullKLabel(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00+09:00`);
+  return new Intl.DateTimeFormat("ko-KR", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+    timeZone: "Asia/Seoul",
+  }).format(d);
+}
+
 /** 하루 이동 (±1일) */
 export function shiftDate(dateStr: string, days: number): string {
   const d = new Date(`${dateStr}T00:00:00+09:00`);

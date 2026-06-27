@@ -1,0 +1,92 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { requireAdmin } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
+import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
+import { kstDayRange, labelDate, normalizeDateStr } from "@/lib/date";
+import { PrintButton } from "@/components/PrintButton";
+
+export default async function AdminCombinedReceipt(props: {
+  params: Promise<{ userId: string; date: string }>;
+}) {
+  await requireAdmin();
+  const { userId, date: rawDate } = await props.params;
+  const date = normalizeDateStr(rawDate);
+  const { start, end } = kstDayRange(date);
+
+  const merchant = await prisma.user.findUnique({ where: { id: userId } });
+  if (!merchant) notFound();
+
+  const orders = await prisma.order.findMany({
+    where: { userId, createdAt: { gte: start, lt: end } },
+    include: { items: { orderBy: { sortOrder: "asc" } } },
+    orderBy: { createdAt: "asc" },
+  });
+  if (orders.length === 0) notFound();
+
+  // 같은 종류(과일/야채/공구/두부)는 한 섹션으로 병합 — 4종이 합쳐진 하나의 발주서
+  type Item = { name: string; qty: string; note: string };
+  const byCat = new Map<Category, Item[]>();
+  for (const o of orders) {
+    const c = o.category as Category;
+    const list = byCat.get(c) ?? [];
+    for (const it of o.items) list.push({ name: it.name, qty: it.qty, note: it.note });
+    byCat.set(c, list);
+  }
+  const sections = CATEGORY_ORDER.filter((c) => byCat.has(c)).map((c) => ({
+    cat: c,
+    items: byCat.get(c)!,
+  }));
+  const totalItems = sections.reduce((n, s) => n + s.items.length, 0);
+
+  return (
+    <>
+      <header className="topbar">
+        <Link href="/admin/hotdeal" className="topbar__back" aria-label="뒤로">
+          ‹
+        </Link>
+        <div className="topbar__title">발주서</div>
+      </header>
+      <div className="page">
+        <div className="receipt" id="receipt-print">
+          <div className="receipt__head">
+            <div className="receipt__store">{merchant.storeName}</div>
+            <div
+              className="receipt__meta"
+              style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}
+            >
+              <span className="badge badge--mute">{labelDate(date)}</span>
+              <span className="badge badge--mute">
+                {sections.length}종 · {totalItems}건
+              </span>
+            </div>
+          </div>
+
+          {sections.map((s) => {
+            const cat = CATEGORIES[s.cat];
+            return (
+              <div className="receipt__section" key={s.cat}>
+                <div className="section-label" style={{ margin: "0 0 8px" }}>
+                  {cat.label}
+                </div>
+                {s.items.map((it, i) => (
+                  <div className="receipt-item" key={i}>
+                    <div className="receipt-item__name">{it.name || "-"}</div>
+                    <div className="receipt-item__qty">{it.qty}</div>
+                    {it.note && (
+                      <div className="receipt-item__note">※ {it.note}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <PrintButton />
+        </div>
+      </div>
+    </>
+  );
+}

@@ -9,16 +9,30 @@ import {
   CATEGORIES,
   needsPickupTime,
   type Category,
+  type Role,
 } from "@/lib/constants";
 import {
-  hasOrderDeadline,
-  isPastOrderDeadline,
+  hasOrderWindow,
+  isOrderOpen,
+  ORDER_OPEN_LABEL,
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
-import { kstToday } from "@/lib/date";
-import { normalizeOrder } from "@/lib/ai";
+import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
+import { normalizeOrder, normalizePickupTime } from "@/lib/ai";
 
 export type OrderFormState = { error?: string };
+
+async function buildPickup(
+  role: Role,
+  formData: FormData,
+  dateStr: string,
+): Promise<string> {
+  if (!needsPickupTime(role)) return "";
+  const raw = String(formData.get("pickupTime") ?? "").trim().slice(0, 100);
+  if (!raw) return "";
+  const cleaned = await normalizePickupTime(raw);
+  return cleaned ? `${fullKLabel(dateStr)} ${cleaned}` : "";
+}
 
 type RawRow = { name?: string; qty?: string; note?: string };
 type Group = { category: Category; items: { name: string; qty: string; note: string }[] };
@@ -42,10 +56,10 @@ export async function createOrderAction(
 ): Promise<OrderFormState> {
   const user = await requireMerchant();
 
-  // 발주 마감(오후 8시) 가드 — 핫딜마켓 가맹점만
-  if (hasOrderDeadline(user.role) && isPastOrderDeadline()) {
+  // 발주 운영시간 가드 — 핫딜마켓 가맹점만 (낮 12시~오후 8시)
+  if (hasOrderWindow(user.role) && !isOrderOpen()) {
     return {
-      error: `오늘 발주 시간이 마감되었어요. (${ORDER_DEADLINE_LABEL} 마감) 내일 다시 발주해 주세요.`,
+      error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
     };
   }
 
@@ -75,9 +89,8 @@ export async function createOrderAction(
     return { error: "발주할 품목을 한 개 이상 입력하세요." };
   }
 
-  const pickupTime = needsPickupTime(user.role)
-    ? String(formData.get("pickupTime") ?? "").trim().slice(0, 100)
-    : "";
+  // 픽업시간: '오늘 날짜 + 정갈한 시간'으로 정리 (예: 2026년 6월 27일 토요일 오전 7시 30분)
+  const pickupTime = await buildPickup(user.role, formData, kstToday());
 
   // 각 카테고리 AI 정리 (병렬, 키 없으면 규칙기반 폴백)
   const normalized = await Promise.all(
@@ -136,8 +149,102 @@ export async function createOrderAction(
   }
 
   // 핫딜마켓(여러 카테고리)은 날짜 단위 발주서로, 그 외(단일)는 개별 발주서로
-  if (hasOrderDeadline(user.role) || groups.length > 1) {
+  if (hasOrderWindow(user.role) || groups.length > 1) {
     redirect(`/order/day/${kstToday()}?new=1`);
   }
   redirect(`/order/${firstId}?new=1`);
+}
+
+// ============================================================
+//  발주 수정 — 본인 발주만. 가맹점은 운영시간(12~20시)에만, 소매업자는 항상.
+// ============================================================
+export async function updateOrderAction(
+  _prev: OrderFormState,
+  formData: FormData,
+): Promise<OrderFormState> {
+  const user = await requireMerchant();
+  const orderId = String(formData.get("orderId") ?? "");
+  if (!orderId) return { error: "잘못된 요청이에요." };
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { userId: true, category: true, createdAt: true },
+  });
+  if (!order || order.userId !== user.id) {
+    return { error: "수정할 수 없는 발주예요." };
+  }
+
+  // 운영시간 가드 — 핫딜마켓 가맹점만
+  if (hasOrderWindow(user.role) && !isOrderOpen()) {
+    return {
+      error: `지금은 수정 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL})`,
+    };
+  }
+
+  const category = order.category as Category;
+
+  let parsed: RawRow[] = [];
+  try {
+    parsed = JSON.parse(String(formData.get("items") ?? "[]"));
+  } catch {
+    parsed = [];
+  }
+  const items = cleanItems(parsed);
+  if (items.length === 0) return { error: "발주할 품목을 한 개 이상 입력하세요." };
+  if (!items.some((r) => r.name)) return { error: "품목명을 입력하세요." };
+
+  const orderDate = kstDateOf(order.createdAt);
+  const pickupTime = await buildPickup(user.role, formData, orderDate);
+
+  const result = await normalizeOrder({
+    categoryLabel: CATEGORIES[category].label,
+    items,
+    pickupTime: pickupTime || undefined,
+  });
+  const aligned = result.items.length === items.length;
+  const clean = aligned ? result.items : items;
+  const engine = aligned ? result.engine : "rule";
+  const rawText = items
+    .map((r, i) => `${i + 1}. ${[r.name, r.qty, r.note].filter(Boolean).join(" ")}`)
+    .join("\n");
+
+  try {
+    await prisma.$transaction([
+      prisma.orderItem.deleteMany({ where: { orderId } }),
+      prisma.order.update({
+        where: { id: orderId },
+        data: {
+          pickupTime: pickupTime || null,
+          rawText,
+          aiSummary: result.summary,
+          aiProcessed: true,
+          aiEngine: engine,
+          // 수정되면 '발주수정' 표시 + 이전 발주확인은 해제(재확인 필요)
+          edited: true,
+          editedAt: new Date(),
+          confirmed: false,
+          confirmedAt: null,
+          items: {
+            create: items.map((r, i) => ({
+              sortOrder: i,
+              rawName: r.name,
+              rawQty: r.qty,
+              rawNote: r.note,
+              name: clean[i]?.name ?? r.name,
+              qty: clean[i]?.qty ?? r.qty,
+              note: clean[i]?.note ?? r.note,
+            })),
+          },
+        },
+      }),
+    ]);
+  } catch (err) {
+    console.error("[order] update failed:", err);
+    return { error: "수정 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+
+  if (hasOrderWindow(user.role)) {
+    redirect(`/order/day/${orderDate}?edited=1`);
+  }
+  redirect(`/order/${orderId}?edited=1`);
 }

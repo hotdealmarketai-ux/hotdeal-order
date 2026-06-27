@@ -4,81 +4,96 @@ import { useEffect, useState } from "react";
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
-// 오늘 오후 8시(KST)까지 남은 밀리초
-function msUntilDeadline(deadlineHour: number): number {
-  const now = Date.now();
-  const kst = new Date(now + KST_OFFSET_MS);
-  const targetKstWall = Date.UTC(
-    kst.getUTCFullYear(),
-    kst.getUTCMonth(),
-    kst.getUTCDate(),
-    deadlineHour,
-    0,
-    0,
-  );
-  const targetUtc = targetKstWall - KST_OFFSET_MS;
-  return targetUtc - now;
+function kstParts(now: number) {
+  const d = new Date(now + KST_OFFSET_MS);
+  return {
+    y: d.getUTCFullYear(),
+    mo: d.getUTCMonth(),
+    da: d.getUTCDate(),
+    h: d.getUTCHours(),
+  };
+}
+
+// (KST 벽시계 y-mo-da-h) 에 해당하는 실제 UTC 인스턴트
+function targetUtc(y: number, mo: number, da: number, h: number) {
+  return Date.UTC(y, mo, da, h, 0, 0) - KST_OFFSET_MS;
 }
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
 }
 
+function clock(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+}
+
 export function DeadlineCountdown({
-  deadlineHour,
+  openHour,
+  closeHour,
   deadlineLabel,
 }: {
-  deadlineHour: number;
+  openHour: number;
+  closeHour: number;
   deadlineLabel: string;
 }) {
-  const [ms, setMs] = useState<number | null>(null);
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
-    const tick = () => setMs(msUntilDeadline(deadlineHour));
+    const tick = () => setNow(Date.now());
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [deadlineHour]);
+  }, []);
 
-  // 서버/첫 렌더에서는 빈 자리만 — 하이드레이션 불일치 방지
-  if (ms === null) {
+  // 첫 렌더(서버/하이드레이션)에는 시계 숨김 — 불일치 방지
+  if (now === null) {
     return (
       <div className="countdown" aria-hidden>
-        <div className="countdown__label">발주 마감 ({deadlineLabel})까지</div>
-        <div className="countdown__time">— : — : —</div>
+        <div className="countdown__label">금일 발주 마감은 {deadlineLabel} 입니다.</div>
+        <div className="countdown__time">
+          <span className="countdown__pre">발주 마감까지</span>
+          <span className="countdown__clock">--:--:--</span>
+        </div>
       </div>
     );
   }
 
-  if (ms <= 0) {
+  const { y, mo, da, h } = kstParts(now);
+  const open = h >= openHour && h < closeHour;
+
+  if (open) {
+    const target = targetUtc(y, mo, da, closeHour);
     return (
-      <div className="countdown countdown--closed">
-        <div className="countdown__label">오늘 발주</div>
-        <div className="countdown__time">마감되었어요</div>
+      <div className="countdown">
+        <div className="countdown__label">금일 발주 마감은 {deadlineLabel} 입니다.</div>
+        <div className="countdown__time">
+          <span className="countdown__pre">발주 마감까지</span>
+          <span className="countdown__clock">{clock(target - now)}</span>
+        </div>
       </div>
     );
   }
 
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  const soon = ms <= 30 * 60 * 1000; // 30분 이내
-
+  // 마감 상태 → 다음 발주 시작(정오)까지
+  let ny = y,
+    nmo = mo,
+    nda = da;
+  if (h >= closeHour) {
+    // 저녁: 다음 정오는 내일
+    const t = new Date(Date.UTC(y, mo, da) + 24 * 60 * 60 * 1000);
+    ny = t.getUTCFullYear();
+    nmo = t.getUTCMonth();
+    nda = t.getUTCDate();
+  }
+  const target = targetUtc(ny, nmo, nda, openHour);
   return (
-    <div className={`countdown ${soon ? "countdown--soon" : ""}`}>
-      <div className="countdown__label">발주 마감 ({deadlineLabel})까지</div>
+    <div className="countdown countdown--closed">
+      <div className="countdown__label">발주가 마감되었습니다</div>
       <div className="countdown__time">
-        {h > 0 && (
-          <>
-            <span className="countdown__num">{pad(h)}</span>
-            <span className="countdown__unit">시간</span>
-          </>
-        )}
-        <span className="countdown__num">{pad(m)}</span>
-        <span className="countdown__unit">분</span>
-        <span className="countdown__num">{pad(s)}</span>
-        <span className="countdown__unit">초</span>
+        <span className="countdown__pre">발주 시작까지</span>
+        <span className="countdown__clock">{clock(target - now)}</span>
+        <span className="countdown__pre">남았습니다</span>
       </div>
     </div>
   );

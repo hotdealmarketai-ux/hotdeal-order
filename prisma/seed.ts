@@ -35,7 +35,7 @@ async function main() {
     {
       username: "saerop",
       role: "ADMIN_SAEROP",
-      storeName: "새롭 (핫딜마켓 본사)",
+      storeName: "새롭",
       phone: "051-000-0000",
       address: "부산 핫딜마켓 본사",
     },
@@ -50,7 +50,7 @@ async function main() {
     {
       username: "sample",
       role: "MERCHANT_SEOBU",
-      storeName: "사하청과 (서부일광 소매)",
+      storeName: "사하청과",
       phone: "010-3333-4444",
       address: "부산 사하구 OO로 34",
     },
@@ -93,17 +93,9 @@ async function main() {
     },
   });
 
-  // ---- 재고현황 — 비어있을 때만 생성(운영에서 매 빌드 안전) ----
-  if ((await prisma.inventoryItem.count()) === 0) {
-    await prisma.inventoryItem.createMany({
-      data: [
-        { name: "샤인머스캣", status: "넉넉", memo: "오늘 물량 좋음", sortOrder: 1 },
-        { name: "부사 사과", status: "보통", memo: "특/상 위주", sortOrder: 2 },
-        { name: "감귤", status: "부족", memo: "오후 입고 예정", sortOrder: 3 },
-        { name: "대추방울토마토", status: "넉넉", memo: "", sortOrder: 4 },
-      ],
-    });
-  }
+  // 재고현황은 새롭(본사)이 실제로 입력 — 데모 데이터 시드하지 않음
+  // [일회성] 기존 데모 재고 정리. 배포 1회 반영 후 이 줄은 제거할 것.
+  await prisma.inventoryItem.deleteMany({});
 
   // ---- 샘플 발주(서부일광 inbox 확인용) ----
   const hotdeal = await prisma.user.findUnique({ where: { username: "hotdeal" } });

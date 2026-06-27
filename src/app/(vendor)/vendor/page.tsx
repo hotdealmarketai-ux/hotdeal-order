@@ -63,7 +63,9 @@ export default async function VendorPage(props: {
                       {o.pickupTime ? ` · 픽업 ${o.pickupTime}` : ""}
                     </div>
                   </div>
-                  {o.confirmed ? (
+                  {o.edited && !o.confirmed ? (
+                    <span className="badge badge--edit">발주수정</span>
+                  ) : o.confirmed ? (
                     <span className="badge badge--ok">발주 확인</span>
                   ) : (
                     <span className="row__chev">›</span>

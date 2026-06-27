@@ -23,20 +23,14 @@ export default async function AdminInventory() {
       </header>
       <div className="page">
         <h1 className="h1">재고현황</h1>
-        <p className="lead">여기에 적은 내용이 핫딜마켓 가맹점 화면에 그대로 보여요.</p>
 
         <div className="card">
           <div className="section-label" style={{ margin: "0 0 10px" }}>
             새 품목 추가
           </div>
           <form action={addInventoryAction} className="stack">
-            <input name="name" className="input" placeholder="품목 (예: 샤인머스캣)" required />
-            <input
-              name="status"
-              className="input"
-              placeholder="상태/수량 (예: 넉넉 / 보통 / 부족)"
-            />
-            <input name="memo" className="input" placeholder="메모 (선택)" />
+            <input name="name" className="input" placeholder="품목" required />
+            <input name="status" className="input" placeholder="상태/수량" />
             <button className="btn btn--primary">추가하기</button>
           </form>
         </div>
@@ -64,12 +58,6 @@ export default async function AdminInventory() {
                     className="input"
                     defaultValue={it.status}
                     placeholder="상태/수량"
-                  />
-                  <input
-                    name="memo"
-                    className="input"
-                    defaultValue={it.memo}
-                    placeholder="메모"
                   />
                   <button className="btn btn--soft btn--sm" style={{ width: "100%" }}>
                     저장

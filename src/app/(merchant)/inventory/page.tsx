@@ -25,7 +25,6 @@ export default async function InventoryPage() {
       </header>
       <div className="page">
         <h1 className="h1">재고현황</h1>
-        <p className="lead">본사(새롭)가 올린 오늘의 재고예요.</p>
 
         {items.length === 0 ? (
           <div className="empty">

@@ -39,9 +39,6 @@ export function ReceiptCard(props: {
           <div className="spread">
             <div>
               <div className="receipt__store">{props.storeName}</div>
-              <div className="receipt__meta">
-                {props.categoryLabel} · {props.vendorLabel}으로 발주
-              </div>
             </div>
             {showOriginalButton && (
               <button
@@ -110,9 +107,8 @@ export function ReceiptCard(props: {
             className="btn btn--ghost"
             onClick={() => window.print()}
           >
-            장끼 출력
+            영수증 인쇄
           </button>
-          <p className="hint center">도트 프린터 연동은 추후 활성화됩니다.</p>
         </div>
       )}
     </div>
