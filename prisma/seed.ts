@@ -94,8 +94,6 @@ async function main() {
   });
 
   // 재고현황은 새롭(본사)이 실제로 입력 — 데모 데이터 시드하지 않음
-  // [일회성] 기존 데모 재고 정리. 배포 1회 반영 후 이 줄은 제거할 것.
-  await prisma.inventoryItem.deleteMany({});
 
   // ---- 샘플 발주(서부일광 inbox 확인용) ----
   const hotdeal = await prisma.user.findUnique({ where: { username: "hotdeal" } });
