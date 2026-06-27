@@ -720,6 +720,86 @@ a {
   flex: 1;
 }
 
+/* ---- 채팅(카톡)식 발주 ---- */
+.modetoggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+.modetoggle__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-row);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.modetoggle__btn:active {
+  transform: scale(0.97);
+}
+.chatorder {
+  display: flex;
+  flex-direction: column;
+}
+.chatbubble {
+  max-width: 90%;
+  padding: 14px 16px;
+  border-radius: 18px;
+  font-size: 15.5px;
+  line-height: 1.55;
+}
+.chatbubble--bot {
+  align-self: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom-left-radius: 6px;
+  box-shadow: var(--shadow-row);
+  color: var(--fg);
+}
+.chatbubble--me {
+  align-self: flex-end;
+  background: var(--black);
+  color: #fff;
+  border-bottom-right-radius: 6px;
+  box-shadow: var(--shadow-pill);
+}
+.chatbubble__hint {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--muted);
+  white-space: pre-line;
+}
+.chatcompose {
+  margin-top: 14px;
+}
+.chatcompose__input {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  padding: 14px 16px;
+  font-size: 16px;
+  font-family: inherit;
+  line-height: 1.55;
+  background: #fff;
+  color: var(--fg);
+  resize: vertical;
+  box-sizing: border-box;
+}
+.chatcompose__input:focus {
+  outline: none;
+  border-color: var(--fg-2);
+}
+.chatcompose__input:disabled {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
 /* ---- 큰 카테고리 카드(홈) ---- */
 .catgrid {
   display: grid;

@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useRef, useState } from "react";
 import { createOrderAction, type OrderFormState } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
+import { ChatOrder } from "./ChatOrder";
 import { CATEGORIES, type Category } from "@/lib/constants";
 
 type Row = { id: number; name: string; qty: string; note: string };
@@ -23,6 +24,7 @@ export function OrderForm({
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
 
+  const [mode, setMode] = useState<"grid" | "chat">("grid");
   const [active, setActive] = useState<Category>(categories[0]);
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
     const init: Record<string, Row[]> = {};
@@ -86,6 +88,27 @@ export function OrderForm({
   const cat = CATEGORIES[active];
   const multi = categories.length > 1;
 
+  if (mode === "chat") {
+    return (
+      <div>
+        <div className="modetoggle">
+          <button
+            type="button"
+            className="modetoggle__btn"
+            onClick={() => setMode("grid")}
+          >
+            칸에 직접 입력하기
+          </button>
+        </div>
+        <ChatOrder
+          categories={categories}
+          needsPickup={needsPickup}
+          locked={locked}
+        />
+      </div>
+    );
+  }
+
   return (
     <form action={formAction}>
       <input type="hidden" name="payload" value={JSON.stringify(payload)} />
@@ -126,8 +149,18 @@ export function OrderForm({
           </div>
         )}
 
-        <div className="notice notice--info" style={{ marginBottom: 14 }}>
+        <div className="notice notice--info" style={{ marginBottom: 10 }}>
           받는 곳 · <b>{cat.vendorLabel}</b>
+        </div>
+
+        <div className="modetoggle">
+          <button
+            type="button"
+            className="modetoggle__btn"
+            onClick={() => setMode("chat")}
+          >
+            채팅으로 발주하기
+          </button>
         </div>
 
         {needsPickup && (

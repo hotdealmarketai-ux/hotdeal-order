@@ -18,9 +18,52 @@ import {
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
 import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
-import { normalizeOrder, normalizePickupTime } from "@/lib/ai";
+import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
 
 export type OrderFormState = { error?: string };
+
+export type ChatParseState = {
+  ok: boolean;
+  groups?: { category: Category; items: { name: string; qty: string; note: string }[] }[];
+  pickupTime?: string;
+  error?: string;
+};
+
+// 채팅(자유 입력)으로 적은 발주를 AI가 정리해 미리보기용 구조로 반환 (저장은 안 함)
+export async function parseChatOrderAction(text: string): Promise<ChatParseState> {
+  const user = await requireMerchant();
+
+  if (hasOrderWindow(user.role) && !isOrderOpen()) {
+    return {
+      ok: false,
+      error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
+    };
+  }
+
+  const clean = String(text ?? "").trim().slice(0, 2000);
+  if (!clean) return { ok: false, error: "발주 내용을 입력해 주세요." };
+
+  const allowed = allowedCategoriesFor(user.role);
+  const catInfo = allowed.map((c) => ({
+    key: c,
+    label: CATEGORIES[c].label,
+    desc: CATEGORIES[c].desc,
+  }));
+
+  const parsed = await parseChatOrder({ text: clean, categories: catInfo });
+  const groups = parsed.groups
+    .filter((g) => allowed.includes(g.category as Category))
+    .map((g) => ({ category: g.category as Category, items: cleanItems(g.items) }))
+    .filter((g) => g.items.length > 0);
+
+  if (groups.length === 0) {
+    return {
+      ok: false,
+      error: "발주 내용을 알아보지 못했어요. 품목과 수량을 적어 주세요.",
+    };
+  }
+  return { ok: true, groups, pickupTime: parsed.pickupTime || "" };
+}
 
 async function buildPickup(
   role: Role,

@@ -163,6 +163,141 @@ export async function normalizeOrder(input: NormalizeInput): Promise<NormalizeRe
 }
 
 // ============================================================
+//  채팅(카톡)식 발주 파싱 — 자유 문장/슬래시 형식을 품목으로 정리 + 카테고리 분류
+// ============================================================
+export interface ChatCatInfo {
+  key: string; // FRUIT | VEG | TOOL | TOFU
+  label: string;
+  desc: string;
+}
+export interface ChatParseGroup {
+  category: string;
+  items: CleanItem[];
+}
+export interface ChatParseResult {
+  engine: "claude" | "rule";
+  groups: ChatParseGroup[];
+  pickupTime: string; // 본문에서 픽업 시간을 언급했으면(소매업자) 추출
+}
+export interface ChatParseInput {
+  text: string;
+  categories: ChatCatInfo[]; // 이 사용자가 발주 가능한 카테고리
+}
+
+/** 규칙기반 채팅 파싱 — 키 없을 때. 줄/콤마/슬래시로 대충 분리. */
+export function ruleChatParse(input: ChatParseInput): ChatParseResult {
+  const cat = input.categories[0]?.key ?? "FRUIT";
+  const chunks = tidy(input.text)
+    .split(/[\n,，]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const items: CleanItem[] = [];
+  for (const ch of chunks) {
+    const parts = ch.split("/").map((p) => tidy(p));
+    if (parts.length >= 2) {
+      items.push({ name: parts[0], qty: parts[1] ?? "", note: parts[2] ?? "" });
+    } else {
+      items.push({ name: ch, qty: "", note: "" });
+    }
+  }
+  return {
+    engine: "rule",
+    groups: items.length ? [{ category: cat, items }] : [],
+    pickupTime: "",
+  };
+}
+
+function chatSystemPrompt(cats: ChatCatInfo[], multi: boolean): string {
+  const catLines = cats.map((c) => `  - ${c.key} (${c.label}): ${c.desc}`).join("\n");
+  const onlyKey = cats[0]?.key ?? "FRUIT";
+  const classifyRule = multi
+    ? `[분류] 각 품목을 아래 카테고리 중 하나로 분류해 category에 키를 넣으세요. 허용된 카테고리만 사용:
+${catLines}
+  · 사과·귤·포도·딸기·참외·수박 등 = FRUIT(과일)
+  · 대파·양배추·마늘쫑·상추·토마토·오이 등 = VEG(야채)
+  · 두부·콩나물·순두부·숙주 등 = TOFU(두부류)
+  · 그날 공동구매하는 포장 가공식품(곰탕·케이크 등) = TOOL(공구)
+  애매하면 가장 가까운 카테고리에 넣으세요.`
+    : `[분류] 모든 품목의 category는 "${onlyKey}" 하나로 고정합니다.`;
+
+  return `당신은 카톡처럼 자유롭게 적은 발주 메시지를 표준 발주서로 정리하는 보조원입니다.
+입력은 두 형태가 섞일 수 있습니다:
+ (1) "행사용 사과 / 20박스 / 싼걸로" 처럼 슬래시로 구분
+ (2) "사장님 오늘 토마토 3개요, 사과는 좋은걸로 5박스 주세요" 처럼 일상 문장
+각 품목을 뽑아 name(품목)·qty(수량)·note(부연설명)로 정리하세요.
+
+[정규화]
+- 품목명 오타·줄임말은 실제 표준명으로 교정하되, 비슷한 다른 단어로 '추측 교정' 금지(불확실하면 원문 유지).
+- note는 짧은 명사 태그 하나만. 예) "싼걸로"·"저렴한"→"저가", "좋은걸로"·"상품으로"→"A급", "당도높은"→"고당도", "행사용"→"행사", "특"→"특". 없으면 "".
+- 수량은 임의 변경·추정 금지(없으면 ""). "3개"→"3개", "5박스"→"5박스".
+- 인사말·잡담("사장님","오늘","요","주세요" 등)은 버리고 품목만 추립니다.
+- 같은 품목을 여러 번 말하면 합치지 말고 적힌 그대로 각각.
+
+${classifyRule}
+
+[픽업] 본문에 픽업/수령 시간이 있으면 pickupTime에 그 시간만(없으면 "").
+
+결과는 순수 JSON만(다른 말·코드블록 금지):
+{"groups":[{"category":"${onlyKey}","items":[{"name":"사과","qty":"5박스","note":"A급"}]}],"pickupTime":""}`;
+}
+
+async function claudeChatParse(input: ChatParseInput): Promise<ChatParseResult> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("no key");
+  const { default: Anthropic } = await import("@anthropic-ai/sdk");
+  const client = new Anthropic({ apiKey });
+  const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+  const multi = input.categories.length > 1;
+  const allowed = new Set(input.categories.map((c) => c.key));
+
+  const msg = await client.messages.create({
+    model,
+    max_tokens: 2000,
+    system: chatSystemPrompt(input.categories, multi),
+    messages: [
+      {
+        role: "user",
+        content: `다음 발주 메시지를 정리해 JSON으로만 답하세요.\n"""${input.text.slice(0, 2000)}"""`,
+      },
+    ],
+  });
+  const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+  const parsed = extractJson(text) as {
+    groups?: { category?: string; items?: { name?: string; qty?: string; note?: string }[] }[];
+    pickupTime?: string;
+  };
+  const fallbackCat = input.categories[0]?.key ?? "FRUIT";
+  const groups: ChatParseGroup[] = (parsed.groups ?? [])
+    .map((g) => {
+      const key = allowed.has(String(g.category)) ? String(g.category) : fallbackCat;
+      return {
+        category: key,
+        items: (g.items ?? [])
+          .map((it) => ({
+            name: tidy(it.name ?? ""),
+            qty: tidy(it.qty ?? ""),
+            note: tidy(it.note ?? ""),
+          }))
+          .filter((it) => it.name || it.qty || it.note),
+      };
+    })
+    .filter((g) => g.items.length > 0);
+  if (groups.length === 0) throw new Error("empty chat parse");
+  return { engine: "claude", groups, pickupTime: tidy(parsed.pickupTime ?? "") };
+}
+
+/** 메인 진입점 — 항상 결과 보장(폴백) */
+export async function parseChatOrder(input: ChatParseInput): Promise<ChatParseResult> {
+  if (!tidy(input.text)) return { engine: "rule", groups: [], pickupTime: "" };
+  try {
+    if (process.env.ANTHROPIC_API_KEY) return await claudeChatParse(input);
+  } catch (err) {
+    console.error("[ai] claude chat parse failed, falling back to rule:", err);
+  }
+  return ruleChatParse(input);
+}
+
+// ============================================================
 //  픽업 시간 정리 — 사람이 적은 시간을 '오전/오후 H시 M분'으로 정갈하게
 // ============================================================
 export async function normalizePickupTime(raw: string): Promise<string> {
