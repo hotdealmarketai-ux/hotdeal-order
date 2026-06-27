@@ -55,7 +55,17 @@ export default async function AdminHome() {
           ))}
         </div>
 
-        <div style={{ marginTop: 22 }}>
+        <form
+          action="/admin/reset-orders"
+          method="post"
+          style={{ marginTop: 22 }}
+        >
+          <button type="submit" className="btn btn--danger">
+            전체 발주 초기화 (임시)
+          </button>
+        </form>
+
+        <div style={{ marginTop: 12 }}>
           <LogoutButton />
         </div>
       </div>
