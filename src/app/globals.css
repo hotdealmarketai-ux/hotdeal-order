@@ -29,7 +29,7 @@
   --radius-sm: 14px;
   --radius-lg: 24px;
   --maxw: 540px;
-  --nav-h: 76px;
+  --nav-h: 68px;
   --shadow-card: 0 4px 16px rgba(40, 34, 24, 0.05);
   --shadow-row: 0 3px 12px rgba(40, 34, 24, 0.04);
   --shadow-pill: 0 8px 22px rgba(28, 26, 23, 0.2);
@@ -390,7 +390,7 @@ a {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 3px;
   font-size: 13.5px;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -410,21 +410,6 @@ a {
   filter: none;
   opacity: 1;
 }
-/* 라벨 위 둥근 네모 박스 (활성=검정 채움, 비활성=연한 박스) */
-.bottomnav__box {
-  width: 22px;
-  height: 16px;
-  border-radius: 6px;
-  background: var(--chip);
-  transition: background 0.15s ease, transform 0.06s ease;
-}
-.bottomnav__item.is-active .bottomnav__box {
-  background: var(--black);
-}
-.bottomnav__item:active .bottomnav__box {
-  transform: scale(0.92);
-}
-
 /* ---- 영수증 ---- */
 .receipt {
   background: #fff;
