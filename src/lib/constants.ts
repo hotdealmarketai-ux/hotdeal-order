@@ -126,7 +126,7 @@ export function vendorRoleForCategory(category: Category): Role {
 // 로그인 후 역할별 홈 경로
 export function homePathFor(role: Role, status: Status): string {
   if (status !== "APPROVED") return "/pending";
-  if (role === "ADMIN_SAEROP") return "/admin";
+  // 새롭(관리자)도 메인은 공구 발주 현황(/vendor) — 관리는 하단 네비로 진입
   if (isVendor(role)) return "/vendor";
   if (isMerchant(role)) return "/order";
   return "/pending";

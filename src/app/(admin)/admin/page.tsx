@@ -6,32 +6,26 @@ import { LogoutButton } from "@/components/LogoutButton";
 export default async function AdminHome() {
   const user = await requireAdmin();
 
-  const [pending, totalOrders, toolOrders, hotdealOrders] = await Promise.all([
+  const [pending, totalOrders, hotdealOrders] = await Promise.all([
     prisma.user.count({ where: { status: "PENDING" } }),
     prisma.order.count(),
-    prisma.order.count({ where: { vendorRole: "ADMIN_SAEROP" } }),
     prisma.order.count({ where: { user: { role: "MERCHANT_HOTDEAL" } } }),
   ]);
 
   const menu = [
     {
       href: "/admin/approvals",
-      title: "가입 승인",
+      title: "가입 대기",
       sub: pending > 0 ? `${pending}건 대기 중` : "대기 없음",
       badge: pending > 0 ? pending : undefined,
     },
-    { href: "/admin/orders", title: "전체 발주", sub: `총 ${totalOrders}건` },
+    { href: "/admin/orders", title: "전체 발주 목록", sub: `총 ${totalOrders}건` },
     {
       href: "/admin/orders?scope=hotdeal",
-      title: "핫딜마켓 발주만 보기",
+      title: "핫딜마켓 발주관리",
       sub: `${hotdealOrders}건`,
     },
-    {
-      href: "/admin/orders?scope=saerop",
-      title: "공구 발주 (새롭 직접)",
-      sub: `${toolOrders}건`,
-    },
-    { href: "/admin/inventory", title: "재고현황 작성", sub: "핫딜 가맹점에 노출" },
+    { href: "/admin/inventory", title: "재고", sub: "핫딜 가맹점에 노출" },
   ];
 
   return (
