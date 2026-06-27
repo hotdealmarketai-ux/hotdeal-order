@@ -28,6 +28,14 @@ export default async function VendorSummary(props: {
           {labelDate(date)} · {VENDOR_LABEL[user.role as Role] ?? ""}
         </p>
 
+        <Link
+          href={`/vendor/report?date=${date}`}
+          className="btn btn--primary"
+          style={{ marginBottom: 16 }}
+        >
+          경매 입찰 전략 레포트 생성
+        </Link>
+
         <Suspense fallback={<AggLoading />}>
           <AggregateSection
             date={date}
@@ -45,7 +53,7 @@ function AggLoading() {
     <div className="empty">
       <div className="statusring statusring--spin" aria-hidden />
       <p style={{ marginTop: 18 }}>
-        전 지점 발주를 품종별로 묶는 중이에요…
+        전 지점 발주를 품목·종류로 묶는 중이에요…
         <br />
         잠시만 기다려 주세요.
       </p>
@@ -80,7 +88,7 @@ async function AggregateSection({
 
   const agg = await aggregateOrders({ categoryLabel: vendorLabel, lines });
 
-  if (agg.groups.length === 0) {
+  if (agg.fruits.length === 0) {
     return (
       <div className="empty">
         <p>이 날짜에 집계할 발주가 없어요.</p>
@@ -91,30 +99,39 @@ async function AggregateSection({
   return (
     <>
       <div className="notice notice--ai" style={{ marginBottom: 14 }}>
-        지점 발주 {orders.length}건을 품목 {agg.groups.length}종으로 묶었어요.
+        지점 발주 {orders.length}건을 품목 {agg.fruits.length}종으로 묶었어요.
         {agg.engine === "claude" ? " (AI 취합)" : ""}
       </div>
       <div className="stack">
-        {agg.groups.map((g, i) => (
+        {agg.fruits.map((f, i) => (
           <div className="card" key={i}>
-            <div className="spread" style={{ marginBottom: 6 }}>
-              <div className="receipt__store" style={{ fontSize: 19 }}>
-                {g.product || "(품목 미지정)"}
+            <div className="spread" style={{ marginBottom: 8 }}>
+              <div className="receipt__store" style={{ fontSize: 20 }}>
+                {f.fruit || "(품목 미지정)"}
               </div>
-              {g.total ? (
-                <span className="badge badge--ai">합계 {g.total}</span>
-              ) : (
-                <span className="badge badge--mute">{g.lines.length}개 지점</span>
-              )}
+              {f.total ? <span className="badge badge--ai">합계 {f.total}</span> : null}
             </div>
-            <div className="divider" style={{ margin: "2px 0 8px" }} />
-            {g.lines.map((l, j) => (
-              <div className="aggline" key={j}>
-                <span className="aggline__store">
-                  {l.store}
-                  {l.note ? ` · ${l.note}` : ""}
-                </span>
-                <span className="aggline__qty">{l.qty}</span>
+
+            {f.varieties.map((v, j) => (
+              <div key={j} style={{ marginTop: j > 0 ? 14 : 0 }}>
+                {v.variety ? (
+                  <div className="spread" style={{ marginBottom: 4 }}>
+                    <span className="chip">{v.variety}</span>
+                    <span className="badge badge--mute">
+                      {v.total || `${v.lines.length}개 지점`}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="divider" style={{ margin: "2px 0 8px" }} />
+                {v.lines.map((l, k) => (
+                  <div className="aggline" key={k}>
+                    <span className="aggline__store">
+                      {l.store}
+                      {l.note ? ` · ${l.note}` : ""}
+                    </span>
+                    <span className="aggline__qty">{l.qty}</span>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
