@@ -1,15 +1,21 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { kstToday, kstDayRange } from "@/lib/date";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export default async function AdminHome() {
   const user = await requireAdmin();
 
+  // 발주 건수는 '오늘(KST)' 들어온 것만 집계
+  const { start, end } = kstDayRange(kstToday());
+  const today = { gte: start, lt: end };
   const [pending, totalOrders, hotdealOrders] = await Promise.all([
     prisma.user.count({ where: { status: "PENDING" } }),
-    prisma.order.count(),
-    prisma.order.count({ where: { user: { role: "MERCHANT_HOTDEAL" } } }),
+    prisma.order.count({ where: { createdAt: today } }),
+    prisma.order.count({
+      where: { user: { role: "MERCHANT_HOTDEAL" }, createdAt: today },
+    }),
   ]);
 
   const menu = [
@@ -20,11 +26,11 @@ export default async function AdminHome() {
       badge: pending > 0 ? pending : undefined,
     },
     { href: "/admin/members", title: "회원 관리", sub: "회원 조회·수정·정지" },
-    { href: "/admin/orders", title: "전체 발주 목록", sub: `총 ${totalOrders}건` },
+    { href: "/admin/orders", title: "전체 발주 목록", sub: `오늘 ${totalOrders}건` },
     {
       href: "/admin/hotdeal",
       title: "핫딜마켓 발주관리",
-      sub: `${hotdealOrders}건`,
+      sub: `오늘 ${hotdealOrders}건`,
     },
     { href: "/admin/inventory", title: "재고", sub: "" },
   ];

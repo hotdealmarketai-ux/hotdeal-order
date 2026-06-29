@@ -94,6 +94,14 @@ export default async function AdminOrders(props: {
         </p>
         <DateBar date={date} basePath="/admin/orders" query={`scope=${scope}`} />
 
+        <Link
+          href={`/admin/summary?ctx=orders&scope=${scope}&date=${date}`}
+          className="btn btn--primary"
+          style={{ margin: "4px 0 16px" }}
+        >
+          발주 취합 보기
+        </Link>
+
         {orders.length === 0 ? (
           <div className="empty">
             <p>이 날짜에 발주가 없어요.</p>
