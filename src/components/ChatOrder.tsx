@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import {
   createOrderAction,
   parseChatOrderAction,
@@ -11,7 +11,13 @@ import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
 
 type Phase = "compose" | "loading" | "preview";
-type Group = { category: Category; items: { name: string; qty: string; note: string }[] };
+type EditItem = {
+  id: number;
+  category: Category;
+  name: string;
+  qty: string;
+  note: string;
+};
 
 export function ChatOrder({
   categories,
@@ -23,9 +29,10 @@ export function ChatOrder({
   locked?: boolean;
 }) {
   const multi = categories.length > 1;
+  const uid = useRef(0);
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("compose");
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [items, setItems] = useState<EditItem[]>([]);
   const [pickup, setPickup] = useState("");
   const [error, setError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
@@ -47,12 +54,16 @@ export function ChatOrder({
         setPhase("compose");
         return;
       }
-      // 카테고리 순서로 정렬
-      const sorted = [...res.groups].sort(
+      const flat: EditItem[] = [];
+      for (const g of [...res.groups].sort(
         (a, b) =>
           CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category),
-      );
-      setGroups(sorted);
+      )) {
+        for (const it of g.items) {
+          flat.push({ id: ++uid.current, category: g.category, ...it });
+        }
+      }
+      setItems(flat);
       if (needsPickup && res.pickupTime) setPickup(res.pickupTime);
       setPhase("preview");
     } catch {
@@ -61,14 +72,52 @@ export function ChatOrder({
     }
   }
 
+  function updateItem(
+    id: number,
+    field: "category" | "name" | "qty" | "note",
+    value: string,
+  ) {
+    setItems((prev) =>
+      prev.map((it) =>
+        it.id === id ? ({ ...it, [field]: value } as EditItem) : it,
+      ),
+    );
+  }
+  function removeItem(id: number) {
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  }
+  function addItem() {
+    setItems((prev) => [
+      ...prev,
+      { id: ++uid.current, category: categories[0], name: "", qty: "", note: "" },
+    ]);
+  }
+
+  // 편집된 품목들을 카테고리별로 다시 묶어 발주 payload 생성
+  const payload = useMemo(() => {
+    const valid = items.filter(
+      (it) => it.name.trim() || it.qty.trim() || it.note.trim(),
+    );
+    const byCat = new Map<Category, { name: string; qty: string; note: string }[]>();
+    for (const it of valid) {
+      const list = byCat.get(it.category) ?? [];
+      list.push({ name: it.name, qty: it.qty, note: it.note });
+      byCat.set(it.category, list);
+    }
+    return CATEGORY_ORDER.filter((c) => byCat.has(c)).map((c) => ({
+      category: c,
+      items: byCat.get(c)!,
+    }));
+  }, [items]);
+
+  const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
+
   const greeting = multi
     ? "필요하신 품목을 편하게 적어 주세요. 종류(과일·야채·공구·두부)를 섞어 적으셔도 알아서 나눠 드려요."
     : "필요하신 품목을 편하게 적어 주세요.";
   const example = multi
     ? "예) 행사용 사과 20박스 싼걸로, 대파 5단, 두부 10모"
     : "예) 행사용 사과 / 20박스 / 싼걸로\n예) 사장님 오늘 토마토 3개랑 참외 2박스요";
-
-  const totalItems = groups.reduce((n, g) => n + g.items.length, 0);
 
   return (
     <div className="chatorder">
@@ -78,7 +127,6 @@ export function ChatOrder({
         </div>
       )}
 
-      {/* 안내 말풍선 */}
       <div className="chatbubble chatbubble--bot">
         <div className="chatbubble__text">{greeting}</div>
         <div className="chatbubble__hint">{example}</div>
@@ -116,39 +164,72 @@ export function ChatOrder({
 
       {phase === "preview" && (
         <>
-          {/* 내가 적은 말풍선 */}
           <div className="chatbubble chatbubble--me">
             <div className="chatbubble__text" style={{ whiteSpace: "pre-wrap" }}>
               {text}
             </div>
           </div>
 
-          {/* AI 정리 결과(영수증 미리보기) */}
           <div className="chatbubble chatbubble--bot" style={{ marginTop: 12 }}>
-            <div className="chatbubble__text">이렇게 정리했어요. 맞는지 확인해 주세요.</div>
+            <div className="chatbubble__text">
+              이렇게 정리했어요. 맞는지 확인하고 고칠 부분은 바로 수정해 주세요.
+              {multi ? " 종류가 틀렸으면 칩을 눌러 바꿀 수 있어요." : ""}
+            </div>
           </div>
 
-          <div className="receipt" style={{ marginTop: 10 }}>
-            {groups.map((g) => {
-              const cat = CATEGORIES[g.category];
-              return (
-                <div className="receipt__section" key={g.category}>
-                  <div className="section-label" style={{ margin: "0 0 8px" }}>
-                    {cat.label}
-                    {multi ? ` · ${cat.vendorLabel}` : ""}
-                  </div>
-                  {g.items.map((it, i) => (
-                    <div className="receipt-item" key={i}>
-                      <div className="receipt-item__name">{it.name || "-"}</div>
-                      <div className="receipt-item__qty">{it.qty}</div>
-                      {it.note && (
-                        <div className="receipt-item__note">※ {it.note}</div>
-                      )}
-                    </div>
-                  ))}
+          <div className="chatedit">
+            {items.map((it) => (
+              <div className="chatedit__item" key={it.id}>
+                <div className="chatedit__head">
+                  {multi ? (
+                    <select
+                      className="chatedit__cat"
+                      value={it.category}
+                      onChange={(e) => updateItem(it.id, "category", e.target.value)}
+                      aria-label="종류"
+                    >
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {CATEGORIES[c].label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="chip">{CATEGORIES[categories[0]].label}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="linkbtn linkbtn--danger"
+                    onClick={() => removeItem(it.id)}
+                  >
+                    삭제
+                  </button>
                 </div>
-              );
-            })}
+                <div className="chatedit__fields">
+                  <input
+                    className="input chatedit__name"
+                    value={it.name}
+                    onChange={(e) => updateItem(it.id, "name", e.target.value)}
+                    placeholder="품목"
+                  />
+                  <input
+                    className="input chatedit__qty"
+                    value={it.qty}
+                    onChange={(e) => updateItem(it.id, "qty", e.target.value)}
+                    placeholder="수량"
+                  />
+                  <input
+                    className="input chatedit__note"
+                    value={it.note}
+                    onChange={(e) => updateItem(it.id, "note", e.target.value)}
+                    placeholder="설명"
+                  />
+                </div>
+              </div>
+            ))}
+            <button type="button" className="linkbtn" onClick={addItem}>
+              + 품목 추가
+            </button>
           </div>
 
           {needsPickup && (
@@ -167,18 +248,12 @@ export function ChatOrder({
           )}
 
           <form action={formAction}>
-            <input
-              type="hidden"
-              name="payload"
-              value={JSON.stringify(groups)}
-            />
-            {needsPickup && (
-              <input type="hidden" name="pickupTime" value={pickup} />
-            )}
+            <input type="hidden" name="payload" value={JSON.stringify(payload)} />
+            {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
             <div className="confirm" style={{ marginTop: 16 }}>
               <div className="confirm__title">이대로 발주 넣으시겠습니까?</div>
               <p className="confirm__hint">
-                품목 {totalItems}건{multi ? ` · ${groups.length}개 종류` : ""}로 발주됩니다.
+                품목 {totalItems}건{multi ? ` · ${payload.length}개 종류` : ""}로 발주됩니다.
               </p>
               <div className="confirm__actions">
                 <button

@@ -1,9 +1,81 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { ASSIGNABLE_MERCHANT_ROLES, type Role } from "@/lib/constants";
+import {
+  ALL_ROLES,
+  ASSIGNABLE_MERCHANT_ROLES,
+  type Role,
+  type Status,
+} from "@/lib/constants";
+
+const EDITABLE_STATUSES: Status[] = ["APPROVED", "SUSPENDED", "PENDING", "REJECTED"];
+
+export type MemberFormState = { ok?: boolean; error?: string };
+
+// 회원 개인정보 + 역할 + 승인상태 수정
+export async function updateMemberAction(
+  _prev: MemberFormState,
+  formData: FormData,
+): Promise<MemberFormState> {
+  const admin = await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return { error: "잘못된 요청이에요." };
+
+  const storeName = String(formData.get("storeName") ?? "").trim().slice(0, 100);
+  const phone = String(formData.get("phone") ?? "").trim().slice(0, 40);
+  const address = String(formData.get("address") ?? "").trim().slice(0, 200);
+  let role = String(formData.get("role") ?? "") as Role;
+  let status = String(formData.get("status") ?? "") as Status;
+
+  if (!ALL_ROLES.includes(role)) return { error: "올바르지 않은 역할이에요." };
+  if (!EDITABLE_STATUSES.includes(status)) return { error: "올바르지 않은 상태예요." };
+  if (!storeName) return { error: "상호명을 입력하세요." };
+
+  // 본인(관리자) 계정은 역할/상태를 낮춰 스스로 잠그지 못하게 보호
+  if (userId === admin.id) {
+    role = "ADMIN_SAEROP";
+    status = "APPROVED";
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { storeName, phone, address, role, status },
+  });
+  revalidatePath("/admin/members");
+  revalidatePath(`/admin/members/${userId}`);
+  return { ok: true };
+}
+
+// 정지/복구 토글
+export async function setMemberStatusAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const status = String(formData.get("status") ?? "") as Status;
+  if (!userId || !EDITABLE_STATUSES.includes(status)) return;
+  if (userId === admin.id) return; // 본인 정지 금지
+  await prisma.user.update({ where: { id: userId }, data: { status } });
+  revalidatePath("/admin/members");
+  revalidatePath(`/admin/members/${userId}`);
+}
+
+// 비밀번호 초기화(관리자가 새 비번 지정)
+export async function resetMemberPasswordAction(
+  _prev: MemberFormState,
+  formData: FormData,
+): Promise<MemberFormState> {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const pw = String(formData.get("password") ?? "");
+  if (!userId) return { error: "잘못된 요청이에요." };
+  if (pw.length < 4) return { error: "비밀번호는 4자 이상으로 정해주세요." };
+  const passwordHash = await bcrypt.hash(pw, 10);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  revalidatePath(`/admin/members/${userId}`);
+  return { ok: true };
+}
 
 export async function approveUserAction(formData: FormData) {
   await requireAdmin();

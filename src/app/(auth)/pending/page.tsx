@@ -8,23 +8,35 @@ export default async function PendingPage() {
   if (!user) redirect("/login");
   if (user.status === "APPROVED") redirect(homePathFor(user.role, user.status));
 
+  const suspended = user.status === "SUSPENDED";
   const rejected = user.status === "REJECTED";
+  const stopped = suspended || rejected;
+
+  const heading = suspended
+    ? "계정이 정지되었어요"
+    : rejected
+      ? "가입이 반려되었어요"
+      : "승인 대기 중이에요";
+  const message = suspended
+    ? "계정이 정지된 상태예요. 본사에 문의해 주세요."
+    : rejected
+      ? "자세한 내용은 본사에 문의해 주세요."
+      : "본사에서 가입 신청을 확인하고 있어요.\n승인되면 바로 발주를 넣을 수 있어요.";
+  const statusLabel = suspended ? "정지" : rejected ? "반려" : "승인 대기";
 
   return (
     <div className="app">
       <div className="page" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <div className="center" style={{ padding: "20px 0 28px" }}>
           <div
-            className={`statusring ${rejected ? "statusring--rejected" : ""}`}
+            className={`statusring ${stopped ? "statusring--rejected" : ""}`}
             aria-hidden
           />
           <h1 className="h1" style={{ marginTop: 20 }}>
-            {rejected ? "가입이 반려되었어요" : "승인 대기 중이에요"}
+            {heading}
           </h1>
           <p className="lead" style={{ marginTop: 8 }}>
-            {rejected
-              ? "자세한 내용은 본사에 문의해 주세요."
-              : "본사에서 가입 신청을 확인하고 있어요.\n승인되면 바로 발주를 넣을 수 있어요."}
+            {message}
           </p>
         </div>
 
@@ -40,8 +52,10 @@ export default async function PendingPage() {
           <div className="kv">
             <span className="kv__k">상태</span>
             <span className="kv__v">
-              <span className={`badge ${rejected ? "badge--mute" : "badge--wait"}`}>
-                {rejected ? "반려" : "승인 대기"}
+              <span
+                className={`badge ${suspended ? "badge--edit" : rejected ? "badge--mute" : "badge--wait"}`}
+              >
+                {statusLabel}
               </span>
             </span>
           </div>

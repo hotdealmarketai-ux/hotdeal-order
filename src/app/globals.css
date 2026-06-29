@@ -799,6 +799,49 @@ a {
   background: var(--surface-2);
   color: var(--muted);
 }
+.chatedit {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chatedit__item {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow-row);
+}
+.chatedit__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 9px;
+}
+.chatedit__cat {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--chip);
+  font-weight: 800;
+  font-size: 14.5px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.chatedit__fields {
+  display: grid;
+  grid-template-columns: 1fr 88px;
+  gap: 8px;
+}
+.chatedit__name {
+  grid-column: 1;
+}
+.chatedit__qty {
+  grid-column: 2;
+}
+.chatedit__note {
+  grid-column: 1 / -1;
+}
 
 /* ---- 큰 카테고리 카드(홈) ---- */
 .catgrid {

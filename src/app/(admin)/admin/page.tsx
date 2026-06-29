@@ -19,6 +19,7 @@ export default async function AdminHome() {
       sub: pending > 0 ? `${pending}건 대기 중` : "대기 없음",
       badge: pending > 0 ? pending : undefined,
     },
+    { href: "/admin/members", title: "회원 관리", sub: "회원 조회·수정·정지" },
     { href: "/admin/orders", title: "전체 발주 목록", sub: `총 ${totalOrders}건` },
     {
       href: "/admin/hotdeal",

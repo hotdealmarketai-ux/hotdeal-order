@@ -11,7 +11,25 @@ export type Role =
   | "VENDOR_CHAEUMCHAE" // 채움채 (두부류)
   | "ADMIN_SAEROP"; // 새롭 (본사·관리자·공구)
 
-export type Status = "PENDING" | "APPROVED" | "REJECTED";
+export type Status = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
+
+export const STATUS_LABEL: Record<Status, string> = {
+  PENDING: "승인 대기",
+  APPROVED: "정상",
+  REJECTED: "거절",
+  SUSPENDED: "정지",
+};
+
+// 회원 관리에서 배정 가능한 전체 역할
+export const ALL_ROLES: Role[] = [
+  "MERCHANT_HOTDEAL",
+  "MERCHANT_SEOBU",
+  "VENDOR_SEOBU",
+  "VENDOR_JANGHEUNG",
+  "VENDOR_CHAEUMCHAE",
+  "ADMIN_SAEROP",
+  "APPLICANT",
+];
 
 export type Category = "FRUIT" | "VEG" | "TOOL" | "TOFU";
 

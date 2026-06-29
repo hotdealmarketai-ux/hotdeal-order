@@ -4,7 +4,14 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
 import { formatKDateTime } from "@/lib/format";
-import { kstDateOf, labelDate } from "@/lib/date";
+import {
+  kstDateOf,
+  labelDate,
+  kstToday,
+  kstDayRange,
+  normalizeDateStr,
+} from "@/lib/date";
+import { DateBar } from "@/components/DateBar";
 
 const SCOPES: { key: string; label: string; where: Prisma.OrderWhereInput }[] = [
   { key: "all", label: "전체", where: {} },
@@ -16,14 +23,17 @@ const SCOPES: { key: string; label: string; where: Prisma.OrderWhereInput }[] = 
 ];
 
 export default async function AdminOrders(props: {
-  searchParams: Promise<{ scope?: string }>;
+  searchParams: Promise<{ scope?: string; date?: string }>;
 }) {
   await requireAdmin();
-  const { scope = "all" } = await props.searchParams;
+  const { scope = "all", date: dateParam } = await props.searchParams;
   const sel = SCOPES.find((s) => s.key === scope) ?? SCOPES[0];
+  const date = normalizeDateStr(dateParam);
+  const isToday = date === kstToday();
+  const { start, end } = kstDayRange(date);
 
   const orders = await prisma.order.findMany({
-    where: sel.where,
+    where: { ...sel.where, createdAt: { gte: start, lt: end } },
     include: { user: true, _count: { select: { items: true } } },
     orderBy: { createdAt: "desc" },
     take: 400,
@@ -78,9 +88,15 @@ export default async function AdminOrders(props: {
           ))}
         </div>
 
+        <p className="lead" style={{ marginTop: 0 }}>
+          {labelDate(date)}
+          {isToday ? " (오늘)" : ""} · {orders.length}건
+        </p>
+        <DateBar date={date} basePath="/admin/orders" query={`scope=${scope}`} />
+
         {orders.length === 0 ? (
           <div className="empty">
-            <p>발주가 없어요.</p>
+            <p>이 날짜에 발주가 없어요.</p>
           </div>
         ) : combined ? (
           <div className="list">
