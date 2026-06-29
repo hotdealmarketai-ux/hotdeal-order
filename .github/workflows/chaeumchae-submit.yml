@@ -1,0 +1,23 @@
+name: chaeumchae-submit
+
+# 채움채 자동 발주 — 마감 30분 뒤 20:30 KST (= 11:30 UTC), 마감이 있는 날(월~금·일)
+on:
+  schedule:
+    - cron: "30 11 * * 0-5"
+  workflow_dispatch:
+    inputs:
+      dryrun:
+        description: "1이면 제출 안 하고 계획만"
+        required: false
+        default: "0"
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Submit aggregated tofu order to chaeumchae
+        run: |
+          DRY=""
+          if [ "${{ github.event.inputs.dryrun }}" = "1" ]; then DRY="?dryrun=1"; fi
+          curl -fsS "https://hotdeal-order-jet.vercel.app/api/cron/submit-chaeumchae$DRY" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
