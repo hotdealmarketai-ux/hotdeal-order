@@ -903,6 +903,39 @@ a {
   text-align: center;
 }
 
+/* ---- 단위 되묻기(박스 확인) ---- */
+.unitwarn {
+  background: var(--warn-bg);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.unitwarn__title {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--warn);
+  margin-bottom: 8px;
+}
+.unitwarn__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+}
+.unitwarn__name {
+  font-size: 14px;
+  color: var(--fg-2);
+}
+.unitwarn--inline {
+  margin: 8px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
 /* ---- 큰 카테고리 카드(홈) ---- */
 .catgrid {
   display: grid;
