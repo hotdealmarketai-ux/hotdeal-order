@@ -871,6 +871,38 @@ a {
   line-height: 1.4;
 }
 
+/* ---- 채움채(두부류) 체크리스트 ---- */
+.tofulist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tofuitem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+.tofuitem.is-on {
+  border-color: var(--black);
+  box-shadow: var(--shadow-row);
+}
+.tofuitem__name {
+  font-weight: 700;
+  font-size: 15.5px;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+.tofuitem__qty {
+  width: 92px;
+  flex: 0 0 auto;
+  text-align: center;
+}
+
 /* ---- 큰 카테고리 카드(홈) ---- */
 .catgrid {
   display: grid;

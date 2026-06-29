@@ -5,6 +5,7 @@ import { createOrderAction, type OrderFormState } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
 import { CATEGORIES, type Category } from "@/lib/constants";
+import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 
 type Row = { id: number; name: string; qty: string; note: string };
 
@@ -32,6 +33,8 @@ export function OrderForm({
     return init;
   });
   const [pickup, setPickup] = useState("");
+  // 채움채(두부류) 체크리스트 수량: product_seq -> 수량 문자열
+  const [tofuQty, setTofuQty] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
@@ -68,14 +71,21 @@ export function OrderForm({
   const payload = useMemo(
     () =>
       categories
-        .map((c) => ({
-          category: c,
-          items: (rowsByCat[c] ?? [])
+        .map((c) => {
+          if (c === "TOFU") {
+            // 채움채는 고정 5품목 체크리스트(수량만)
+            const items = CHAEUMCHAE_CATALOG.filter(
+              (p) => (tofuQty[p.seq] ?? "").trim(),
+            ).map((p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }));
+            return { category: c, items };
+          }
+          const items = (rowsByCat[c] ?? [])
             .filter(isFilled)
-            .map((r) => ({ name: r.name, qty: r.qty, note: r.note })),
-        }))
+            .map((r) => ({ name: r.name, qty: r.qty, note: r.note }));
+          return { category: c, items };
+        })
         .filter((g) => g.items.length > 0),
-    [categories, rowsByCat],
+    [categories, rowsByCat, tofuQty],
   );
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
@@ -180,43 +190,69 @@ export function OrderForm({
 
         <div className="section-label">발주 품목</div>
 
-        {rows.map((r, i) => {
-          const filled = isFilled(r);
-          return (
-            <div className="orderline" key={r.id}>
-              <div className="orderline__idx">
-                <span className="orderline__num">{i + 1}</span>
-                {filled && (
-                  <button
-                    type="button"
-                    className="linkbtn linkbtn--danger"
-                    onClick={() => removeRow(r.id)}
-                  >
-                    삭제
-                  </button>
-                )}
+        {active === "TOFU" ? (
+          <div className="tofulist">
+            {CHAEUMCHAE_CATALOG.map((p) => {
+              const q = tofuQty[p.seq] ?? "";
+              return (
+                <div
+                  className={`tofuitem ${q.trim() ? "is-on" : ""}`}
+                  key={p.seq}
+                >
+                  <span className="tofuitem__name">{p.name}</span>
+                  <input
+                    className="input tofuitem__qty"
+                    inputMode="numeric"
+                    value={q}
+                    onChange={(e) => {
+                      setConfirming(false);
+                      setTofuQty((prev) => ({ ...prev, [p.seq]: e.target.value }));
+                    }}
+                    placeholder="수량"
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          rows.map((r, i) => {
+            const filled = isFilled(r);
+            return (
+              <div className="orderline" key={r.id}>
+                <div className="orderline__idx">
+                  <span className="orderline__num">{i + 1}</span>
+                  {filled && (
+                    <button
+                      type="button"
+                      className="linkbtn linkbtn--danger"
+                      onClick={() => removeRow(r.id)}
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+                <input
+                  className="input orderline__name"
+                  value={r.name}
+                  onChange={(e) => updateRow(r.id, "name", e.target.value)}
+                  placeholder="품목"
+                />
+                <input
+                  className="input"
+                  value={r.qty}
+                  onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+                  placeholder="수량"
+                />
+                <input
+                  className="input orderline__note"
+                  value={r.note}
+                  onChange={(e) => updateRow(r.id, "note", e.target.value)}
+                  placeholder="설명"
+                />
               </div>
-              <input
-                className="input orderline__name"
-                value={r.name}
-                onChange={(e) => updateRow(r.id, "name", e.target.value)}
-                placeholder="품목"
-              />
-              <input
-                className="input"
-                value={r.qty}
-                onChange={(e) => updateRow(r.id, "qty", e.target.value)}
-                placeholder="수량"
-              />
-              <input
-                className="input orderline__note"
-                value={r.note}
-                onChange={(e) => updateRow(r.id, "note", e.target.value)}
-                placeholder="설명"
-              />
-            </div>
-          );
-        })}
+            );
+          })
+        )}
 
         {!confirming ? (
           <div style={{ marginTop: 18 }}>

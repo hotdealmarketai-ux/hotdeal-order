@@ -137,13 +137,20 @@ export async function createOrderAction(
   const pickupTime = await buildPickup(user.role, formData, kstToday());
 
   // 각 카테고리 AI 정리 (병렬, 키 없으면 규칙기반 폴백)
+  // 채움채(TOFU)는 고정 카탈로그 체크리스트라 정규화 없이 정확한 이름 그대로 보존(자동제출 매핑용)
   const normalized = await Promise.all(
     groups.map((g) =>
-      normalizeOrder({
-        categoryLabel: CATEGORIES[g.category].label,
-        items: g.items,
-        pickupTime: pickupTime || undefined,
-      }),
+      g.category === "TOFU"
+        ? Promise.resolve({
+            engine: "rule" as const,
+            items: g.items,
+            summary: `채움채 발주 ${g.items.length}건`,
+          })
+        : normalizeOrder({
+            categoryLabel: CATEGORIES[g.category].label,
+            items: g.items,
+            pickupTime: pickupTime || undefined,
+          }),
     ),
   );
 
