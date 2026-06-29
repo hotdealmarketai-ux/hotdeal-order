@@ -126,16 +126,17 @@ export function ChatOrder({
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
 
-  const greeting =
-    "필요하신 품목을 편하게 적어 주세요. 종류(과일·야채·공구)를 섞어 적으셔도 알아서 나눠 드려요." +
-    (hasTofu ? " 두부류(채움채)는 아래에서 체크해 주세요." : "");
-  const example = "예) 행사용 사과 20박스 싼걸로, 대파 5단, 양배추 3통";
+  // 여러 종류를 넣는 점주(핫딜)만 종류 안내, 단일(서부일광 소매)은 한 줄만
+  const greetingLines = multi
+    ? ["필요하신 품목을 편하게 적어 주세요.", "종류를 섞어 적으셔도 알아서 나눠 드려요."]
+    : ["필요하신 품목을 편하게 적어 주세요."];
+  const example = multi ? "예) 행사용 사과 20박스 싼걸로, 대파 5단, 양배추 3통" : "";
 
   // 채움채 체크리스트 UI
   const tofuList = hasTofu ? (
     <div style={{ marginTop: 16 }}>
       <div className="section-label" style={{ margin: "0 0 8px" }}>
-        채움채 (체크하고 수량)
+        채움채
       </div>
       <div className="tofulist">
         {CHAEUMCHAE_CATALOG.map((p) => {
@@ -169,8 +170,12 @@ export function ChatOrder({
       )}
 
       <div className="chatbubble chatbubble--bot">
-        <div className="chatbubble__text">{greeting}</div>
-        <div className="chatbubble__hint">{example}</div>
+        <div className="chatbubble__text">
+          {greetingLines.map((l, i) => (
+            <div key={i}>{l}</div>
+          ))}
+        </div>
+        {example && <div className="chatbubble__hint">{example}</div>}
       </div>
 
       {(error || state?.error) && (
@@ -201,7 +206,7 @@ export function ChatOrder({
             onClick={handleParse}
             disabled={locked || phase === "loading"}
           >
-            {phase === "loading" ? "AI가 정리 중…" : "발주서로 정리하기"}
+            {phase === "loading" ? "AI가 정리 중…" : "발주"}
           </button>
         </>
       )}

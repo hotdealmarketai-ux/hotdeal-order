@@ -98,13 +98,13 @@ export function PushToggle() {
     <div className="pushrow">
       <div className="pushrow__main">
         <div className="pushrow__title">발주 알림</div>
-        <div className="pushrow__sub">
-          {state === "on"
-            ? "새 발주가 들어오면 이 기기로 알려드려요."
-            : state === "denied"
-              ? "브라우저 알림이 차단돼 있어요. 설정에서 허용해 주세요."
-              : "알림을 켜면 새 발주를 바로 받아볼 수 있어요."}
-        </div>
+        {state === "on" ? (
+          <div className="pushrow__sub">새 발주가 들어오면 이 기기로 알려드려요.</div>
+        ) : state === "denied" ? (
+          <div className="pushrow__sub">
+            브라우저 알림이 차단돼 있어요. 설정에서 허용해 주세요.
+          </div>
+        ) : null}
       </div>
       {state === "on" ? (
         <button type="button" className="btn btn--xs btn--soft" onClick={disable}>

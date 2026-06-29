@@ -49,10 +49,8 @@ export function fullKLabel(dateStr: string): string {
   }).format(d);
 }
 
-/** 하루 이동 (±1일) */
+/** 하루 이동 (±1일) — KST 기준으로 정확히(이전엔 UTC 슬라이스라 +1이 안 먹던 버그) */
 export function shiftDate(dateStr: string, days: number): string {
-  const d = new Date(`${dateStr}T00:00:00+09:00`);
-  return new Date(d.getTime() + days * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  const base = new Date(`${dateStr}T00:00:00+09:00`).getTime() + days * 24 * 60 * 60 * 1000;
+  return kstDateOf(new Date(base));
 }

@@ -66,7 +66,7 @@ export const CATEGORIES: Record<Category, CategoryDef> = {
   },
   TOFU: {
     key: "TOFU",
-    label: "두부·콩나물",
+    label: "채움채",
     vendorLabel: "채움채",
     vendorRole: "VENDOR_CHAEUMCHAE",
     desc: "두부·콩나물·순두부·숙주 (채움채)",
@@ -83,6 +83,12 @@ export const RECEIVER_LABEL: Record<Category, string> = {
   TOOL: "공구",
   TOFU: "채움채",
 };
+
+// 핫딜마켓 가맹점만 받는 업체명 비공개(카테고리로 표기). 서부일광 소매 등은 실제 업체명 노출.
+export function receiverLabel(category: Category, role: Role): string {
+  if (role === "MERCHANT_HOTDEAL") return RECEIVER_LABEL[category];
+  return CATEGORIES[category].vendorLabel;
+}
 
 // 역할별로 발주 가능한 카테고리
 export const ALLOWED_CATEGORIES: Partial<Record<Role, Category[]>> = {

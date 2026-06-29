@@ -5,7 +5,7 @@
       "name": "hotdeal-order",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 4200
+      "port": 4300
     }
   ]
 }

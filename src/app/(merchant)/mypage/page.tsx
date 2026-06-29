@@ -4,12 +4,12 @@ import { prisma } from "@/lib/prisma";
 import {
   CATEGORIES,
   CATEGORY_ORDER,
-  RECEIVER_LABEL,
+  receiverLabel,
   ROLE_LABEL,
   type Category,
 } from "@/lib/constants";
 import { formatKDate } from "@/lib/format";
-import { kstDateOf, labelDate } from "@/lib/date";
+import { kstDateOf, kstToday, labelDate } from "@/lib/date";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export default async function MyPage(props: {
@@ -23,6 +23,9 @@ export default async function MyPage(props: {
     include: { _count: { select: { items: true } } },
     orderBy: { createdAt: "desc" },
   });
+
+  // 발주일이 오늘 이전이면 마감이 지난 것 → '완료'로 표시
+  const today = kstToday();
 
   // 핫딜마켓 가맹점은 한 번에 4종을 발주하므로 '발주한 날짜'로 묶어서 보여준다
   const groupByDate = user.role === "MERCHANT_HOTDEAL";
@@ -113,7 +116,9 @@ export default async function MyPage(props: {
                     {g.items}건
                   </div>
                 </div>
-                {g.confirmed >= g.orders ? (
+                {g.date < today ? (
+                  <span className="badge badge--ok">완료</span>
+                ) : g.confirmed >= g.orders ? (
                   <span className="badge badge--ok">준비 중</span>
                 ) : g.confirmed > 0 ? (
                   <span className="badge badge--mute">일부 확인</span>
@@ -134,10 +139,12 @@ export default async function MyPage(props: {
                       {cat.label} · {o._count.items}건
                     </div>
                     <div className="row__sub">
-                      {formatKDate(o.createdAt)} · {RECEIVER_LABEL[o.category as Category]}
+                      {formatKDate(o.createdAt)} · {receiverLabel(o.category as Category, user.role)}
                     </div>
                   </div>
-                  {o.confirmed ? (
+                  {kstDateOf(o.createdAt) < today ? (
+                    <span className="badge badge--ok">완료</span>
+                  ) : o.confirmed ? (
                     <span className="badge badge--ok">준비 중</span>
                   ) : (
                     <span className="row__chev">›</span>

@@ -35,16 +35,8 @@ export default async function AdminHome() {
       badge: pending > 0 ? pending : undefined,
     },
     { href: "/admin/members", title: "회원 관리", sub: "회원 조회·수정·정지" },
-    {
-      href: "/admin/orders",
-      title: "전체 발주 목록",
-      sub: `오늘 ${totalOrders}개 점포 주문`,
-    },
-    {
-      href: "/admin/hotdeal",
-      title: "핫딜마켓 발주관리",
-      sub: `오늘 ${hotdealOrders}개 점포 주문`,
-    },
+    { href: "/admin/orders", title: "전체 발주 목록", sub: `${totalOrders}건` },
+    { href: "/admin/hotdeal", title: "핫딜마켓 발주관리", sub: `${hotdealOrders}건` },
     { href: "/admin/inventory", title: "재고", sub: "" },
   ];
 

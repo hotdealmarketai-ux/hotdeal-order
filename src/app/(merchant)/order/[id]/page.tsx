@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { hasOrderWindow, isOrderOpen } from "@/lib/deadline";
 import { formatKDateTime } from "@/lib/format";
+import { kstDateOf, kstToday } from "@/lib/date";
 import { ReceiptCard } from "@/components/ReceiptCard";
 
 export default async function ReceiptPage(props: {
@@ -22,7 +23,8 @@ export default async function ReceiptPage(props: {
   if (!order || order.userId !== user.id) notFound();
 
   const cat = CATEGORIES[order.category as Category];
-  const canEdit = !hasOrderWindow(user.role) || isOrderOpen();
+  const isPastDay = kstDateOf(order.createdAt) < kstToday();
+  const canEdit = !isPastDay && (!hasOrderWindow(user.role) || isOrderOpen());
 
   return (
     <>
@@ -39,7 +41,11 @@ export default async function ReceiptPage(props: {
           </div>
         )}
 
-        {order.confirmed ? (
+        {isPastDay ? (
+          <div className="notice notice--ok" style={{ marginBottom: 14 }}>
+            발주가 완료되었습니다.
+          </div>
+        ) : order.confirmed ? (
           <div className="notice notice--ok" style={{ marginBottom: 14 }}>
             발주가 확인되었습니다. 준비 중이에요.
           </div>

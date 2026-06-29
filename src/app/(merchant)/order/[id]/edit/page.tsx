@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { RECEIVER_LABEL, needsPickupTime, type Category } from "@/lib/constants";
+import { receiverLabel, needsPickupTime, type Category } from "@/lib/constants";
 import {
   hasOrderWindow,
   isOrderOpen,
@@ -51,7 +51,7 @@ export default async function EditOrderPage(props: {
       <div className="page">
         <h1 className="h1">발주 수정</h1>
         <div className="notice notice--info" style={{ marginBottom: 14 }}>
-          받는 곳 · <b>{RECEIVER_LABEL[order.category as Category]}</b>
+          받는 곳 · <b>{receiverLabel(order.category as Category, user.role)}</b>
         </div>
         <EditOrderForm
           orderId={order.id}

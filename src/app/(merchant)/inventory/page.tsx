@@ -25,6 +25,12 @@ export default async function InventoryPage() {
       </header>
       <div className="page">
         <h1 className="h1">재고현황</h1>
+        <p
+          className="lead"
+          style={{ marginTop: 6, marginBottom: 24, fontSize: 13.5 }}
+        >
+          재고는 실시간 반영이 되지 않으므로, 실제와 다를 수 있습니다.
+        </p>
 
         {items.length === 0 ? (
           <div className="empty">

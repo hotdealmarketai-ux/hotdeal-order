@@ -9,7 +9,7 @@ import {
   currentWindowStartUtc,
 } from "@/lib/deadline";
 import { formatKDateTime } from "@/lib/format";
-import { kstDayRange, labelDate, normalizeDateStr } from "@/lib/date";
+import { kstDayRange, kstToday, labelDate, normalizeDateStr } from "@/lib/date";
 import { ReceiptCard } from "@/components/ReceiptCard";
 
 export default async function DayReceiptPage(props: {
@@ -21,6 +21,7 @@ export default async function DayReceiptPage(props: {
   const { new: isNew, edited } = await props.searchParams;
   const date = normalizeDateStr(rawDate);
   const { start, end } = kstDayRange(date);
+  const isPastDay = date < kstToday();
 
   const orders = await prisma.order.findMany({
     where: { userId: user.id, createdAt: { gte: start, lt: end } },
@@ -66,9 +67,11 @@ export default async function DayReceiptPage(props: {
               <div className="spread" style={{ marginBottom: 8 }}>
                 <span className="chip">{cat.label}</span>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  {order.confirmed && (
+                  {isPastDay ? (
+                    <span className="badge badge--ok">완료</span>
+                  ) : order.confirmed ? (
                     <span className="badge badge--ok">확인됨 · 준비 중</span>
-                  )}
+                  ) : null}
                   {canEditOrder(order.createdAt) && (
                     <Link
                       href={`/order/${order.id}/edit`}

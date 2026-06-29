@@ -729,8 +729,9 @@ a {
 .orderhead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   margin-bottom: 14px;
 }
 .modetoggle__btn {
@@ -882,14 +883,14 @@ a {
 .tofulist {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 .tofuitem {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 6px 8px 6px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--line-strong);
   background: var(--surface);
@@ -900,14 +901,15 @@ a {
 }
 .tofuitem__name {
   font-weight: 700;
-  font-size: 15.5px;
+  font-size: 15px;
   color: var(--fg);
   letter-spacing: -0.01em;
 }
 .tofuitem__qty {
-  width: 92px;
+  width: 84px;
   flex: 0 0 auto;
   text-align: center;
+  padding: 9px 10px;
 }
 
 /* ---- 단위 되묻기(박스 확인) ---- */

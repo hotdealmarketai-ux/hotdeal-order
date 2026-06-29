@@ -61,6 +61,7 @@ export default async function OrderPage() {
             categories={allowedCategoriesFor(user.role)}
             needsPickup={needsPickupTime(user.role)}
             locked={windowed && !open}
+            role={user.role}
           />
         )}
       </div>

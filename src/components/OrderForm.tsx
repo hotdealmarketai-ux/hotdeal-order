@@ -4,7 +4,12 @@ import { useActionState, useMemo, useRef, useState } from "react";
 import { createOrderAction, type OrderFormState } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
-import { CATEGORIES, RECEIVER_LABEL, type Category } from "@/lib/constants";
+import {
+  CATEGORIES,
+  receiverLabel,
+  type Category,
+  type Role,
+} from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 import { needsUnitConfirm, toBoxQty } from "@/lib/unit";
 
@@ -21,10 +26,12 @@ export function OrderForm({
   categories,
   needsPickup,
   locked = false,
+  role,
 }: {
   categories: Category[];
   needsPickup: boolean;
   locked?: boolean;
+  role: Role;
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -204,7 +211,7 @@ export function OrderForm({
         )}
 
         <div className="notice notice--info" style={{ marginBottom: 14 }}>
-          받는 곳 · <b>{RECEIVER_LABEL[active]}</b>
+          받는 곳 · <b>{receiverLabel(active, role)}</b>
         </div>
 
         {needsPickup && (
@@ -335,7 +342,7 @@ export function OrderForm({
                 <div className="confirm__row" key={g.category}>
                   <span className="confirm__cat">{CATEGORIES[g.category].label}</span>
                   <span className="confirm__dest">
-                    {RECEIVER_LABEL[g.category]}
+                    {receiverLabel(g.category, role)}
                   </span>
                   <span className="confirm__n">{g.items.length}건</span>
                 </div>
