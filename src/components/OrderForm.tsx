@@ -4,7 +4,7 @@ import { useActionState, useMemo, useRef, useState } from "react";
 import { createOrderAction, type OrderFormState } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
-import { CATEGORIES, type Category } from "@/lib/constants";
+import { CATEGORIES, RECEIVER_LABEL, type Category } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 import { needsUnitConfirm, toBoxQty } from "@/lib/unit";
 
@@ -129,7 +129,10 @@ export function OrderForm({
   if (mode === "chat") {
     return (
       <div>
-        <div className="modetoggle">
+        <div className="orderhead">
+          <h1 className="h1" style={{ margin: 0 }}>
+            발주하기
+          </h1>
           <button
             type="button"
             className="modetoggle__btn"
@@ -151,6 +154,19 @@ export function OrderForm({
     <form action={formAction}>
       <input type="hidden" name="payload" value={JSON.stringify(payload)} />
       {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
+
+      <div className="orderhead">
+        <h1 className="h1" style={{ margin: 0 }}>
+          발주하기
+        </h1>
+        <button
+          type="button"
+          className="modetoggle__btn"
+          onClick={() => setMode("chat")}
+        >
+          채팅으로 발주하기
+        </button>
+      </div>
 
       {locked && (
         <div className="notice notice--mute" style={{ marginBottom: 14 }}>
@@ -187,18 +203,8 @@ export function OrderForm({
           </div>
         )}
 
-        <div className="notice notice--info" style={{ marginBottom: 10 }}>
-          받는 곳 · <b>{cat.vendorLabel}</b>
-        </div>
-
-        <div className="modetoggle">
-          <button
-            type="button"
-            className="modetoggle__btn"
-            onClick={() => setMode("chat")}
-          >
-            채팅으로 발주하기
-          </button>
+        <div className="notice notice--info" style={{ marginBottom: 14 }}>
+          받는 곳 · <b>{RECEIVER_LABEL[active]}</b>
         </div>
 
         {needsPickup && (
@@ -329,7 +335,7 @@ export function OrderForm({
                 <div className="confirm__row" key={g.category}>
                   <span className="confirm__cat">{CATEGORIES[g.category].label}</span>
                   <span className="confirm__dest">
-                    {CATEGORIES[g.category].vendorLabel}
+                    {RECEIVER_LABEL[g.category]}
                   </span>
                   <span className="confirm__n">{g.items.length}건</span>
                 </div>

@@ -10,13 +10,22 @@ export default async function AdminHome() {
   // 발주 건수는 '오늘(KST)' 들어온 것만 집계
   const { start, end } = kstDayRange(kstToday());
   const today = { gte: start, lt: end };
-  const [pending, totalOrders, hotdealOrders] = await Promise.all([
+  // 건수 = '오늘 주문한 점포 수'(중복 제거). 한 점포가 여러 종류를 넣어도 1로 계산.
+  const [pending, allStores, hotdealStores] = await Promise.all([
     prisma.user.count({ where: { status: "PENDING" } }),
-    prisma.order.count({ where: { createdAt: today } }),
-    prisma.order.count({
+    prisma.order.findMany({
+      where: { createdAt: today },
+      select: { userId: true },
+      distinct: ["userId"],
+    }),
+    prisma.order.findMany({
       where: { user: { role: "MERCHANT_HOTDEAL" }, createdAt: today },
+      select: { userId: true },
+      distinct: ["userId"],
     }),
   ]);
+  const totalOrders = allStores.length;
+  const hotdealOrders = hotdealStores.length;
 
   const menu = [
     {
@@ -26,11 +35,15 @@ export default async function AdminHome() {
       badge: pending > 0 ? pending : undefined,
     },
     { href: "/admin/members", title: "회원 관리", sub: "회원 조회·수정·정지" },
-    { href: "/admin/orders", title: "전체 발주 목록", sub: `오늘 ${totalOrders}건` },
+    {
+      href: "/admin/orders",
+      title: "전체 발주 목록",
+      sub: `오늘 ${totalOrders}개 점포 주문`,
+    },
     {
       href: "/admin/hotdeal",
       title: "핫딜마켓 발주관리",
-      sub: `오늘 ${hotdealOrders}건`,
+      sub: `오늘 ${hotdealOrders}개 점포 주문`,
     },
     { href: "/admin/inventory", title: "재고", sub: "" },
   ];

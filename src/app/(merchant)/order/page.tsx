@@ -43,10 +43,9 @@ export default async function OrderPage() {
 
         <PushToggle />
 
-        <h1 className="h1">발주하기</h1>
-
         {lockedToEdit ? (
           <>
+            <h1 className="h1">발주하기</h1>
             <div className="notice notice--mute" style={{ marginBottom: 16 }}>
               이미 주문이 진행됐으므로, 발주수정만 가능합니다.
             </div>

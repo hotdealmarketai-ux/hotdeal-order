@@ -14,10 +14,11 @@ export async function loginAction(
 ): Promise<FormState> {
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
+  const remember = formData.get("remember") ? "true" : "false";
   if (!username || !password) return { error: "아이디와 비밀번호를 입력하세요." };
 
   try {
-    await signIn("credentials", { username, password, redirectTo: "/" });
+    await signIn("credentials", { username, password, remember, redirectTo: "/" });
   } catch (e) {
     if (e instanceof AuthError) {
       return { error: "아이디 또는 비밀번호가 올바르지 않습니다." };
@@ -85,7 +86,12 @@ export async function signupAction(
   }
 
   try {
-    await signIn("credentials", { username, password, redirectTo: "/" });
+    await signIn("credentials", {
+      username,
+      password,
+      remember: "true",
+      redirectTo: "/",
+    });
   } catch (e) {
     if (e instanceof AuthError) {
       return { error: "가입은 완료됐어요. 로그인 화면에서 로그인해 주세요." };

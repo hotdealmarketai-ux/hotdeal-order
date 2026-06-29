@@ -41,14 +41,13 @@ export function ProfileForm({
       </div>
       <div className="field">
         <label className="label" htmlFor="password">
-          새 비밀번호
+          새 비밀번호 (변경 시에만 입력)
         </label>
         <input
           id="password"
           name="password"
           type="password"
           className="input"
-          placeholder="변경할 때만 입력 (4자 이상)"
           autoComplete="new-password"
         />
       </div>

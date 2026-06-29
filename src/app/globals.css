@@ -726,6 +726,13 @@ a {
   justify-content: flex-end;
   margin-bottom: 14px;
 }
+.orderhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
 .modetoggle__btn {
   display: inline-flex;
   align-items: center;
@@ -1005,6 +1012,23 @@ a {
   font-weight: 500;
   color: var(--muted);
   letter-spacing: -0.01em;
+}
+
+/* ---- 자동 로그인 토글 ---- */
+.remember {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--fg-2);
+  cursor: pointer;
+  padding: 2px 0;
+}
+.remember input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--black);
 }
 .empty {
   text-align: center;

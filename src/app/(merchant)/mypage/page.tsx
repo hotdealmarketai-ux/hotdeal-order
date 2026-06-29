@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import {
   CATEGORIES,
   CATEGORY_ORDER,
+  RECEIVER_LABEL,
   ROLE_LABEL,
   type Category,
 } from "@/lib/constants";
@@ -133,7 +134,7 @@ export default async function MyPage(props: {
                       {cat.label} · {o._count.items}건
                     </div>
                     <div className="row__sub">
-                      {formatKDate(o.createdAt)} · {cat.vendorLabel}
+                      {formatKDate(o.createdAt)} · {RECEIVER_LABEL[o.category as Category]}
                     </div>
                   </div>
                   {o.confirmed ? (

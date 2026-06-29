@@ -1,10 +1,11 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   updateMemberAction,
   resetMemberPasswordAction,
   setMemberStatusAction,
+  deleteMemberAction,
   type MemberFormState,
 } from "@/app/actions/admin";
 import { SubmitButton } from "./SubmitButton";
@@ -35,6 +36,7 @@ export function MemberEditForm({
     resetMemberPasswordAction,
     {},
   );
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const suspended = initial.status === "SUSPENDED";
 
@@ -165,6 +167,44 @@ export function MemberEditForm({
         </div>
         <SubmitButton pendingText="변경 중…">비밀번호 변경</SubmitButton>
       </form>
+
+      {/* 회원 삭제 */}
+      {!isSelf && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="section-label" style={{ margin: "0 0 10px" }}>
+            회원 삭제
+          </div>
+          <p className="hint" style={{ marginBottom: 12 }}>
+            삭제하면 이 회원과 발주 이력이 모두 사라져요. 되돌릴 수 없어요.
+          </p>
+          {!confirmDelete ? (
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => setConfirmDelete(true)}
+            >
+              회원 삭제
+            </button>
+          ) : (
+            <form action={deleteMemberAction}>
+              <input type="hidden" name="userId" value={userId} />
+              <p style={{ fontWeight: 700, marginBottom: 10 }}>
+                정말 삭제할까요?
+              </p>
+              <div className="confirm__actions">
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setConfirmDelete(false)}
+                >
+                  취소
+                </button>
+                <button className="btn btn--danger">네, 삭제합니다</button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
     </>
   );
 }

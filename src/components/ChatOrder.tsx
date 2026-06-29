@@ -10,6 +10,7 @@ import {
 import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
 import { needsUnitConfirm, toBoxQty } from "@/lib/unit";
+import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 
 const UNIT_SCOPED: Category[] = ["FRUIT", "VEG"];
 
@@ -31,13 +32,16 @@ export function ChatOrder({
   needsPickup: boolean;
   locked?: boolean;
 }) {
-  // 채움채(TOFU)는 채팅 분류 제외 — 두부류는 야채로
+  // 채움채(TOFU)는 체크리스트, 나머지(과일·야채·공구)는 자유 입력
   const chatCats = categories.filter((c) => c !== "TOFU");
+  const hasTofu = categories.includes("TOFU");
   const multi = chatCats.length > 1;
   const uid = useRef(0);
+
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("compose");
   const [items, setItems] = useState<EditItem[]>([]);
+  const [tofuQty, setTofuQty] = useState<Record<string, string>>({});
   const [pickup, setPickup] = useState("");
   const [error, setError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
@@ -45,10 +49,19 @@ export function ChatOrder({
     {},
   );
 
+  const tofuChecked = () =>
+    CHAEUMCHAE_CATALOG.some((p) => (tofuQty[p.seq] ?? "").trim());
+
   async function handleParse() {
     setError("");
+    if (!text.trim() && !tofuChecked()) {
+      setError("발주 내용을 적거나 채움채 품목을 선택해 주세요.");
+      return;
+    }
     if (!text.trim()) {
-      setError("발주 내용을 입력해 주세요.");
+      // 채움채만 발주
+      setItems([]);
+      setPhase("preview");
       return;
     }
     setPhase("loading");
@@ -83,46 +96,69 @@ export function ChatOrder({
     value: string,
   ) {
     setItems((prev) =>
-      prev.map((it) =>
-        it.id === id ? ({ ...it, [field]: value } as EditItem) : it,
-      ),
+      prev.map((it) => (it.id === id ? ({ ...it, [field]: value } as EditItem) : it)),
     );
   }
   function removeItem(id: number) {
     setItems((prev) => prev.filter((it) => it.id !== id));
   }
-  function addItem() {
-    setItems((prev) => [
-      ...prev,
-      { id: ++uid.current, category: chatCats[0], name: "", qty: "", note: "" },
-    ]);
-  }
 
-  // 편집된 품목들을 카테고리별로 다시 묶어 발주 payload 생성
+  // 편집한 청과/공구 + 채움채 체크리스트를 합쳐 카테고리별 payload
   const payload = useMemo(() => {
-    const valid = items.filter(
-      (it) => it.name.trim() || it.qty.trim() || it.note.trim(),
-    );
     const byCat = new Map<Category, { name: string; qty: string; note: string }[]>();
-    for (const it of valid) {
+    for (const it of items) {
+      if (!(it.name.trim() || it.qty.trim() || it.note.trim())) continue;
       const list = byCat.get(it.category) ?? [];
       list.push({ name: it.name, qty: it.qty, note: it.note });
       byCat.set(it.category, list);
+    }
+    if (hasTofu) {
+      const tofuItems = CHAEUMCHAE_CATALOG.filter(
+        (p) => (tofuQty[p.seq] ?? "").trim(),
+      ).map((p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }));
+      if (tofuItems.length) byCat.set("TOFU", tofuItems);
     }
     return CATEGORY_ORDER.filter((c) => byCat.has(c)).map((c) => ({
       category: c,
       items: byCat.get(c)!,
     }));
-  }, [items]);
+  }, [items, tofuQty, hasTofu]);
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
 
-  const greeting = multi
-    ? "필요하신 품목을 편하게 적어 주세요. 종류(과일·야채·공구)를 섞어 적으셔도 알아서 나눠 드려요. (두부류는 야채로 들어가요)"
-    : "필요하신 품목을 편하게 적어 주세요.";
-  const example = multi
-    ? "예) 행사용 사과 20박스 싼걸로, 대파 5단, 양배추 3통"
-    : "예) 행사용 사과 / 20박스 / 싼걸로\n예) 사장님 오늘 토마토 3개랑 참외 2박스요";
+  const greeting =
+    "필요하신 품목을 편하게 적어 주세요. 종류(과일·야채·공구)를 섞어 적으셔도 알아서 나눠 드려요." +
+    (hasTofu ? " 두부류(채움채)는 아래에서 체크해 주세요." : "");
+  const example = "예) 행사용 사과 20박스 싼걸로, 대파 5단, 양배추 3통";
+
+  // 채움채 체크리스트 UI
+  const tofuList = hasTofu ? (
+    <div style={{ marginTop: 16 }}>
+      <div className="section-label" style={{ margin: "0 0 8px" }}>
+        채움채 (체크하고 수량)
+      </div>
+      <div className="tofulist">
+        {CHAEUMCHAE_CATALOG.map((p) => {
+          const q = tofuQty[p.seq] ?? "";
+          return (
+            <div className={`tofuitem ${q.trim() ? "is-on" : ""}`} key={p.seq}>
+              <span className="tofuitem__name">{p.name}</span>
+              <input
+                className="input tofuitem__qty"
+                inputMode="numeric"
+                value={q}
+                onChange={(e) =>
+                  setTofuQty((prev) => ({ ...prev, [p.seq]: e.target.value }))
+                }
+                placeholder="수량"
+                disabled={locked}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="chatorder">
@@ -155,10 +191,13 @@ export function ChatOrder({
               disabled={locked || phase === "loading"}
             />
           </div>
+
+          {tofuList}
+
           <button
             type="button"
             className="btn btn--primary"
-            style={{ marginTop: 12 }}
+            style={{ marginTop: 14 }}
             onClick={handleParse}
             disabled={locked || phase === "loading"}
           >
@@ -169,69 +208,70 @@ export function ChatOrder({
 
       {phase === "preview" && (
         <>
-          <div className="chatbubble chatbubble--me">
-            <div className="chatbubble__text" style={{ whiteSpace: "pre-wrap" }}>
-              {text}
+          {text.trim() && (
+            <div className="chatbubble chatbubble--me">
+              <div className="chatbubble__text" style={{ whiteSpace: "pre-wrap" }}>
+                {text}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="chatbubble chatbubble--bot" style={{ marginTop: 12 }}>
             <div className="chatbubble__text">
               이렇게 정리했어요. 맞는지 확인하고 고칠 부분은 바로 수정해 주세요.
-              {multi ? " 종류가 틀렸으면 칩을 눌러 바꿀 수 있어요." : ""}
             </div>
           </div>
 
-          <div className="chatedit">
-            {items.map((it) => (
-              <div className="chatedit__item" key={it.id}>
-                <div className="chatedit__head">
-                  {multi ? (
-                    <select
-                      className="chatedit__cat"
-                      value={it.category}
-                      onChange={(e) => updateItem(it.id, "category", e.target.value)}
-                      aria-label="종류"
+          {items.length > 0 && (
+            <div className="chatedit">
+              {items.map((it) => (
+                <div className="chatedit__item" key={it.id}>
+                  <div className="chatedit__head">
+                    {multi ? (
+                      <select
+                        className="chatedit__cat"
+                        value={it.category}
+                        onChange={(e) => updateItem(it.id, "category", e.target.value)}
+                        aria-label="종류"
+                      >
+                        {chatCats.map((c) => (
+                          <option key={c} value={c}>
+                            {CATEGORIES[c].label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="chip">{CATEGORIES[chatCats[0]].label}</span>
+                    )}
+                    <button
+                      type="button"
+                      className="linkbtn linkbtn--danger"
+                      onClick={() => removeItem(it.id)}
                     >
-                      {chatCats.map((c) => (
-                        <option key={c} value={c}>
-                          {CATEGORIES[c].label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="chip">{CATEGORIES[chatCats[0]].label}</span>
-                  )}
-                  <button
-                    type="button"
-                    className="linkbtn linkbtn--danger"
-                    onClick={() => removeItem(it.id)}
-                  >
-                    삭제
-                  </button>
-                </div>
-                <div className="chatedit__fields">
-                  <input
-                    className="input chatedit__name"
-                    value={it.name}
-                    onChange={(e) => updateItem(it.id, "name", e.target.value)}
-                    placeholder="품목"
-                  />
-                  <input
-                    className="input chatedit__qty"
-                    value={it.qty}
-                    onChange={(e) => updateItem(it.id, "qty", e.target.value)}
-                    placeholder="수량"
-                  />
-                  <input
-                    className="input chatedit__note"
-                    value={it.note}
-                    onChange={(e) => updateItem(it.id, "note", e.target.value)}
-                    placeholder="설명"
-                  />
-                </div>
-                {UNIT_SCOPED.includes(it.category) &&
-                  needsUnitConfirm(it.qty) && (
+                      삭제
+                    </button>
+                  </div>
+                  <div className="chatedit__fields">
+                    <input
+                      className="input chatedit__name"
+                      value={it.name}
+                      onChange={(e) => updateItem(it.id, "name", e.target.value)}
+                      placeholder="품목"
+                    />
+                    <input
+                      className="input chatedit__qty"
+                      value={it.qty}
+                      onChange={(e) => updateItem(it.id, "qty", e.target.value)}
+                      placeholder="수량"
+                    />
+                    <input
+                      className="input chatedit__note"
+                      value={it.note}
+                      onChange={(e) => updateItem(it.id, "note", e.target.value)}
+                      placeholder="설명"
+                    />
+                  </div>
+                  {UNIT_SCOPED.includes(it.category) && needsUnitConfirm(it.qty) && (
                     <div className="unitwarn unitwarn--inline">
                       <span className="unitwarn__name">
                         &lsquo;{it.qty}&rsquo; 박스가 맞나요?
@@ -245,12 +285,12 @@ export function ChatOrder({
                       </button>
                     </div>
                   )}
-              </div>
-            ))}
-            <button type="button" className="linkbtn" onClick={addItem}>
-              + 품목 추가
-            </button>
-          </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tofuList}
 
           {needsPickup && (
             <div className="field" style={{ marginTop: 14 }}>
@@ -273,7 +313,7 @@ export function ChatOrder({
             <div className="confirm" style={{ marginTop: 16 }}>
               <div className="confirm__title">이대로 발주 넣으시겠습니까?</div>
               <p className="confirm__hint">
-                품목 {totalItems}건{multi ? ` · ${payload.length}개 종류` : ""}로 발주됩니다.
+                품목 {totalItems}건{multi || hasTofu ? ` · ${payload.length}개 종류` : ""}로 발주됩니다.
               </p>
               <div className="confirm__actions">
                 <button

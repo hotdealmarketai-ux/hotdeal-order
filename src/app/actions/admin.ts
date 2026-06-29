@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
@@ -59,6 +60,19 @@ export async function setMemberStatusAction(formData: FormData) {
   await prisma.user.update({ where: { id: userId }, data: { status } });
   revalidatePath("/admin/members");
   revalidatePath(`/admin/members/${userId}`);
+}
+
+// 회원 삭제 — 본인 제외. 발주 이력(+항목)도 함께 삭제(되돌릴 수 없음).
+export async function deleteMemberAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId || userId === admin.id) return; // 본인 삭제 금지
+  await prisma.$transaction([
+    prisma.order.deleteMany({ where: { userId } }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
+  revalidatePath("/admin/members");
+  redirect("/admin/members");
 }
 
 // 비밀번호 초기화(관리자가 새 비번 지정)

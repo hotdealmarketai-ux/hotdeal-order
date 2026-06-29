@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { CATEGORIES, needsPickupTime, type Category } from "@/lib/constants";
+import { RECEIVER_LABEL, needsPickupTime, type Category } from "@/lib/constants";
 import {
   hasOrderWindow,
   isOrderOpen,
@@ -34,7 +34,6 @@ export default async function EditOrderPage(props: {
     if (!isOrderOpen() || !inWindow) redirect(backHref);
   }
 
-  const cat = CATEGORIES[order.category as Category];
   const initialItems = order.items.map((it) => ({
     name: it.rawName,
     qty: it.rawQty,
@@ -52,7 +51,7 @@ export default async function EditOrderPage(props: {
       <div className="page">
         <h1 className="h1">발주 수정</h1>
         <div className="notice notice--info" style={{ marginBottom: 14 }}>
-          받는 곳 · <b>{cat.vendorLabel}</b>
+          받는 곳 · <b>{RECEIVER_LABEL[order.category as Category]}</b>
         </div>
         <EditOrderForm
           orderId={order.id}

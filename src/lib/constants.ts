@@ -75,6 +75,15 @@ export const CATEGORIES: Record<Category, CategoryDef> = {
 
 export const CATEGORY_ORDER: Category[] = ["FRUIT", "VEG", "TOOL", "TOFU"];
 
+// 점주(가맹점/소매)에게 보이는 '받는 곳' 라벨 — 실제 업체명 비공개(과일/야채/공구/채움채).
+// 라우팅(vendorRole)·업자/관리자 화면에는 영향 없음, 점주 화면 표시용.
+export const RECEIVER_LABEL: Record<Category, string> = {
+  FRUIT: "과일",
+  VEG: "야채",
+  TOOL: "공구",
+  TOFU: "채움채",
+};
+
 // 역할별로 발주 가능한 카테고리
 export const ALLOWED_CATEGORIES: Partial<Record<Role, Category[]>> = {
   MERCHANT_HOTDEAL: ["FRUIT", "VEG", "TOOL", "TOFU"],

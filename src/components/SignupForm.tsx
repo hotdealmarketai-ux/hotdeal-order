@@ -14,13 +14,7 @@ export function SignupForm() {
         <label className="label" htmlFor="storeName">
           상호명<span className="req">*</span>
         </label>
-        <input
-          id="storeName"
-          name="storeName"
-          className="input"
-          placeholder="예) 핫딜마켓 OO점"
-          required
-        />
+        <input id="storeName" name="storeName" className="input" required />
       </div>
 
       <div className="field">
@@ -33,7 +27,6 @@ export function SignupForm() {
           type="tel"
           inputMode="tel"
           className="input"
-          placeholder="예) 010-1234-5678"
           autoComplete="tel"
           required
         />
@@ -43,13 +36,7 @@ export function SignupForm() {
         <label className="label" htmlFor="address">
           업장 소재지<span className="req">*</span>
         </label>
-        <input
-          id="address"
-          name="address"
-          className="input"
-          placeholder="예) 부산 OO구 OO로 12"
-          required
-        />
+        <input id="address" name="address" className="input" required />
       </div>
 
       <div className="field">
@@ -71,13 +58,12 @@ export function SignupForm() {
 
       <div className="field">
         <label className="label" htmlFor="username">
-          아이디<span className="req">*</span>
+          아이디 (영문·숫자 3자 이상)<span className="req">*</span>
         </label>
         <input
           id="username"
           name="username"
           className="input"
-          placeholder="영문/숫자 3자 이상"
           autoComplete="username"
           required
         />
@@ -85,14 +71,13 @@ export function SignupForm() {
 
       <div className="field">
         <label className="label" htmlFor="password">
-          비밀번호<span className="req">*</span>
+          비밀번호 (4자 이상)<span className="req">*</span>
         </label>
         <input
           id="password"
           name="password"
           type="password"
           className="input"
-          placeholder="4자 이상"
           autoComplete="new-password"
           required
         />

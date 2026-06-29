@@ -36,6 +36,10 @@ export function LoginForm() {
           required
         />
       </div>
+      <label className="remember">
+        <input type="checkbox" name="remember" value="true" defaultChecked />
+        <span>자동 로그인 (다음에도 로그인 유지)</span>
+      </label>
       <SubmitButton pendingText="로그인 중…">로그인</SubmitButton>
     </form>
   );
