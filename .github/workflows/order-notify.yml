@@ -1,0 +1,36 @@
+name: order-notify
+
+# 핫딜마켓 가맹점 예약 알림 (KST = UTC+9)
+#  - 0 10 * * 0-5  → 19:00 KST  마감 1시간 전 (월~금, 일)
+#  - 0 11 * * 0-5  → 20:00 KST  발주 마감 (월~금, 일)
+#  - 0 3  * * 1-6  → 12:00 KST  발주 시작 (월~토)
+on:
+  schedule:
+    - cron: "0 10 * * 0-5"
+    - cron: "0 11 * * 0-5"
+    - cron: "0 3 * * 1-6"
+  workflow_dispatch:
+    inputs:
+      type:
+        description: "수동 실행용 알림 종류 (warn | deadline | open)"
+        required: false
+        default: "open"
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve notification type
+        id: t
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 10 * * 0-5") echo "type=warn" >> "$GITHUB_OUTPUT" ;;
+            "0 11 * * 0-5") echo "type=deadline" >> "$GITHUB_OUTPUT" ;;
+            "0 3 * * 1-6")  echo "type=open" >> "$GITHUB_OUTPUT" ;;
+            *)              echo "type=${{ github.event.inputs.type }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Send push
+        run: |
+          curl -fsS \
+            "https://hotdeal-order-jet.vercel.app/api/cron/notify?type=${{ steps.t.outputs.type }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

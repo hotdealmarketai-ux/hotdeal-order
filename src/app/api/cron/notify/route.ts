@@ -13,13 +13,17 @@ function kstParts(atMs: number) {
 
 type Job = { type: string; title: string };
 
+const JOBS: Record<string, Job> = {
+  warn: { type: "warn", title: "금일 발주 마감까지 1시간 남았습니다." },
+  deadline: { type: "deadline", title: "금일 발주가 마감되었습니다." },
+  open: { type: "open", title: "지금부터 발주가 가능합니다." },
+};
+
+// 시각 자동판별(수동 테스트용). 스케줄러는 ?type= 으로 명시 호출(지연돼도 정확).
 function pick(dow: number, h: number): Job | null {
-  if (h === 19 && DEADLINE_DAYS.has(dow))
-    return { type: "warn", title: "금일 발주 마감까지 1시간 남았습니다." };
-  if (h === 20 && DEADLINE_DAYS.has(dow))
-    return { type: "deadline", title: "금일 발주가 마감되었습니다." };
-  if (h === 12 && OPEN_DAYS.has(dow))
-    return { type: "open", title: "지금부터 발주가 가능합니다." };
+  if (h === 19 && DEADLINE_DAYS.has(dow)) return JOBS.warn;
+  if (h === 20 && DEADLINE_DAYS.has(dow)) return JOBS.deadline;
+  if (h === 12 && OPEN_DAYS.has(dow)) return JOBS.open;
   return null;
 }
 
@@ -32,12 +36,13 @@ export async function GET(request: Request) {
     return new Response("forbidden", { status: 403 });
   }
 
-  // ?at=ISO 로 시각 시뮬레이션(테스트용)
+  // ?type= (스케줄러가 명시) 우선, 없으면 ?at= 또는 현재시각으로 자동판별
+  const typeParam = url.searchParams.get("type");
   const atParam = url.searchParams.get("at");
   const atMs = atParam ? new Date(atParam).getTime() : Date.now();
   const { dow, h } = kstParts(atMs);
 
-  const job = pick(dow, h);
+  const job = typeParam ? JOBS[typeParam] : pick(dow, h);
   if (!job) return Response.json({ ok: true, sent: false, dow, h });
 
   await sendPushToRole("MERCHANT_HOTDEAL", {
