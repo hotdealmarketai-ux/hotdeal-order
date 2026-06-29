@@ -5,7 +5,7 @@ const TITLE = "오더야 (Orderya)";
 const DESCRIPTION = "주문은 더 간편하게, 운영은 더 스마트하게.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://hotdeal-order-jet.vercel.app"),
+  metadataBase: new URL("https://www.orderya.xyz"),
   title: TITLE,
   description: DESCRIPTION,
   openGraph: {
