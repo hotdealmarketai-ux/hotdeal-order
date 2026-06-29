@@ -1,9 +1,9 @@
 name: chaeumchae-submit
 
-# 채움채 자동 발주 — 마감 30분 뒤 20:30 KST (= 11:30 UTC), 마감이 있는 날(월~금·일)
+# 채움채 자동 발주 — 마감 5분 뒤 20:05 KST (= 11:05 UTC), 마감이 있는 날(월~금·일)
 on:
   schedule:
-    - cron: "30 11 * * 0-5"
+    - cron: "5 11 * * 0-5"
   workflow_dispatch:
     inputs:
       dryrun:
