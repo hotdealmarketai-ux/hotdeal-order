@@ -843,6 +843,34 @@ a {
   grid-column: 1 / -1;
 }
 
+/* ---- 발주 알림 토글 ---- */
+.pushrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.pushrow__main {
+  min-width: 0;
+}
+.pushrow__title {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--fg);
+}
+.pushrow__sub {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
 /* ---- 큰 카테고리 카드(홈) ---- */
 .catgrid {
   display: grid;

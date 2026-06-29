@@ -28,8 +28,22 @@ model User {
   businessCert String? // 사업자등록증 파일 경로/URL
 
   orders       Order[]
+  pushSubs     PushSubscription[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// 웹 푸시 구독 — 사용자 기기별 1개 (알림 발송 대상)
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 model Order {

@@ -19,6 +19,7 @@ import {
 } from "@/lib/deadline";
 import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
+import { notifyVendorNewOrder } from "@/lib/push";
 
 export type OrderFormState = { error?: string };
 
@@ -190,6 +191,12 @@ export async function createOrderAction(
     console.error("[order] create failed:", err);
     return { error: "발주 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
   }
+
+  // 새 발주 알림(웹푸시) — 목적지 업자에게. 실패해도 발주에는 영향 없음.
+  const vendorRoles = [
+    ...new Set(groups.map((g) => vendorRoleForCategory(g.category))),
+  ];
+  await Promise.all(vendorRoles.map((r) => notifyVendorNewOrder(r)));
 
   // 핫딜마켓(여러 카테고리)은 날짜 단위 발주서로, 그 외(단일)는 개별 발주서로
   if (hasOrderWindow(user.role) || groups.length > 1) {
