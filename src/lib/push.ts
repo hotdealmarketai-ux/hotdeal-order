@@ -46,17 +46,19 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
   );
 }
 
-// 특정 업자 역할(서부일광/장흥/채움채/새롭)에게 새 발주 알림
-export async function notifyVendorNewOrder(role: Role) {
+// 특정 업자 역할(서부일광/장흥/채움채/새롭)에게 새 발주 알림.
+// fromStoreName = 발주를 넣은 점주(가맹점/소매) 상호.
+export async function notifyVendorNewOrder(role: Role, fromStoreName: string) {
   try {
     const vendor = await prisma.user.findFirst({
       where: { role, status: "APPROVED" },
-      select: { id: true, storeName: true },
+      select: { id: true },
     });
     if (!vendor) return;
     await sendPushToUser(vendor.id, {
-      title: "발주요청 도착",
-      body: `${vendor.storeName} 님에게 발주요청이 도착했습니다.`,
+      // 제목 한 줄만 보이도록 body는 비움(브라우저가 붙이는 출처 라벨은 제거 불가)
+      title: `${fromStoreName} 님에게 발주요청이 도착했습니다.`,
+      body: "",
       url: "/vendor",
     });
   } catch (err) {

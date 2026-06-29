@@ -196,7 +196,9 @@ export async function createOrderAction(
   const vendorRoles = [
     ...new Set(groups.map((g) => vendorRoleForCategory(g.category))),
   ];
-  await Promise.all(vendorRoles.map((r) => notifyVendorNewOrder(r)));
+  await Promise.all(
+    vendorRoles.map((r) => notifyVendorNewOrder(r, user.storeName)),
+  );
 
   // 핫딜마켓(여러 카테고리)은 날짜 단위 발주서로, 그 외(단일)는 개별 발주서로
   if (hasOrderWindow(user.role) || groups.length > 1) {
