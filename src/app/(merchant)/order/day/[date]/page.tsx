@@ -65,16 +65,19 @@ export default async function DayReceiptPage(props: {
             <div key={order.id} style={{ marginBottom: 22 }}>
               <div className="spread" style={{ marginBottom: 8 }}>
                 <span className="chip">{cat.label}</span>
-                {order.confirmed ? (
-                  <span className="badge badge--ok">확인됨 · 준비 중</span>
-                ) : canEditOrder(order.createdAt) ? (
-                  <Link
-                    href={`/order/${order.id}/edit`}
-                    className="btn btn--xs btn--soft"
-                  >
-                    수정
-                  </Link>
-                ) : null}
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {order.confirmed && (
+                    <span className="badge badge--ok">확인됨 · 준비 중</span>
+                  )}
+                  {canEditOrder(order.createdAt) && (
+                    <Link
+                      href={`/order/${order.id}/edit`}
+                      className="btn btn--xs btn--soft"
+                    >
+                      수정
+                    </Link>
+                  )}
+                </div>
               </div>
               <ReceiptCard
                 storeName={user.storeName}

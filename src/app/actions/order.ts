@@ -19,7 +19,11 @@ import {
 } from "@/lib/deadline";
 import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
-import { notifyVendorNewOrder, notifyMerchantOrderPlaced } from "@/lib/push";
+import {
+  notifyVendorNewOrder,
+  notifyMerchantOrderPlaced,
+  notifyVendorOrderEdited,
+} from "@/lib/push";
 
 export type OrderFormState = { error?: string };
 
@@ -44,7 +48,10 @@ export async function parseChatOrderAction(text: string): Promise<ChatParseState
   const clean = String(text ?? "").trim().slice(0, 2000);
   if (!clean) return { ok: false, error: "발주 내용을 입력해 주세요." };
 
-  const allowed = allowedCategoriesFor(user.role);
+  // 채움채(TOFU)는 체크리스트 전용 — 채팅 분류에서 제외(두부류는 야채로 보냄)
+  const allowed: Category[] = allowedCategoriesFor(user.role).filter(
+    (c) => c !== "TOFU",
+  );
   const catInfo = allowed.map((c) => ({
     key: c,
     label: CATEGORIES[c].label,
@@ -258,11 +265,19 @@ export async function updateOrderAction(
   const orderDate = kstDateOf(order.createdAt);
   const pickupTime = await buildPickup(user.role, formData, orderDate);
 
-  const result = await normalizeOrder({
-    categoryLabel: CATEGORIES[category].label,
-    items,
-    pickupTime: pickupTime || undefined,
-  });
+  // 채움채(TOFU)는 정규화 없이 정확한 이름 보존(자동제출 매핑용)
+  const result =
+    category === "TOFU"
+      ? {
+          engine: "rule" as const,
+          items,
+          summary: `채움채 발주 ${items.length}건`,
+        }
+      : await normalizeOrder({
+          categoryLabel: CATEGORIES[category].label,
+          items,
+          pickupTime: pickupTime || undefined,
+        });
   const aligned = result.items.length === items.length;
   const clean = aligned ? result.items : items;
   const engine = aligned ? result.engine : "rule";
@@ -304,6 +319,9 @@ export async function updateOrderAction(
     console.error("[order] update failed:", err);
     return { error: "수정 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
   }
+
+  // 받는 업체에 '발주 수정' 알림
+  await notifyVendorOrderEdited(vendorRoleForCategory(category), user.storeName);
 
   if (hasOrderWindow(user.role)) {
     redirect(`/order/day/${orderDate}?edited=1`);

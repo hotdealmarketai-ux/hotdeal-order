@@ -3,6 +3,8 @@
 import { useActionState, useMemo, useRef, useState } from "react";
 import { updateOrderAction, type OrderFormState } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
+import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
+import type { Category } from "@/lib/constants";
 
 type Row = { id: number; name: string; qty: string; note: string };
 
@@ -12,15 +14,18 @@ function isFilled(r: Row) {
 
 export function EditOrderForm({
   orderId,
+  category,
   initialItems,
   needsPickup,
   initialPickup,
 }: {
   orderId: string;
+  category: Category;
   initialItems: { name: string; qty: string; note: string }[];
   needsPickup: boolean;
   initialPickup?: string;
 }) {
+  const isTofu = category === "TOFU";
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
 
@@ -32,6 +37,15 @@ export function EditOrderForm({
       note: it.note,
     }));
     return [...seed, newRow()];
+  });
+  // 채움채(두부류): 체크리스트 수량 (기존 발주에서 채워 넣음)
+  const [tofuQty, setTofuQty] = useState<Record<string, string>>(() => {
+    const m: Record<string, string> = {};
+    for (const it of initialItems) {
+      const p = CHAEUMCHAE_CATALOG.find((c) => c.name === it.name.trim());
+      if (p) m[p.seq] = it.qty;
+    }
+    return m;
   });
   const [pickup, setPickup] = useState(initialPickup ?? "");
   const [confirming, setConfirming] = useState(false);
@@ -64,13 +78,16 @@ export function EditOrderForm({
     });
   }
 
-  const items = useMemo(
-    () =>
-      rows
-        .filter(isFilled)
-        .map((r) => ({ name: r.name, qty: r.qty, note: r.note })),
-    [rows],
-  );
+  const items = useMemo(() => {
+    if (isTofu) {
+      return CHAEUMCHAE_CATALOG.filter((p) => (tofuQty[p.seq] ?? "").trim()).map(
+        (p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }),
+      );
+    }
+    return rows
+      .filter(isFilled)
+      .map((r) => ({ name: r.name, qty: r.qty, note: r.note }));
+  }, [isTofu, rows, tofuQty]);
 
   return (
     <form action={formAction}>
@@ -101,43 +118,66 @@ export function EditOrderForm({
 
       <div className="section-label">발주 품목</div>
 
-      {rows.map((r, i) => {
-        const filled = isFilled(r);
-        return (
-          <div className="orderline" key={r.id}>
-            <div className="orderline__idx">
-              <span className="orderline__num">{i + 1}</span>
-              {filled && (
-                <button
-                  type="button"
-                  className="linkbtn linkbtn--danger"
-                  onClick={() => removeRow(r.id)}
-                >
-                  삭제
-                </button>
-              )}
+      {isTofu ? (
+        <div className="tofulist">
+          {CHAEUMCHAE_CATALOG.map((p) => {
+            const q = tofuQty[p.seq] ?? "";
+            return (
+              <div className={`tofuitem ${q.trim() ? "is-on" : ""}`} key={p.seq}>
+                <span className="tofuitem__name">{p.name}</span>
+                <input
+                  className="input tofuitem__qty"
+                  inputMode="numeric"
+                  value={q}
+                  onChange={(e) => {
+                    setConfirming(false);
+                    setTofuQty((prev) => ({ ...prev, [p.seq]: e.target.value }));
+                  }}
+                  placeholder="수량"
+                />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        rows.map((r, i) => {
+          const filled = isFilled(r);
+          return (
+            <div className="orderline" key={r.id}>
+              <div className="orderline__idx">
+                <span className="orderline__num">{i + 1}</span>
+                {filled && (
+                  <button
+                    type="button"
+                    className="linkbtn linkbtn--danger"
+                    onClick={() => removeRow(r.id)}
+                  >
+                    삭제
+                  </button>
+                )}
+              </div>
+              <input
+                className="input orderline__name"
+                value={r.name}
+                onChange={(e) => updateRow(r.id, "name", e.target.value)}
+                placeholder="품목"
+              />
+              <input
+                className="input"
+                value={r.qty}
+                onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+                placeholder="수량"
+              />
+              <input
+                className="input orderline__note"
+                value={r.note}
+                onChange={(e) => updateRow(r.id, "note", e.target.value)}
+                placeholder="설명"
+              />
             </div>
-            <input
-              className="input orderline__name"
-              value={r.name}
-              onChange={(e) => updateRow(r.id, "name", e.target.value)}
-              placeholder="품목"
-            />
-            <input
-              className="input"
-              value={r.qty}
-              onChange={(e) => updateRow(r.id, "qty", e.target.value)}
-              placeholder="수량"
-            />
-            <input
-              className="input orderline__note"
-              value={r.note}
-              onChange={(e) => updateRow(r.id, "note", e.target.value)}
-              placeholder="설명"
-            />
-          </div>
-        );
-      })}
+          );
+        })
+      )}
 
       {!confirming ? (
         <div style={{ marginTop: 18 }}>
@@ -170,7 +210,7 @@ export function EditOrderForm({
             >
               다시 볼게요
             </button>
-            <SubmitButton pendingText="AI가 정리 중…">네, 수정할게요</SubmitButton>
+            <SubmitButton pendingText="저장 중…">네, 수정할게요</SubmitButton>
           </div>
         </div>
       )}

@@ -56,6 +56,7 @@ export default async function EditOrderPage(props: {
         </div>
         <EditOrderForm
           orderId={order.id}
+          category={order.category as Category}
           initialItems={initialItems}
           needsPickup={needsPickupTime(user.role)}
           initialPickup={order.pickupTime ?? ""}

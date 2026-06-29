@@ -103,3 +103,21 @@ export async function notifyVendorNewOrder(role: Role, fromStoreName: string) {
     console.error("[push] notifyVendorNewOrder failed:", err);
   }
 }
+
+// 발주 수정 시 받는 업체에 알림
+export async function notifyVendorOrderEdited(role: Role, fromStoreName: string) {
+  try {
+    const vendor = await prisma.user.findFirst({
+      where: { role, status: "APPROVED" },
+      select: { id: true },
+    });
+    if (!vendor) return;
+    await sendPushToUser(vendor.id, {
+      title: `${fromStoreName} 님이 발주를 수정하였습니다.`,
+      body: "",
+      url: "/vendor",
+    });
+  } catch (err) {
+    console.error("[push] notifyVendorOrderEdited failed:", err);
+  }
+}

@@ -31,7 +31,9 @@ export function ChatOrder({
   needsPickup: boolean;
   locked?: boolean;
 }) {
-  const multi = categories.length > 1;
+  // 채움채(TOFU)는 채팅 분류 제외 — 두부류는 야채로
+  const chatCats = categories.filter((c) => c !== "TOFU");
+  const multi = chatCats.length > 1;
   const uid = useRef(0);
   const [text, setText] = useState("");
   const [phase, setPhase] = useState<Phase>("compose");
@@ -92,7 +94,7 @@ export function ChatOrder({
   function addItem() {
     setItems((prev) => [
       ...prev,
-      { id: ++uid.current, category: categories[0], name: "", qty: "", note: "" },
+      { id: ++uid.current, category: chatCats[0], name: "", qty: "", note: "" },
     ]);
   }
 
@@ -116,10 +118,10 @@ export function ChatOrder({
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
 
   const greeting = multi
-    ? "필요하신 품목을 편하게 적어 주세요. 종류(과일·야채·공구·두부)를 섞어 적으셔도 알아서 나눠 드려요."
+    ? "필요하신 품목을 편하게 적어 주세요. 종류(과일·야채·공구)를 섞어 적으셔도 알아서 나눠 드려요. (두부류는 야채로 들어가요)"
     : "필요하신 품목을 편하게 적어 주세요.";
   const example = multi
-    ? "예) 행사용 사과 20박스 싼걸로, 대파 5단, 두부 10모"
+    ? "예) 행사용 사과 20박스 싼걸로, 대파 5단, 양배추 3통"
     : "예) 행사용 사과 / 20박스 / 싼걸로\n예) 사장님 오늘 토마토 3개랑 참외 2박스요";
 
   return (
@@ -191,14 +193,14 @@ export function ChatOrder({
                       onChange={(e) => updateItem(it.id, "category", e.target.value)}
                       aria-label="종류"
                     >
-                      {categories.map((c) => (
+                      {chatCats.map((c) => (
                         <option key={c} value={c}>
                           {CATEGORIES[c].label}
                         </option>
                       ))}
                     </select>
                   ) : (
-                    <span className="chip">{CATEGORIES[categories[0]].label}</span>
+                    <span className="chip">{CATEGORIES[chatCats[0]].label}</span>
                   )}
                   <button
                     type="button"
