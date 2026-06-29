@@ -19,7 +19,7 @@ import {
 } from "@/lib/deadline";
 import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
-import { notifyVendorNewOrder } from "@/lib/push";
+import { notifyVendorNewOrder, notifyMerchantOrderPlaced } from "@/lib/push";
 
 export type OrderFormState = { error?: string };
 
@@ -199,6 +199,9 @@ export async function createOrderAction(
   await Promise.all(
     vendorRoles.map((r) => notifyVendorNewOrder(r, user.storeName)),
   );
+  // 발주 넣은 점주 본인에게 '주문 완료' 알림
+  const placedCount = groups.reduce((n, g) => n + g.items.length, 0);
+  await notifyMerchantOrderPlaced(user.id, placedCount);
 
   // 핫딜마켓(여러 카테고리)은 날짜 단위 발주서로, 그 외(단일)는 개별 발주서로
   if (hasOrderWindow(user.role) || groups.length > 1) {

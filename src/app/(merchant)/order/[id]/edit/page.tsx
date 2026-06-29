@@ -3,7 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, needsPickupTime, type Category } from "@/lib/constants";
-import { hasOrderWindow, isOrderOpen } from "@/lib/deadline";
+import {
+  hasOrderWindow,
+  isOrderOpen,
+  currentWindowStartUtc,
+} from "@/lib/deadline";
 import { kstDateOf } from "@/lib/date";
 import { EditOrderForm } from "@/components/EditOrderForm";
 
@@ -24,8 +28,11 @@ export default async function EditOrderPage(props: {
     ? `/order/day/${orderDate}`
     : `/order/${order.id}`;
 
-  // 가맹점은 운영시간(12~20시)에만 수정 가능
-  if (hasOrderWindow(user.role) && !isOrderOpen()) redirect(backHref);
+  // 가맹점: 운영시간 + '이번 발주 창에 넣은 발주'만 수정 가능
+  if (hasOrderWindow(user.role)) {
+    const inWindow = order.createdAt.getTime() >= currentWindowStartUtc();
+    if (!isOrderOpen() || !inWindow) redirect(backHref);
+  }
 
   const cat = CATEGORIES[order.category as Category];
   const initialItems = order.items.map((it) => ({

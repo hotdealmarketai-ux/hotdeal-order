@@ -46,6 +46,44 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
   );
 }
 
+// 특정 역할의 모든 사용자에게 발송
+export async function sendPushToRole(role: Role, payload: PushPayload) {
+  const users = await prisma.user.findMany({
+    where: { role, status: "APPROVED" },
+    select: { id: true },
+  });
+  await Promise.all(users.map((u) => sendPushToUser(u.id, payload)));
+}
+
+// 점주(가맹점/소매)에게 '주문 완료' 알림
+export async function notifyMerchantOrderPlaced(userId: string, count: number) {
+  try {
+    await sendPushToUser(userId, {
+      title: `${count}건이 주문 완료되었습니다.`,
+      body: "",
+      url: "/mypage",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantOrderPlaced failed:", err);
+  }
+}
+
+// 점주에게 '업자가 발주 확인함' 알림. vendorLabel = 받는 곳(예: 서부일광)
+export async function notifyMerchantOrderConfirmed(
+  userId: string,
+  vendorLabel: string,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: `${vendorLabel}에서 발주를 확인하였습니다.`,
+      body: "",
+      url: "/mypage",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantOrderConfirmed failed:", err);
+  }
+}
+
 // 특정 업자 역할(서부일광/장흥/채움채/새롭)에게 새 발주 알림.
 // fromStoreName = 발주를 넣은 점주(가맹점/소매) 상호.
 export async function notifyVendorNewOrder(role: Role, fromStoreName: string) {

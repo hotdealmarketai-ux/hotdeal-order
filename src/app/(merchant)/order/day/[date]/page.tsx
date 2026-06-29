@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
-import { hasOrderWindow, isOrderOpen } from "@/lib/deadline";
+import {
+  hasOrderWindow,
+  isOrderOpen,
+  currentWindowStartUtc,
+} from "@/lib/deadline";
 import { formatKDateTime } from "@/lib/format";
 import { kstDayRange, labelDate, normalizeDateStr } from "@/lib/date";
 import { ReceiptCard } from "@/components/ReceiptCard";
@@ -30,7 +34,10 @@ export default async function DayReceiptPage(props: {
       CATEGORY_ORDER.indexOf(a.category as Category) -
       CATEGORY_ORDER.indexOf(b.category as Category),
   );
-  const canEdit = !hasOrderWindow(user.role) || isOrderOpen();
+  const windowStart = currentWindowStartUtc();
+  const canEditOrder = (createdAt: Date) =>
+    !hasOrderWindow(user.role) ||
+    (isOrderOpen() && createdAt.getTime() >= windowStart);
 
   return (
     <>
@@ -60,7 +67,7 @@ export default async function DayReceiptPage(props: {
                 <span className="chip">{cat.label}</span>
                 {order.confirmed ? (
                   <span className="badge badge--ok">확인됨 · 준비 중</span>
-                ) : canEdit ? (
+                ) : canEditOrder(order.createdAt) ? (
                   <Link
                     href={`/order/${order.id}/edit`}
                     className="btn btn--xs btn--soft"
