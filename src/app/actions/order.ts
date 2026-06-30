@@ -18,6 +18,7 @@ import {
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
 import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
+import { displayQty } from "@/lib/qty";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
 import {
   notifyVendorNewOrder,
@@ -189,7 +190,7 @@ export async function createOrderAction(
             rawQty: r.qty,
             rawNote: r.note,
             name: clean[i]?.name ?? r.name,
-            qty: clean[i]?.qty ?? r.qty,
+            qty: displayQty(clean[i]?.qty ?? r.qty),
             note: clean[i]?.note ?? r.note,
           })),
         },
@@ -308,7 +309,7 @@ export async function updateOrderAction(
               rawQty: r.qty,
               rawNote: r.note,
               name: clean[i]?.name ?? r.name,
-              qty: clean[i]?.qty ?? r.qty,
+              qty: displayQty(clean[i]?.qty ?? r.qty),
               note: clean[i]?.note ?? r.note,
             })),
           },
