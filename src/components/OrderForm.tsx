@@ -11,10 +11,8 @@ import {
   type Role,
 } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
-import { needsUnitConfirm, toBoxQty } from "@/lib/unit";
-
-// 박스 단위 되묻기 대상 카테고리(청과)
-const UNIT_SCOPED: Category[] = ["FRUIT", "VEG"];
+import { QtyField } from "./QtyField";
+import { anomalyMessage, itemKey } from "@/lib/unit";
 
 type Row = { id: number; name: string; qty: string; note: string };
 
@@ -27,11 +25,13 @@ export function OrderForm({
   needsPickup,
   locked = false,
   role,
+  typicals = {},
 }: {
   categories: Category[];
   needsPickup: boolean;
   locked?: boolean;
   role: Role;
+  typicals?: Record<string, number>;
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -79,16 +79,6 @@ export function OrderForm({
     });
   }
 
-  // 특정 카테고리 행의 수량을 'N박스'로 변경(단위 되묻기에서)
-  function setRowQtyToBox(category: Category, id: number, qty: string) {
-    setRowsByCat((prev) => ({
-      ...prev,
-      [category]: (prev[category] ?? []).map((r) =>
-        r.id === id ? { ...r, qty: toBoxQty(qty) } : r,
-      ),
-    }));
-  }
-
   const payload = useMemo(
     () =>
       categories
@@ -116,21 +106,6 @@ export function OrderForm({
     return m;
   }, [payload]);
 
-  // 단위 되묻기 대상: 과일·야채 행 중 박스/무게 아닌 단위
-  const flaggedUnits = useMemo(() => {
-    const out: { category: Category; id: number; name: string; qty: string }[] = [];
-    for (const c of categories) {
-      if (!UNIT_SCOPED.includes(c)) continue;
-      for (const r of rowsByCat[c] ?? []) {
-        if (r.name.trim() && needsUnitConfirm(r.qty)) {
-          out.push({ category: c, id: r.id, name: r.name, qty: r.qty });
-        }
-      }
-    }
-    return out;
-  }, [categories, rowsByCat]);
-
-  const cat = CATEGORIES[active];
   const multi = categories.length > 1;
 
   if (mode === "chat") {
@@ -278,11 +253,14 @@ export function OrderForm({
                   onChange={(e) => updateRow(r.id, "name", e.target.value)}
                   placeholder="품목"
                 />
-                <input
-                  className="input"
+                <QtyField
                   value={r.qty}
-                  onChange={(e) => updateRow(r.id, "qty", e.target.value)}
-                  placeholder="수량"
+                  onChange={(v) => updateRow(r.id, "qty", v)}
+                  warn={
+                    r.name.trim()
+                      ? anomalyMessage(r.qty, typicals[itemKey(r.name)])
+                      : ""
+                  }
                 />
                 <input
                   className="input orderline__note"
@@ -316,26 +294,6 @@ export function OrderForm({
         ) : (
           <div className="confirm">
             <div className="confirm__title">이대로 발주할까요?</div>
-
-            {flaggedUnits.length > 0 && (
-              <div className="unitwarn">
-                <div className="unitwarn__title">단위 확인 — 박스가 맞나요?</div>
-                {flaggedUnits.map((f) => (
-                  <div className="unitwarn__row" key={`${f.category}-${f.id}`}>
-                    <span className="unitwarn__name">
-                      {f.name} <b>{f.qty}</b>
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn--xs btn--soft"
-                      onClick={() => setRowQtyToBox(f.category, f.id, f.qty)}
-                    >
-                      박스로 변경
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
 
             <div className="confirm__list">
               {payload.map((g) => (

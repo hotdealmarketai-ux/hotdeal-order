@@ -9,6 +9,7 @@ import {
   currentWindowStartUtc,
 } from "@/lib/deadline";
 import { kstDateOf } from "@/lib/date";
+import { buildTypicals } from "@/lib/unit";
 import { EditOrderForm } from "@/components/EditOrderForm";
 
 export default async function EditOrderPage(props: {
@@ -40,6 +41,15 @@ export default async function EditOrderPage(props: {
     note: it.rawNote,
   }));
 
+  // 이상 수량 경고용: 이 가맹점의 과거 발주 품목별 '평소 수량'
+  const pastItems = await prisma.orderItem.findMany({
+    where: { order: { userId: user.id } },
+    select: { name: true, rawName: true, rawQty: true, qty: true },
+    orderBy: { order: { createdAt: "desc" } },
+    take: 500,
+  });
+  const typicals = buildTypicals(pastItems);
+
   return (
     <>
       <header className="topbar">
@@ -59,6 +69,7 @@ export default async function EditOrderPage(props: {
           initialItems={initialItems}
           needsPickup={needsPickupTime(user.role)}
           initialPickup={order.pickupTime ?? ""}
+          typicals={typicals}
         />
       </div>
     </>

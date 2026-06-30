@@ -9,10 +9,7 @@ import {
 } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
-import { needsUnitConfirm, toBoxQty } from "@/lib/unit";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
-
-const UNIT_SCOPED: Category[] = ["FRUIT", "VEG"];
 
 type Phase = "compose" | "loading" | "preview";
 type EditItem = {
@@ -276,20 +273,6 @@ export function ChatOrder({
                       placeholder="설명"
                     />
                   </div>
-                  {UNIT_SCOPED.includes(it.category) && needsUnitConfirm(it.qty) && (
-                    <div className="unitwarn unitwarn--inline">
-                      <span className="unitwarn__name">
-                        &lsquo;{it.qty}&rsquo; 박스가 맞나요?
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn--xs btn--soft"
-                        onClick={() => updateItem(it.id, "qty", toBoxQty(it.qty))}
-                      >
-                        박스로 변경
-                      </button>
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
