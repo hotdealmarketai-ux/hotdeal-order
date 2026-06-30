@@ -12,6 +12,7 @@ import {
   normalizeDateStr,
 } from "@/lib/date";
 import { DateBar } from "@/components/DateBar";
+import { ResetOrdersButton } from "@/components/ResetOrdersButton";
 
 const SCOPES: { key: string; label: string; where: Prisma.OrderWhereInput }[] = [
   { key: "all", label: "전체", where: {} },
@@ -23,10 +24,10 @@ const SCOPES: { key: string; label: string; where: Prisma.OrderWhereInput }[] = 
 ];
 
 export default async function AdminOrders(props: {
-  searchParams: Promise<{ scope?: string; date?: string }>;
+  searchParams: Promise<{ scope?: string; date?: string; reset?: string }>;
 }) {
   await requireAdmin();
-  const { scope = "all", date: dateParam } = await props.searchParams;
+  const { scope = "all", date: dateParam, reset } = await props.searchParams;
   const sel = SCOPES.find((s) => s.key === scope) ?? SCOPES[0];
   const date = normalizeDateStr(dateParam);
   const isToday = date === kstToday();
@@ -76,6 +77,12 @@ export default async function AdminOrders(props: {
         <div className="topbar__title">발주 목록</div>
       </header>
       <div className="page page--tight">
+        {reset !== undefined && (
+          <div className="notice notice--ok" style={{ marginBottom: 14 }}>
+            ✓ 전체 발주 {reset}건을 초기화했습니다.
+          </div>
+        )}
+
         <div className="cattabs">
           {SCOPES.map((s) => (
             <Link
@@ -143,6 +150,22 @@ export default async function AdminOrders(props: {
             })}
           </div>
         )}
+
+        <div
+          style={{
+            marginTop: 28,
+            paddingTop: 16,
+            borderTop: "1px solid var(--line)",
+          }}
+        >
+          <div className="section-label" style={{ marginTop: 0 }}>
+            관리 도구
+          </div>
+          <p className="lead" style={{ marginTop: 0, marginBottom: 10 }}>
+            전체 발주 내역을 한 번에 삭제합니다. (회원·재고는 유지)
+          </p>
+          <ResetOrdersButton />
+        </div>
       </div>
     </>
   );

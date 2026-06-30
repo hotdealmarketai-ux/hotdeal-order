@@ -149,3 +149,15 @@ export async function deleteInventoryAction(formData: FormData) {
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }
+
+// 전체 발주 초기화 — 관리자 전용. 모든 Order 삭제(OrderItem은 Cascade).
+// 회원·재고는 유지. 실수 방지를 위해 확인 토큰 필요.
+export async function resetAllOrdersAction(formData: FormData) {
+  await requireAdmin();
+  if (String(formData.get("confirm") ?? "") !== "RESET-ALL-ORDERS") return;
+  const res = await prisma.order.deleteMany({});
+  revalidatePath("/admin");
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin/hotdeal");
+  redirect(`/admin/orders?reset=${res.count}`);
+}
