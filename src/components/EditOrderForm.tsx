@@ -4,8 +4,6 @@ import { useActionState, useMemo, useRef, useState } from "react";
 import { updateOrderAction, type OrderFormState } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
-import { QtyField } from "./QtyField";
-import { anomalyMessage, itemKey } from "@/lib/unit";
 import type { Category } from "@/lib/constants";
 
 type Row = { id: number; name: string; qty: string; note: string };
@@ -20,14 +18,12 @@ export function EditOrderForm({
   initialItems,
   needsPickup,
   initialPickup,
-  typicals = {},
 }: {
   orderId: string;
   category: Category;
   initialItems: { name: string; qty: string; note: string }[];
   needsPickup: boolean;
   initialPickup?: string;
-  typicals?: Record<string, number>;
 }) {
   const isTofu = category === "TOFU";
   const uid = useRef(0);
@@ -166,14 +162,11 @@ export function EditOrderForm({
                 onChange={(e) => updateRow(r.id, "name", e.target.value)}
                 placeholder="품목"
               />
-              <QtyField
+              <input
+                className="input"
                 value={r.qty}
-                onChange={(v) => updateRow(r.id, "qty", v)}
-                warn={
-                  r.name.trim()
-                    ? anomalyMessage(r.qty, typicals[itemKey(r.name)])
-                    : ""
-                }
+                onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+                placeholder="수량"
               />
               <input
                 className="input orderline__note"

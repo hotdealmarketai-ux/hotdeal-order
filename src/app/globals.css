@@ -484,8 +484,8 @@ a {
 
 /* ---- 발주 입력 행(오토그로우) ---- */
 .orderline {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 96px;
   gap: 8px;
   padding: 14px;
   background: #fff;
@@ -496,7 +496,11 @@ a {
 .orderline__name {
   font-weight: 600;
 }
+.orderline__note {
+  grid-column: 1 / -1;
+}
 .orderline__idx {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -512,87 +516,6 @@ a {
   font-size: 16px;
   padding: 11px 13px;
   box-shadow: none;
-}
-
-/* ---- 수량 스텝퍼 + 단위 칩 ---- */
-.qtyfield {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.qtyfield__stepper {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-}
-.qtystep {
-  flex: 0 0 auto;
-  width: 50px;
-  min-height: 50px;
-  border: 1px solid var(--line-strong);
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  font-size: 22px;
-  line-height: 1;
-  color: var(--black);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  user-select: none;
-}
-.qtystep:active {
-  background: var(--chip);
-}
-.qtyfield__num {
-  flex: 1 1 auto;
-  text-align: center;
-  min-width: 0;
-}
-.qtyfield__units {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.qtyunit {
-  padding: 8px 15px;
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-}
-.qtyunit.is-on {
-  background: var(--black);
-  color: #fff;
-  border-color: var(--black);
-}
-.anomwarn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  background: var(--warn-bg);
-  color: var(--warn);
-  font-size: 13px;
-  line-height: 1.45;
-}
-.anomwarn__ico {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--warn);
-  color: var(--warn-bg);
-  font-weight: 800;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 .linkbtn {
   background: none;

@@ -9,7 +9,6 @@ import {
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
 import { kstDateOf } from "@/lib/date";
-import { buildTypicals } from "@/lib/unit";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import { PushToggle } from "@/components/PushToggle";
@@ -31,15 +30,6 @@ export default async function OrderPage() {
     if (existing) existingOrderDate = kstDateOf(existing.createdAt);
   }
   const lockedToEdit = !!existingOrderDate;
-
-  // 이상 수량 경고용: 과거 발주 품목별 '평소 수량'(중앙값)
-  const pastItems = await prisma.orderItem.findMany({
-    where: { order: { userId: user.id } },
-    select: { name: true, rawName: true, rawQty: true, qty: true },
-    orderBy: { order: { createdAt: "desc" } },
-    take: 500,
-  });
-  const typicals = buildTypicals(pastItems);
 
   return (
     <>
@@ -72,7 +62,6 @@ export default async function OrderPage() {
             needsPickup={needsPickupTime(user.role)}
             locked={windowed && !open}
             role={user.role}
-            typicals={typicals}
           />
         )}
       </div>

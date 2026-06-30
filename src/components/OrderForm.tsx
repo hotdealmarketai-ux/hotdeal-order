@@ -11,8 +11,6 @@ import {
   type Role,
 } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
-import { QtyField } from "./QtyField";
-import { anomalyMessage, itemKey } from "@/lib/unit";
 
 type Row = { id: number; name: string; qty: string; note: string };
 
@@ -25,13 +23,11 @@ export function OrderForm({
   needsPickup,
   locked = false,
   role,
-  typicals = {},
 }: {
   categories: Category[];
   needsPickup: boolean;
   locked?: boolean;
   role: Role;
-  typicals?: Record<string, number>;
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -253,14 +249,11 @@ export function OrderForm({
                   onChange={(e) => updateRow(r.id, "name", e.target.value)}
                   placeholder="품목"
                 />
-                <QtyField
+                <input
+                  className="input"
                   value={r.qty}
-                  onChange={(v) => updateRow(r.id, "qty", v)}
-                  warn={
-                    r.name.trim()
-                      ? anomalyMessage(r.qty, typicals[itemKey(r.name)])
-                      : ""
-                  }
+                  onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+                  placeholder="수량"
                 />
                 <input
                   className="input orderline__note"
