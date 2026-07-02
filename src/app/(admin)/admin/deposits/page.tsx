@@ -6,6 +6,7 @@ import { formatKDateTime } from "@/lib/format";
 import { CollectDepositsButton } from "@/components/CollectDepositsButton";
 import { DepositMatchControl } from "@/components/DepositMatchControl";
 import { ManualPayButton } from "@/components/ManualPayButton";
+import { setOrderUnlockAction } from "@/app/actions/deposit";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -18,7 +19,9 @@ export default async function AdminDeposits() {
   const [unpaidInv, paidTodayInv, franchises] = await Promise.all([
     prisma.invoice.findMany({
       where: { status: "ISSUED", user: { role: "MERCHANT_HOTDEAL" } },
-      include: { user: { select: { storeName: true, payerNames: true } } },
+      include: {
+        user: { select: { storeName: true, payerNames: true, orderUnlock: true } },
+      },
       orderBy: { date: "asc" },
     }),
     prisma.invoice.findMany({
@@ -138,7 +141,27 @@ export default async function AdminDeposits() {
                             : `입금 ${fmt(dep)}원 확인 필요`}
                       </div>
                     </div>
-                    <ManualPayButton invoiceId={inv.id} />
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                        alignItems: "flex-end",
+                      }}
+                    >
+                      <ManualPayButton invoiceId={inv.id} />
+                      <form action={setOrderUnlockAction}>
+                        <input type="hidden" name="userId" value={inv.userId} />
+                        <input
+                          type="hidden"
+                          name="unlock"
+                          value={inv.user.orderUnlock ? "false" : "true"}
+                        />
+                        <button type="submit" className="linkbtn">
+                          {inv.user.orderUnlock ? "발주 다시 잠금" : "발주 잠금 해제"}
+                        </button>
+                      </form>
+                    </div>
                   </div>
                 </div>
               );

@@ -89,6 +89,18 @@ export async function ignoreDepositAction(formData: FormData) {
   revalidateDeposit();
 }
 
+// 발주 잠금 해제/재잠금 — 관리자가 임의 출고 시 미납이어도 발주 허용(orderUnlock).
+// 완납되면 자동으로 다시 잠긴다(clearOrderUnlockIfSettled).
+export async function setOrderUnlockAction(formData: FormData) {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const unlock = formData.get("unlock") === "true";
+  if (!userId) return;
+  await prisma.user.update({ where: { id: userId }, data: { orderUnlock: unlock } });
+  revalidatePath("/admin/deposits");
+  revalidatePath(`/admin/members/${userId}`);
+}
+
 // 무시/해제 되돌리기 → 미매칭
 export async function resetDepositAction(formData: FormData) {
   await requireAdmin();
