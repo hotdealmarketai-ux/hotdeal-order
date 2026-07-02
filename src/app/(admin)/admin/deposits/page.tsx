@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatKDateTime } from "@/lib/format";
+import { CollectDepositsButton } from "@/components/CollectDepositsButton";
 
 export default async function AdminDeposits() {
   await requireAdmin();
@@ -26,6 +27,8 @@ export default async function AdminDeposits() {
           하나 법인계좌 입금 {deposits.length}건
           {unmatched > 0 ? ` · 미매칭 ${unmatched}건` : ""}
         </p>
+
+        <CollectDepositsButton />
 
         {deposits.length === 0 ? (
           <div className="empty">
