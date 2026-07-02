@@ -191,21 +191,30 @@ export async function autoMatchDeposit(
     data: { matchStatus: "AUTO", matchedUserId: userId, matchedAt: new Date() },
   });
 
-  // 금액이 정확히 일치하는 미입금 계산서가 '딱 1장'일 때만 자동 확인
+  const invoicePaid = await tryAutoPayInvoice(userId, dep.amount, dep.txAt);
+  return { storeMatched: true, invoicePaid };
+}
+
+// 금액이 정확히 일치하는 '입금 대기(ISSUED)' 계산서가 딱 1장일 때만 자동 입금확인.
+// 0장/2장 이상이면 사람이 판단하도록 두고 false 반환. (자동매칭·수동매칭 공용)
+export async function tryAutoPayInvoice(
+  userId: string,
+  amount: number,
+  paidAt: Date,
+): Promise<boolean> {
   const exact = await prisma.invoice.findMany({
-    where: { userId, status: "ISSUED", total: dep.amount },
+    where: { userId, status: "ISSUED", total: amount },
     select: { id: true },
     take: 2,
   });
-  if (exact.length !== 1) return { storeMatched: true, invoicePaid: false };
-
+  if (exact.length !== 1) return false;
   const upd = await prisma.invoice.updateMany({
     where: { id: exact[0].id, status: "ISSUED" },
-    data: { status: "PAID", paidAt: dep.txAt },
+    data: { status: "PAID", paidAt },
   });
   if (upd.count === 1) {
     await notifyMerchantInvoicePaid(userId, exact[0].id);
-    return { storeMatched: true, invoicePaid: true };
+    return true;
   }
-  return { storeMatched: true, invoicePaid: false };
+  return false;
 }

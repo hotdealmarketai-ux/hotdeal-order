@@ -1258,3 +1258,49 @@ a {
   font-size: 23px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- 입금 수동 매칭 큐 ---- */
+.deprow {
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-row);
+}
+.deprow__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.depmatch {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.depmatch__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.depmatch__remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--fg-2);
+}
+.depmatch__remember input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+.depmatch__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.depmatch__ignore {
+  margin-top: 10px;
+  text-align: center;
+}
