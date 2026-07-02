@@ -60,7 +60,6 @@ export function InvoiceForm({
   date,
   categories,
   initialItems = [],
-  initialMemo = "",
   refGroups = [],
 }: {
   invoiceId?: string;
@@ -68,7 +67,6 @@ export function InvoiceForm({
   date: string;
   categories: Category[];
   initialItems?: InvoiceInitialItem[];
-  initialMemo?: string;
   refGroups?: InvoiceRefGroup[];
 }) {
   const uid = useRef(0);
@@ -94,7 +92,6 @@ export function InvoiceForm({
     for (const c of categories) init[c].push(newRow());
     return init;
   });
-  const [memo, setMemo] = useState(initialMemo);
   const [confirming, setConfirming] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [localError, setLocalError] = useState("");
@@ -202,11 +199,6 @@ export function InvoiceForm({
           </div>
         )}
 
-        <div className="notice notice--info" style={{ marginBottom: 14 }}>
-          발주 내역은 참고만 하세요 — <b>실제 출고 기준</b>으로 직접
-          입력합니다. (더 나간 것·빠진 것·주문 없던 것 모두 반영)
-        </div>
-
         {refCount > 0 && (
           <details className="invref">
             <summary>이날 발주 내역 참고 ({refCount}건)</summary>
@@ -280,20 +272,6 @@ export function InvoiceForm({
           );
         })}
 
-        <div className="field" style={{ marginTop: 14 }}>
-          <label className="label" htmlFor="invmemo">
-            메모 (선택 · 점주에게 표시)
-          </label>
-          <input
-            id="invmemo"
-            name="memo"
-            className="input"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-            placeholder="예) 입금 계좌 하나은행 000-000000-00000 새롭"
-          />
-        </div>
-
         <div className="invtotal">
           <span>합계 · 자동 계산 ({totalCount}건)</span>
           <b>{fmt(total)}원</b>
@@ -316,19 +294,34 @@ export function InvoiceForm({
           <div className="confirm">
             <input type="hidden" name="mode" value="issue" />
             <div className="confirm__title">이대로 발행할까요?</div>
-            <div className="confirm__list">
-              {categories
-                .filter((c) => (subtotals[c]?.count ?? 0) > 0)
-                .map((c) => (
-                  <div className="confirm__row" key={c}>
-                    <span className="confirm__cat">{CATEGORIES[c].label}</span>
-                    <span className="confirm__dest">
-                      {subtotals[c].count}건
-                    </span>
-                    <span className="confirm__n">{fmt(subtotals[c].sum)}원</span>
+            {categories
+              .filter((c) => (subtotals[c]?.count ?? 0) > 0)
+              .map((c) => {
+                const rows = (rowsByCat[c] ?? []).filter(isFilled);
+                return (
+                  <div className="invcat" key={c}>
+                    <div className="invcat__head">
+                      <span className="chip">{CATEGORIES[c].label}</span>
+                      <span className="invcat__sum">
+                        {fmt(subtotals[c].sum)}원
+                      </span>
+                    </div>
+                    {rows.map((r) => (
+                      <div className="invline" key={r.id}>
+                        <span>
+                          {r.name}
+                          <span className="invline__meta">
+                            {r.qty} × {r.unitPrice}
+                          </span>
+                        </span>
+                        <span className="invline__amt">
+                          {fmt(rowAmount(r))}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-            </div>
+                );
+              })}
             <div className="invtotal" style={{ marginTop: 10 }}>
               <span>총 결제요청 금액</span>
               <b>{fmt(total)}원</b>

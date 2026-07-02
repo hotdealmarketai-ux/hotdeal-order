@@ -329,6 +329,22 @@ a {
   background: var(--danger);
   color: #fff;
 }
+.badge--danger {
+  background: var(--danger);
+  color: #fff;
+}
+.kv--strong {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.kv--strong .kv__k,
+.kv--strong .kv__v {
+  font-weight: 800;
+}
+.kv--due .kv__v {
+  color: var(--danger);
+}
 
 /* ---- 리스트 행(발주 목록 등) ---- */
 .list {
@@ -389,6 +405,7 @@ a {
   z-index: 40;
 }
 .bottomnav__item {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -399,6 +416,22 @@ a {
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--muted-2);
+}
+.bottomnav__badge {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(6px);
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 17px;
+  text-align: center;
 }
 .bottomnav__item .ic {
   font-size: 22px;
@@ -602,6 +635,13 @@ a {
   background: var(--black);
   color: #fff;
   box-shadow: var(--shadow-pill);
+}
+.cattab__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+  flex: 0 0 auto;
 }
 .cattab__count {
   display: inline-flex;
@@ -1257,6 +1297,127 @@ a {
 .invgrand b {
   font-size: 23px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---- 발주 확인 시트(슬라이드업 모달) ---- */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(28, 26, 23, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: sheet-fade 0.18s ease;
+}
+@keyframes sheet-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.sheet__panel {
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-radius: 20px 20px 0 0;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.18);
+  animation: sheet-up 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sheet__title {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--fg);
+}
+.sheet__close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.sheet__hint {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 4px 0 12px;
+}
+.sheet__body {
+  overflow-y: auto;
+  flex: 1;
+  -webkit-overflow-scrolling: touch;
+}
+.sheet__foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 14px;
+  margin-top: 8px;
+  border-top: 1px solid var(--line-strong);
+}
+.sheet__foot .btn {
+  flex: 1;
+}
+.sheet__count {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.confsec {
+  margin-bottom: 14px;
+}
+.confsec__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.confsec__dest {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.confitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.confitem__name {
+  font-weight: 600;
+  flex: 1;
+}
+.confitem--edit {
+  display: grid;
+  grid-template-columns: 1fr 74px;
+  grid-template-areas: "name qty" "note note";
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.confitem--edit .confitem__name { grid-area: name; }
+.confitem--edit .confitem__qty { grid-area: qty; }
+.confitem--edit .confitem__note { grid-area: note; }
+.confitem__qty {
+  width: 74px;
+  text-align: center;
+}
+.confitem .input {
+  min-height: 42px;
+  font-size: 15px;
+  padding: 8px 10px;
+  box-shadow: none;
 }
 
 /* ---- 입금 수동 매칭 큐 ---- */

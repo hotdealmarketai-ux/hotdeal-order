@@ -40,6 +40,19 @@ export function SignupForm() {
       </div>
 
       <div className="field">
+        <label className="label" htmlFor="payerName">
+          예금주 (입금자명)<span className="req">*</span>
+        </label>
+        <input
+          id="payerName"
+          name="payerName"
+          className="input"
+          placeholder="입금 시 통장에 찍히는 이름"
+          required
+        />
+      </div>
+
+      <div className="field">
         <label className="label" htmlFor="businessCert">
           사업자등록증
         </label>

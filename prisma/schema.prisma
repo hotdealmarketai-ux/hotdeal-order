@@ -27,8 +27,10 @@ model User {
   address      String // 업장 소재지
   businessCert String? // 사업자등록증 파일 경로/URL
 
-  // 입금 자동매칭용 — 이 점포가 입금 시 통장에 찍히는 입금자명(상호·대표자명·직원명 등, 여러 개)
+  // 입금 자동매칭용 — 이 점포가 입금 시 통장에 찍히는 예금주/입금자명(가입 시 입력, 여러 개)
   payerNames   String[] @default([])
+  // 1일 미수 잠금 해제(관리자가 임의 출고 시) — 미납 계산서가 있어도 발주 허용
+  orderUnlock  Boolean  @default(false)
 
   orders          Order[]
   pushSubs        PushSubscription[]
@@ -117,6 +119,12 @@ model Invoice {
   total  Int    @default(0) // 합계(원) — 서버가 단가×수량으로 계산
   memo   String @default("")
 
+  // 분할 입금 요청 — 점주가 나눠 입금하겠다고 알림(관리자 수동 확인 대상)
+  splitRequested   Boolean   @default(false)
+  splitRequestedAt DateTime?
+  // 수동 입금확인 — true면 자동매칭이 되돌리지 않음(관리자 판단 우선)
+  manualPaid       Boolean   @default(false)
+
   issuedAt DateTime?
   paidAt   DateTime?
   voidedAt DateTime?
@@ -156,8 +164,11 @@ model Deposit {
   matchedUserId String?
   matchedUser  User?     @relation(fields: [matchedUserId], references: [id], onDelete: SetNull)
   matchedAt    DateTime?
+  // 이 입금이 어느 계산서 대금으로 소진됐는지(귀속). 소진된 입금은 다른 계산서 차액에 다시 안 셈.
+  appliedInvoiceId String?
   createdAt    DateTime  @default(now())
 
   @@index([matchStatus, txAt])
   @@index([matchedUserId])
+  @@index([appliedInvoiceId])
 }

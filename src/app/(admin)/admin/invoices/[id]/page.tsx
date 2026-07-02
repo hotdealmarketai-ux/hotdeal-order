@@ -101,7 +101,6 @@ export default async function AdminInvoiceDetail(props: {
             date={inv.date}
             categories={categories}
             initialItems={initialItems}
-            initialMemo={inv.memo}
             refGroups={refGroups}
           />
         </div>
@@ -183,15 +182,6 @@ export default async function AdminInvoiceDetail(props: {
             </div>
           );
         })}
-
-        {inv.memo && (
-          <div className="card" style={{ marginTop: 4 }}>
-            <div className="kv">
-              <span className="kv__k">메모</span>
-              <span className="kv__v">{inv.memo}</span>
-            </div>
-          </div>
-        )}
 
         <div className="invgrand">
           <span>총 결제요청 금액</span>

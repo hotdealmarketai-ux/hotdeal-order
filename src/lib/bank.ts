@@ -179,8 +179,13 @@ export async function autoMatchDeposit(
     return { storeMatched: false, invoicePaid: false };
   }
 
+  // 정산 대상(승인된 가맹/소매)만 후보로 — 미승인·타 역할 계정의 입금자명 위조 매칭 방지
   const candidates = await prisma.user.findMany({
-    where: { payerNames: { has: dep.payerName } },
+    where: {
+      payerNames: { has: dep.payerName },
+      status: "APPROVED",
+      role: { in: ["MERCHANT_HOTDEAL", "MERCHANT_SEOBU"] },
+    },
     select: { id: true },
   });
   if (candidates.length !== 1) return { storeMatched: false, invoicePaid: false };
@@ -191,30 +196,60 @@ export async function autoMatchDeposit(
     data: { matchStatus: "AUTO", matchedUserId: userId, matchedAt: new Date() },
   });
 
-  const invoicePaid = await tryAutoPayInvoice(userId, dep.amount, dep.txAt);
-  return { storeMatched: true, invoicePaid };
+  const paidId = await tryAutoPayInvoice(userId, dep.amount, dep.txAt);
+  if (paidId) {
+    // 이 입금을 그 계산서 대금으로 소진 처리(다른 계산서 차액에 중복 계산 방지)
+    await prisma.deposit.update({
+      where: { id: dep.id },
+      data: { appliedInvoiceId: paidId },
+    });
+  }
+  return { storeMatched: true, invoicePaid: !!paidId };
 }
 
 // 금액이 정확히 일치하는 '입금 대기(ISSUED)' 계산서가 딱 1장일 때만 자동 입금확인.
-// 0장/2장 이상이면 사람이 판단하도록 두고 false 반환. (자동매칭·수동매칭 공용)
+// 귀속 정합성 게이트: 입금 시점 이전에 '발행'된 것 + 분할요청 아닌 것만. 애매하면 사람 확인.
+// 성공 시 확정된 invoiceId 반환, 아니면 null. (자동매칭 공용)
 export async function tryAutoPayInvoice(
   userId: string,
   amount: number,
   paidAt: Date,
-): Promise<boolean> {
+): Promise<string | null> {
   const exact = await prisma.invoice.findMany({
-    where: { userId, status: "ISSUED", total: amount },
-    select: { id: true },
+    where: {
+      userId,
+      status: "ISSUED",
+      total: amount,
+      splitRequested: false,
+      issuedAt: { lte: paidAt },
+    },
+    select: { id: true, date: true, total: true, _count: { select: { items: true } } },
     take: 2,
   });
-  if (exact.length !== 1) return false;
+  if (exact.length !== 1) return null;
+  const inv = exact[0];
   const upd = await prisma.invoice.updateMany({
-    where: { id: exact[0].id, status: "ISSUED" },
+    where: { id: inv.id, status: "ISSUED" }, // manualPaid(PAID)는 status가 이미 PAID라 여기 안 걸림
     data: { status: "PAID", paidAt },
   });
   if (upd.count === 1) {
-    await notifyMerchantInvoicePaid(userId, exact[0].id);
-    return true;
+    await notifyMerchantInvoicePaid(userId, inv.date, inv._count.items, inv.total);
+    await clearOrderUnlockIfSettled(userId);
+    return inv.id;
   }
-  return false;
+  return null;
+}
+
+// 미수(ISSUED)가 모두 정산되면 관리자 임의 잠금해제(orderUnlock)를 자동으로 원복 —
+// 해제가 영구 무력화되지 않게.
+export async function clearOrderUnlockIfSettled(userId: string) {
+  const remaining = await prisma.invoice.count({
+    where: { userId, status: "ISSUED" },
+  });
+  if (remaining === 0) {
+    await prisma.user.updateMany({
+      where: { id: userId, orderUnlock: true },
+      data: { orderUnlock: false },
+    });
+  }
 }

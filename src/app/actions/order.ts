@@ -19,6 +19,7 @@ import {
 } from "@/lib/deadline";
 import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
 import { displayQty } from "@/lib/qty";
+import { orderLockOf } from "@/lib/receivable";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
 import {
   notifyVendorNewOrder,
@@ -113,6 +114,12 @@ export async function createOrderAction(
     return {
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
     };
+  }
+
+  // 1일 미수 잠금 — 지난 미입금 계산서가 있으면 서버에서도 차단(UI 우회 방지)
+  const lock = await orderLockOf(user.id, user.orderUnlock);
+  if (lock.locked) {
+    return { error: "지난 발주가 결제되지 않아 발주가 잠겨 있어요. 입금 확인 후 가능해요." };
   }
 
   const allowed = allowedCategoriesFor(user.role);
@@ -249,6 +256,12 @@ export async function updateOrderAction(
     return {
       error: `지금은 수정 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL})`,
     };
+  }
+
+  // 1일 미수 잠금 — 미입금 상태면 수정도 차단(서버 강제)
+  const lock = await orderLockOf(user.id, user.orderUnlock);
+  if (lock.locked) {
+    return { error: "지난 발주가 결제되지 않아 잠겨 있어요. 입금 확인 후 가능해요." };
   }
 
   const category = order.category as Category;

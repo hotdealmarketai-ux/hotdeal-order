@@ -67,6 +67,16 @@ export function OrderForm({
     });
   }
 
+  // 확인 모달에서 카테고리 지정 인라인 수정(현재 탭과 무관)
+  function updateRowInCat(cat: Category, id: number, field: keyof Row, value: string) {
+    setRowsByCat((prev) => {
+      const list = (prev[cat] ?? []).map((r) =>
+        r.id === id ? { ...r, [field]: value } : r,
+      );
+      return { ...prev, [cat]: withTrailingEmpty(list) };
+    });
+  }
+
   function removeRow(id: number) {
     setRowsByCat((prev) => {
       let list = prev[active].filter((r) => r.id !== id);
@@ -266,53 +276,140 @@ export function OrderForm({
           })
         )}
 
-        {!confirming ? (
-          <div style={{ marginTop: 18 }}>
-            <button
-              type="button"
-              className="btn btn--primary"
-              disabled={locked}
-              onClick={() => {
-                if (totalItems === 0) {
-                  setLocalError("발주할 품목을 한 개 이상 입력하세요.");
-                  return;
-                }
-                setLocalError("");
-                setConfirming(true);
-              }}
-            >
-              발주하기
-            </button>
-          </div>
-        ) : (
-          <div className="confirm">
-            <div className="confirm__title">이대로 발주할까요?</div>
+        <div style={{ marginTop: 18 }}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            disabled={locked}
+            onClick={() => {
+              if (totalItems === 0) {
+                setLocalError("발주할 품목을 한 개 이상 입력하세요.");
+                return;
+              }
+              setLocalError("");
+              setConfirming(true);
+            }}
+          >
+            발주하기
+          </button>
+        </div>
 
-            <div className="confirm__list">
-              {payload.map((g) => (
-                <div className="confirm__row" key={g.category}>
-                  <span className="confirm__cat">{CATEGORIES[g.category].label}</span>
-                  <span className="confirm__dest">
-                    {receiverLabel(g.category, role)}
-                  </span>
-                  <span className="confirm__n">{g.items.length}건</span>
-                </div>
-              ))}
-            </div>
-            {multi && (
-              <p className="confirm__hint">
-                위 {payload.length}개 종류가 한 번에 발주됩니다.
+        {/* 확인 모달 — 발주 전체를 영수증처럼 보여주고, 그 자리에서 바로 수정 가능 */}
+        {confirming && (
+          <div
+            className="sheet"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setConfirming(false);
+            }}
+          >
+            <div className="sheet__panel">
+              <div className="sheet__head">
+                <div className="sheet__title">이대로 발주할까요?</div>
+                <button
+                  type="button"
+                  className="sheet__close"
+                  aria-label="닫기"
+                  onClick={() => setConfirming(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="sheet__hint">
+                아래 내용이 맞는지 확인하세요. 여기서 바로 수정할 수 있어요.
               </p>
-            )}
-            <div className="confirm__actions">
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={() => setConfirming(false)}
-              >
-                다시 볼게요
-              </button>
-              <SubmitButton pendingText="AI가 정리 중…">네, 발주할게요</SubmitButton>
+
+              {(state?.error || localError) && (
+                <div className="notice notice--error" style={{ marginBottom: 10 }}>
+                  {state?.error || localError}
+                </div>
+              )}
+
+              <div className="sheet__body">
+                {categories.map((c) => {
+                  if (c === "TOFU") {
+                    const items = CHAEUMCHAE_CATALOG.filter(
+                      (p) => (tofuQty[p.seq] ?? "").trim(),
+                    );
+                    if (items.length === 0) return null;
+                    return (
+                      <div className="confsec" key={c}>
+                        <div className="confsec__head">
+                          <span className="chip">{CATEGORIES[c].label}</span>
+                          <span className="confsec__dest">
+                            {receiverLabel(c, role)} · {items.length}건
+                          </span>
+                        </div>
+                        {items.map((p) => (
+                          <div className="confitem" key={p.seq}>
+                            <span className="confitem__name">{p.name}</span>
+                            <input
+                              className="input confitem__qty"
+                              inputMode="numeric"
+                              value={tofuQty[p.seq] ?? ""}
+                              onChange={(e) => {
+                                setTofuQty((prev) => ({
+                                  ...prev,
+                                  [p.seq]: e.target.value,
+                                }));
+                              }}
+                              placeholder="수량"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  const rows = (rowsByCat[c] ?? []).filter(isFilled);
+                  if (rows.length === 0) return null;
+                  return (
+                    <div className="confsec" key={c}>
+                      <div className="confsec__head">
+                        <span className="chip">{CATEGORIES[c].label}</span>
+                        <span className="confsec__dest">
+                          {receiverLabel(c, role)} · {rows.length}건
+                        </span>
+                      </div>
+                      {rows.map((r) => (
+                        <div className="confitem confitem--edit" key={r.id}>
+                          <input
+                            className="input confitem__name"
+                            value={r.name}
+                            onChange={(e) =>
+                              updateRowInCat(c, r.id, "name", e.target.value)
+                            }
+                            placeholder="품목"
+                          />
+                          <input
+                            className="input confitem__qty"
+                            value={r.qty}
+                            onChange={(e) =>
+                              updateRowInCat(c, r.id, "qty", e.target.value)
+                            }
+                            placeholder="수량"
+                          />
+                          <input
+                            className="input confitem__note"
+                            value={r.note}
+                            onChange={(e) =>
+                              updateRowInCat(c, r.id, "note", e.target.value)
+                            }
+                            placeholder="설명"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="sheet__foot">
+                <div className="sheet__count">총 {totalItems}건</div>
+                <SubmitButton pendingText="AI가 정리 중…">
+                  네, 발주할게요
+                </SubmitButton>
+              </div>
             </div>
           </div>
         )}

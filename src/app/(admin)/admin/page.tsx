@@ -11,7 +11,7 @@ export default async function AdminHome() {
   const { start, end } = kstDayRange(kstToday());
   const today = { gte: start, lt: end };
   // 건수 = '오늘 주문한 점포 수'(중복 제거). 한 점포가 여러 종류를 넣어도 1로 계산.
-  const [pending, allStores, hotdealStores, ar] = await Promise.all([
+  const [pending, allStores, hotdealStores] = await Promise.all([
     prisma.user.count({ where: { status: "PENDING" } }),
     prisma.order.findMany({
       where: { createdAt: today },
@@ -23,14 +23,9 @@ export default async function AdminHome() {
       select: { userId: true },
       distinct: ["userId"],
     }),
-    prisma.invoice.aggregate({
-      where: { status: "ISSUED" },
-      _sum: { total: true },
-    }),
   ]);
   const totalOrders = allStores.length;
   const hotdealOrders = hotdealStores.length;
-  const arSum = ar._sum.total ?? 0;
 
   const menu = [
     {
@@ -42,12 +37,7 @@ export default async function AdminHome() {
     { href: "/admin/members", title: "회원 관리", sub: "회원 조회·수정·정지" },
     { href: "/admin/orders", title: "전체 발주 목록", sub: `${totalOrders}건` },
     { href: "/admin/hotdeal", title: "핫딜마켓 발주관리", sub: `${hotdealOrders}건` },
-    {
-      href: "/admin/invoices",
-      title: "계산서·미수",
-      sub: arSum > 0 ? `미수 ${arSum.toLocaleString("ko-KR")}원` : "미수 없음",
-    },
-    { href: "/admin/deposits", title: "입금 관리", sub: "입금 확인·자동매칭" },
+    { href: "/admin/deposits", title: "입금 관리", sub: "오늘 입금 현황" },
     { href: "/admin/inventory", title: "재고", sub: "" },
   ];
 

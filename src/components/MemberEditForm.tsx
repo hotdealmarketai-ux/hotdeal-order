@@ -99,15 +99,13 @@ export function MemberEditForm({
           <input id="address" name="address" className="input" defaultValue={initial.address} />
         </div>
         <div className="field">
-          <label className="label" htmlFor="payerNames">입금자명 (입금 자동매칭용)</label>
+          <label className="label" htmlFor="payerNames">예금주 (입금자명)</label>
           <input
             id="payerNames"
             name="payerNames"
             className="input"
             defaultValue={initial.payerNames.join(", ")}
-            placeholder="통장에 찍히는 이름, 여러 개면 콤마로 (예: 새롭상회, 홍길동)"
           />
-          <p className="hint">이 점포가 입금할 때 통장에 찍히는 이름이에요. 정확할수록 자동 입금확인이 잘 돼요.</p>
         </div>
 
         <div className="field">

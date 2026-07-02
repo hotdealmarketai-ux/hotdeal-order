@@ -13,6 +13,7 @@ export type AppUser = {
   phone: string;
   address: string;
   businessCert: string | null;
+  orderUnlock: boolean;
 };
 
 export async function getCurrentUser(): Promise<AppUser | null> {
@@ -31,6 +32,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       phone: u.phone,
       address: u.address,
       businessCert: u.businessCert,
+      orderUnlock: u.orderUnlock,
     };
   } catch (err) {
     // DB 미연결/장애 시 앱이 죽지 않고 비로그인으로 처리(로그인 화면 표시)

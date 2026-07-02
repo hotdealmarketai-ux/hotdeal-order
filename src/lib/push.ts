@@ -104,32 +104,31 @@ export async function notifyVendorNewOrder(role: Role, fromStoreName: string) {
   }
 }
 
-// 점주에게 '입금요청서(계산서) 발행' 알림
-export async function notifyMerchantInvoiceIssued(
-  userId: string,
-  invoiceId: string,
-) {
+// 점주에게 '입금요청서(계산서) 발행' 알림 — 지난 발주의 해당 날짜 입금요청서로 이동
+export async function notifyMerchantInvoiceIssued(userId: string, date: string) {
   try {
     await sendPushToUser(userId, {
       title: "입금요청서가 발행되었습니다.",
       body: "",
-      url: `/invoices/${invoiceId}`,
+      url: `/order/day/${date}?view=invoice`,
     });
   } catch (err) {
     console.error("[push] notifyMerchantInvoiceIssued failed:", err);
   }
 }
 
-// 점주에게 '입금 확인 완료' 알림
+// 점주에게 '입금 확인 완료' 알림 — 건수·금액 포함
 export async function notifyMerchantInvoicePaid(
   userId: string,
-  invoiceId: string,
+  date: string,
+  itemCount: number,
+  total: number,
 ) {
   try {
     await sendPushToUser(userId, {
-      title: "입금이 확인되었습니다. 감사합니다.",
+      title: `${itemCount}건 ${total.toLocaleString("ko-KR")}원 입금 확인이 완료되었습니다.`,
       body: "",
-      url: `/invoices/${invoiceId}`,
+      url: `/order/day/${date}?view=invoice`,
     });
   } catch (err) {
     console.error("[push] notifyMerchantInvoicePaid failed:", err);

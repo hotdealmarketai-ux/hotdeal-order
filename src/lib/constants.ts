@@ -31,6 +31,10 @@ export const ALL_ROLES: Role[] = [
   "APPLICANT",
 ];
 
+// 점주 입금요청서에 고정 표기되는 새롭 입금계좌 (필요 시 이 값만 수정)
+export const SAEROP_BANK_ACCOUNT = "하나은행 129-910031-04104";
+export const SAEROP_ACCOUNT_HOLDER = "주식회사 새롭";
+
 export type Category = "FRUIT" | "VEG" | "TOOL" | "TOFU";
 
 // 발주 카테고리 정의

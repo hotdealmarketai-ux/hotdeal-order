@@ -37,6 +37,7 @@ export async function signupAction(
   const storeName = String(formData.get("storeName") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
   const address = String(formData.get("address") ?? "").trim();
+  const payerName = String(formData.get("payerName") ?? "").trim().slice(0, 60);
   const cert = formData.get("businessCert");
 
   if (username.length < 3) return { error: "아이디는 3자 이상 입력하세요." };
@@ -67,6 +68,7 @@ export async function signupAction(
         phone,
         address,
         businessCert,
+        payerNames: payerName ? [payerName] : [],
         role: "APPLICANT",
         status: "PENDING",
       },

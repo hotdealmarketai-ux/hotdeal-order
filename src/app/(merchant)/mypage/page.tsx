@@ -10,7 +10,10 @@ import {
 } from "@/lib/constants";
 import { formatKDate } from "@/lib/format";
 import { kstDateOf, kstToday, labelDate } from "@/lib/date";
+import { receivableOf } from "@/lib/receivable";
 import { LogoutButton } from "@/components/LogoutButton";
+
+const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 export default async function MyPage(props: {
   searchParams: Promise<{ saved?: string }>;
@@ -18,24 +21,26 @@ export default async function MyPage(props: {
   const user = await requireMerchant();
   const { saved } = await props.searchParams;
 
-  const [orders, ar] = await Promise.all([
+  const [orders, invoices, ar] = await Promise.all([
     prisma.order.findMany({
       where: { userId: user.id },
       include: { _count: { select: { items: true } } },
       orderBy: { createdAt: "desc" },
     }),
-    prisma.invoice.aggregate({
-      where: { userId: user.id, status: "ISSUED" },
-      _sum: { total: true },
-      _count: true,
+    prisma.invoice.findMany({
+      where: { userId: user.id, status: { in: ["ISSUED", "PAID"] } },
+      select: { date: true, status: true },
     }),
+    receivableOf(user.id),
   ]);
-  const arSum = ar._sum.total ?? 0;
 
-  // 발주일이 오늘 이전이면 마감이 지난 것 → '완료'로 표시
+  // 날짜별 입금요청서 상태 (ISSUED=입금요청, PAID=입금완료)
+  const invByDate = new Map<string, "ISSUED" | "PAID">();
+  for (const inv of invoices) {
+    invByDate.set(inv.date, inv.status as "ISSUED" | "PAID");
+  }
+
   const today = kstToday();
-
-  // 핫딜마켓 가맹점은 한 번에 4종을 발주하므로 '발주한 날짜'로 묶어서 보여준다
   const groupByDate = user.role === "MERCHANT_HOTDEAL";
   const dayGroups: {
     date: string;
@@ -65,6 +70,15 @@ export default async function MyPage(props: {
         (a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b),
       );
     }
+  }
+
+  // 발주 상태 배지 — 입금요청/완료가 있으면 우선 표시
+  function dayBadge(date: string, base: React.ReactNode) {
+    const inv = invByDate.get(date);
+    if (inv === "PAID") return <span className="badge badge--ok">입금 완료</span>;
+    if (inv === "ISSUED")
+      return <span className="badge badge--danger">입금 요청</span>;
+    return base;
   }
 
   return (
@@ -97,29 +111,17 @@ export default async function MyPage(props: {
             <span className="kv__k">소재지</span>
             <span className="kv__v">{user.address}</span>
           </div>
+          <div className={`kv kv--strong ${ar.balance > 0 ? "kv--due" : ""}`}>
+            <span className="kv__k">미수 잔액</span>
+            <span className="kv__v">
+              {ar.balance > 0 ? `${fmt(ar.balance)}원` : "0원"}
+            </span>
+          </div>
           <div style={{ marginTop: 14 }}>
             <Link href="/mypage/edit" className="btn btn--ghost">
               프로필 수정
             </Link>
           </div>
-        </div>
-
-        <div className="list" style={{ marginBottom: 4 }}>
-          <Link href="/invoices" className="row">
-            <div className="row__main">
-              <div className="row__title">계산서함 (입금요청서)</div>
-              <div className="row__sub">
-                {arSum > 0
-                  ? `미수 ${arSum.toLocaleString("ko-KR")}원 · ${ar._count}건 입금 대기`
-                  : "미수 없음"}
-              </div>
-            </div>
-            {arSum > 0 ? (
-              <span className="badge badge--wait">입금 대기</span>
-            ) : (
-              <span className="row__chev">›</span>
-            )}
-          </Link>
         </div>
 
         <div className="section-label">지난 발주</div>
@@ -130,11 +132,7 @@ export default async function MyPage(props: {
         ) : groupByDate ? (
           <div className="list">
             {dayGroups.map((g) => (
-              <Link
-                href={`/order/day/${g.date}`}
-                className="row"
-                key={g.date}
-              >
+              <Link href={`/order/day/${g.date}`} className="row" key={g.date}>
                 <div className="row__main">
                   <div className="row__title">{labelDate(g.date)}</div>
                   <div className="row__sub">
@@ -142,14 +140,17 @@ export default async function MyPage(props: {
                     {g.items}건
                   </div>
                 </div>
-                {g.date < today ? (
-                  <span className="badge badge--ok">완료</span>
-                ) : g.confirmed >= g.orders ? (
-                  <span className="badge badge--ok">준비 중</span>
-                ) : g.confirmed > 0 ? (
-                  <span className="badge badge--mute">일부 확인</span>
-                ) : (
-                  <span className="row__chev">›</span>
+                {dayBadge(
+                  g.date,
+                  g.date < today ? (
+                    <span className="badge badge--ok">완료</span>
+                  ) : g.confirmed >= g.orders ? (
+                    <span className="badge badge--mute">준비 중</span>
+                  ) : g.confirmed > 0 ? (
+                    <span className="badge badge--mute">일부 확인</span>
+                  ) : (
+                    <span className="row__chev">›</span>
+                  ),
                 )}
               </Link>
             ))}
@@ -158,6 +159,7 @@ export default async function MyPage(props: {
           <div className="list">
             {orders.map((o) => {
               const cat = CATEGORIES[o.category as Category];
+              const d = kstDateOf(o.createdAt);
               return (
                 <Link href={`/order/${o.id}`} className="row" key={o.id}>
                   <div className="row__main">
@@ -165,15 +167,19 @@ export default async function MyPage(props: {
                       {cat.label} · {o._count.items}건
                     </div>
                     <div className="row__sub">
-                      {formatKDate(o.createdAt)} · {receiverLabel(o.category as Category, user.role)}
+                      {formatKDate(o.createdAt)} ·{" "}
+                      {receiverLabel(o.category as Category, user.role)}
                     </div>
                   </div>
-                  {kstDateOf(o.createdAt) < today ? (
-                    <span className="badge badge--ok">완료</span>
-                  ) : o.confirmed ? (
-                    <span className="badge badge--ok">준비 중</span>
-                  ) : (
-                    <span className="row__chev">›</span>
+                  {dayBadge(
+                    d,
+                    d < today ? (
+                      <span className="badge badge--ok">완료</span>
+                    ) : o.confirmed ? (
+                      <span className="badge badge--mute">준비 중</span>
+                    ) : (
+                      <span className="row__chev">›</span>
+                    ),
                   )}
                 </Link>
               );

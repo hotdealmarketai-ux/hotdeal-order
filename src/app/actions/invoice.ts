@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/session";
+import { requireAdmin, requireMerchant } from "@/lib/session";
 import {
   CATEGORY_ORDER,
   isMerchant,
@@ -15,6 +15,8 @@ import {
   notifyMerchantInvoicePaid,
 } from "@/lib/push";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
+import { clearOrderUnlockIfSettled } from "@/lib/bank";
+import { kstDayRange } from "@/lib/date";
 
 export type InvoiceFormState = { error?: string };
 
@@ -78,7 +80,6 @@ export async function saveInvoiceAction(
   const userId = String(formData.get("userId") ?? "");
   const date = String(formData.get("date") ?? "");
   const mode = formData.get("mode") === "issue" ? "issue" : "draft";
-  const memo = String(formData.get("memo") ?? "").trim().slice(0, 500);
 
   if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return { error: "잘못된 요청이에요." };
@@ -120,7 +121,6 @@ export async function saveInvoiceAction(
   const data = {
     userId,
     date,
-    memo,
     total,
     status: mode === "issue" ? "ISSUED" : "DRAFT",
     issuedAt: mode === "issue" ? new Date() : null,
@@ -166,10 +166,11 @@ export async function saveInvoiceAction(
   }
 
   if (mode === "issue") {
-    await notifyMerchantInvoiceIssued(userId, id);
+    await notifyMerchantInvoiceIssued(userId, date);
   }
 
   revalidatePath("/admin/invoices");
+  revalidatePath("/admin/deposits");
   revalidatePath(`/admin/combined/${userId}/${date}`);
   revalidatePath("/admin");
   redirect(`/admin/invoices/${id}?${mode === "issue" ? "issued" : "saved"}=1`);
@@ -196,21 +197,37 @@ export async function voidInvoiceAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
-// 입금 확인(수동) — 팝빌 자동확인 전 임시 운영 + 자동확인 이후에도 예외 처리용
+// 입금 확인(수동) — 분할입금·차액 등 자동매칭이 못 잡는 건을 관리자가 확정.
+// manualPaid=true로 표시해 이후 자동매칭이 되돌리지 못하게 한다.
 export async function markInvoicePaidAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("invoiceId") ?? "");
   if (!id) return;
   const upd = await prisma.invoice.updateMany({
     where: { id, status: "ISSUED" },
-    data: { status: "PAID", paidAt: new Date() },
+    data: { status: "PAID", paidAt: new Date(), manualPaid: true },
   });
   if (upd.count === 0) return;
   const inv = await prisma.invoice.findUnique({
     where: { id },
-    select: { userId: true },
+    select: { userId: true, date: true, total: true, _count: { select: { items: true } } },
   });
-  if (inv) await notifyMerchantInvoicePaid(inv.userId, id);
+  if (inv) {
+    // 이 계산서 날짜에 그 점포로 들어온 '미소진' 매칭 입금을 이 계산서에 귀속(소진)
+    const { start, end } = kstDayRange(inv.date);
+    await prisma.deposit.updateMany({
+      where: {
+        matchedUserId: inv.userId,
+        appliedInvoiceId: null,
+        txAt: { gte: start, lt: end },
+      },
+      data: { appliedInvoiceId: id },
+    });
+    await notifyMerchantInvoicePaid(inv.userId, inv.date, inv._count.items, inv.total);
+    await clearOrderUnlockIfSettled(inv.userId);
+    revalidatePath(`/order/day/${inv.date}`);
+  }
+  revalidatePath("/admin/deposits");
   revalidatePath("/admin/invoices");
   revalidatePath(`/admin/invoices/${id}`);
   revalidatePath("/admin");
@@ -223,11 +240,36 @@ export async function unmarkInvoicePaidAction(formData: FormData) {
   if (!id) return;
   const upd = await prisma.invoice.updateMany({
     where: { id, status: "PAID" },
-    data: { status: "ISSUED", paidAt: null },
+    data: { status: "ISSUED", paidAt: null, manualPaid: false },
   });
   if (upd.count === 0) return;
+  // 이 계산서에 귀속됐던 입금을 다시 미소진으로 되돌림
+  await prisma.deposit.updateMany({
+    where: { appliedInvoiceId: id },
+    data: { appliedInvoiceId: null },
+  });
+  const inv = await prisma.invoice.findUnique({ where: { id }, select: { date: true } });
+  if (inv) revalidatePath(`/order/day/${inv.date}`);
+  revalidatePath("/admin/deposits");
   revalidatePath("/admin/invoices");
   revalidatePath(`/admin/invoices/${id}`);
+  revalidatePath("/admin");
+}
+
+// 분할 입금 요청 — 점주가 나눠 입금하겠다고 알림(관리자 수동 확인 유도)
+export async function requestSplitPaymentAction(formData: FormData) {
+  const user = await requireMerchant();
+  const id = String(formData.get("invoiceId") ?? "");
+  if (!id) return;
+  const upd = await prisma.invoice.updateMany({
+    where: { id, userId: user.id, status: "ISSUED" },
+    data: { splitRequested: true, splitRequestedAt: new Date() },
+  });
+  if (upd.count === 0) return;
+  const inv = await prisma.invoice.findUnique({ where: { id }, select: { date: true } });
+  if (inv) revalidatePath(`/order/day/${inv.date}`);
+  revalidatePath("/admin/deposits");
+  revalidatePath("/admin/invoices");
   revalidatePath("/admin");
 }
 

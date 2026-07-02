@@ -4,11 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { isMerchant, type Role } from "@/lib/constants";
-import {
-  collectDeposits,
-  tryAutoPayInvoice,
-  type CollectResult,
-} from "@/lib/bank";
+import { collectDeposits, type CollectResult } from "@/lib/bank";
 
 export type CollectState = { result?: CollectResult; error?: string };
 
@@ -64,8 +60,8 @@ export async function matchDepositManuallyAction(formData: FormData) {
     });
   }
 
-  // 금액 정확 일치 계산서 1장이면 자동 입금확인
-  await tryAutoPayInvoice(userId, dep.amount, dep.txAt);
+  // 수동 매칭은 '이 입금은 이 점포 것'이라는 귀속만 한다.
+  // 계산서 완납 확정은 관리자가 '수동 입금확인'으로 명시적으로 하도록 분리(오확정 방지).
   revalidateDeposit();
 }
 
