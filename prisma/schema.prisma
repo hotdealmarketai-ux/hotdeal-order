@@ -33,6 +33,7 @@ model User {
   orders          Order[]
   pushSubs        PushSubscription[]
   matchedDeposits Deposit[]
+  invoices        Invoice[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -101,6 +102,44 @@ model InventoryItem {
   memo      String   @default("")
   sortOrder Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+// 계산서(장끼) — 새롭이 '실제 출고 기준'으로 직접 작성해 점포에 청구.
+// 발주 리스트는 참고만(경매·생물 특성상 출고가 주문과 다름). 발행 후 수정 금지(취소→재작성).
+model Invoice {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  date   String // 출고 기준일 (KST, YYYY-MM-DD) — 합본 발주서 날짜와 동일 단위
+
+  // status: DRAFT(작성중) | ISSUED(발행·입금대기) | PAID(입금확인) | VOID(취소)
+  status String @default("DRAFT")
+  total  Int    @default(0) // 합계(원) — 서버가 단가×수량으로 계산
+  memo   String @default("")
+
+  issuedAt DateTime?
+  paidAt   DateTime?
+  voidedAt DateTime?
+
+  items     InvoiceItem[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([userId, date])
+  @@index([status, issuedAt])
+}
+
+model InvoiceItem {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  category  String // FRUIT | VEG | TOOL | TOFU — 카테고리별 섹션 표기
+  sortOrder Int     @default(0)
+
+  name      String // 품목
+  qty       Float  @default(0) // 수량(소수 허용 — kg 등)
+  unitPrice Int    @default(0) // 단가(원)
+  amount    Int    @default(0) // 금액 = round(수량 × 단가), 서버 계산
 }
 
 // 입금 내역 — 팝빌 계좌조회로 수집한 하나 법인계좌 입금 건(자동 매칭 대상)

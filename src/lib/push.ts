@@ -104,6 +104,38 @@ export async function notifyVendorNewOrder(role: Role, fromStoreName: string) {
   }
 }
 
+// 점주에게 '입금요청서(계산서) 발행' 알림
+export async function notifyMerchantInvoiceIssued(
+  userId: string,
+  invoiceId: string,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: "입금요청서가 발행되었습니다.",
+      body: "",
+      url: `/invoices/${invoiceId}`,
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantInvoiceIssued failed:", err);
+  }
+}
+
+// 점주에게 '입금 확인 완료' 알림
+export async function notifyMerchantInvoicePaid(
+  userId: string,
+  invoiceId: string,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: "입금이 확인되었습니다. 감사합니다.",
+      body: "",
+      url: `/invoices/${invoiceId}`,
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantInvoicePaid failed:", err);
+  }
+}
+
 // 발주 수정 시 받는 업체에 알림
 export async function notifyVendorOrderEdited(role: Role, fromStoreName: string) {
   try {

@@ -18,11 +18,19 @@ export default async function MyPage(props: {
   const user = await requireMerchant();
   const { saved } = await props.searchParams;
 
-  const orders = await prisma.order.findMany({
-    where: { userId: user.id },
-    include: { _count: { select: { items: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [orders, ar] = await Promise.all([
+    prisma.order.findMany({
+      where: { userId: user.id },
+      include: { _count: { select: { items: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.invoice.aggregate({
+      where: { userId: user.id, status: "ISSUED" },
+      _sum: { total: true },
+      _count: true,
+    }),
+  ]);
+  const arSum = ar._sum.total ?? 0;
 
   // 발주일이 오늘 이전이면 마감이 지난 것 → '완료'로 표시
   const today = kstToday();
@@ -94,6 +102,24 @@ export default async function MyPage(props: {
               프로필 수정
             </Link>
           </div>
+        </div>
+
+        <div className="list" style={{ marginBottom: 4 }}>
+          <Link href="/invoices" className="row">
+            <div className="row__main">
+              <div className="row__title">계산서함 (입금요청서)</div>
+              <div className="row__sub">
+                {arSum > 0
+                  ? `미수 ${arSum.toLocaleString("ko-KR")}원 · ${ar._count}건 입금 대기`
+                  : "미수 없음"}
+              </div>
+            </div>
+            {arSum > 0 ? (
+              <span className="badge badge--wait">입금 대기</span>
+            ) : (
+              <span className="row__chev">›</span>
+            )}
+          </Link>
         </div>
 
         <div className="section-label">지난 발주</div>

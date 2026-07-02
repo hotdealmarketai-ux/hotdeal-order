@@ -39,6 +39,20 @@ export default async function AdminCombinedReceipt(props: {
   }));
   const totalItems = sections.reduce((n, s) => n + s.items.length, 0);
 
+  // 이 점포·날짜의 계산서(취소 제외) — 있으면 보기, 없으면 작성 버튼
+  const invoice = await prisma.invoice.findFirst({
+    where: { userId, date, status: { not: "VOID" } },
+    select: { id: true, status: true, total: true },
+  });
+  const invoiceLabel =
+    invoice?.status === "DRAFT"
+      ? "계산서 이어서 작성 (작성중)"
+      : invoice?.status === "PAID"
+        ? "계산서 보기 · 입금 완료"
+        : invoice
+          ? "계산서 보기 · 발행됨"
+          : "계산서 작성";
+
   return (
     <>
       <header className="topbar">
@@ -48,6 +62,19 @@ export default async function AdminCombinedReceipt(props: {
         <div className="topbar__title">발주서</div>
       </header>
       <div className="page">
+        <div style={{ marginBottom: 16 }}>
+          <Link
+            href={
+              invoice
+                ? `/admin/invoices/${invoice.id}`
+                : `/admin/invoices/new?user=${userId}&date=${date}`
+            }
+            className="btn btn--primary"
+          >
+            {invoiceLabel}
+          </Link>
+        </div>
+
         <div className="receipt" id="receipt-print">
           <div className="receipt__head">
             <div className="receipt__store">{merchant.storeName}</div>
