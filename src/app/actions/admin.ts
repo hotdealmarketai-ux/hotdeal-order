@@ -31,6 +31,17 @@ export async function updateMemberAction(
   let role = String(formData.get("role") ?? "") as Role;
   let status = String(formData.get("status") ?? "") as Status;
 
+  // 입금자명 — 콤마/줄바꿈으로 여러 개, 중복·공백 정리
+  const payerNames = [
+    ...new Set(
+      String(formData.get("payerNames") ?? "")
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => s.slice(0, 60)),
+    ),
+  ].slice(0, 20);
+
   if (!ALL_ROLES.includes(role)) return { error: "올바르지 않은 역할이에요." };
   if (!EDITABLE_STATUSES.includes(status)) return { error: "올바르지 않은 상태예요." };
   if (!storeName) return { error: "상호명을 입력하세요." };
@@ -43,7 +54,7 @@ export async function updateMemberAction(
 
   await prisma.user.update({
     where: { id: userId },
-    data: { storeName, phone, address, role, status },
+    data: { storeName, phone, address, role, status, payerNames },
   });
   revalidatePath("/admin/members");
   revalidatePath(`/admin/members/${userId}`);

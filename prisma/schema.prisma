@@ -27,8 +27,12 @@ model User {
   address      String // 업장 소재지
   businessCert String? // 사업자등록증 파일 경로/URL
 
-  orders       Order[]
-  pushSubs     PushSubscription[]
+  // 입금 자동매칭용 — 이 점포가 입금 시 통장에 찍히는 입금자명(상호·대표자명·직원명 등, 여러 개)
+  payerNames   String[] @default([])
+
+  orders          Order[]
+  pushSubs        PushSubscription[]
+  matchedDeposits Deposit[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -97,4 +101,24 @@ model InventoryItem {
   memo      String   @default("")
   sortOrder Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+// 입금 내역 — 팝빌 계좌조회로 수집한 하나 법인계좌 입금 건(자동 매칭 대상)
+model Deposit {
+  id           String    @id @default(cuid())
+  bankTid      String    @unique // 팝빌 거래 고유 ID(중복 수집 방지)
+  txAt         DateTime // 거래일시
+  amount       Int // 입금액(원)
+  payerName    String    @default("") // 입금자명(적요에서 추출)
+  memo         String    @default("") // 적요/메모 원본
+  balanceAfter Int? // 거래후 잔액
+  // matchStatus: UNMATCHED | AUTO | MANUAL | IGNORED
+  matchStatus  String    @default("UNMATCHED")
+  matchedUserId String?
+  matchedUser  User?     @relation(fields: [matchedUserId], references: [id], onDelete: SetNull)
+  matchedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([matchStatus, txAt])
+  @@index([matchedUserId])
 }

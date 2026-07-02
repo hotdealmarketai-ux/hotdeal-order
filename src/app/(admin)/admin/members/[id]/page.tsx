@@ -50,6 +50,7 @@ export default async function AdminMemberDetail(props: {
             address: user.address,
             role: user.role,
             status: user.status,
+            payerNames: user.payerNames,
           }}
         />
       </div>
