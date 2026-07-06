@@ -148,7 +148,8 @@ export default async function AdminDeposits() {
                         display: "flex",
                         flexDirection: "column",
                         gap: 6,
-                        alignItems: "flex-end",
+                        alignItems: "stretch",
+                        flex: "0 0 auto",
                       }}
                     >
                       <ManualPayButton invoiceId={inv.id} />
@@ -159,7 +160,11 @@ export default async function AdminDeposits() {
                           name="unlock"
                           value={inv.user.orderUnlock ? "false" : "true"}
                         />
-                        <button type="submit" className="btn btn--xs btn--soft">
+                        <button
+                          type="submit"
+                          className="btn btn--xs btn--soft"
+                          style={{ width: "100%" }}
+                        >
                           {inv.user.orderUnlock ? "발주 다시 잠금" : "발주 잠금 해제"}
                         </button>
                       </form>

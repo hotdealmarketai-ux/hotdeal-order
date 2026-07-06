@@ -13,6 +13,7 @@ export function ManualPayButton({ invoiceId }: { invoiceId: string }) {
       <button
         type="button"
         className="btn btn--xs btn--soft"
+        style={{ width: "100%" }}
         onClick={() => setOpen(true)}
       >
         수동 입금확인

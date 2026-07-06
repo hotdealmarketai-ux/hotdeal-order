@@ -111,11 +111,11 @@ a {
 }
 .topbar__reset {
   flex: 0 0 auto;
-  background: none;
-  border: 1px solid var(--danger);
-  color: var(--danger);
+  background: var(--black);
+  border: none;
+  color: #fff;
   border-radius: 999px;
-  padding: 7px 13px;
+  padding: 8px 14px;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
