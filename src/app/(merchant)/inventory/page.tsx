@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { canViewInventory } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
@@ -20,9 +21,7 @@ export default async function InventoryPage() {
 
   return (
     <>
-      <header className="topbar">
-        <div className="topbar__title">재고현황</div>
-      </header>
+      <Topbar title="재고현황" />
       <div className="page">
         <h1 className="h1">재고현황</h1>
         <p

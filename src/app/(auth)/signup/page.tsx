@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { homePathFor } from "@/lib/constants";
@@ -10,12 +10,7 @@ export default async function SignupPage() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <Link href="/login" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">가입 신청</div>
-      </header>
+      <Topbar backHref="/login" title="가입 신청" />
       <div className="page">
         <h1 className="h1">가입 신청</h1>
         <p className="lead">

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { approveUserAction, rejectUserAction } from "@/app/actions/admin";
@@ -13,12 +13,7 @@ export default async function ApprovalsPage() {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">가입 승인</div>
-      </header>
+      <Topbar backHref="/admin" title="가입 승인" />
       <div className="page">
         <h1 className="h1">가입 승인</h1>
         <p className="lead">신청자를 승인하면서 발주 유형을 정해주세요.</p>

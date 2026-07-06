@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -70,12 +71,7 @@ export default async function AdminHotdeal(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">핫딜마켓 발주관리</div>
-      </header>
+      <Topbar backHref="/admin" title="핫딜마켓 발주관리" />
       <div className="page page--tight">
         <div className="cattabs">
           {SCOPES.map((s) => (

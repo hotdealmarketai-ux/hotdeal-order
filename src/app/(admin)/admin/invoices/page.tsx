@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { labelDate } from "@/lib/date";
@@ -31,12 +32,7 @@ export default async function AdminInvoices() {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">계산서·미수</div>
-      </header>
+      <Topbar backHref="/admin" title="계산서·미수" />
       <div className="page">
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="row__sub">미수 합계 (발행 후 미입금)</div>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { kstToday, kstDayRange } from "@/lib/date";
@@ -43,11 +44,7 @@ export default async function AdminHome() {
 
   return (
     <>
-      <header className="topbar">
-        <div className="brandmark">새롭 · 관리자</div>
-        <div className="topbar__spacer" />
-        <span className="chip">{user.storeName}</span>
-      </header>
+      <Topbar brand="새롭 · 관리자" right={<TopbarChip>{user.storeName}</TopbarChip>} />
       <div className="page">
         <h1 className="h1">관리자</h1>
         <p className="lead">전체 발주를 확인하고 가맹점을 관리하세요.</p>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { ROLE_LABEL, STATUS_LABEL, type Role, type Status } from "@/lib/constants";
@@ -18,12 +19,7 @@ export default async function AdminMembers() {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">회원 관리</div>
-      </header>
+      <Topbar backHref="/admin" title="회원 관리" />
       <div className="page">
         <h1 className="h1">회원 관리</h1>
         <p className="lead">전체 {members.length}명</p>

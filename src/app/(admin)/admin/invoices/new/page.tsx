@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -57,16 +57,7 @@ export default async function NewInvoicePage(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link
-          href={`/admin/combined/${userId}/${date}`}
-          className="topbar__back"
-          aria-label="뒤로"
-        >
-          ‹
-        </Link>
-        <div className="topbar__title">계산서 작성</div>
-      </header>
+      <Topbar backHref={`/admin/combined/${userId}/${date}`} title="계산서 작성" />
       <div className="page">
         <h1 className="h1">{merchant.storeName}</h1>
         <p className="lead" style={{ marginTop: 4 }}>

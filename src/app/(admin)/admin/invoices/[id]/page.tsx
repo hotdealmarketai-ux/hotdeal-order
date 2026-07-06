@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -79,12 +80,7 @@ export default async function AdminInvoiceDetail(props: {
 
     return (
       <>
-        <header className="topbar">
-          <Link href="/admin/invoices" className="topbar__back" aria-label="뒤로">
-            ‹
-          </Link>
-          <div className="topbar__title">계산서 작성중</div>
-        </header>
+        <Topbar backHref="/admin/invoices" title="계산서 작성중" />
         <div className="page">
           {saved === "1" && (
             <div className="notice notice--ok" style={{ marginBottom: 14 }}>
@@ -116,12 +112,7 @@ export default async function AdminInvoiceDetail(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin/invoices" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">계산서</div>
-      </header>
+      <Topbar backHref="/admin/invoices" title="계산서" />
       <div className="page">
         {issued === "1" && (
           <div className="notice notice--ok" style={{ marginBottom: 14 }}>

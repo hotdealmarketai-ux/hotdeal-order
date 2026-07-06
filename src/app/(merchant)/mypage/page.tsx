@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -83,9 +84,7 @@ export default async function MyPage(props: {
 
   return (
     <>
-      <header className="topbar">
-        <div className="topbar__title">마이페이지</div>
-      </header>
+      <Topbar title="마이페이지" />
       <div className="page">
         {saved === "1" && (
           <div className="notice notice--ai" style={{ marginBottom: 14 }}>

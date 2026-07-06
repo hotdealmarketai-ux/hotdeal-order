@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound, redirect } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -42,12 +42,7 @@ export default async function EditOrderPage(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href={backHref} className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">발주 수정</div>
-      </header>
+      <Topbar backHref={backHref} title="발주 수정" />
       <div className="page">
         <h1 className="h1">발주 수정</h1>
         <div className="notice notice--info" style={{ marginBottom: 14 }}>

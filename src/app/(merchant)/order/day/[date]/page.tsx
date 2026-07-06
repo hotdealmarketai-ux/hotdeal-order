@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -73,14 +74,10 @@ export default async function DayReceiptPage(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/mypage" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">
-          {labelDate(date)} {activeView === "invoice" ? "입금요청서" : "발주서"}
-        </div>
-      </header>
+      <Topbar
+        backHref="/mypage"
+        title={`${labelDate(date)} ${activeView === "invoice" ? "입금요청서" : "발주서"}`}
+      />
       <div className="page">
         {isNew === "1" && (
           <div className="notice notice--ai" style={{ marginBottom: 14 }}>

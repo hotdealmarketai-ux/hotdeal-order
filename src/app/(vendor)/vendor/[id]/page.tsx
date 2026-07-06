@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireVendor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -23,12 +23,7 @@ export default async function VendorOrderDetail(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/vendor" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">발주서</div>
-      </header>
+      <Topbar backHref="/vendor" title="발주서" />
       <div className="page">
         {order.edited && !order.confirmed ? (
           <div className="notice notice--edit" style={{ marginBottom: 14 }}>

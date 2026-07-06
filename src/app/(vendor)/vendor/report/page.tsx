@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireVendor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -19,16 +19,7 @@ export default async function VendorReport(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link
-          href={`/vendor/summary?date=${date}`}
-          className="topbar__back"
-          aria-label="뒤로"
-        >
-          ‹
-        </Link>
-        <div className="topbar__title">발주 레포트</div>
-      </header>
+      <Topbar backHref={`/vendor/summary?date=${date}`} title="발주 레포트" />
       <div className="page">
         <h1 className="h1">오늘 발주 레포트</h1>
         <p className="lead">

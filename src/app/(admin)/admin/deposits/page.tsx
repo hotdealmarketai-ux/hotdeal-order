@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatKDateTime } from "@/lib/format";
@@ -72,12 +73,7 @@ export default async function AdminDeposits() {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">입금 관리</div>
-      </header>
+      <Topbar backHref="/admin" title="입금 관리" />
       <div className="page">
         <p className="lead" style={{ marginTop: 0, marginBottom: 4 }}>
           미수 {dueStores}곳 · 합계 {fmt(totalDue)}원

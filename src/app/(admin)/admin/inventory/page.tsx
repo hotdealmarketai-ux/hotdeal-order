@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -15,12 +15,7 @@ export default async function AdminInventory() {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">재고현황 작성</div>
-      </header>
+      <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
         <h1 className="h1">재고현황</h1>
 

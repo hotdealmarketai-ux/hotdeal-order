@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireVendor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, VENDOR_LABEL, type Category } from "@/lib/constants";
@@ -25,11 +26,10 @@ export default async function VendorPage(props: {
 
   return (
     <>
-      <header className="topbar">
-        <div className="topbar__title">들어온 발주</div>
-        <div className="topbar__spacer" />
-        <span className="chip">{VENDOR_LABEL[user.role] ?? user.storeName}</span>
-      </header>
+      <Topbar
+        title="들어온 발주"
+        right={<TopbarChip>{VENDOR_LABEL[user.role] ?? user.storeName}</TopbarChip>}
+      />
       <div className="page">
         <h1 className="h1">발주 목록</h1>
         <p className="lead">

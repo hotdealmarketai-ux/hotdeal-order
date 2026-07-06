@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -28,12 +29,7 @@ export default async function ReceiptPage(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/order" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">발주서</div>
-      </header>
+      <Topbar backHref="/order" title="발주서" />
       <div className="page">
         {edited === "1" && (
           <div className="notice notice--ai" style={{ marginBottom: 14 }}>

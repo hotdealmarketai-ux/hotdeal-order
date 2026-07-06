@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { allowedCategoriesFor, needsPickupTime } from "@/lib/constants";
@@ -37,14 +38,10 @@ export default async function OrderPage() {
 
   return (
     <>
-      <header className="topbar">
-        <div className="brandmark">오더야</div>
-        <div className="topbar__spacer" />
-        <span className="chip">{user.storeName}</span>
-      </header>
-      <div className="page">
+      <Topbar brand="오더야" right={<TopbarChip>{user.storeName}</TopbarChip>}>
         {windowed && <DeadlineCountdown deadlineLabel={ORDER_DEADLINE_LABEL} />}
-
+      </Topbar>
+      <div className="page">
         <PushToggle />
 
         {receivableLock.locked ? (

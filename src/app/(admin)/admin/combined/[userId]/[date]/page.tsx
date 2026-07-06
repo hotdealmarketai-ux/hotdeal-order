@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -55,12 +56,7 @@ export default async function AdminCombinedReceipt(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin/hotdeal" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">발주서</div>
-      </header>
+      <Topbar backHref="/admin/hotdeal" title="발주서" />
       <div className="page">
         <div style={{ marginBottom: 16 }}>
           <Link

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -87,12 +88,7 @@ export default async function AdminDepositStore(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin/deposits" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">{user.storeName}</div>
-      </header>
+      <Topbar backHref="/admin/deposits" title={user.storeName} />
       <div className="page">
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="row__sub">남은 결제잔액 (미입금액)</div>

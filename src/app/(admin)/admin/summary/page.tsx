@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -41,12 +41,7 @@ export default async function AdminSummary(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href={`${sel.backHref}&date=${date}`} className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">{sel.label} 집계</div>
-      </header>
+      <Topbar backHref={`${sel.backHref}&date=${date}`} title={`${sel.label} 집계`} />
       <div className="page">
         <h1 className="h1">{sel.label} 집계</h1>
         <p className="lead">

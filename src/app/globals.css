@@ -1427,7 +1427,7 @@ a {
 }
 .confitem .input {
   min-height: 42px;
-  font-size: 15px;
+  font-size: 16px; /* 16px 미만이면 iOS가 포커스 시 자동 확대함 */
   padding: 8px 10px;
   box-shadow: none;
 }
@@ -1491,3 +1491,145 @@ a {
   margin-top: 10px;
   text-align: center;
 }
+
+
+/* ============================================================
+   오더야 · COBALT 리스킨 패치 (강화판: 색 + 모양/밀도 + 헤더)
+   사용법: 기존 src/app/globals.css "맨 아래"에 통째로 붙여넣기.
+   (뒤에 오는 규칙이 이기므로 아래 값들이 기존 값을 덮어씀)
+
+   포함 범위
+   1) 색 토큰      → 버튼·카드·배지·리스트·영수증·입력 전 페이지 코발트
+   2) 모양/밀도    → 시안처럼 각진(12px) 버튼·탭·카드
+   3) 네이비 헤더  → Topbar.tsx 컴포넌트가 쓰는 .tbar 클래스들
+   ============================================================ */
+
+/* ---------- 1) 색 + 둥글기 토큰 ---------- */
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --surface-2: #f7f9fd;
+
+  --fg: #0b1120;
+  --fg-2: #2a3244;
+  --muted: #6b7488;
+  --muted-2: #98a0b3;
+
+  --line: #eef1f8;
+  --line-strong: #e2e7f2;
+  --chip: #eef1f8;
+
+  /* ⭐ 주 강조 채움(기본버튼·활성탭·하단네비·AI배지·합계바) → 코발트 */
+  --black: #2e5bff;
+  /* ⭐ 상단 헤더 네이비 */
+  --header: #0b1120;
+
+  --danger: #c0334c;
+  --danger-bg: #fdecef;
+  --danger-line: #f2c9d2;
+  --ok: #1c7a4a;
+  --ok-bg: #e6f5ec;
+  --warn: #a76a00;
+  --warn-bg: #fbf0da;
+
+  /* ⭐ 시안처럼 덜 둥글게 (기존 20/14/24 → 12/10/14).
+     --radius* 를 쓰는 카드·영수증·알림·카운트다운 등이 전부 각져집니다. */
+  --radius: 12px;
+  --radius-sm: 10px;
+  --radius-lg: 14px;
+
+  --shadow-card: 0 1px 2px rgba(11, 17, 32, 0.04);
+  --shadow-row: 0 1px 2px rgba(11, 17, 32, 0.03);
+  --shadow-soft: 0 1px 2px rgba(11, 17, 32, 0.04);
+  --shadow-pill: 0 12px 24px -8px rgba(46, 91, 255, 0.5);
+}
+
+/* ---------- 2) 모양/밀도 (알약 → 각진 사각) ---------- */
+/* 버튼: 999px 알약 → 12px 라운드. 높이는 어르신 배려로 크게 유지(52px). */
+.btn        { border-radius: 12px; min-height: 52px; }
+.btn--sm    { border-radius: 10px; }
+.btn--xs    { border-radius: 8px; }
+.btn--primary { box-shadow: 0 12px 22px -8px rgba(46, 91, 255, 0.5); }
+
+/* 카테고리 탭: 알약 → 각진 탭 */
+.cattab { border-radius: 10px; }
+
+/* 카드·리스트 행: 그림자 위주 → 1px 테두리 + 옅은 그림자 (시안 톤) */
+.card { border: 1px solid var(--line-strong); }
+.row  { border: 1px solid var(--line-strong); box-shadow: none; }
+
+/* 입력창 / 칩 / 배지도 살짝 각지게 */
+.input, .textarea, .select { border-radius: 10px; }
+.chip  { border-radius: 8px; box-shadow: none; border: 1px solid var(--line-strong); }
+.badge { border-radius: 6px; }
+
+/* 입력 포커스 링 코발트 */
+.input:focus, .textarea:focus, .select:focus {
+  border-color: var(--black);
+  box-shadow: 0 0 0 3px rgba(46, 91, 255, 0.14);
+}
+
+/* ---------- 3) 네이비 헤더 (Topbar.tsx 전용 클래스) ---------- */
+.tbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--header);
+  color: #fff;
+}
+.tbar__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 16px;
+}
+.tbar__back {
+  width: 34px;
+  height: 34px;
+  margin-left: -6px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: 22px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.tbar__back:active { background: rgba(255, 255, 255, 0.12); }
+.tbar__brand { font-size: 20px; font-weight: 800; letter-spacing: -0.04em; }
+.tbar__title { font-size: 16px; font-weight: 800; }
+.tbar__spacer { flex: 1; }
+.tbar__chip {
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(46, 91, 255, 0.9);
+  border-radius: 7px;
+  padding: 5px 11px;
+  white-space: nowrap;
+}
+/* 헤더 안 히어로 슬롯 (예: 발주 마감 카운트다운) */
+.tbar__hero { padding: 0 16px 14px; }
+
+/* 기존 DeadlineCountdown 을 헤더 히어로에 그대로 넣으면 다크 버전으로 보임 */
+.tbar__hero .countdown {
+  margin: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+.tbar__hero .countdown__label,
+.tbar__hero .countdown__pre { color: #9aa3bb; }
+.tbar__hero .countdown__clock { color: #fff; }
+
+/* ---------- (마이그레이션 중) 아직 안 바꾼 옛 .topbar 도 네이비로 ---------- */
+/* 페이지를 <Topbar> 로 다 교체하면 이 블록은 지워도 됩니다. */
+.topbar {
+  background: var(--header);
+  border-bottom: none;
+  backdrop-filter: none;
+  color: #fff;
+}
+.topbar__title, .brandmark { color: #fff; }
+.topbar__back { color: rgba(255, 255, 255, 0.8); }
+.topbar .chip { background: rgba(255, 255, 255, 0.14); color: #fff; box-shadow: none; }
+.topbar__reset { background: rgba(255, 255, 255, 0.16); }

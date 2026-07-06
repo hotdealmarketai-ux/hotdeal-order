@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -22,12 +22,7 @@ export default async function AdminOrderDetail(props: {
 
   return (
     <>
-      <header className="topbar">
-        <Link href="/admin/orders" className="topbar__back" aria-label="뒤로">
-          ‹
-        </Link>
-        <div className="topbar__title">발주서</div>
-      </header>
+      <Topbar backHref="/admin/orders" title="발주서" />
       <div className="page">
         <div className="card card--flat" style={{ marginBottom: 14 }}>
           <div className="kv">
