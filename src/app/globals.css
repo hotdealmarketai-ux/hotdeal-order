@@ -1432,6 +1432,20 @@ a {
   box-shadow: none;
 }
 
+/* ---- 점포 입출금 원장 ---- */
+.ledger__req {
+  font-weight: 800;
+  color: var(--danger);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ledger__pay {
+  font-weight: 800;
+  color: var(--ok);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ---- 입금 수동 매칭 큐 ---- */
 .deprow {
   background: var(--surface);
