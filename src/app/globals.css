@@ -1633,3 +1633,278 @@ a {
 .topbar__back { color: rgba(255, 255, 255, 0.8); }
 .topbar .chip { background: rgba(255, 255, 255, 0.14); color: #fff; box-shadow: none; }
 .topbar__reset { background: rgba(255, 255, 255, 0.16); }
+
+/* ===== 코발트 핸드오프 2 (발주화면 + 하단네비 아이콘) ===== */
+/* --- 하단 네비 아이콘/활성 알약/배지 (globals-cobalt §4) --- */
+/* ---------- 4) 하단 네비: 텍스트만 → 아이콘 + 활성 알약 + 배지 ----------
+   handoff/BottomNav.tsx (아이콘 포함 교체본)와 함께 사용하세요. */
+.bottomnav {
+  background: var(--surface);
+  border-top: 1px solid var(--line-strong);
+}
+.bottomnav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted-2);
+}
+.bottomnav__ic {
+  position: relative;
+  width: 46px;
+  height: 27px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+}
+.bottomnav__item.is-active {
+  color: var(--black);
+  font-weight: 800;
+}
+.bottomnav__item.is-active .bottomnav__ic { background: #eaefff; }
+.bottomnav__badge {
+  position: absolute;
+  top: -4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+
+/* --- 발주하기 화면 코발트 (order-cobalt.css) --- */
+/* ============================================================
+   오더야 · 발주하기 화면 코발트 패치 CSS
+   적용법: src/app/globals.css "맨 아래"에 붙여넣기
+   (globals-cobalt.css 전체 패치 뒤에 붙여도 되고, 단독으로도 동작)
+   짝꿍 파일: OrderForm.tsx / order-page.tsx /
+             DeadlineCountdown.tsx / PushToggle.tsx
+   ============================================================ */
+
+/* ---- ① 헤더 카운트다운: 문장 제거, 큰 시계 + 마감시각 칩 ---- */
+.countdown {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  margin: 0;
+}
+.countdown__main { display: flex; flex-direction: column; gap: 2px; }
+.countdown__pre {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9aa3bb;
+  letter-spacing: 0.02em;
+}
+.countdown__clock {
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.countdown__chip {
+  font-size: 12px;
+  font-weight: 800;
+  color: #2e5bff;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.countdown--closed .countdown__chip { color: #c0334c; }
+
+/* ---- ② 발주 알림: 큰 버튼 카드 → 작은 카드 + 토글 스위치 ---- */
+.pushcard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #e6eaf3;
+  border-radius: 12px;
+  padding: 13px 14px;
+  margin-top: 16px;
+}
+.pushcard__title { font-size: 14px; font-weight: 800; color: #0b1120; }
+.pushcard__sub { font-size: 12px; color: #8a93ab; margin-top: 2px; }
+.switch {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 27px;
+  border-radius: 999px;
+  border: 0;
+  background: #d6dbe8;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.switch__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: left 0.15s ease;
+}
+.switch.is-on { background: #2e5bff; }
+.switch.is-on .switch__knob { left: 22px; }
+.switch:disabled { opacity: 0.55; }
+
+/* ---- ③ 채팅 발주 칩 (큰 제목 삭제, 오른쪽 정렬 칩) ---- */
+.modetoggle { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.chatchip {
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  color: #2e5bff;
+  background: #eaefff;
+  border-radius: 999px;
+  padding: 9px 15px;
+  cursor: pointer;
+}
+
+/* ---- ④ 카테고리 탭(발주 폼 전용): 개별 버튼 → 세그먼트 컨트롤 ----
+   ⚠ .cattabs--seg 로 스코프. 관리자 발주관리/일자별(.cattabs)의 스코프 탭은
+   기존 가로 스크롤 알약 스타일을 그대로 유지한다(전역 세그먼트화 금지). */
+.cattabs--seg {
+  display: flex;
+  gap: 0;
+  background: #eef1f8;
+  border: 1px solid #e2e7f2;
+  border-radius: 12px;
+  padding: 3px;
+  margin-bottom: 14px;
+  box-shadow: none;
+}
+.cattabs--seg .cattab {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #6b7488;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 11px 0;
+  border-radius: 9px;
+  box-shadow: none;
+  cursor: pointer;
+}
+.cattabs--seg .cattab.is-active {
+  background: #2e5bff;
+  color: #fff;
+  font-weight: 800;
+  box-shadow: none;
+}
+/* 카운트: '·N' 평문 (원형 배지 잔재 제거, handoff risk #4) */
+.cattabs--seg .cattab__count {
+  margin-left: 2px;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-weight: 800;
+  opacity: 0.85;
+}
+.cattabs--seg .cattab__count::before { content: "·"; margin-right: 2px; }
+.cattabs--seg .cattab.is-active .cattab__count { background: none; color: #fff; }
+
+/* ---- ⑤ "발주 품목 · 받는곳" 라벨 줄 (받는 곳 밴드 대체) ---- */
+.itemshead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 2px 2px 10px;
+}
+.itemshead__label {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #98a0b3;
+}
+.itemshead__count { font-size: 13px; font-weight: 800; color: #2e5bff; }
+
+/* ---- ⑥ 발주 품목: 리스트 카드 + 파란 좌측 보더 행 ---- */
+.oitems {
+  background: #fff;
+  border: 1px solid #e6eaf3;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.oitem {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 13px 12px 10px;
+  border-left: 3px solid transparent;
+}
+.oitem + .oitem { border-top: 1px solid #eef1f8; }
+.oitem.is-filled { border-left-color: #2e5bff; }
+.oitem__num {
+  flex: 0 0 auto;
+  width: 20px;
+  padding-top: 14px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #98a0b3;
+  font-variant-numeric: tabular-nums;
+}
+.oitem__fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.oitem__row1 { display: grid; grid-template-columns: 1fr 88px; gap: 7px; }
+/* ⚠ iOS 자동확대 방지: 반드시 16px 이상 유지 */
+.oitem .input { font-size: 16px; padding: 11px 12px; border-radius: 9px; }
+.oitem__del {
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
+  color: #c0334c;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 14px 2px 0;
+  cursor: pointer;
+}
+
+/* ---- ⑦ CTA: 하단 고정 + 그라데이션 ----
+   bottom 값(76px)은 하단 네비 높이에 맞게 조정하세요.
+   하단 네비가 없는 역할(서부일광 소매)은 bottom:0 이 자연스럽습니다. */
+.ctabar {
+  position: sticky;
+  bottom: 76px;
+  margin-top: 18px;
+  padding-top: 12px;
+  background: linear-gradient(180deg, rgba(244, 246, 251, 0), #f4f6fb 45%);
+}
+.btn--block { width: 100%; }
+
+/* (cattab 카운트 리셋은 위 .cattabs--seg 블록으로 이동/스코프됨) */
+
+/* --- 채팅 발주(ChatOrder) 미리보기를 새 폼 톤으로 정렬 (핸드오프2 일관성) --- */
+.chatedit__item { box-shadow: none; }   /* 새 .oitem 처럼 평평한 1px 테두리 카드 */
+.chatedit__cat { border-radius: 10px; } /* 종류 선택 알약(999px) → 각진(폼 인풋 톤) */

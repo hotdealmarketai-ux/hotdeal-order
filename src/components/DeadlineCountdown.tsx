@@ -1,3 +1,10 @@
+// ============================================================
+//  DeadlineCountdown — 코발트 교체본
+//  위치: src/components/DeadlineCountdown.tsx 교체
+//  변경: 안내 문장 삭제 → 라벨 + 큰 시계 + 마감시각 흰 칩
+//  로직(스케줄 계산·1초 틱·마감/오픈 상태)은 기존과 동일
+// ============================================================
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -29,14 +36,15 @@ export function DeadlineCountdown({
     return () => clearInterval(t);
   }, []);
 
+  // SSR/초기 렌더 — 자리 유지
   if (now === null) {
     return (
       <div className="countdown" aria-hidden>
-        <div className="countdown__label">금일 발주 마감은 {deadlineLabel} 입니다.</div>
-        <div className="countdown__time">
+        <div className="countdown__main">
           <span className="countdown__pre">발주 마감까지</span>
           <span className="countdown__clock">--:--:--</span>
         </div>
+        <span className="countdown__chip">{deadlineLabel} 마감</span>
       </div>
     );
   }
@@ -44,23 +52,24 @@ export function DeadlineCountdown({
   if (isOrderOpen(now)) {
     return (
       <div className="countdown">
-        <div className="countdown__label">금일 발주 마감은 {deadlineLabel} 입니다.</div>
-        <div className="countdown__time">
+        <div className="countdown__main">
           <span className="countdown__pre">발주 마감까지</span>
-          <span className="countdown__clock">{clock(currentDeadlineUtc(now) - now)}</span>
+          <span className="countdown__clock">
+            {clock(currentDeadlineUtc(now) - now)}
+          </span>
         </div>
+        <span className="countdown__chip">{deadlineLabel} 마감</span>
       </div>
     );
   }
 
   return (
     <div className="countdown countdown--closed">
-      <div className="countdown__label">발주가 마감되었습니다</div>
-      <div className="countdown__time">
-        <span className="countdown__pre">발주 시작까지</span>
+      <div className="countdown__main">
+        <span className="countdown__pre">발주 마감 · 발주 시작까지</span>
         <span className="countdown__clock">{clock(nextOpenUtc(now) - now)}</span>
-        <span className="countdown__pre">남았습니다</span>
       </div>
+      <span className="countdown__chip">마감됨</span>
     </div>
   );
 }

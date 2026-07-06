@@ -1,8 +1,39 @@
+// ============================================================
+//  BottomNav — 오더야 코발트 하단 네비 (아이콘 + 활성 알약 + 배지)
+//  위치: 기존 src/components/BottomNav.tsx 를 이 파일로 교체
+//  스타일: handoff/globals-cobalt.css 의 .bottomnav 오버라이드 필요
+//  로직(role 필터·활성 판정·myBadge)은 기존과 100% 동일합니다.
+// ============================================================
+
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { canViewInventory, type Role } from "@/lib/constants";
+
+const ICONS = {
+  order: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="4" width="14" height="17" rx="2.5" />
+      <path d="M9 4V3a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 3v1" />
+      <path d="M9 10.5h6" />
+      <path d="M9 14.5h4" />
+    </svg>
+  ),
+  inventory: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 8.2 12 3.5 3 8.2v7.6l9 4.7 9-4.7V8.2Z" />
+      <path d="M3 8.2l9 4.6 9-4.6" />
+      <path d="M12 12.8v7.7" />
+    </svg>
+  ),
+  my: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5 20c1.4-3.2 3.9-4.8 7-4.8s5.6 1.6 7 4.8" />
+    </svg>
+  ),
+};
 
 export function BottomNav({
   role,
@@ -13,11 +44,11 @@ export function BottomNav({
 }) {
   const path = usePathname();
   const items = [
-    { href: "/order", label: "발주", badge: 0 },
+    { href: "/order", label: "발주", icon: ICONS.order, badge: 0 },
     ...(canViewInventory(role)
-      ? [{ href: "/inventory", label: "재고현황", badge: 0 }]
+      ? [{ href: "/inventory", label: "재고현황", icon: ICONS.inventory, badge: 0 }]
       : []),
-    { href: "/mypage", label: "마이", badge: myBadge },
+    { href: "/mypage", label: "마이", icon: ICONS.my, badge: myBadge },
   ];
 
   return (
@@ -30,12 +61,15 @@ export function BottomNav({
             href={it.href}
             className={`bottomnav__item ${active ? "is-active" : ""}`}
           >
+            <span className="bottomnav__ic">
+              {it.icon}
+              {it.badge > 0 && (
+                <span className="bottomnav__badge">
+                  {it.badge > 99 ? "99+" : it.badge}
+                </span>
+              )}
+            </span>
             <span>{it.label}</span>
-            {it.badge > 0 && (
-              <span className="bottomnav__badge">
-                {it.badge > 99 ? "99+" : it.badge}
-              </span>
-            )}
           </Link>
         );
       })}

@@ -1,3 +1,12 @@
+// ============================================================
+//  PushToggle — 코발트 교체본
+//  위치: src/components/PushToggle.tsx 교체
+//  변경: 큰 "알림 켜기" 버튼 카드 → 작은 카드 + 토글 스위치
+//  로직(SW 등록·구독·저장/해제·denied/unsupported 분기)은 기존과 동일
+//  ※ 이 컴포넌트는 업자 화면 등에서도 재사용되므로, 그 화면들도
+//    자동으로 같은 토글 스타일이 됩니다(의도된 통일).
+// ============================================================
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,6 +29,8 @@ function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
 
 export function PushToggle() {
   const [state, setState] = useState<State>("checking");
+  // 토글을 끈 직후 다시 켤 때 이전 상태 기억용
+  const [wasOn, setWasOn] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -51,6 +62,7 @@ export function PushToggle() {
   }, []);
 
   async function enable() {
+    setWasOn(false);
     setState("busy");
     try {
       const reg = await navigator.serviceWorker.register("/sw.js");
@@ -78,6 +90,7 @@ export function PushToggle() {
   }
 
   async function disable() {
+    setWasOn(true);
     setState("busy");
     try {
       const reg = await navigator.serviceWorker.getRegistration();
@@ -94,30 +107,32 @@ export function PushToggle() {
 
   if (state === "checking" || state === "unsupported") return null;
 
+  const on = state === "on";
+  const busy = state === "busy";
+
   return (
-    <div className="pushrow">
-      <div className="pushrow__main">
-        <div className="pushrow__title">발주 알림</div>
-        {state === "on" ? (
-          <div className="pushrow__sub">새 발주가 들어오면 이 기기로 알려드려요.</div>
-        ) : state === "denied" ? (
-          <div className="pushrow__sub">
-            브라우저 알림이 차단돼 있어요. 설정에서 허용해 주세요.
-          </div>
-        ) : null}
+    <div className="pushcard">
+      <div className="pushcard__main">
+        <div className="pushcard__title">발주 알림</div>
+        <div className="pushcard__sub">
+          {state === "denied"
+            ? "브라우저 알림이 차단돼 있어요. 설정에서 허용해 주세요."
+            : on
+              ? "새 발주 소식을 이 기기로 알려드려요."
+              : "새 발주 소식을 이 기기로"}
+        </div>
       </div>
-      {state === "on" ? (
-        <button type="button" className="btn btn--xs btn--soft" onClick={disable}>
-          끄기
-        </button>
-      ) : state === "denied" ? null : (
+      {state !== "denied" && (
         <button
           type="button"
-          className="btn btn--xs btn--primary"
-          onClick={enable}
-          disabled={state === "busy"}
+          role="switch"
+          aria-checked={on}
+          aria-label="발주 알림"
+          className={`switch ${on || (busy && !wasOn) ? "is-on" : ""}`}
+          onClick={on ? disable : enable}
+          disabled={busy}
         >
-          {state === "busy" ? "설정 중…" : "알림 켜기"}
+          <span className="switch__knob" />
         </button>
       )}
     </div>

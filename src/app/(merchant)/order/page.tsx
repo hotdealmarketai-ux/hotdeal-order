@@ -1,3 +1,10 @@
+// ============================================================
+//  OrderPage — 코발트 교체본
+//  위치: src/app/(merchant)/order/page.tsx 교체
+//  변경: ② PushToggle 을 본문 맨 위 → OrderForm "아래"로 이동
+//  나머지(미수 잠금·발주창 잠금·기존발주 수정 유도 분기)는 기존 그대로
+// ============================================================
+
 import Link from "next/link";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
@@ -42,8 +49,6 @@ export default async function OrderPage() {
         {windowed && <DeadlineCountdown deadlineLabel={ORDER_DEADLINE_LABEL} />}
       </Topbar>
       <div className="page">
-        <PushToggle />
-
         {receivableLock.locked ? (
           <>
             <h1 className="h1">발주하기</h1>
@@ -85,6 +90,9 @@ export default async function OrderPage() {
             role={user.role}
           />
         )}
+
+        {/* ② 발주 알림: 본문 맨 아래로 이동 */}
+        <PushToggle />
       </div>
     </>
   );

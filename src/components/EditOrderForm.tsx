@@ -15,12 +15,14 @@ function isFilled(r: Row) {
 export function EditOrderForm({
   orderId,
   category,
+  receiver,
   initialItems,
   needsPickup,
   initialPickup,
 }: {
   orderId: string;
   category: Category;
+  receiver: string;
   initialItems: { name: string; qty: string; note: string }[];
   needsPickup: boolean;
   initialPickup?: string;
@@ -116,7 +118,10 @@ export function EditOrderForm({
         </div>
       )}
 
-      <div className="section-label">발주 품목</div>
+      <div className="itemshead">
+        <span className="itemshead__label">발주 품목 · {receiver}</span>
+        <span className="itemshead__count">{items.length}건</span>
+      </div>
 
       {isTofu ? (
         <div className="tofulist">
@@ -140,50 +145,54 @@ export function EditOrderForm({
           })}
         </div>
       ) : (
-        rows.map((r, i) => {
-          const filled = isFilled(r);
-          return (
-            <div className="orderline" key={r.id}>
-              <div className="orderline__idx">
-                <span className="orderline__num">{i + 1}</span>
+        <div className="oitems">
+          {rows.map((r, i) => {
+            const filled = isFilled(r);
+            return (
+              <div className={`oitem ${filled ? "is-filled" : ""}`} key={r.id}>
+                <span className="oitem__num">{String(i + 1).padStart(2, "0")}</span>
+                <div className="oitem__fields">
+                  <div className="oitem__row1">
+                    <input
+                      className="input"
+                      value={r.name}
+                      onChange={(e) => updateRow(r.id, "name", e.target.value)}
+                      placeholder="품목"
+                    />
+                    <input
+                      className="input"
+                      value={r.qty}
+                      onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+                      placeholder="수량"
+                    />
+                  </div>
+                  <input
+                    className="input"
+                    value={r.note}
+                    onChange={(e) => updateRow(r.id, "note", e.target.value)}
+                    placeholder="설명 (예: 부사 上)"
+                  />
+                </div>
                 {filled && (
                   <button
                     type="button"
-                    className="linkbtn linkbtn--danger"
+                    className="oitem__del"
                     onClick={() => removeRow(r.id)}
                   >
                     삭제
                   </button>
                 )}
               </div>
-              <input
-                className="input orderline__name"
-                value={r.name}
-                onChange={(e) => updateRow(r.id, "name", e.target.value)}
-                placeholder="품목"
-              />
-              <input
-                className="input"
-                value={r.qty}
-                onChange={(e) => updateRow(r.id, "qty", e.target.value)}
-                placeholder="수량"
-              />
-              <input
-                className="input orderline__note"
-                value={r.note}
-                onChange={(e) => updateRow(r.id, "note", e.target.value)}
-                placeholder="설명"
-              />
-            </div>
-          );
-        })
+            );
+          })}
+        </div>
       )}
 
       {!confirming ? (
-        <div style={{ marginTop: 18 }}>
+        <div className="ctabar">
           <button
             type="button"
-            className="btn btn--primary"
+            className="btn btn--primary btn--block"
             onClick={() => {
               if (items.length === 0) {
                 setLocalError("발주할 품목을 한 개 이상 입력하세요.");
@@ -193,7 +202,7 @@ export function EditOrderForm({
               setConfirming(true);
             }}
           >
-            수정 완료
+            수정 완료{items.length > 0 ? ` · ${items.length}건` : ""}
           </button>
         </div>
       ) : (

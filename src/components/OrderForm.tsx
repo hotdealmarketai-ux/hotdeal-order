@@ -1,3 +1,20 @@
+// ============================================================
+//  OrderForm — 코발트 교체본
+//  위치: src/components/OrderForm.tsx 교체
+//
+//  변경(표시만, 로직 100% 동일):
+//  ③ 큰 제목 "발주하기" 삭제 → 오른쪽 정렬 "채팅으로 발주하기" 칩
+//  ④ 카테고리 탭: 개별 버튼 → 세그먼트 컨트롤(활성 탭에 ·N 카운트)
+//  ⑤ "받는 곳" 밴드 삭제 → "발주 품목 · {받는곳}" + "N건" 라벨 줄
+//  ⑥ 품목 입력: 낱개 카드 → 리스트 카드(번호칩·파란 좌측보더·삭제)
+//     ※ 빈 마지막 행 자동 추가(withTrailingEmpty) 로직 그대로 =
+//       마지막 옅은 행이 곧 "품목 추가" 역할
+//  ⑦ CTA: "발주하기" → "발주 확정 · N건" + sticky
+//
+//  유지: payload/hidden input, 채움채(TOFU) 체크리스트, 픽업시간,
+//        locked fieldset, 확인 시트(모달), useActionState, 에러 표시
+// ============================================================
+
 "use client";
 
 import { useActionState, useMemo, useRef, useState } from "react";
@@ -40,7 +57,6 @@ export function OrderForm({
     return init;
   });
   const [pickup, setPickup] = useState("");
-  // 채움채(두부류) 체크리스트 수량: product_seq -> 수량 문자열
   const [tofuQty, setTofuQty] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState("");
@@ -67,7 +83,6 @@ export function OrderForm({
     });
   }
 
-  // 확인 모달에서 카테고리 지정 인라인 수정(현재 탭과 무관)
   function updateRowInCat(cat: Category, id: number, field: keyof Row, value: string) {
     setRowsByCat((prev) => {
       const list = (prev[cat] ?? []).map((r) =>
@@ -90,7 +105,6 @@ export function OrderForm({
       categories
         .map((c) => {
           if (c === "TOFU") {
-            // 채움채는 고정 5품목 체크리스트(수량만)
             const items = CHAEUMCHAE_CATALOG.filter(
               (p) => (tofuQty[p.seq] ?? "").trim(),
             ).map((p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }));
@@ -117,13 +131,10 @@ export function OrderForm({
   if (mode === "chat") {
     return (
       <div>
-        <div className="orderhead">
-          <h1 className="h1" style={{ margin: 0 }}>
-            발주하기
-          </h1>
+        <div className="modetoggle">
           <button
             type="button"
-            className="modetoggle__btn"
+            className="chatchip"
             onClick={() => setMode("grid")}
           >
             칸에 직접 입력하기
@@ -143,16 +154,14 @@ export function OrderForm({
       <input type="hidden" name="payload" value={JSON.stringify(payload)} />
       {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
 
-      <div className="orderhead">
-        <h1 className="h1" style={{ margin: 0 }}>
-          발주하기
-        </h1>
+      {/* ③ 제목 삭제 → 채팅 발주 칩 */}
+      <div className="modetoggle">
         <button
           type="button"
-          className="modetoggle__btn"
+          className="chatchip"
           onClick={() => setMode("chat")}
         >
-          채팅으로 발주하기
+          💬 채팅으로 발주하기
         </button>
       </div>
 
@@ -172,8 +181,9 @@ export function OrderForm({
         disabled={locked}
         style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
       >
+        {/* ④ 세그먼트 탭 (발주 폼 전용 스코프) */}
         {multi && (
-          <div className="cattabs">
+          <div className="cattabs cattabs--seg">
             {categories.map((c) => {
               const n = countByCat[c] ?? 0;
               return (
@@ -191,10 +201,6 @@ export function OrderForm({
           </div>
         )}
 
-        <div className="notice notice--info" style={{ marginBottom: 14 }}>
-          받는 곳 · <b>{receiverLabel(active, role)}</b>
-        </div>
-
         {needsPickup && (
           <div className="field">
             <label className="label" htmlFor="pickup">
@@ -210,7 +216,13 @@ export function OrderForm({
           </div>
         )}
 
-        <div className="section-label">발주 품목</div>
+        {/* ⑤ 받는 곳 밴드 → 라벨 줄 통합 */}
+        <div className="itemshead">
+          <span className="itemshead__label">
+            발주 품목 · {receiverLabel(active, role)}
+          </span>
+          <span className="itemshead__count">{countByCat[active] ?? 0}건</span>
+        </div>
 
         {active === "TOFU" ? (
           <div className="tofulist">
@@ -237,49 +249,60 @@ export function OrderForm({
             })}
           </div>
         ) : (
-          rows.map((r, i) => {
-            const filled = isFilled(r);
-            return (
-              <div className="orderline" key={r.id}>
-                <div className="orderline__idx">
-                  <span className="orderline__num">{i + 1}</span>
+          /* ⑥ 리스트 카드 */
+          <div className="oitems">
+            {rows.map((r, i) => {
+              const filled = isFilled(r);
+              return (
+                <div
+                  className={`oitem ${filled ? "is-filled" : ""}`}
+                  key={r.id}
+                >
+                  <span className="oitem__num">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <div className="oitem__fields">
+                    <div className="oitem__row1">
+                      <input
+                        className="input"
+                        value={r.name}
+                        onChange={(e) => updateRow(r.id, "name", e.target.value)}
+                        placeholder="품목"
+                      />
+                      <input
+                        className="input"
+                        value={r.qty}
+                        onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+                        placeholder="수량"
+                      />
+                    </div>
+                    <input
+                      className="input"
+                      value={r.note}
+                      onChange={(e) => updateRow(r.id, "note", e.target.value)}
+                      placeholder="설명 (예: 부사 上)"
+                    />
+                  </div>
                   {filled && (
                     <button
                       type="button"
-                      className="linkbtn linkbtn--danger"
+                      className="oitem__del"
                       onClick={() => removeRow(r.id)}
                     >
                       삭제
                     </button>
                   )}
                 </div>
-                <input
-                  className="input orderline__name"
-                  value={r.name}
-                  onChange={(e) => updateRow(r.id, "name", e.target.value)}
-                  placeholder="품목"
-                />
-                <input
-                  className="input"
-                  value={r.qty}
-                  onChange={(e) => updateRow(r.id, "qty", e.target.value)}
-                  placeholder="수량"
-                />
-                <input
-                  className="input orderline__note"
-                  value={r.note}
-                  onChange={(e) => updateRow(r.id, "note", e.target.value)}
-                  placeholder="설명"
-                />
-              </div>
-            );
-          })
+              );
+            })}
+          </div>
         )}
 
-        <div style={{ marginTop: 18 }}>
+        {/* ⑦ CTA */}
+        <div className="ctabar">
           <button
             type="button"
-            className="btn btn--primary"
+            className="btn btn--primary btn--block"
             disabled={locked}
             onClick={() => {
               if (totalItems === 0) {
@@ -290,11 +313,11 @@ export function OrderForm({
               setConfirming(true);
             }}
           >
-            발주하기
+            발주 확정{totalItems > 0 ? ` · ${totalItems}건` : ""}
           </button>
         </div>
 
-        {/* 확인 모달 — 발주 전체를 영수증처럼 보여주고, 그 자리에서 바로 수정 가능 */}
+        {/* 확인 시트 — 기존 그대로 */}
         {confirming && (
           <div
             className="sheet"
