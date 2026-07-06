@@ -105,7 +105,7 @@ export default async function AdminHotdeal(props: {
 
         {orders.length === 0 ? (
           <div className="empty">
-            <p>이 날짜에 발주가 없어요.</p>
+            <p>해당 날짜에 발주가 없습니다.</p>
           </div>
         ) : combined ? (
           <div className="list">

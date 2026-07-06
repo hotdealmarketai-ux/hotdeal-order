@@ -3,10 +3,10 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { kstToday, kstDayRange, labelDate } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
-import { CollectDepositsButton } from "@/components/CollectDepositsButton";
 import { DepositMatchControl } from "@/components/DepositMatchControl";
 import { ManualPayButton } from "@/components/ManualPayButton";
 import { setOrderUnlockAction } from "@/app/actions/deposit";
+import { lastBankSyncAt } from "@/lib/bank";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -80,6 +80,7 @@ export default async function AdminDeposits() {
     }),
   ]);
   const stores = merchants.map((m) => ({ id: m.id, label: m.storeName }));
+  const syncedAt = await lastBankSyncAt();
 
   return (
     <>
@@ -90,12 +91,13 @@ export default async function AdminDeposits() {
         <div className="topbar__title">입금 관리</div>
       </header>
       <div className="page">
-        <p className="lead" style={{ marginTop: 0 }}>
-          {labelDate(today)} · 미입금 {unpaidInv.length}곳 · 오늘 입금{" "}
-          {paidTodayInv.length}곳
+        <p className="lead" style={{ marginTop: 0, marginBottom: 4 }}>
+          {labelDate(today)} · 미입금 {unpaidInv.length} · 입금 완료{" "}
+          {paidTodayInv.length}
         </p>
-
-        <CollectDepositsButton />
+        <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
+          최신 계좌 동기화 : {syncedAt ? formatKDateTime(syncedAt) : "동기화 전"}
+        </p>
 
         <div className="section-label">미입금</div>
         {unpaidInv.length === 0 ? (
@@ -135,9 +137,9 @@ export default async function AdminDeposits() {
                         }}
                       >
                         {dep <= 0
-                          ? `미입금 · ${fmt(inv.total)}원`
+                          ? `미입금액 ${fmt(inv.total)}원`
                           : diff > 0
-                            ? `입금됐지만 차액 ${fmt(diff)}원 (입금 ${fmt(dep)}원)`
+                            ? `미입금액 ${fmt(diff)}원 (입금 ${fmt(dep)}원)`
                             : `입금 ${fmt(dep)}원 확인 필요`}
                       </div>
                     </div>
@@ -157,7 +159,7 @@ export default async function AdminDeposits() {
                           name="unlock"
                           value={inv.user.orderUnlock ? "false" : "true"}
                         />
-                        <button type="submit" className="linkbtn">
+                        <button type="submit" className="btn btn--xs btn--soft">
                           {inv.user.orderUnlock ? "발주 다시 잠금" : "발주 잠금 해제"}
                         </button>
                       </form>

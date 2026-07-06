@@ -165,7 +165,21 @@ export async function collectDeposits(days = 3): Promise<CollectResult> {
       out.errors.push(`${acct.accountNumber}: ${(err as Error)?.message ?? err}`);
     }
   }
+  // 최신 동기화 시각 기록(관리자 화면 표시용)
+  await prisma.appMeta
+    .upsert({
+      where: { key: "bank_sync" },
+      create: { key: "bank_sync", syncedAt: new Date() },
+      update: { syncedAt: new Date() },
+    })
+    .catch(() => {});
   return out;
+}
+
+// 팝빌 계좌 최신 동기화 시각(없으면 null)
+export async function lastBankSyncAt(): Promise<Date | null> {
+  const m = await prisma.appMeta.findUnique({ where: { key: "bank_sync" } });
+  return m?.syncedAt ?? null;
 }
 
 // 입금 1건 자동매칭 — 입금자명이 정확히 한 점포의 payerNames와 일치할 때만.

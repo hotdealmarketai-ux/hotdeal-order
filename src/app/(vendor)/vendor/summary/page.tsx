@@ -98,7 +98,7 @@ async function AggregateSection({
   if (agg.fruits.length === 0) {
     return (
       <div className="empty">
-        <p>이 날짜에 집계할 발주가 없어요.</p>
+        <p>해당 날짜에 집계할 발주가 없습니다.</p>
       </div>
     );
   }

@@ -94,7 +94,7 @@ async function ReportSection({
   if (report.sentences.length === 0) {
     return (
       <div className="empty">
-        <p>이 날짜에 입찰할 발주가 없어요.</p>
+        <p>해당 날짜에 입찰할 발주가 없습니다.</p>
       </div>
     );
   }

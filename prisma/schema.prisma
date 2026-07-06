@@ -96,6 +96,12 @@ model OrderItem {
   note String @default("") // 정리된 부연설명
 }
 
+// 앱 전역 메타(키-값 타임스탬프) — 예: 팝빌 계좌 최신 동기화 시각(bank_sync)
+model AppMeta {
+  key      String   @id
+  syncedAt DateTime @default(now())
+}
+
 // 재고현황 — 새롭(본사)이 작성, 핫딜마켓 가맹점만 열람
 model InventoryItem {
   id        String   @id @default(cuid())

@@ -75,6 +75,8 @@ export default async function AdminOrders(props: {
           ‹
         </Link>
         <div className="topbar__title">발주 목록</div>
+        <div className="topbar__spacer" />
+        <ResetOrdersButton />
       </header>
       <div className="page page--tight">
         {reset !== undefined && (
@@ -111,7 +113,7 @@ export default async function AdminOrders(props: {
 
         {orders.length === 0 ? (
           <div className="empty">
-            <p>이 날짜에 발주가 없어요.</p>
+            <p>해당 날짜에 발주가 없습니다.</p>
           </div>
         ) : combined ? (
           <div className="list">
@@ -150,22 +152,6 @@ export default async function AdminOrders(props: {
             })}
           </div>
         )}
-
-        <div
-          style={{
-            marginTop: 28,
-            paddingTop: 16,
-            borderTop: "1px solid var(--line)",
-          }}
-        >
-          <div className="section-label" style={{ marginTop: 0 }}>
-            관리 도구
-          </div>
-          <p className="lead" style={{ marginTop: 0, marginBottom: 10 }}>
-            전체 발주 내역을 한 번에 삭제합니다. (회원·재고는 유지)
-          </p>
-          <ResetOrdersButton />
-        </div>
       </div>
     </>
   );
