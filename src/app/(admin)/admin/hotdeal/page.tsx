@@ -13,6 +13,7 @@ import {
   normalizeDateStr,
 } from "@/lib/date";
 import { DateBar } from "@/components/DateBar";
+import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
 
 // 핫딜마켓 가맹점 발주를 '카테고리(보내는 곳)'별로.
 const HOTDEAL = { user: { role: "MERCHANT_HOTDEAL" } } as const;
@@ -25,10 +26,10 @@ const SCOPES: { key: string; label: string; where: Prisma.OrderWhereInput }[] = 
 ];
 
 export default async function AdminHotdeal(props: {
-  searchParams: Promise<{ scope?: string; date?: string }>;
+  searchParams: Promise<{ scope?: string; date?: string; cancelled?: string }>;
 }) {
   await requireAdmin();
-  const { scope = "all", date: dateParam } = await props.searchParams;
+  const { scope = "all", date: dateParam, cancelled } = await props.searchParams;
   const sel = SCOPES.find((s) => s.key === scope) ?? SCOPES[0];
   const date = normalizeDateStr(dateParam);
   const isToday = date === kstToday();
@@ -73,6 +74,11 @@ export default async function AdminHotdeal(props: {
     <>
       <Topbar backHref="/admin" title="핫딜마켓 발주관리" />
       <div className="page page--tight">
+        {cancelled && (
+          <div className="notice notice--ok" style={{ marginBottom: 14 }}>
+            발주가 취소되었습니다. ({cancelled}건 삭제 · 점주에게 알림 발송)
+          </div>
+        )}
         <div className="cattabs">
           {SCOPES.map((s) => (
             <Link
@@ -106,20 +112,24 @@ export default async function AdminHotdeal(props: {
         ) : combined ? (
           <div className="list">
             {groups.map((g) => (
-              <Link
-                href={`/admin/combined/${g.userId}/${g.date}`}
-                className="row"
-                key={`${g.userId}-${g.date}`}
-              >
-                <div className="row__main">
+              <div className="row" key={`${g.userId}-${g.date}`}>
+                <Link
+                  href={`/admin/combined/${g.userId}/${g.date}`}
+                  className="row__main"
+                  style={{ textDecoration: "none" }}
+                >
                   <div className="row__title">{g.store}</div>
                   <div className="row__sub">
                     {labelDate(g.date)} ·{" "}
                     {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
                   </div>
-                </div>
-                <span className="row__chev">›</span>
-              </Link>
+                </Link>
+                <CancelStoreOrdersButton
+                  userId={g.userId}
+                  date={g.date}
+                  store={g.store}
+                />
+              </div>
             ))}
           </div>
         ) : (

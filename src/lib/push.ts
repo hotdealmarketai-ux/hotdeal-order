@@ -135,6 +135,19 @@ export async function notifyMerchantInvoicePaid(
   }
 }
 
+// 관리자가 지점 발주를 전체 취소했을 때 점주에게 알림
+export async function notifyMerchantOrdersCancelled(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "발주가 취소되었습니다.",
+      body: "",
+      url: "/order",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantOrdersCancelled failed:", err);
+  }
+}
+
 // 발주 수정 시 받는 업체에 알림
 export async function notifyVendorOrderEdited(role: Role, fromStoreName: string) {
   try {

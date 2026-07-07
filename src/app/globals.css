@@ -1506,7 +1506,7 @@ a {
 
 /* ---------- 1) 색 + 둥글기 토큰 ---------- */
 :root {
-  --bg: #f4f6fb;
+  --bg: #fafbfc;
   --surface: #ffffff;
   --surface-2: #f7f9fd;
 
@@ -1903,7 +1903,7 @@ a {
   bottom: 76px;
   margin-top: 18px;
   padding-top: 12px;
-  background: linear-gradient(180deg, rgba(244, 246, 251, 0), #f4f6fb 45%);
+  background: linear-gradient(180deg, rgba(250, 251, 252, 0), #fafbfc 45%);
 }
 .btn--block { width: 100%; }
 

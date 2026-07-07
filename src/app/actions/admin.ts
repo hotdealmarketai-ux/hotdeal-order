@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
+import { kstDayRange } from "@/lib/date";
+import { notifyMerchantOrdersCancelled } from "@/lib/push";
 import {
   ALL_ROLES,
   ASSIGNABLE_MERCHANT_ROLES,
@@ -171,4 +173,32 @@ export async function resetAllOrdersAction(formData: FormData) {
   revalidatePath("/admin/orders");
   revalidatePath("/admin/hotdeal");
   redirect(`/admin/orders?reset=${res.count}`);
+}
+
+// 지점 발주 전체 취소 — 관리자 전용. 해당 점주가 그 날짜에 넣은 발주(전 카테고리)를 삭제.
+// 점주에게 '발주가 취소되었습니다' 푸시. 발주를 넣어 잠겼던 발주창은 삭제로 자동 재오픈됨.
+export async function cancelStoreOrdersAction(formData: FormData) {
+  await requireAdmin();
+  if (String(formData.get("confirm") ?? "") !== "CANCEL-STORE-ORDERS") return;
+  const userId = String(formData.get("userId") ?? "");
+  const date = String(formData.get("date") ?? "");
+  if (!userId || !date) return;
+
+  const { start, end } = kstDayRange(date);
+  const res = await prisma.order.deleteMany({
+    where: { userId, createdAt: { gte: start, lt: end } },
+  });
+  if (res.count > 0) {
+    await notifyMerchantOrdersCancelled(userId);
+  }
+
+  revalidatePath("/admin/hotdeal");
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  revalidatePath(`/admin/combined/${userId}/${date}`);
+  revalidatePath("/order");
+  revalidatePath(`/order/day/${date}`);
+  revalidatePath("/mypage");
+  revalidatePath("/vendor");
+  redirect(`/admin/hotdeal?date=${date}&cancelled=${res.count}`);
 }
