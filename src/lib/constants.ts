@@ -7,7 +7,7 @@ export type Role =
   | "MERCHANT_HOTDEAL" // 핫딜마켓 가맹점주
   | "MERCHANT_SEOBU" // 서부일광 타 소매업자
   | "VENDOR_SEOBU" // 서부일광 (과일)
-  | "VENDOR_JANGHEUNG" // 장흥 (야채)
+  | "VENDOR_JANGHEUNG" // 조은팜 (야채) — 내부 식별자는 JANGHEUNG 유지(DB 저장값)
   | "VENDOR_CHAEUMCHAE" // 채움채 (두부류)
   | "ADMIN_SAEROP"; // 새롭 (본사·관리자·공구)
 
@@ -57,9 +57,9 @@ export const CATEGORIES: Record<Category, CategoryDef> = {
   VEG: {
     key: "VEG",
     label: "야채",
-    vendorLabel: "장흥",
+    vendorLabel: "조은팜",
     vendorRole: "VENDOR_JANGHEUNG",
-    desc: "채소 (장흥)",
+    desc: "채소 (조은팜)",
   },
   TOOL: {
     key: "TOOL",
@@ -103,7 +103,7 @@ export const ALLOWED_CATEGORIES: Partial<Record<Role, Category[]>> = {
 // 업자 role -> 표기
 export const VENDOR_LABEL: Partial<Record<Role, string>> = {
   VENDOR_SEOBU: "서부일광",
-  VENDOR_JANGHEUNG: "장흥",
+  VENDOR_JANGHEUNG: "조은팜",
   VENDOR_CHAEUMCHAE: "채움채",
   ADMIN_SAEROP: "새롭",
 };
@@ -114,7 +114,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   MERCHANT_HOTDEAL: "핫딜마켓 가맹점",
   MERCHANT_SEOBU: "서부일광 소매",
   VENDOR_SEOBU: "서부일광",
-  VENDOR_JANGHEUNG: "장흥",
+  VENDOR_JANGHEUNG: "조은팜",
   VENDOR_CHAEUMCHAE: "채움채",
   ADMIN_SAEROP: "새롭 (본사)",
 };

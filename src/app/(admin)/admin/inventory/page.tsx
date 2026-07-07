@@ -6,6 +6,7 @@ import {
   updateInventoryAction,
   deleteInventoryAction,
 } from "@/app/actions/admin";
+import { formatKStamp } from "@/lib/format";
 
 export default async function AdminInventory() {
   await requireAdmin();
@@ -39,12 +40,18 @@ export default async function AdminInventory() {
           <div className="stack">
             {items.map((it) => (
               <div className="card" key={it.id}>
-                <div className="spread" style={{ marginBottom: 10 }}>
+                <div className="spread" style={{ marginBottom: 4 }}>
                   <div className="row__title">{it.name}</div>
                   <form action={deleteInventoryAction}>
                     <input type="hidden" name="id" value={it.id} />
                     <button className="linkbtn linkbtn--danger">삭제</button>
                   </form>
+                </div>
+                <div
+                  className="row__sub"
+                  style={{ fontSize: 11.5, color: "var(--muted-2)", marginBottom: 10 }}
+                >
+                  업데이트 시간 : {formatKStamp(it.updatedAt)}
                 </div>
                 <form action={updateInventoryAction} className="stack">
                   <input type="hidden" name="id" value={it.id} />

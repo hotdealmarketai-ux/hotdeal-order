@@ -21,7 +21,7 @@ async function main() {
     {
       username: "jangheung",
       role: "VENDOR_JANGHEUNG",
-      storeName: "장흥 채소",
+      storeName: "조은팜",
       phone: "051-000-0002",
       address: "부산 엄궁 농산물도매시장 채소동",
     },

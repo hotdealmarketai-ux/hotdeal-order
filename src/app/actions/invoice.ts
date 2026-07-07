@@ -223,6 +223,39 @@ export async function markInvoicePaidAction(formData: FormData) {
       },
       data: { appliedInvoiceId: id },
     });
+    // 실제 입금으로 채워지지 않은 잔액은 '수동입금확인'으로 입출금내역에 기록해
+    // 수동 확인한 금액이 입금된 것처럼 통장 내역에 남게 한다. (실제 입금이 이미
+    // 귀속됐으면 그만큼 차감 → 이중계상 방지)
+    const attributed = await prisma.deposit.aggregate({
+      where: { appliedInvoiceId: id },
+      _sum: { amount: true },
+    });
+    const shortfall = inv.total - (attributed._sum.amount ?? 0);
+    if (shortfall > 0) {
+      const now = new Date();
+      await prisma.deposit.upsert({
+        where: { bankTid: `manual-${id}` },
+        create: {
+          bankTid: `manual-${id}`,
+          txAt: now,
+          amount: shortfall,
+          payerName: "수동 입금확인",
+          memo: "관리자 수동 입금확인",
+          matchStatus: "MANUAL",
+          matchedUserId: inv.userId,
+          matchedAt: now,
+          appliedInvoiceId: id,
+        },
+        update: {
+          amount: shortfall,
+          txAt: now,
+          matchStatus: "MANUAL",
+          matchedUserId: inv.userId,
+          matchedAt: now,
+          appliedInvoiceId: id,
+        },
+      });
+    }
     await notifyMerchantInvoicePaid(inv.userId, inv.date, inv._count.items, inv.total);
     await clearOrderUnlockIfSettled(inv.userId);
     revalidatePath(`/order/day/${inv.date}`);
@@ -243,7 +276,9 @@ export async function unmarkInvoicePaidAction(formData: FormData) {
     data: { status: "ISSUED", paidAt: null, manualPaid: false },
   });
   if (upd.count === 0) return;
-  // 이 계산서에 귀속됐던 입금을 다시 미소진으로 되돌림
+  // '수동입금확인'으로 만든 합성 입금기록은 삭제(내역에서 제거)
+  await prisma.deposit.deleteMany({ where: { bankTid: `manual-${id}` } });
+  // 이 계산서에 귀속됐던 (실제) 입금을 다시 미소진으로 되돌림
   await prisma.deposit.updateMany({
     where: { appliedInvoiceId: id },
     data: { appliedInvoiceId: null },

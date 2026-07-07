@@ -56,7 +56,7 @@ export async function requireMerchant(): Promise<AppUser> {
   return user;
 }
 
-/** 업자(서부일광/장흥/채움채/새롭) 전용 */
+/** 업자(서부일광/조은팜/채움채/새롭) 전용 */
 export async function requireVendor(): Promise<AppUser> {
   const user = await requireUser();
   if (user.status !== "APPROVED") redirect("/pending");

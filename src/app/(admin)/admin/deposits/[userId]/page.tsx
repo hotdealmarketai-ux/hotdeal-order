@@ -21,7 +21,14 @@ type LedgerRow =
       status: string;
       splitRequested: boolean;
     }
-  | { kind: "deposit"; at: Date; amount: number; payer: string; via: string };
+  | {
+      kind: "deposit";
+      at: Date;
+      amount: number;
+      payer: string;
+      via: string;
+      manual: boolean;
+    };
 
 // 점포 입출금 내역 — 통장 거래내역처럼 날짜순으로 '입금 요청(청구)'와 '입금'을 나열.
 export default async function AdminDepositStore(props: {
@@ -54,6 +61,7 @@ export default async function AdminDepositStore(props: {
         amount: true,
         payerName: true,
         matchStatus: true,
+        bankTid: true,
       },
     }),
     receivableOf(userId),
@@ -82,6 +90,7 @@ export default async function AdminDepositStore(props: {
         amount: d.amount,
         payer: d.payerName || "(입금자명 없음)",
         via: d.matchStatus === "AUTO" ? "자동" : "수동",
+        manual: d.bankTid.startsWith("manual-"),
       }),
     ),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
@@ -106,25 +115,42 @@ export default async function AdminDepositStore(props: {
             입금자 {user.payerNames[0] ?? "미등록"} · 총 청구 {fmt(totalBilled)}원
             · 총 입금 {fmt(totalPaid)}원
           </div>
-          <div style={{ marginTop: 12 }}>
-            {lock.locked ? (
-              <span className="badge badge--danger">발주 잠김</span>
-            ) : user.orderUnlock ? (
-              <span className="badge badge--wait">발주 잠금 해제됨</span>
-            ) : (
-              <span className="badge badge--ok">발주 정상</span>
-            )}
-            <form
-              action={setOrderUnlockAction}
-              style={{ display: "inline-block", marginLeft: 10 }}
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <span
+              className={`badge ${
+                lock.locked
+                  ? "badge--danger"
+                  : user.orderUnlock
+                    ? "badge--wait"
+                    : "badge--ok"
+              }`}
+              style={{ minHeight: 36, padding: "0 16px", fontSize: 13, borderRadius: 999 }}
             >
+              {lock.locked
+                ? "발주 잠김"
+                : user.orderUnlock
+                  ? "발주 잠금 해제됨"
+                  : "발주 정상"}
+            </span>
+            <form action={setOrderUnlockAction} style={{ margin: 0 }}>
               <input type="hidden" name="userId" value={userId} />
               <input
                 type="hidden"
                 name="unlock"
                 value={user.orderUnlock ? "false" : "true"}
               />
-              <button type="submit" className="btn btn--xs btn--soft">
+              <button
+                type="submit"
+                className="btn btn--xs btn--soft"
+                style={{ minHeight: 36 }}
+              >
                 {user.orderUnlock ? "발주 다시 잠금" : "발주 잠금 해제"}
               </button>
             </form>
@@ -173,9 +199,12 @@ export default async function AdminDepositStore(props: {
               ) : (
                 <div className="row" key={`dep-${i}`}>
                   <div className="row__main">
-                    <div className="row__title">입금 · {r.payer}</div>
+                    <div className="row__title">
+                      {r.manual ? "수동입금확인" : `입금 · ${r.payer}`}
+                    </div>
                     <div className="row__sub">
-                      {formatKDate(r.at)} · {r.via} 매칭
+                      {formatKDate(r.at)} ·{" "}
+                      {r.manual ? "관리자 확인" : `${r.via} 매칭`}
                     </div>
                   </div>
                   <div className="ledger__pay">−{fmt(r.amount)}원</div>

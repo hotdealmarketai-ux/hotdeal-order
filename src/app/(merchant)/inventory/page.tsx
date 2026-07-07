@@ -3,6 +3,7 @@ import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { canViewInventory } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
+import { formatKStamp } from "@/lib/format";
 
 function stockBadgeClass(status: string): string {
   if (status.includes("넉넉") || status.includes("많")) return "badge--ok";
@@ -42,6 +43,12 @@ export default async function InventoryPage() {
                 <div className="row__main">
                   <div className="row__title">{it.name}</div>
                   {it.memo && <div className="row__sub">{it.memo}</div>}
+                  <div
+                    className="row__sub"
+                    style={{ fontSize: 11.5, color: "var(--muted-2)", marginTop: 3 }}
+                  >
+                    업데이트 시간 : {formatKStamp(it.updatedAt)}
+                  </div>
                 </div>
                 {it.status && (
                   <span className={`badge ${stockBadgeClass(it.status)}`}>

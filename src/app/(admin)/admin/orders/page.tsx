@@ -19,7 +19,7 @@ const SCOPES: { key: string; label: string; where: Prisma.OrderWhereInput }[] = 
   { key: "all", label: "전체", where: {} },
   { key: "hotdeal", label: "핫딜마켓", where: { user: { role: "MERCHANT_HOTDEAL" } } },
   { key: "seobu", label: "서부일광", where: { vendorRole: "VENDOR_SEOBU" } },
-  { key: "jangheung", label: "장흥", where: { vendorRole: "VENDOR_JANGHEUNG" } },
+  { key: "jangheung", label: "조은팜", where: { vendorRole: "VENDOR_JANGHEUNG" } },
   { key: "chaeumchae", label: "채움채", where: { vendorRole: "VENDOR_CHAEUMCHAE" } },
   { key: "saerop", label: "주식회사 새롭", where: { vendorRole: "ADMIN_SAEROP" } },
 ];

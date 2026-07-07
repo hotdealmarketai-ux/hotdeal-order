@@ -21,7 +21,7 @@ function resolve(ctx: string, scope: string) {
     all: { label: "전체", where: {}, mode: "produce" },
     hotdeal: { label: "핫딜마켓", where: { ...HOTDEAL }, mode: "produce" },
     seobu: { label: "서부일광", where: { vendorRole: "VENDOR_SEOBU" }, mode: "produce" },
-    jangheung: { label: "장흥", where: { vendorRole: "VENDOR_JANGHEUNG" }, mode: "produce" },
+    jangheung: { label: "조은팜", where: { vendorRole: "VENDOR_JANGHEUNG" }, mode: "produce" },
     chaeumchae: { label: "채움채", where: { vendorRole: "VENDOR_CHAEUMCHAE" }, mode: "simple" },
     saerop: { label: "주식회사 새롭", where: { vendorRole: "ADMIN_SAEROP" }, mode: "simple" },
   };
