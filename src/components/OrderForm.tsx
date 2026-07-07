@@ -280,7 +280,7 @@ export function OrderForm({
                       className="input"
                       value={r.note}
                       onChange={(e) => updateRow(r.id, "note", e.target.value)}
-                      placeholder="설명 (예: 부사 上)"
+                      placeholder="설명"
                     />
                   </div>
                   {filled && (

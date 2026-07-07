@@ -39,6 +39,8 @@ export function ChatOrder({
   const [phase, setPhase] = useState<Phase>("compose");
   const [items, setItems] = useState<EditItem[]>([]);
   const [tofuQty, setTofuQty] = useState<Record<string, string>>({});
+  // 채움채 발주 온오프(기본 오프) — 켜야 채움채 품목 선택이 열림
+  const [tofuOpen, setTofuOpen] = useState(false);
   const [pickup, setPickup] = useState("");
   const [error, setError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
@@ -47,7 +49,7 @@ export function ChatOrder({
   );
 
   const tofuChecked = () =>
-    CHAEUMCHAE_CATALOG.some((p) => (tofuQty[p.seq] ?? "").trim());
+    tofuOpen && CHAEUMCHAE_CATALOG.some((p) => (tofuQty[p.seq] ?? "").trim());
 
   async function handleParse() {
     setError("");
@@ -109,7 +111,7 @@ export function ChatOrder({
       list.push({ name: it.name, qty: it.qty, note: it.note });
       byCat.set(it.category, list);
     }
-    if (hasTofu) {
+    if (hasTofu && tofuOpen) {
       const tofuItems = CHAEUMCHAE_CATALOG.filter(
         (p) => (tofuQty[p.seq] ?? "").trim(),
       ).map((p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }));
@@ -119,7 +121,7 @@ export function ChatOrder({
       category: c,
       items: byCat.get(c)!,
     }));
-  }, [items, tofuQty, hasTofu]);
+  }, [items, tofuQty, hasTofu, tofuOpen]);
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
 
@@ -132,29 +134,49 @@ export function ChatOrder({
   // 채움채 체크리스트 UI
   const tofuList = hasTofu ? (
     <div style={{ marginTop: 16 }}>
-      <div className="section-label" style={{ margin: "0 0 8px" }}>
-        채움채
+      {/* 채움채 발주 온오프 토글 — 켜야 아래 품목 선택이 열림(기본 오프) */}
+      <div className="pushcard">
+        <div className="pushcard__main">
+          <div className="pushcard__title">채움채 발주</div>
+          <div className="pushcard__sub">
+            두부·콩나물 등 채움채 품목도 함께 발주해요.
+          </div>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={tofuOpen}
+          aria-label="채움채 발주"
+          className={`switch ${tofuOpen ? "is-on" : ""}`}
+          onClick={() => setTofuOpen((v) => !v)}
+          disabled={locked}
+        >
+          <span className="switch__knob" />
+        </button>
       </div>
-      <div className="tofulist">
-        {CHAEUMCHAE_CATALOG.map((p) => {
-          const q = tofuQty[p.seq] ?? "";
-          return (
-            <div className={`tofuitem ${q.trim() ? "is-on" : ""}`} key={p.seq}>
-              <span className="tofuitem__name">{p.name}</span>
-              <input
-                className="input tofuitem__qty"
-                inputMode="numeric"
-                value={q}
-                onChange={(e) =>
-                  setTofuQty((prev) => ({ ...prev, [p.seq]: e.target.value }))
-                }
-                placeholder="수량"
-                disabled={locked}
-              />
-            </div>
-          );
-        })}
-      </div>
+
+      {tofuOpen && (
+        <div className="tofulist" style={{ marginTop: 10 }}>
+          {CHAEUMCHAE_CATALOG.map((p) => {
+            const q = tofuQty[p.seq] ?? "";
+            return (
+              <div className={`tofuitem ${q.trim() ? "is-on" : ""}`} key={p.seq}>
+                <span className="tofuitem__name">{p.name}</span>
+                <input
+                  className="input tofuitem__qty"
+                  inputMode="numeric"
+                  value={q}
+                  onChange={(e) =>
+                    setTofuQty((prev) => ({ ...prev, [p.seq]: e.target.value }))
+                  }
+                  placeholder="수량"
+                  disabled={locked}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   ) : null;
 

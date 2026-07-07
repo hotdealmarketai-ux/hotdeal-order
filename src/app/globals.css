@@ -1690,20 +1690,23 @@ a {
              DeadlineCountdown.tsx / PushToggle.tsx
    ============================================================ */
 
-/* ---- ① 헤더 카운트다운: 문장 제거, 큰 시계 + 마감시각 칩 ---- */
+/* ---- ① 헤더 카운트다운: 문장 제거, 큰 시계 + 마감시각 칩 ----
+   시안: 좌측(라벨+시계) ↔ 우측 칩 가로 한 줄. flex-direction:row 명시
+   (원본 .countdown 의 column 상속을 덮어 세로 중앙정렬로 무너지는 것 방지). */
 .countdown {
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 13px 16px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: none;
   margin: 0;
 }
-.countdown__main { display: flex; flex-direction: column; gap: 2px; }
+.countdown__main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .countdown__pre {
   font-size: 12px;
   font-weight: 700;
@@ -1800,6 +1803,7 @@ a {
 .cattabs--seg .cattab {
   flex: 1;
   min-width: 0;
+  justify-content: center;
   border: 0;
   background: transparent;
   color: #6b7488;

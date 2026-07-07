@@ -113,13 +113,9 @@ export function PushToggle() {
   return (
     <div className="pushcard">
       <div className="pushcard__main">
-        <div className="pushcard__title">발주 알림</div>
+        <div className="pushcard__title">앱 알림</div>
         <div className="pushcard__sub">
-          {state === "denied"
-            ? "브라우저 알림이 차단돼 있어요. 설정에서 허용해 주세요."
-            : on
-              ? "새 발주 소식을 이 기기로 알려드려요."
-              : "새 발주 소식을 이 기기로"}
+          {on ? "새 발주 소식을 이 기기로 알려드려요." : "앱에서 알림을 허용합니다."}
         </div>
       </div>
       {state !== "denied" && (
@@ -127,7 +123,7 @@ export function PushToggle() {
           type="button"
           role="switch"
           aria-checked={on}
-          aria-label="발주 알림"
+          aria-label="앱 알림"
           className={`switch ${on || (busy && !wasOn) ? "is-on" : ""}`}
           onClick={on ? disable : enable}
           disabled={busy}
