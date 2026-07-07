@@ -63,7 +63,11 @@ export async function parseChatOrderAction(text: string): Promise<ChatParseState
   const parsed = await parseChatOrder({ text: clean, categories: catInfo });
   const groups = parsed.groups
     .filter((g) => allowed.includes(g.category as Category))
-    .map((g) => ({ category: g.category as Category, items: cleanItems(g.items) }))
+    .map((g) => ({
+      category: g.category as Category,
+      // 미리보기 수량도 최종과 동일하게 '숫자만'으로 정리(displayQty) → 보이는 그대로 저장됨
+      items: cleanItems(g.items).map((it) => ({ ...it, qty: displayQty(it.qty) })),
+    }))
     .filter((g) => g.items.length > 0);
 
   if (groups.length === 0) {
