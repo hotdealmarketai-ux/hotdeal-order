@@ -26,10 +26,10 @@ const SCOPES: { key: string; label: string; where: Prisma.OrderWhereInput }[] = 
 ];
 
 export default async function AdminHotdeal(props: {
-  searchParams: Promise<{ scope?: string; date?: string; cancelled?: string }>;
+  searchParams: Promise<{ scope?: string; date?: string }>;
 }) {
   await requireAdmin();
-  const { scope = "all", date: dateParam, cancelled } = await props.searchParams;
+  const { scope = "all", date: dateParam } = await props.searchParams;
   const sel = SCOPES.find((s) => s.key === scope) ?? SCOPES[0];
   const date = normalizeDateStr(dateParam);
   const isToday = date === kstToday();
@@ -74,11 +74,6 @@ export default async function AdminHotdeal(props: {
     <>
       <Topbar backHref="/admin" title="핫딜마켓 발주관리" />
       <div className="page page--tight">
-        {cancelled && (
-          <div className="notice notice--ok" style={{ marginBottom: 14 }}>
-            발주가 취소되었습니다. ({cancelled}건 삭제 · 점주에게 알림 발송)
-          </div>
-        )}
         <div className="cattabs">
           {SCOPES.map((s) => (
             <Link

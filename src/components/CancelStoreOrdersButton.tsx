@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { cancelStoreOrdersAction } from "@/app/actions/admin";
+import { useActionState, useEffect, useState } from "react";
+import {
+  cancelStoreOrdersAction,
+  type CancelOrdersState,
+} from "@/app/actions/admin";
 import { SubmitButton } from "./SubmitButton";
 
 // 지점 발주 전체 취소 — 관리자가 핫딜마켓 발주관리에서 지점별로 취소.
-// 확인은 오버레이 모달로(오취소 방지).
+// useActionState로 결과를 받아 성공 시 모달을 명시적으로 닫는다(리다이렉트 상태 잔존으로
+// 확인창이 계속 다시 뜨던 문제 방지). 삭제되면 revalidate로 지점 행 자체가 사라진다.
 export function CancelStoreOrdersButton({
   userId,
   date,
@@ -16,6 +20,14 @@ export function CancelStoreOrdersButton({
   store: string;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [state, formAction] = useActionState<CancelOrdersState, FormData>(
+    cancelStoreOrdersAction,
+    {},
+  );
+
+  useEffect(() => {
+    if (state?.ok) setConfirming(false);
+  }, [state]);
 
   return (
     <>
@@ -65,7 +77,7 @@ export function CancelStoreOrdersButton({
               >
                 닫기
               </button>
-              <form action={cancelStoreOrdersAction} style={{ flex: 1 }}>
+              <form action={formAction} style={{ flex: 1 }}>
                 <input type="hidden" name="confirm" value="CANCEL-STORE-ORDERS" />
                 <input type="hidden" name="userId" value={userId} />
                 <input type="hidden" name="date" value={date} />

@@ -177,12 +177,18 @@ export async function resetAllOrdersAction(formData: FormData) {
 
 // 지점 발주 전체 취소 — 관리자 전용. 해당 점주가 그 날짜에 넣은 발주(전 카테고리)를 삭제.
 // 점주에게 '발주가 취소되었습니다' 푸시. 발주를 넣어 잠겼던 발주창은 삭제로 자동 재오픈됨.
-export async function cancelStoreOrdersAction(formData: FormData) {
+// useActionState로 결과를 반환(리다이렉트 X) — 모달이 결과를 받아 스스로 닫히게(재로딩 방지).
+export type CancelOrdersState = { ok?: boolean; count?: number };
+
+export async function cancelStoreOrdersAction(
+  _prev: CancelOrdersState,
+  formData: FormData,
+): Promise<CancelOrdersState> {
   await requireAdmin();
-  if (String(formData.get("confirm") ?? "") !== "CANCEL-STORE-ORDERS") return;
+  if (String(formData.get("confirm") ?? "") !== "CANCEL-STORE-ORDERS") return {};
   const userId = String(formData.get("userId") ?? "");
   const date = String(formData.get("date") ?? "");
-  if (!userId || !date) return;
+  if (!userId || !date) return {};
 
   const { start, end } = kstDayRange(date);
   const res = await prisma.order.deleteMany({
@@ -200,5 +206,5 @@ export async function cancelStoreOrdersAction(formData: FormData) {
   revalidatePath(`/order/day/${date}`);
   revalidatePath("/mypage");
   revalidatePath("/vendor");
-  redirect(`/admin/hotdeal?date=${date}&cancelled=${res.count}`);
+  return { ok: true, count: res.count };
 }
