@@ -45,7 +45,15 @@ export default async function OrderPage() {
 
   return (
     <>
-      <Topbar brand="오더야" right={<TopbarChip>{user.storeName}</TopbarChip>}>
+      <Topbar
+        brand="오더야"
+        right={
+          <>
+            <TopbarChip>{user.storeName}</TopbarChip>
+            <PushToggle variant="header" />
+          </>
+        }
+      >
         {windowed && <DeadlineCountdown deadlineLabel={ORDER_DEADLINE_LABEL} />}
       </Topbar>
       <div className="page">
@@ -90,9 +98,6 @@ export default async function OrderPage() {
             role={user.role}
           />
         )}
-
-        {/* ② 발주 알림: 본문 맨 아래로 이동 */}
-        <PushToggle />
       </div>
     </>
   );

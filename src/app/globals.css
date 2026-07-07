@@ -1912,3 +1912,23 @@ a {
 /* --- 채팅 발주(ChatOrder) 미리보기를 새 폼 톤으로 정렬 (핸드오프2 일관성) --- */
 .chatedit__item { box-shadow: none; }   /* 새 .oitem 처럼 평평한 1px 테두리 카드 */
 .chatedit__cat { border-radius: 10px; } /* 종류 선택 알약(999px) → 각진(폼 인풋 톤) */
+
+/* --- 헤더 우측 '앱 알림' 벨 토글 (상호명 옆) --- */
+.tbar__push {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.10);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease,
+    transform 0.05s ease;
+}
+.tbar__push:active { transform: scale(0.94); }
+.tbar__push:disabled { opacity: 0.55; cursor: default; }
+.tbar__push.is-on { background: rgba(46, 91, 255, 0.95); color: #fff; }
+.tbar__push.is-off { background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.55); }

@@ -28,7 +28,12 @@ export default async function VendorPage(props: {
     <>
       <Topbar
         title="들어온 발주"
-        right={<TopbarChip>{VENDOR_LABEL[user.role] ?? user.storeName}</TopbarChip>}
+        right={
+          <>
+            <TopbarChip>{VENDOR_LABEL[user.role] ?? user.storeName}</TopbarChip>
+            <PushToggle variant="header" />
+          </>
+        }
       />
       <div className="page">
         <h1 className="h1">발주 목록</h1>
@@ -36,8 +41,6 @@ export default async function VendorPage(props: {
           {labelDate(date)}
           {isToday ? " (오늘)" : ""} · {orders.length}건
         </p>
-
-        <PushToggle />
 
         <VendorDateBar date={date} />
 
