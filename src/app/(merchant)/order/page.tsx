@@ -46,7 +46,7 @@ export default async function OrderPage() {
   return (
     <>
       <Topbar
-        brand="오더야"
+        brand="핫딜오더"
         right={
           <>
             <TopbarChip>{user.storeName}</TopbarChip>

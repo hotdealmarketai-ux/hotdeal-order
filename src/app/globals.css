@@ -1494,7 +1494,7 @@ a {
 
 
 /* ============================================================
-   오더야 · COBALT 리스킨 패치 (강화판: 색 + 모양/밀도 + 헤더)
+   핫딜오더 · COBALT 리스킨 패치 (강화판: 색 + 모양/밀도 + 헤더)
    사용법: 기존 src/app/globals.css "맨 아래"에 통째로 붙여넣기.
    (뒤에 오는 규칙이 이기므로 아래 값들이 기존 값을 덮어씀)
 
@@ -1683,7 +1683,7 @@ a {
 
 /* --- 발주하기 화면 코발트 (order-cobalt.css) --- */
 /* ============================================================
-   오더야 · 발주하기 화면 코발트 패치 CSS
+   핫딜오더 · 발주하기 화면 코발트 패치 CSS
    적용법: src/app/globals.css "맨 아래"에 붙여넣기
    (globals-cobalt.css 전체 패치 뒤에 붙여도 되고, 단독으로도 동작)
    짝꿍 파일: OrderForm.tsx / order-page.tsx /
@@ -1714,7 +1714,7 @@ a {
   letter-spacing: 0.02em;
 }
 .countdown__clock {
-  font-size: 26px;
+  font-size: 21px;
   font-weight: 800;
   color: #fff;
   font-variant-numeric: tabular-nums;

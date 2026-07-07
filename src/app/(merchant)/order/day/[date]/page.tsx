@@ -172,7 +172,17 @@ export default async function DayReceiptPage(props: {
             )}
           </>
         ) : (
-          sorted.map((order) => {
+          <>
+            {/* 지점명은 맨 위 한 번만 — 그 아래로 카테고리별 영수증 나열 */}
+            <div style={{ marginBottom: 18 }}>
+              <div className="receipt__store">{user.storeName}</div>
+              {user.phone && (
+                <div className="row__sub" style={{ marginTop: 2 }}>
+                  {user.phone}
+                </div>
+              )}
+            </div>
+            {sorted.map((order) => {
             const cat = CATEGORIES[order.category as Category];
             return (
               <div key={order.id} style={{ marginBottom: 22 }}>
@@ -214,11 +224,13 @@ export default async function DayReceiptPage(props: {
                     rawNote: it.rawNote,
                   }))}
                   rawText={order.rawText}
+                  showStore={false}
                   showPrintButton={false}
                 />
               </div>
             );
-          })
+          })}
+          </>
         )}
       </div>
     </>

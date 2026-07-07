@@ -1,5 +1,5 @@
 // ============================================================
-//  Topbar — 오더야 코발트 공용 상단 헤더 (네이비 바)
+//  Topbar — 핫딜오더 코발트 공용 상단 헤더 (네이비 바)
 //  위치 제안: src/components/Topbar.tsx
 //  스타일: handoff/globals-cobalt.css 의 .tbar 클래스들이 필요합니다.
 //
@@ -19,7 +19,7 @@ export function Topbar({
 }: {
   /** 가운데 제목 (상세/관리 페이지) */
   title?: string;
-  /** 왼쪽 큰 브랜드 워드마크 (예: "오더야", "새롭 · 관리자") */
+  /** 왼쪽 큰 브랜드 워드마크 (예: "핫딜오더", "새롭 · 관리자") */
   brand?: string;
   /** 있으면 왼쪽에 뒤로가기(‹) 링크 */
   backHref?: string;
@@ -59,7 +59,7 @@ export function TopbarChip({ children }: { children: ReactNode }) {
    import { Topbar, TopbarChip } from "@/components/Topbar";
    import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 
-   <Topbar brand="오더야" right={<TopbarChip>{user.storeName}</TopbarChip>}>
+   <Topbar brand="핫딜오더" right={<TopbarChip>{user.storeName}</TopbarChip>}>
      {windowed && <DeadlineCountdown deadlineLabel={ORDER_DEADLINE_LABEL} />}
    </Topbar>
    // ↑ .tbar__hero 스타일이 카운트다운을 자동으로 다크 버전으로 만들어 줍니다.

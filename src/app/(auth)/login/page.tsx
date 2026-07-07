@@ -14,7 +14,7 @@ export default async function LoginPage() {
         <div style={{ height: 44 }} />
         <div className="authbrand">
           <div className="authbrand__name">
-            오더야 <span className="authbrand__en">ORDERYA</span>
+            핫딜오더 <span className="authbrand__en">HOTDEAL ORDER</span>
           </div>
           <p className="authbrand__desc">
             주문은 더 간편하게, 운영은 더 스마트하게.

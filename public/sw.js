@@ -1,4 +1,4 @@
-// 오더야 푸시 전용 서비스워커 — 캐싱 일절 안 함(데이터 항상 최신).
+// 핫딜오더 푸시 전용 서비스워커 — 캐싱 일절 안 함(데이터 항상 최신).
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
@@ -9,7 +9,7 @@ self.addEventListener("push", (event) => {
   } catch (e) {
     data = { body: event.data ? event.data.text() : "" };
   }
-  const title = data.title || "오더야";
+  const title = data.title || "핫딜오더";
   const options = {
     body: data.body || "",
     icon: "/icon-192.png",

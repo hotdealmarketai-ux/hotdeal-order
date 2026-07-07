@@ -1,5 +1,5 @@
 // ============================================================
-//  BottomNav — 오더야 코발트 하단 네비 (아이콘 + 활성 알약 + 배지)
+//  BottomNav — 핫딜오더 코발트 하단 네비 (아이콘 + 활성 알약 + 배지)
 //  위치: 기존 src/components/BottomNav.tsx 를 이 파일로 교체
 //  스타일: handoff/globals-cobalt.css 의 .bottomnav 오버라이드 필요
 //  로직(role 필터·활성 판정·myBadge)은 기존과 100% 동일합니다.

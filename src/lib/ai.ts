@@ -44,10 +44,10 @@ export function ruleNormalize(input: NormalizeInput): NormalizeResult {
     }))
     .filter((it) => it.name || it.qty || it.note);
 
-  const summary =
-    items.length > 0
-      ? `${input.categoryLabel} 발주 ${items.length}건`
-      : `${input.categoryLabel} 발주`;
+  // 메모(summary)는 점주가 적은 비고(note)만 모아 보여준다. 품목·수량은 넣지 않음.
+  // 비고가 없으면 빈 문자열 → 영수증에서 메모 줄이 아예 안 나온다.
+  const noteTags = [...new Set(items.map((it) => it.note).filter(Boolean))];
+  const summary = noteTags.join(" · ");
 
   return { engine: "rule", items, summary };
 }
@@ -86,8 +86,14 @@ const SYSTEM_PROMPT = `당신은 과일·농산물 도매 발주서를 정리하
       "행사용"·"행사 쓸 거"→"행사", "특자"·"특상"→"특", "상자(등급)"→"상". 등급·요청 없으면 빈 문자열("").
 - 항목 개수와 순서는 반드시 그대로 유지, 빈 값은 "".
 
+[메모(summary) · 매우 중요]
+- summary에는 품목명·수량을 절대 넣지 마세요(품목/수량은 위 items로 이미 표시됨).
+- 점주가 적은 비고/요청(각 item의 note)만 짧게 묶어 함축하세요. 뜻은 그대로 두고, 다른 뜻으로 바꾸거나 없는 말을 지어내지 마세요.
+  예) 여러 품목에 "고당도"·"행사"가 있으면 → summary "고당도 · 행사"
+- 비고(note)가 하나도 없으면 summary는 반드시 빈 문자열 "".
+
 결과는 순수 JSON만 출력(다른 말·코드블록 금지):
-{"items":[{"name":"표준 품목명","qty":"수량","note":"정리된 부연설명"}],"summary":"한 줄 요약"}`;
+{"items":[{"name":"표준 품목명","qty":"수량","note":"정리된 부연설명"}],"summary":"비고 함축(품목·수량 제외, 없으면 \\"\\")"}`;
 
 function extractJson(text: string): unknown {
   const start = text.indexOf("{");
@@ -156,7 +162,8 @@ async function claudeNormalize(input: NormalizeInput): Promise<NormalizeResult> 
   return {
     engine: "claude",
     items,
-    summary: tidy(parsed.summary ?? "") || `${input.categoryLabel} 발주 ${items.length}건`,
+    // 비고가 없으면 빈 문자열 그대로(품목·수량 요약으로 대체하지 않음).
+    summary: tidy(parsed.summary ?? ""),
   };
 }
 

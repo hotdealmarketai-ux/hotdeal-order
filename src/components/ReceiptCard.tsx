@@ -18,10 +18,12 @@ export function ReceiptCard(props: {
   rawItems: ReceiptRawItem[];
   rawText?: string;
   isNew?: boolean;
+  showStore?: boolean;
   showOriginalButton?: boolean;
   showPrintButton?: boolean;
 }) {
   const [orig, setOrig] = useState(false);
+  const showStore = props.showStore ?? true;
   const showOriginalButton = props.showOriginalButton ?? true;
   const showPrintButton = props.showPrintButton ?? true;
   const aiOn = props.aiEngine === "claude";
@@ -38,7 +40,9 @@ export function ReceiptCard(props: {
         <div className="receipt__head">
           <div className="spread">
             <div>
-              <div className="receipt__store">{props.storeName}</div>
+              {showStore && (
+                <div className="receipt__store">{props.storeName}</div>
+              )}
             </div>
             {showOriginalButton && (
               <button

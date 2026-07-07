@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const TITLE = "오더야 (Orderya)";
+const TITLE = "핫딜오더";
 const DESCRIPTION = "주문은 더 간편하게, 운영은 더 스마트하게.";
 
 export const metadata: Metadata = {
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
     type: "website",
-    siteName: "오더야",
+    siteName: "핫딜오더",
   },
   twitter: {
     card: "summary_large_image",
