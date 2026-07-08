@@ -128,6 +128,7 @@ model Invoice {
   // 분할 입금 요청 — 점주가 나눠 입금하겠다고 알림(관리자 수동 확인 대상)
   splitRequested   Boolean   @default(false)
   splitRequestedAt DateTime?
+  splitApprovedAt  DateTime? // 관리자가 분할 입금을 승인한 시각(null=미처리 요청)
   // 수동 입금확인 — true면 자동매칭이 되돌리지 않음(관리자 판단 우선)
   manualPaid       Boolean   @default(false)
 

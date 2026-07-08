@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { formatKDateTime } from "@/lib/format";
 import { DepositMatchControl } from "@/components/DepositMatchControl";
 import { lastBankSyncAt } from "@/lib/bank";
+import { SubmitButton } from "@/components/SubmitButton";
+import { approveSplitAction, rejectSplitAction } from "@/app/actions/invoice";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -13,7 +15,8 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 export default async function AdminDeposits() {
   await requireAdmin();
 
-  const [stores, balances, splitReqs, unmatched, syncedAt] = await Promise.all([
+  const [stores, balances, splitReqs, unmatched, syncedAt, pendingSplits] =
+    await Promise.all([
     prisma.user.findMany({
       where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
       select: { id: true, storeName: true, payerNames: true },
@@ -27,7 +30,7 @@ export default async function AdminDeposits() {
       _count: true,
     }),
     prisma.invoice.findMany({
-      where: { status: "ISSUED", splitRequested: true },
+      where: { status: "ISSUED", splitRequested: true, splitApprovedAt: null },
       select: { userId: true },
       distinct: ["userId"],
     }),
@@ -37,6 +40,17 @@ export default async function AdminDeposits() {
       take: 100,
     }),
     lastBankSyncAt(),
+    // 미처리 분할 입금 요청(승인/반려 대기) — 계산서 단위
+    prisma.invoice.findMany({
+      where: { status: "ISSUED", splitRequested: true, splitApprovedAt: null },
+      select: {
+        id: true,
+        date: true,
+        total: true,
+        user: { select: { storeName: true } },
+      },
+      orderBy: { splitRequestedAt: "asc" },
+    }),
   ]);
 
   const balByUser = new Map(
@@ -81,6 +95,48 @@ export default async function AdminDeposits() {
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
           최신 계좌 동기화 : {syncedAt ? formatKDateTime(syncedAt) : "동기화 전"}
         </p>
+
+        {pendingSplits.length > 0 && (
+          <>
+            <div className="section-label">
+              분할 입금 요청 ({pendingSplits.length})
+            </div>
+            <div className="list">
+              {pendingSplits.map((s) => (
+                <div className="deprow" key={s.id}>
+                  <div className="deprow__head">
+                    <div className="row__main">
+                      <div className="row__title">
+                        {s.user.storeName} · {fmt(s.total)}원
+                      </div>
+                      <div className="row__sub">{s.date} 계산서 · 나눠 입금 요청</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                      <form action={approveSplitAction}>
+                        <input type="hidden" name="invoiceId" value={s.id} />
+                        <SubmitButton
+                          className="btn btn--xs btn--primary"
+                          pendingText="…"
+                        >
+                          승인
+                        </SubmitButton>
+                      </form>
+                      <form action={rejectSplitAction}>
+                        <input type="hidden" name="invoiceId" value={s.id} />
+                        <SubmitButton
+                          className="btn btn--xs btn--ghost"
+                          pendingText="…"
+                        >
+                          반려
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="section-label">가맹점</div>
         <div className="list">

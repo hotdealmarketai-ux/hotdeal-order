@@ -14,6 +14,8 @@ import {
 import {
   notifyMerchantInvoiceIssued,
   notifyMerchantInvoicePaid,
+  notifyMerchantSplitApproved,
+  notifyMerchantSplitRejected,
 } from "@/lib/push";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { clearOrderUnlockIfSettled } from "@/lib/bank";
@@ -314,6 +316,65 @@ export async function requestSplitPaymentAction(formData: FormData) {
   if (inv) revalidatePath(`/order/day/${inv.date}`);
   revalidatePath("/admin/deposits");
   revalidatePath("/admin/invoices");
+  revalidatePath("/admin");
+}
+
+// 분할 입금 승인(관리자) — 나눠 입금 허용. 발주 잠금 해제(완납 시 자동 원복) + 점주 알림.
+// 분할 건은 splitRequested 유지 → 자동매칭에서 계속 제외(사람이 확정).
+export async function approveSplitAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("invoiceId") ?? "");
+  if (!id) return;
+  const inv = await prisma.invoice.findUnique({
+    where: { id },
+    select: { userId: true, date: true, total: true, status: true, splitRequested: true },
+  });
+  if (!inv || inv.status !== "ISSUED" || !inv.splitRequested) return;
+  await prisma.$transaction([
+    prisma.invoice.update({ where: { id }, data: { splitApprovedAt: new Date() } }),
+    prisma.user.update({ where: { id: inv.userId }, data: { orderUnlock: true } }),
+  ]);
+  await writeAudit({
+    action: "invoice.splitApprove",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "invoice",
+    targetId: id,
+    summary: `분할 입금 승인 · ${inv.date} · ${inv.total.toLocaleString("ko-KR")}원 (발주잠금 해제)`,
+  });
+  await notifyMerchantSplitApproved(inv.userId, inv.date);
+  revalidatePath("/admin/deposits");
+  revalidatePath(`/admin/deposits/${inv.userId}`);
+  revalidatePath(`/order/day/${inv.date}`);
+  revalidatePath("/admin");
+}
+
+// 분할 입금 반려(관리자) — 요청 취소. 전액 입금 안내 + 점주 알림. 자동매칭 재개.
+export async function rejectSplitAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("invoiceId") ?? "");
+  if (!id) return;
+  const inv = await prisma.invoice.findUnique({
+    where: { id },
+    select: { userId: true, date: true, total: true, splitRequested: true },
+  });
+  if (!inv || !inv.splitRequested) return;
+  await prisma.invoice.update({
+    where: { id },
+    data: { splitRequested: false, splitRequestedAt: null, splitApprovedAt: null },
+  });
+  await writeAudit({
+    action: "invoice.splitReject",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "invoice",
+    targetId: id,
+    summary: `분할 입금 반려 · ${inv.date} · ${inv.total.toLocaleString("ko-KR")}원`,
+  });
+  await notifyMerchantSplitRejected(inv.userId, inv.date);
+  revalidatePath("/admin/deposits");
+  revalidatePath(`/admin/deposits/${inv.userId}`);
+  revalidatePath(`/order/day/${inv.date}`);
   revalidatePath("/admin");
 }
 

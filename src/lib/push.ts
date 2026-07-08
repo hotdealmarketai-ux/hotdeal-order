@@ -153,6 +153,32 @@ export async function notifyMerchantInvoiceOverdue(
   }
 }
 
+// 점주에게 '분할 입금 승인' 알림
+export async function notifyMerchantSplitApproved(userId: string, date: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "분할 입금이 승인되었습니다.",
+      body: "",
+      url: `/order/day/${date}?view=invoice`,
+    });
+  } catch (err) {
+    logError("push.notifyMerchantSplitApproved", err, { userId, date });
+  }
+}
+
+// 점주에게 '분할 입금 반려' 알림
+export async function notifyMerchantSplitRejected(userId: string, date: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "분할 입금 요청이 반려되었습니다. 전액 입금 부탁드려요.",
+      body: "",
+      url: `/order/day/${date}?view=invoice`,
+    });
+  } catch (err) {
+    logError("push.notifyMerchantSplitRejected", err, { userId, date });
+  }
+}
+
 // 관리자가 지점 발주를 전체 취소했을 때 점주에게 알림
 export async function notifyMerchantOrdersCancelled(userId: string) {
   try {
