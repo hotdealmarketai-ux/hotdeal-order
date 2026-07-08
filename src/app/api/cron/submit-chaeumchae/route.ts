@@ -4,6 +4,7 @@ import { submitChaeumchae, type SubmitItem } from "@/lib/chaeumchae-submit";
 import { sendPushToRole } from "@/lib/push";
 import { currentWindowStartUtc } from "@/lib/schedule";
 import { kstDateOf } from "@/lib/date";
+import { logError } from "@/lib/log";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -12,15 +13,14 @@ async function alertAdmin() {
     title: "채움채 발주에 실패하였습니다.",
     body: "",
     url: "/admin",
-  }).catch(() => {});
+  }).catch((e) => logError("cron.chaeumchae.alertAdmin", e));
 }
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   const url = new URL(request.url);
   const auth = request.headers.get("authorization");
-  const qsecret = url.searchParams.get("secret");
-  if (!secret || (auth !== `Bearer ${secret}` && qsecret !== secret)) {
+  if (!secret || auth !== `Bearer ${secret}`) {
     return new Response("forbidden", { status: 403 });
   }
 
@@ -73,7 +73,14 @@ export async function GET(request: Request) {
   try {
     const results = await submitChaeumchae(orderDay, items);
     const failed = results.filter((r) => r.result === "ERR");
-    if (failed.length > 0) await alertAdmin();
+    if (failed.length > 0) {
+      logError("cron.chaeumchae.itemsFailed", new Error("일부 채움채 자동제출 실패"), {
+        orderDay,
+        failedCount: failed.length,
+        total: results.length,
+      });
+      await alertAdmin();
+    }
     return Response.json({
       ok: failed.length === 0,
       submitted: true,
@@ -82,7 +89,7 @@ export async function GET(request: Request) {
       unmapped,
     });
   } catch (err) {
-    console.error("[chaeumchae] submit failed:", err);
+    logError("cron.chaeumchae.submit", err, { orderDay, items: items.length });
     await alertAdmin();
     return Response.json(
       { ok: false, error: String(err), orderDay },

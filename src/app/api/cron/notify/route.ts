@@ -31,8 +31,7 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   const url = new URL(request.url);
   const auth = request.headers.get("authorization");
-  const qsecret = url.searchParams.get("secret");
-  if (!secret || (auth !== `Bearer ${secret}` && qsecret !== secret)) {
+  if (!secret || auth !== `Bearer ${secret}`) {
     return new Response("forbidden", { status: 403 });
   }
 

@@ -1,6 +1,7 @@
 // 웹푸시 발송(서버 전용). 비공개키 없으면 조용히 무시(앱 동작에 영향 없음).
 import { prisma } from "@/lib/prisma";
 import { VAPID_PUBLIC_KEY } from "@/lib/vapid";
+import { logError } from "@/lib/log";
 import type { Role } from "@/lib/constants";
 
 const VAPID_SUBJECT = "mailto:hotdealmarketai@gmail.com";
@@ -39,7 +40,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
             .delete({ where: { endpoint: s.endpoint } })
             .catch(() => {});
         } else {
-          console.error("[push] send failed:", code);
+          logError("push.send", err, { userId, endpoint: s.endpoint, status: code });
         }
       }
     }),

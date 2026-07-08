@@ -1,4 +1,5 @@
 import { collectDeposits } from "@/lib/bank";
+import { logError } from "@/lib/log";
 
 export const maxDuration = 60; // 팝빌 수집 대기 포함
 
@@ -7,8 +8,7 @@ export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   const url = new URL(request.url);
   const auth = request.headers.get("authorization");
-  const qsecret = url.searchParams.get("secret");
-  if (!secret || (auth !== `Bearer ${secret}` && qsecret !== secret)) {
+  if (!secret || auth !== `Bearer ${secret}`) {
     return new Response("forbidden", { status: 403 });
   }
 
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     if (msg.includes("미설정")) {
       return Response.json({ ok: false, skipped: true, reason: msg });
     }
-    console.error("[bank] collect failed:", err);
+    logError("cron.bank.collect", err);
     return Response.json({ ok: false, error: msg }, { status: 500 });
   }
 }
