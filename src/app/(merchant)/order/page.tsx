@@ -17,7 +17,7 @@ import {
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
 import { kstDateOf, labelDate } from "@/lib/date";
-import { orderLockOf } from "@/lib/receivable";
+import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import { PushToggle } from "@/components/PushToggle";
@@ -29,6 +29,8 @@ export default async function OrderPage() {
 
   // 1일 미수 잠금 — 지난 날짜 미입금 계산서가 있으면 발주 잠금(관리자 해제 시 예외)
   const receivableLock = await orderLockOf(user.id, user.orderUnlock);
+  // 현재 미수 요약(발행·미입금 계산서 전체) — 발주 화면 상단 카드로 노출
+  const receivable = await receivableOf(user.id);
 
   // 가맹점: 이번 발주 창에 이미 넣은 발주가 있으면 새 발주는 잠그고 수정만
   let existingOrderDate: string | null = null;
@@ -57,6 +59,28 @@ export default async function OrderPage() {
         {windowed && <DeadlineCountdown deadlineLabel={ORDER_DEADLINE_LABEL} />}
       </Topbar>
       <div className="page">
+        {receivable.balance > 0 && (
+          <Link
+            href="/mypage"
+            className="card"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              marginBottom: 16,
+              textDecoration: "none",
+              color: "inherit",
+            }}
+          >
+            <span style={{ color: "var(--muted)" }}>
+              현재 미수 · {receivable.count}건
+            </span>
+            <span style={{ fontWeight: 800, color: "var(--black)" }}>
+              {receivable.balance.toLocaleString("ko-KR")}원 ›
+            </span>
+          </Link>
+        )}
         {receivableLock.locked ? (
           <>
             <h1 className="h1">발주하기</h1>

@@ -1,0 +1,23 @@
+name: invoice-overdue
+
+# 입금 기한 안내 (KST = UTC+9)
+#  - 0 1 * * *  → 10:00 KST  매일 1회. 발행 후 N일(기본 2일) 지난 미입금 계산서에 안내 푸시.
+on:
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "발행 후 며칠 지난 미입금을 대상으로 할지 (기본 2)"
+        required: false
+        default: "2"
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send overdue reminders
+        run: |
+          curl -fsS \
+            "https://hotdeal-order-jet.vercel.app/api/cron/invoice-overdue?days=${{ github.event.inputs.days || '2' }}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

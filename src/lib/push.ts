@@ -136,6 +136,23 @@ export async function notifyMerchantInvoicePaid(
   }
 }
 
+// 점주에게 '입금 기한 안내(미입금)' 알림 — 계산서 발행 후 N일 지나도 미입금일 때
+export async function notifyMerchantInvoiceOverdue(
+  userId: string,
+  date: string,
+  total: number,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: `${total.toLocaleString("ko-KR")}원 입금이 아직 확인되지 않았습니다.`,
+      body: "",
+      url: `/order/day/${date}?view=invoice`,
+    });
+  } catch (err) {
+    logError("push.notifyMerchantInvoiceOverdue", err, { userId, date });
+  }
+}
+
 // 관리자가 지점 발주를 전체 취소했을 때 점주에게 알림
 export async function notifyMerchantOrdersCancelled(userId: string) {
   try {
