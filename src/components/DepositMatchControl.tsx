@@ -9,27 +9,53 @@ import { SubmitButton } from "./SubmitButton";
 
 type StoreOpt = { id: string; label: string };
 
-// 미매칭 입금 1건을 관리자가 점포로 수동 매칭하거나 '무시' 처리
+// 미매칭 입금 1건을 관리자가 점포로 수동 매칭하거나 '무시' 처리.
+// suggestion 이 있으면 '한 번에 매칭' 버튼(제안 점포)을 함께 노출.
 export function DepositMatchControl({
   depositId,
   payerName,
   stores,
+  suggestion,
 }: {
   depositId: string;
   payerName: string;
   stores: StoreOpt[];
+  suggestion?: { userId: string; storeName: string; reason: string };
 }) {
   const [open, setOpen] = useState(false);
 
   if (!open) {
     return (
-      <button
-        type="button"
-        className="btn btn--xs btn--soft"
-        onClick={() => setOpen(true)}
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          flexWrap: "wrap",
+          justifyContent: "flex-end",
+        }}
       >
-        매칭
-      </button>
+        {suggestion && (
+          <form action={matchDepositManuallyAction}>
+            <input type="hidden" name="depositId" value={depositId} />
+            <input type="hidden" name="userId" value={suggestion.userId} />
+            <input type="hidden" name="remember" value="true" />
+            <SubmitButton
+              className="btn btn--xs btn--primary"
+              pendingText="처리 중…"
+            >
+              → {suggestion.storeName}
+            </SubmitButton>
+          </form>
+        )}
+        <button
+          type="button"
+          className="btn btn--xs btn--soft"
+          onClick={() => setOpen(true)}
+        >
+          {suggestion ? "다른 점포" : "매칭"}
+        </button>
+      </div>
     );
   }
 

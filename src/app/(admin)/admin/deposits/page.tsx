@@ -7,6 +7,7 @@ import { DepositMatchControl } from "@/components/DepositMatchControl";
 import { lastBankSyncAt } from "@/lib/bank";
 import { SubmitButton } from "@/components/SubmitButton";
 import { approveSplitAction, rejectSplitAction } from "@/app/actions/invoice";
+import { suggestStoresForDeposits } from "@/lib/deposit-suggest";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -84,6 +85,11 @@ export default async function AdminDeposits() {
     orderBy: { storeName: "asc" },
   });
   const storeOpts = merchants.map((m) => ({ id: m.id, label: m.storeName }));
+
+  // 미매칭 입금 → 점포 자동 제안(유일하게 특정될 때만)
+  const suggestions = await suggestStoresForDeposits(
+    unmatched.map((d) => ({ id: d.id, payerName: d.payerName, amount: d.amount })),
+  );
 
   return (
     <>
@@ -183,12 +189,20 @@ export default async function AdminDeposits() {
                       <div className="row__title">
                         {d.payerName || "(입금자명 없음)"} · {fmt(d.amount)}원
                       </div>
-                      <div className="row__sub">{formatKDateTime(d.txAt)}</div>
+                      <div className="row__sub">
+                        {formatKDateTime(d.txAt)}
+                        {suggestions.get(d.id) && (
+                          <span style={{ color: "var(--black)", marginLeft: 6 }}>
+                            · 제안: {suggestions.get(d.id)!.reason}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <DepositMatchControl
                       depositId={d.id}
                       payerName={d.payerName}
                       stores={storeOpts}
+                      suggestion={suggestions.get(d.id)}
                     />
                   </div>
                 </div>
