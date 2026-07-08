@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireMerchant } from "@/lib/session";
+import { writeAudit } from "@/lib/audit";
 import {
   CATEGORY_ORDER,
   isMerchant,
@@ -179,7 +180,7 @@ export async function saveInvoiceAction(
 // 발행된 계산서 취소(VOID) — 되돌릴 수 없음, 재작성은 합본 발주서에서
 // (모든 상태 전이는 updateMany + status 조건으로 '쓰기 시점'에 가드 — 동시 클릭 레이스 차단)
 export async function voidInvoiceAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const id = String(formData.get("invoiceId") ?? "");
   if (!id || String(formData.get("confirm") ?? "") !== "VOID-INVOICE") return;
   const upd = await prisma.invoice.updateMany({
@@ -190,6 +191,14 @@ export async function voidInvoiceAction(formData: FormData) {
   const inv = await prisma.invoice.findUnique({
     where: { id },
     select: { userId: true, date: true },
+  });
+  await writeAudit({
+    action: "invoice.void",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "invoice",
+    targetId: id,
+    summary: `계산서 취소(VOID) · ${inv?.date ?? ""}`,
   });
   revalidatePath("/admin/invoices");
   revalidatePath(`/admin/invoices/${id}`);

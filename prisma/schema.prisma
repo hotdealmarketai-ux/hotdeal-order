@@ -178,3 +178,20 @@ model Deposit {
   @@index([matchedUserId])
   @@index([appliedInvoiceId])
 }
+
+// 감사 로그 — 관리자의 파괴적 작업(회원삭제·발주 초기화·발주 취소·계산서 취소/입금취소 등) 추적.
+// 삭제 계열은 snapshot에 삭제된 데이터 요약(JSON)을 남겨 사후 확인/복구 참고가 가능하게 한다.
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String // member.delete | orders.resetAll | orders.cancelStore | invoice.void | invoice.unpay | order.unlock ...
+  actorId    String // 실행한 관리자 id
+  actorName  String   @default("") // 실행 관리자 상호/이름(사후 표시용, 비정규화 스냅샷)
+  targetType String   @default("") // user | order | invoice | store ...
+  targetId   String   @default("") // 대상 식별자
+  summary    String   @default("") // 사람이 읽는 한 줄 요약
+  snapshot   String? // 복구 참고용 JSON 스냅샷(삭제 등에서 사용)
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action, createdAt])
+}

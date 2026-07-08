@@ -40,6 +40,7 @@ export default async function AdminHome() {
     { href: "/admin/hotdeal", title: "핫딜마켓 발주관리", sub: `${hotdealOrders}건` },
     { href: "/admin/deposits", title: "입금 관리", sub: "오늘 입금 현황" },
     { href: "/admin/inventory", title: "재고", sub: "" },
+    { href: "/admin/audit", title: "감사 로그", sub: "관리자 작업 이력(삭제·취소·초기화)" },
   ];
 
   return (

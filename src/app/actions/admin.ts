@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { kstDayRange } from "@/lib/date";
 import { notifyMerchantOrdersCancelled } from "@/lib/push";
+import { writeAudit } from "@/lib/audit";
 import {
   ALL_ROLES,
   ASSIGNABLE_MERCHANT_ROLES,
@@ -80,10 +81,31 @@ export async function deleteMemberAction(formData: FormData) {
   const admin = await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
   if (!userId || userId === admin.id) return; // 본인 삭제 금지
+
+  // 삭제 전 스냅샷(복구 참고용) — 회원 요약 + 함께 지워질 발주 건수
+  const victim = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true, username: true, storeName: true, phone: true, address: true,
+      role: true, status: true, payerNames: true, createdAt: true,
+      _count: { select: { orders: true } },
+    },
+  });
+  if (!victim) return; // 이미 없는 회원
+
   await prisma.$transaction([
     prisma.order.deleteMany({ where: { userId } }),
     prisma.user.delete({ where: { id: userId } }),
   ]);
+  await writeAudit({
+    action: "member.delete",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "user",
+    targetId: userId,
+    summary: `회원 삭제: ${victim.storeName}(${victim.username}) · 발주 ${victim._count.orders}건 함께 삭제`,
+    snapshot: victim,
+  });
   revalidatePath("/admin/members");
   redirect("/admin/members");
 }
@@ -166,9 +188,16 @@ export async function deleteInventoryAction(formData: FormData) {
 // 전체 발주 초기화 — 관리자 전용. 모든 Order 삭제(OrderItem은 Cascade).
 // 회원·재고는 유지. 실수 방지를 위해 확인 토큰 필요.
 export async function resetAllOrdersAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   if (String(formData.get("confirm") ?? "") !== "RESET-ALL-ORDERS") return;
   const res = await prisma.order.deleteMany({});
+  await writeAudit({
+    action: "orders.resetAll",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "order",
+    summary: `발주 전체 초기화 · ${res.count}건 삭제`,
+  });
   revalidatePath("/admin");
   revalidatePath("/admin/orders");
   revalidatePath("/admin/hotdeal");
@@ -184,7 +213,7 @@ export async function cancelStoreOrdersAction(
   _prev: CancelOrdersState,
   formData: FormData,
 ): Promise<CancelOrdersState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   if (String(formData.get("confirm") ?? "") !== "CANCEL-STORE-ORDERS") return {};
   const userId = String(formData.get("userId") ?? "");
   const date = String(formData.get("date") ?? "");
@@ -195,6 +224,14 @@ export async function cancelStoreOrdersAction(
     where: { userId, createdAt: { gte: start, lt: end } },
   });
   if (res.count > 0) {
+    await writeAudit({
+      action: "orders.cancelStore",
+      actorId: admin.id,
+      actorName: admin.storeName,
+      targetType: "store",
+      targetId: userId,
+      summary: `지점 발주 취소 · ${date} · ${res.count}건`,
+    });
     await notifyMerchantOrdersCancelled(userId);
   }
 
