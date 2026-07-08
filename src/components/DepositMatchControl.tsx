@@ -20,7 +20,12 @@ export function DepositMatchControl({
   depositId: string;
   payerName: string;
   stores: StoreOpt[];
-  suggestion?: { userId: string; storeName: string; reason: string };
+  suggestion?: {
+    userId: string;
+    storeName: string;
+    reason: string;
+    remember: boolean;
+  };
 }) {
   const [open, setOpen] = useState(false);
 
@@ -39,7 +44,9 @@ export function DepositMatchControl({
           <form action={matchDepositManuallyAction}>
             <input type="hidden" name="depositId" value={depositId} />
             <input type="hidden" name="userId" value={suggestion.userId} />
-            <input type="hidden" name="remember" value="true" />
+            {suggestion.remember && (
+              <input type="hidden" name="remember" value="true" />
+            )}
             <SubmitButton
               className="btn btn--xs btn--primary"
               pendingText="처리 중…"

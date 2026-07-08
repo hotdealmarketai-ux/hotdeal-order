@@ -327,13 +327,16 @@ export async function approveSplitAction(formData: FormData) {
   if (!id) return;
   const inv = await prisma.invoice.findUnique({
     where: { id },
-    select: { userId: true, date: true, total: true, status: true, splitRequested: true },
+    select: { userId: true, date: true, total: true },
   });
-  if (!inv || inv.status !== "ISSUED" || !inv.splitRequested) return;
-  await prisma.$transaction([
-    prisma.invoice.update({ where: { id }, data: { splitApprovedAt: new Date() } }),
-    prisma.user.update({ where: { id: inv.userId }, data: { orderUnlock: true } }),
-  ]);
+  if (!inv) return;
+  // 쓰기 시점 가드 — ISSUED + 분할요청일 때만 승인(경합/취소/완납 전이 시 count 0 → 중단)
+  const upd = await prisma.invoice.updateMany({
+    where: { id, status: "ISSUED", splitRequested: true },
+    data: { splitApprovedAt: new Date() },
+  });
+  if (upd.count === 0) return;
+  await prisma.user.update({ where: { id: inv.userId }, data: { orderUnlock: true } });
   await writeAudit({
     action: "invoice.splitApprove",
     actorId: admin.id,
@@ -356,13 +359,16 @@ export async function rejectSplitAction(formData: FormData) {
   if (!id) return;
   const inv = await prisma.invoice.findUnique({
     where: { id },
-    select: { userId: true, date: true, total: true, splitRequested: true },
+    select: { userId: true, date: true, total: true },
   });
-  if (!inv || !inv.splitRequested) return;
-  await prisma.invoice.update({
-    where: { id },
+  if (!inv) return;
+  const upd = await prisma.invoice.updateMany({
+    where: { id, splitRequested: true },
     data: { splitRequested: false, splitRequestedAt: null, splitApprovedAt: null },
   });
+  if (upd.count === 0) return;
+  // 승인 때 풀린 발주잠금 원복(반려 취지 = 전액 입금 요구). 다건 분할이면 관리자가 재확인.
+  await prisma.user.update({ where: { id: inv.userId }, data: { orderUnlock: false } });
   await writeAudit({
     action: "invoice.splitReject",
     actorId: admin.id,

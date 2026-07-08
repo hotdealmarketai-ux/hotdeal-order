@@ -135,6 +135,8 @@ model Invoice {
   issuedAt DateTime?
   paidAt   DateTime?
   voidedAt DateTime?
+  // 입금 기한 안내 푸시를 보낸 시각(멱등 마커 — 중복/반복 발송 방지)
+  overdueRemindedAt DateTime?
 
   items     InvoiceItem[]
   createdAt DateTime      @default(now())

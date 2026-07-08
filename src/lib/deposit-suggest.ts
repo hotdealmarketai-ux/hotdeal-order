@@ -6,6 +6,7 @@ export type DepositSuggestion = {
   userId: string;
   storeName: string;
   reason: string;
+  remember: boolean; // 이 제안으로 매칭 시 입금자명 학습 여부(이름 기반만 true)
 };
 
 const norm = (s: string) => (s ?? "").replace(/\s+/g, "").toLowerCase();
@@ -25,7 +26,7 @@ export async function suggestStoresForDeposits(
       select: { id: true, storeName: true, payerNames: true },
     }),
     prisma.invoice.findMany({
-      where: { status: "ISSUED" },
+      where: { status: "ISSUED", splitRequested: false },
       select: { userId: true, total: true },
     }),
   ]);
@@ -48,7 +49,7 @@ export async function suggestStoresForDeposits(
         if (
           m.payerNames.some((p) => {
             const np = norm(p);
-            return np.length >= 2 && (dp.includes(np) || np.includes(dp));
+            return np.length >= 3 && (dp.includes(np) || np.includes(dp));
           })
         ) {
           nameCandidates.add(m.id);
@@ -60,24 +61,33 @@ export async function suggestStoresForDeposits(
     const amtUsers = amountToUsers.get(d.amount);
 
     // 결정: 이름 유일(+금액도 맞으면 확신) > 금액 유일
-    let pick: { userId: string; reason: string } | null = null;
+    let pick: { userId: string; reason: string; remember: boolean } | null = null;
     if (nameCandidates.size === 1) {
       const uid = [...nameCandidates][0];
+      // 이름 기반 제안만 입금자명 학습 허용
       pick = {
         userId: uid,
         reason: amtUsers?.has(uid) ? "입금자명·금액 일치" : "입금자명 유사",
+        remember: true,
       };
     } else if (amtUsers && amtUsers.size === 1) {
+      // 금액만 우연히 일치 → 입금자명은 학습하지 않음(오토매칭 오염 방지)
       pick = {
         userId: [...amtUsers][0],
         reason: `미입금 ${d.amount.toLocaleString("ko-KR")}원 일치`,
+        remember: false,
       };
     }
 
     if (pick) {
       const storeName = nameById.get(pick.userId);
       if (storeName) {
-        out.set(d.id, { userId: pick.userId, storeName, reason: pick.reason });
+        out.set(d.id, {
+          userId: pick.userId,
+          storeName,
+          reason: pick.reason,
+          remember: pick.remember,
+        });
       }
     }
   }
