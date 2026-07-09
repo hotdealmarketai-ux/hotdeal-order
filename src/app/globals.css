@@ -1121,6 +1121,45 @@ a {
   }
 }
 
+/* ---- 로딩 스켈레톤 ---- */
+@keyframes sk-shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: calc(200px + 100%) 0;
+  }
+}
+.sk {
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    #f6f8fc 37%,
+    var(--surface-2) 63%
+  );
+  background-size: 200px 100%;
+  animation: sk-shimmer 1.15s ease-in-out infinite;
+}
+.sk--title {
+  height: 24px;
+  width: 42%;
+  margin: 6px 0 18px;
+}
+.sk--line {
+  height: 14px;
+  margin: 8px 0;
+}
+.sk--row {
+  height: 64px;
+  margin-bottom: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk {
+    animation: none;
+  }
+}
+
 /* ---- 날짜 선택 바 (업자 발주 목록) ---- */
 .datebar {
   display: flex;
