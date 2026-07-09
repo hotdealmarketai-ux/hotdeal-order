@@ -3,8 +3,10 @@ name: invoice-overdue
 # 입금 기한 안내 (KST = UTC+9)
 #  - 0 1 * * *  → 10:00 KST  매일 1회. 발행 다음날(기본 1일) 미입금 계산서에 안내 푸시.
 on:
-  schedule:
-    - cron: "0 1 * * *"
+  # 스케줄 비활성화 — 연체 안내는 cron-job.org → /api/cron/tick 디스패처(10:00 KST)가 담당(2026-07-09).
+  # 백업 복구가 필요하면 아래 주석 해제.
+  # schedule:
+  #   - cron: "0 1 * * *"
   workflow_dispatch:
     inputs:
       days:

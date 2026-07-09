@@ -2,8 +2,10 @@ name: chaeumchae-submit
 
 # 채움채 자동 발주 — 마감 5분 뒤 20:05 KST (= 11:05 UTC), 마감이 있는 날(월~금·일)
 on:
-  schedule:
-    - cron: "5 11 * * 0-5"
+  # 스케줄 비활성화 — 채움채 자동제출은 cron-job.org → /api/cron/tick 디스패처(20:05 KST)가 담당(2026-07-09).
+  # 백업 복구가 필요하면 아래 주석 해제.
+  # schedule:
+  #   - cron: "5 11 * * 0-5"
   workflow_dispatch:
     inputs:
       dryrun:

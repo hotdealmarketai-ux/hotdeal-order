@@ -3,8 +3,10 @@
 name: bank-collect
 
 on:
-  schedule:
-    - cron: "*/10 * * * *" # 10분 간격 (UTC 기준이지만 간격이라 무관)
+  # 스케줄 비활성화 — 입금수집은 cron-job.org → /api/cron/tick 디스패처(10분 주기)가 담당(2026-07-09).
+  # 백업 복구가 필요하면 아래 주석 해제.
+  # schedule:
+  #   - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:
       days:

@@ -5,10 +5,12 @@ name: order-notify
 #  - 0 11 * * 0-5  → 20:00 KST  발주 마감 (월~금, 일)
 #  - 0 3  * * 1-6  → 12:00 KST  발주 시작 (월~토)
 on:
-  schedule:
-    - cron: "0 10 * * 0-5"
-    - cron: "0 11 * * 0-5"
-    - cron: "0 3 * * 1-6"
+  # 스케줄 비활성화 — 정시 발송은 cron-job.org → /api/cron/tick 디스패처가 담당(2026-07-09).
+  # 백업 복구가 필요하면 아래 3줄 주석 해제.
+  # schedule:
+  #   - cron: "0 10 * * 0-5"
+  #   - cron: "0 11 * * 0-5"
+  #   - cron: "0 3 * * 1-6"
   workflow_dispatch:
     inputs:
       type:
