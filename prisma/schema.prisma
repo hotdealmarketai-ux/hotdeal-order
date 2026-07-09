@@ -29,8 +29,10 @@ model User {
 
   // 입금 자동매칭용 — 이 점포가 입금 시 통장에 찍히는 예금주/입금자명(가입 시 입력, 여러 개)
   payerNames   String[] @default([])
-  // 1일 미수 잠금 해제(관리자가 임의 출고 시) — 미납 계산서가 있어도 발주 허용
+  // 미수 잠금 1회성 해제(관리자가 임의 출고 시) — 미납 계산서가 있어도 발주 허용
   orderUnlock  Boolean  @default(false)
+  // 해제한 시각 — 그 '발주창'에만 유효(1회성). 다음 창엔 미수가 남아있으면 다시 잠긴다.
+  orderUnlockAt DateTime?
 
   orders          Order[]
   pushSubs        PushSubscription[]

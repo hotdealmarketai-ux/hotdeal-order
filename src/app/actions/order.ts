@@ -121,7 +121,7 @@ export async function createOrderAction(
   }
 
   // 1일 미수 잠금 — 지난 미입금 계산서가 있으면 서버에서도 차단(UI 우회 방지)
-  const lock = await orderLockOf(user.id, user.orderUnlock);
+  const lock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
   if (lock.locked) {
     return { error: "지난 발주가 결제되지 않아 발주가 잠겨 있어요. 입금 확인 후 가능해요." };
   }
@@ -263,7 +263,7 @@ export async function updateOrderAction(
   }
 
   // 1일 미수 잠금 — 미입금 상태면 수정도 차단(서버 강제)
-  const lock = await orderLockOf(user.id, user.orderUnlock);
+  const lock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
   if (lock.locked) {
     return { error: "지난 발주가 결제되지 않아 잠겨 있어요. 입금 확인 후 가능해요." };
   }

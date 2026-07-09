@@ -336,14 +336,14 @@ export async function approveSplitAction(formData: FormData) {
     data: { splitApprovedAt: new Date() },
   });
   if (upd.count === 0) return;
-  await prisma.user.update({ where: { id: inv.userId }, data: { orderUnlock: true } });
+  // 승인은 '나눠 입금 허용' 통지·기록만. 발주 잠금은 자동으로 풀지 않는다(관리자 수동 해제).
   await writeAudit({
     action: "invoice.splitApprove",
     actorId: admin.id,
     actorName: admin.storeName,
     targetType: "invoice",
     targetId: id,
-    summary: `분할 입금 승인 · ${inv.date} · ${inv.total.toLocaleString("ko-KR")}원 (발주잠금 해제)`,
+    summary: `분할 입금 승인 · ${inv.date} · ${inv.total.toLocaleString("ko-KR")}원`,
   });
   await notifyMerchantSplitApproved(inv.userId, inv.date);
   revalidatePath("/admin/deposits");
@@ -367,8 +367,7 @@ export async function rejectSplitAction(formData: FormData) {
     data: { splitRequested: false, splitRequestedAt: null, splitApprovedAt: null },
   });
   if (upd.count === 0) return;
-  // 승인 때 풀린 발주잠금 원복(반려 취지 = 전액 입금 요구). 다건 분할이면 관리자가 재확인.
-  await prisma.user.update({ where: { id: inv.userId }, data: { orderUnlock: false } });
+  // 반려는 요청 취소·통지·기록만. 발주 잠금은 건드리지 않는다(수동 해제와 독립).
   await writeAudit({
     action: "invoice.splitReject",
     actorId: admin.id,

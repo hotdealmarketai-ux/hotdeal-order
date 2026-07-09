@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { formatKDateTime, formatKDate } from "@/lib/format";
 import { labelDate } from "@/lib/date";
 import { receivableOf, orderLockOf } from "@/lib/receivable";
+import { currentWindowStartUtc } from "@/lib/deadline";
 import { setOrderUnlockAction } from "@/app/actions/deposit";
 import { ManualPayButton } from "@/components/ManualPayButton";
 
@@ -65,8 +66,14 @@ export default async function AdminDepositStore(props: {
       },
     }),
     receivableOf(userId),
-    orderLockOf(userId, user.orderUnlock),
+    orderLockOf(userId, user.orderUnlock, user.orderUnlockAt),
   ]);
+
+  // 수동 해제가 '이번 발주창'에 유효한지(1회성). 창이 지나면 stale → 해제 아님.
+  const unlockedThisWindow =
+    user.orderUnlock &&
+    !!user.orderUnlockAt &&
+    user.orderUnlockAt >= new Date(currentWindowStartUtc());
 
   const totalBilled = invoices.reduce((n, i) => n + i.total, 0);
   const totalPaid = deposits.reduce((n, d) => n + d.amount, 0);
@@ -127,7 +134,7 @@ export default async function AdminDepositStore(props: {
               className={`badge ${
                 lock.locked
                   ? "badge--danger"
-                  : user.orderUnlock
+                  : unlockedThisWindow
                     ? "badge--wait"
                     : "badge--ok"
               }`}
@@ -135,8 +142,8 @@ export default async function AdminDepositStore(props: {
             >
               {lock.locked
                 ? "발주 잠김"
-                : user.orderUnlock
-                  ? "발주 잠금 해제됨"
+                : unlockedThisWindow
+                  ? "이번 발주창 해제"
                   : "발주 정상"}
             </span>
             <form action={setOrderUnlockAction} style={{ margin: 0 }}>
@@ -144,14 +151,14 @@ export default async function AdminDepositStore(props: {
               <input
                 type="hidden"
                 name="unlock"
-                value={user.orderUnlock ? "false" : "true"}
+                value={unlockedThisWindow ? "false" : "true"}
               />
               <button
                 type="submit"
                 className="btn btn--xs btn--soft"
                 style={{ minHeight: 36 }}
               >
-                {user.orderUnlock ? "발주 다시 잠금" : "발주 잠금 해제"}
+                {unlockedThisWindow ? "발주 다시 잠금" : "발주 1회 잠금 해제"}
               </button>
             </form>
           </div>

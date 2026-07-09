@@ -28,7 +28,7 @@ export default async function OrderPage() {
   const open = !windowed || isOrderOpen();
 
   // 1일 미수 잠금 — 지난 날짜 미입금 계산서가 있으면 발주 잠금(관리자 해제 시 예외)
-  const receivableLock = await orderLockOf(user.id, user.orderUnlock);
+  const receivableLock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
   // 현재 미수 요약(발행·미입금 계산서 전체) — 발주 화면 상단 카드로 노출
   const receivable = await receivableOf(user.id);
 

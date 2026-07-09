@@ -263,7 +263,7 @@ export async function clearOrderUnlockIfSettled(userId: string) {
   if (remaining === 0) {
     await prisma.user.updateMany({
       where: { id: userId, orderUnlock: true },
-      data: { orderUnlock: false },
+      data: { orderUnlock: false, orderUnlockAt: null },
     });
   }
 }

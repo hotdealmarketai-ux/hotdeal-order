@@ -3,7 +3,7 @@ import { notifyMerchantInvoiceOverdue } from "@/lib/push";
 import { logError } from "@/lib/log";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const OVERDUE_DAYS = 2; // 발행 후 N일 미입금이면 안내
+const OVERDUE_DAYS = 1; // 발행 다음날(발행일 결제 원칙) 미입금이면 안내
 const MAX_AGE_DAYS = 30; // 그보다 오래된 미입금은 안내 대상에서 제외(대량 발송 방지)
 
 // 입금 기한 안내 크론 — 매일 1회. 발행 후 N일 이상 지난 미입금(ISSUED, 비분할) 계산서에

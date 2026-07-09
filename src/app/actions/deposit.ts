@@ -96,9 +96,15 @@ export async function setOrderUnlockAction(formData: FormData) {
   const userId = String(formData.get("userId") ?? "");
   const unlock = formData.get("unlock") === "true";
   if (!userId) return;
-  await prisma.user.update({ where: { id: userId }, data: { orderUnlock: unlock } });
+  // 1회성 해제: 해제 시각을 기록 → orderLockOf가 '현재 발주창'에서만 인정, 다음 창엔 재잠금.
+  await prisma.user.update({
+    where: { id: userId },
+    data: { orderUnlock: unlock, orderUnlockAt: unlock ? new Date() : null },
+  });
   revalidatePath("/admin/deposits");
+  revalidatePath(`/admin/deposits/${userId}`);
   revalidatePath(`/admin/members/${userId}`);
+  revalidatePath("/order");
 }
 
 // 무시/해제 되돌리기 → 미매칭

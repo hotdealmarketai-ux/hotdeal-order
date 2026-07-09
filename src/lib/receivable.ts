@@ -17,19 +17,24 @@ export async function receivableOf(
 
 // 1일 미수 잠금: '이번 발주창 시작 이전' 날짜의 미입금 계산서가 있으면 이번 창 발주 잠금.
 // (주말 연속창(토12시~일20시) 안에서 발행된 건 같은 창이라 과잉 잠금하지 않음)
-// orderUnlock(관리자 임의 해제)이면 잠기지 않는다.
+// 수동 해제(orderUnlock)는 해제한 그 '발주창'에만 유효(1회성) — 다음 창엔 미수 남으면 다시 잠긴다.
 export async function orderLockOf(
   userId: string,
   orderUnlock: boolean,
+  orderUnlockAt?: Date | null,
 ): Promise<{ locked: boolean; unpaidDate: string | null; unpaidTotal: number }> {
-  const windowStartDate = kstDateOf(new Date(currentWindowStartUtc()));
+  const windowStart = new Date(currentWindowStartUtc());
+  // 해제가 '현재 발주창' 안에서 이뤄졌을 때만 인정(1회성). 창이 넘어가면 stale → 다시 잠금.
+  const unlockedThisWindow =
+    orderUnlock && !!orderUnlockAt && orderUnlockAt >= windowStart;
+  const windowStartDate = kstDateOf(windowStart);
   const past = await prisma.invoice.findFirst({
     where: { userId, status: "ISSUED", date: { lt: windowStartDate } },
     orderBy: { date: "asc" },
     select: { date: true, total: true },
   });
   return {
-    locked: !!past && !orderUnlock,
+    locked: !!past && !unlockedThisWindow,
     unpaidDate: past?.date ?? null,
     unpaidTotal: past?.total ?? 0,
   };
