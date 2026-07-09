@@ -1,4 +1,6 @@
 import { sendPushToRole } from "@/lib/push";
+import { prisma } from "@/lib/prisma";
+import { kstDateOf } from "@/lib/date";
 
 // 핫딜마켓 가맹점 대상 예약 알림.
 // 마감(20시)이 있는 날 = 월·화·수·목·금·일 / 발주 시작(정오)이 있는 날 = 월~토
@@ -44,10 +46,22 @@ export async function GET(request: Request) {
   const job = typeParam ? JOBS[typeParam] : pick(dow, h);
   if (!job) return Response.json({ ok: true, sent: false, dow, h });
 
+  // 멱등: 같은 종류를 같은 KST 날짜에 두 번 보내지 않음(디스패처+GH Actions 겹쳐도 안전)
+  const key = `notify:${job.type}:${kstDateOf(new Date(atMs))}`;
+  const already = await prisma.appMeta.findUnique({ where: { key } });
+  if (already) {
+    return Response.json({ ok: true, sent: false, dedup: true, type: job.type });
+  }
+
   await sendPushToRole("MERCHANT_HOTDEAL", {
     title: job.title,
     body: "",
     url: "/order",
+  });
+  await prisma.appMeta.upsert({
+    where: { key },
+    create: { key, syncedAt: new Date() },
+    update: { syncedAt: new Date() },
   });
   return Response.json({ ok: true, sent: true, type: job.type, dow, h });
 }

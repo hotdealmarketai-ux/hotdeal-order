@@ -70,6 +70,19 @@ export async function GET(request: Request) {
     return Response.json({ ok: true, dryrun: true, orderDay, items, unmapped });
   }
 
+  // 멱등: 같은 출고일엔 한 번만 제출(디스패처+GH Actions 동시 실행에도 중복 제출 방지).
+  // 원자적 claim(create) — 동시 두 호출 중 하나만 성공(@id 유니크). ?force=1 은 수동 재실행(claim 무시).
+  const force = url.searchParams.get("force") === "1";
+  const claimKey = `chaeumchae:${orderDay}`;
+  if (!force) {
+    try {
+      await prisma.appMeta.create({ data: { key: claimKey } });
+    } catch {
+      // 이미 claim됨(동시 실행 또는 이전에 제출 완료) → 스킵
+      return Response.json({ ok: true, submitted: false, dedup: true, orderDay });
+    }
+  }
+
   try {
     const results = await submitChaeumchae(orderDay, items);
     const failed = results.filter((r) => r.result === "ERR");
@@ -89,6 +102,10 @@ export async function GET(request: Request) {
       unmapped,
     });
   } catch (err) {
+    // 제출이 던진 실패(아무것도 안 나감) → claim 롤백해 다음 실행에서 재시도 가능하게(무음 유실 방지).
+    if (!force) {
+      await prisma.appMeta.deleteMany({ where: { key: claimKey } }).catch(() => {});
+    }
     logError("cron.chaeumchae.submit", err, { orderDay, items: items.length });
     await alertAdmin();
     return Response.json(

@@ -170,7 +170,7 @@ export async function notifyMerchantSplitApproved(userId: string, date: string) 
 export async function notifyMerchantSplitRejected(userId: string, date: string) {
   try {
     await sendPushToUser(userId, {
-      title: "분할 입금 요청이 반려되었습니다. 전액 입금 부탁드려요.",
+      title: "분할 입금 요청이 반려되었습니다. 전액 입금 요청드립니다.",
       body: "",
       url: `/order/day/${date}?view=invoice`,
     });

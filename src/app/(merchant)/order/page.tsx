@@ -85,7 +85,7 @@ export default async function OrderPage() {
           <>
             <h1 className="h1">발주하기</h1>
             <div className="notice notice--error" style={{ marginBottom: 16 }}>
-              <b>지난 발주가 결제되지 않았습니다.</b>
+              <b>지난 발주가 결제되지 않았습니다. 미수금 결제 부탁드립니다.</b>
               <br />
               {receivableLock.unpaidDate
                 ? `${labelDate(receivableLock.unpaidDate)} 입금요청서 ${receivableLock.unpaidTotal.toLocaleString("ko-KR")}원`
