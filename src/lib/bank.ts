@@ -217,6 +217,10 @@ export async function autoMatchDeposit(
       where: { id: dep.id },
       data: { appliedInvoiceId: paidId },
     });
+  } else {
+    // 자동확정 대상이 없으면, 관리자가 이미 '수동 입금확인'해 둔 계산서의 합성입금을
+    // 이 실입금으로 대체(이중계상 방지). 정확일치 없으면 그대로 미소진으로 남긴다.
+    await replaceManualPlaceholderWithReal(userId, dep.id);
   }
   return { storeMatched: true, invoicePaid: !!paidId };
 }
@@ -252,6 +256,41 @@ export async function tryAutoPayInvoice(
     return inv.id;
   }
   return null;
+}
+
+// 관리자가 실입금 도착 전에 '수동 입금확인'하면 합성입금(bankTid=manual-<invId>)이 생긴다.
+// 뒤늦게 진짜 입금이 수집되면, 금액이 딱 맞는 그 합성입금을 실입금으로 '대체'(합성 삭제 + 실입금 귀속)해
+// 통장 이중계상(합성+실입금 동시 존재)을 막는다. 정확일치일 때만 동작(보수적 — 버그#10).
+async function replaceManualPlaceholderWithReal(
+  userId: string,
+  depositId: string,
+): Promise<boolean> {
+  const dep = await prisma.deposit.findUnique({
+    where: { id: depositId },
+    select: { id: true, amount: true, appliedInvoiceId: true },
+  });
+  if (!dep || dep.appliedInvoiceId) return false;
+  // 이 점포의 수동확정(PAID·manualPaid) 계산서 중 금액이 딱 맞는 것.
+  const inv = await prisma.invoice.findFirst({
+    where: { userId, status: "PAID", manualPaid: true, total: dep.amount },
+    orderBy: { paidAt: "desc" },
+    select: { id: true },
+  });
+  if (!inv) return false;
+  const synth = await prisma.deposit.findUnique({
+    where: { bankTid: `manual-${inv.id}` },
+    select: { id: true, amount: true },
+  });
+  // 합성입금이 '전액 합성'(=계산서 total, 즉 실입금과 동일)일 때만 대체(부분충당은 손대지 않음).
+  if (!synth || synth.amount !== dep.amount) return false;
+  await prisma.$transaction([
+    prisma.deposit.delete({ where: { id: synth.id } }),
+    prisma.deposit.update({
+      where: { id: dep.id },
+      data: { appliedInvoiceId: inv.id },
+    }),
+  ]);
+  return true;
 }
 
 // 미수(ISSUED)가 모두 정산되면 관리자 임의 잠금해제(orderUnlock)를 자동으로 원복 —

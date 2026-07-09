@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { VENDOR_LABEL, type Role } from "@/lib/constants";
 import { normalizeDateStr, kstDayRange, labelDate, kstToday } from "@/lib/date";
 import { auctionReport } from "@/lib/ai";
+import { displayQty } from "@/lib/qty";
 
 export default async function VendorReport(props: {
   searchParams: Promise<{ date?: string }>;
@@ -75,7 +76,8 @@ async function ReportSection({
     o.items.map((it) => ({
       store: o.user.storeName,
       name: it.name || it.rawName,
-      qty: it.qty || it.rawQty,
+      // 폴백 원문에도 displayQty 적용 — '4다이'(등급)가 수량으로 되살아나는 사고 방지.
+      qty: it.qty || displayQty(it.rawQty),
       note: it.note || it.rawNote,
     })),
   );

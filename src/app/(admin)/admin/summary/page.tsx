@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { normalizeDateStr, kstDayRange, labelDate, kstToday } from "@/lib/date";
 import { aggregateOrders, type AggregateMode } from "@/lib/ai";
+import { displayQty } from "@/lib/qty";
 
 type ScopeDef = { label: string; where: Prisma.OrderWhereInput; mode: AggregateMode };
 const HOTDEAL = { user: { role: "MERCHANT_HOTDEAL" } } as const;
@@ -90,7 +91,8 @@ async function AggSection({
     o.items.map((it) => ({
       store: o.user.storeName,
       name: it.name || it.rawName,
-      qty: it.qty || it.rawQty,
+      // 폴백 원문에도 displayQty 적용 — '4다이'(등급)가 수량으로 되살아나 합산되는 사고 방지.
+      qty: it.qty || displayQty(it.rawQty),
       note: it.note || it.rawNote,
     })),
   );

@@ -6,6 +6,11 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { kstDayRange } from "@/lib/date";
+import {
+  currentWindowStartUtc,
+  currentDeadlineUtc,
+} from "@/lib/schedule";
+import { hasOrderWindow } from "@/lib/deadline";
 import { notifyMerchantOrdersCancelled } from "@/lib/push";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -219,7 +224,24 @@ export async function cancelStoreOrdersAction(
   const date = String(formData.get("date") ?? "");
   if (!userId || !date) return {};
 
-  const { start, end } = kstDayRange(date);
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  if (!target) return {};
+
+  // 취소 범위: 가맹점(발주창 있음)은 '발주창 단위'로 지운다. 주말 연속창(토12시~일20시)은
+  // KST 두 날짜에 걸쳐도 한 발주라 한 번에 취소(옛 버그#13: 하루만 지워 반쪽이 남아 채움채로 나감).
+  // 소매·벤더(창 없음)는 종전대로 그 날짜 하루만.
+  let start: Date;
+  let end: Date;
+  if (hasOrderWindow(target.role as Role)) {
+    const noonMs = new Date(`${date}T12:00:00+09:00`).getTime();
+    start = new Date(currentWindowStartUtc(noonMs));
+    end = new Date(currentDeadlineUtc(noonMs));
+  } else {
+    ({ start, end } = kstDayRange(date));
+  }
   const res = await prisma.order.deleteMany({
     where: { userId, createdAt: { gte: start, lt: end } },
   });

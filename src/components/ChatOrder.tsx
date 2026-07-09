@@ -319,6 +319,9 @@ export function ChatOrder({
 
           <form action={formAction}>
             <input type="hidden" name="payload" value={JSON.stringify(payload)} />
+            {/* 채팅 미리보기에서 이미 AI가 정리했고 점주가 확인·수정까지 마친 결과 →
+                서버가 저장 시 '재정규화'하지 않고 그대로 저장하도록 표시(승인=저장 보장, 버그 #3). */}
+            <input type="hidden" name="preNormalized" value="1" />
             {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
             <div className="confirm" style={{ marginTop: 16 }}>
               <div className="confirm__title">이대로 발주 넣으시겠습니까?</div>

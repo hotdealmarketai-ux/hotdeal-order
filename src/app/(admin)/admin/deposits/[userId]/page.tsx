@@ -5,8 +5,11 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatKDateTime, formatKDate } from "@/lib/format";
 import { labelDate } from "@/lib/date";
-import { receivableOf, orderLockOf } from "@/lib/receivable";
-import { currentWindowStartUtc } from "@/lib/deadline";
+import {
+  receivableOf,
+  orderLockOf,
+  isUnlockActiveThisWindow,
+} from "@/lib/receivable";
 import { setOrderUnlockAction } from "@/app/actions/deposit";
 import { ManualPayButton } from "@/components/ManualPayButton";
 
@@ -69,11 +72,11 @@ export default async function AdminDepositStore(props: {
     orderLockOf(userId, user.orderUnlock, user.orderUnlockAt),
   ]);
 
-  // 수동 해제가 '이번 발주창'에 유효한지(1회성). 창이 지나면 stale → 해제 아님.
-  const unlockedThisWindow =
-    user.orderUnlock &&
-    !!user.orderUnlockAt &&
-    user.orderUnlockAt >= new Date(currentWindowStartUtc());
+  // 수동 해제가 '이번 발주창'에 유효한지(1회성). orderLockOf와 동일한 창-키 판정 공유.
+  const unlockedThisWindow = isUnlockActiveThisWindow(
+    user.orderUnlock,
+    user.orderUnlockAt,
+  );
 
   const totalBilled = invoices.reduce((n, i) => n + i.total, 0);
   const totalPaid = deposits.reduce((n, d) => n + d.amount, 0);

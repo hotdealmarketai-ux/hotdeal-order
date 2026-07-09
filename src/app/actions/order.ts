@@ -18,6 +18,7 @@ import {
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
 import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
+import { currentWindowStartUtc } from "@/lib/schedule";
 import { displayQty } from "@/lib/qty";
 import { orderLockOf } from "@/lib/receivable";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
@@ -126,6 +127,23 @@ export async function createOrderAction(
     return { error: "지난 발주가 결제되지 않아 발주가 잠겨 있어요. 입금 확인 후 가능해요." };
   }
 
+  // 이번 발주 창에 이미 넣은 발주가 있으면(가맹점) 새 발주 생성 차단 — 수정만 허용.
+  // page.tsx의 lockedToEdit(현재 창 기존 발주 조회)를 '서버에서도' 강제 — 더블클릭·뒤로가기
+  // 재제출·새 탭·채팅+그리드 각각 제출로 같은 창에 Order가 중복 생성되면 채움채/집계가 2배로
+  // 나가는 사고(확정 버그 #1)를 막는다. 소매·벤더(창 없음)는 자유 발주라 해당 없음.
+  if (hasOrderWindow(user.role)) {
+    const since = new Date(currentWindowStartUtc());
+    const existing = await prisma.order.findFirst({
+      where: { userId: user.id, createdAt: { gte: since } },
+      select: { id: true },
+    });
+    if (existing) {
+      return {
+        error: "이번 발주 시간에 이미 넣은 발주가 있어요. '발주 수정'에서 고쳐 주세요.",
+      };
+    }
+  }
+
   const allowed = allowedCategoriesFor(user.role);
 
   // payload: [{ category, items: [...] }] — 여러 카테고리를 한 번에
@@ -155,22 +173,36 @@ export async function createOrderAction(
   // 픽업시간: '오늘 날짜 + 정갈한 시간'으로 정리 (예: 2026년 6월 27일 토요일 오전 7시 30분)
   const pickupTime = await buildPickup(user.role, formData, kstToday());
 
+  // 채팅 발주는 미리보기에서 이미 AI가 정리하고 점주가 확인·수정을 마쳤다 → 저장 시 재정규화하면
+  // 점주가 승인한 내용과 달라진다(버그 #3). preNormalized면 재정규화 없이 그대로 저장.
+  const preNormalized = String(formData.get("preNormalized") ?? "") === "1";
+
   // 각 카테고리 AI 정리 (병렬, 키 없으면 규칙기반 폴백)
   // 채움채(TOFU)는 고정 카탈로그 체크리스트라 정규화 없이 정확한 이름 그대로 보존(자동제출 매핑용)
   const normalized = await Promise.all(
-    groups.map((g) =>
-      g.category === "TOFU"
-        ? Promise.resolve({
-            engine: "rule" as const,
-            items: g.items,
-            summary: `채움채 발주 ${g.items.length}건`,
-          })
-        : normalizeOrder({
-            categoryLabel: CATEGORIES[g.category].label,
-            items: g.items,
-            pickupTime: pickupTime || undefined,
-          }),
-    ),
+    groups.map((g) => {
+      if (g.category === "TOFU") {
+        return Promise.resolve({
+          engine: "rule" as const,
+          items: g.items,
+          summary: `채움채 발주 ${g.items.length}건`,
+        });
+      }
+      if (preNormalized) {
+        // 재정규화 생략 — 미리보기(=AI 정리)에서 점주가 확정한 name/note를 그대로 보존.
+        const noteTags = [...new Set(g.items.map((it) => it.note).filter(Boolean))];
+        return Promise.resolve({
+          engine: "claude" as const,
+          items: g.items,
+          summary: noteTags.join(" · "),
+        });
+      }
+      return normalizeOrder({
+        categoryLabel: CATEGORIES[g.category].label,
+        items: g.items,
+        pickupTime: pickupTime || undefined,
+      });
+    }),
   );
 
   // 카테고리별 Order 생성 데이터 구성

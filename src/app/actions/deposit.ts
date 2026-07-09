@@ -65,11 +65,25 @@ export async function matchDepositManuallyAction(formData: FormData) {
   revalidateDeposit();
 }
 
-// 매칭 해제 — 다시 미매칭으로(오매칭 복구). 계산서 입금확인은 별도로 되돌려야 함.
-export async function unmatchDepositAction(formData: FormData) {
+// 매칭 해제 — 다시 미매칭으로(오매칭 복구).
+// 이미 계산서에 '귀속(입금확인)'된 입금은 그냥 풀면(옛 버그#9) 원장에서 입금이 사라지는데
+// 계산서는 PAID로 남아 잔액/미수가 어긋난다 → 귀속된 입금은 먼저 계산서 '입금확인 취소'를 하도록 차단.
+// (unmarkInvoicePaidAction이 appliedInvoiceId 정리 + 합성입금 삭제 + PAID→ISSUED 원복을 한 번에 처리)
+export async function unmatchDepositAction(formData: FormData): Promise<{ error?: string } | void> {
   await requireAdmin();
   const depositId = String(formData.get("depositId") ?? "");
   if (!depositId) return;
+  const dep = await prisma.deposit.findUnique({
+    where: { id: depositId },
+    select: { matchStatus: true, appliedInvoiceId: true },
+  });
+  if (!dep || (dep.matchStatus !== "AUTO" && dep.matchStatus !== "MANUAL")) return;
+  if (dep.appliedInvoiceId) {
+    return {
+      error:
+        "이 입금은 계산서 대금으로 반영돼 있어요. 먼저 해당 계산서에서 '입금확인 취소'를 한 뒤 매칭을 해제해 주세요.",
+    };
+  }
   await prisma.deposit.updateMany({
     where: { id: depositId, matchStatus: { in: ["AUTO", "MANUAL"] } },
     data: { matchStatus: "UNMATCHED", matchedUserId: null, matchedAt: null },

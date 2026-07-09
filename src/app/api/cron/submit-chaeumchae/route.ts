@@ -8,6 +8,15 @@ import { logError } from "@/lib/log";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// 수량 문자열을 안전하게 정수로. replace(/[^0-9]/g,'')로 소수점을 '지우면' "1.5"→"15"(10배)로
+// 자릿수가 붙어 외부 채움채에 과다발주되는 사고가 난다. 소수점을 살려 파싱한 뒤 반올림(두부는 정수 단위).
+function parseTofuQty(raw: unknown): number {
+  const m = String(raw ?? "").match(/\d+(?:\.\d+)?/);
+  if (!m) return 0;
+  const n = parseFloat(m[0]);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
 async function alertAdmin() {
   await sendPushToRole("ADMIN_SAEROP", {
     title: "채움채 발주에 실패하였습니다.",
@@ -50,8 +59,8 @@ export async function GET(request: Request) {
         unmapped++;
         continue;
       }
-      const q = parseInt(String(it.qty).replace(/[^0-9]/g, ""), 10);
-      if (!Number.isFinite(q) || q <= 0) continue;
+      const q = parseTofuQty(it.qty);
+      if (q <= 0) continue;
       const name = CHAEUMCHAE_CATALOG.find((p) => p.seq === seq)?.name ?? it.name;
       const cur = bySeq.get(seq);
       bySeq.set(seq, { name, qty: (cur?.qty ?? 0) + q });
