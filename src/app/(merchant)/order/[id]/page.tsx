@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { notFound } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, type Category } from "@/lib/constants";
-import { hasOrderWindow, isOrderOpen } from "@/lib/deadline";
 import { formatKDateTime } from "@/lib/format";
 import { kstDateOf, kstToday } from "@/lib/date";
 import { ReceiptCard } from "@/components/ReceiptCard";
@@ -25,7 +23,6 @@ export default async function ReceiptPage(props: {
 
   const cat = CATEGORIES[order.category as Category];
   const isPastDay = kstDateOf(order.createdAt) < kstToday();
-  const canEdit = !isPastDay && (!hasOrderWindow(user.role) || isOrderOpen());
 
   return (
     <>
@@ -69,17 +66,6 @@ export default async function ReceiptPage(props: {
           rawText={order.rawText}
           isNew={isNew === "1"}
         />
-
-        {canEdit && (
-          <div style={{ marginTop: 12 }}>
-            <Link
-              href={`/order/${order.id}/edit`}
-              className="btn btn--ghost btn--block"
-            >
-              발주 수정
-            </Link>
-          </div>
-        )}
       </div>
     </>
   );
