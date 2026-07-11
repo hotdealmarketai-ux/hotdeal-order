@@ -18,8 +18,6 @@ export default async function AdminInventory() {
     <>
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
-        <h1 className="h1">재고현황</h1>
-
         <div className="card">
           <div className="section-label" style={{ margin: "0 0 10px" }}>
             새 품목 추가
@@ -53,17 +51,16 @@ export default async function AdminInventory() {
                 >
                   업데이트 시간 : {formatKStamp(it.updatedAt)}
                 </div>
-                <form action={updateInventoryAction} className="stack">
+                <form action={updateInventoryAction} style={{ display: "flex", gap: 8 }}>
                   <input type="hidden" name="id" value={it.id} />
                   <input
                     name="status"
                     className="input"
                     defaultValue={it.status}
                     placeholder="상태/수량"
+                    style={{ flex: 1 }}
                   />
-                  <button className="btn btn--soft btn--sm" style={{ width: "100%" }}>
-                    저장
-                  </button>
+                  <button className="btn btn--soft btn--sm">저장</button>
                 </form>
               </div>
             ))}

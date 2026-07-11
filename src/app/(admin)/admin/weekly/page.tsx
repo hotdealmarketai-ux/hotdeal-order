@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Topbar } from "@/components/Topbar";
+import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -66,10 +66,15 @@ export default async function AdminWeeklyPage({
 
   return (
     <>
-      <Topbar brand="핫딜오더" title="주간발주" />
+      <Topbar
+        title="주간발주"
+        right={
+          <TopbarChip>
+            {forceOpen || inWindow ? "주간발주 진행 중" : "주간발주 마감"}
+          </TopbarChip>
+        }
+      />
       <div className="page">
-        <h1 className="h1">주간발주</h1>
-
         {/* 달력식 주 이동 */}
         <div
           style={{

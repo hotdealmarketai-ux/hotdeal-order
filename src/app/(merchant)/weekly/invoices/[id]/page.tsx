@@ -49,15 +49,13 @@ export default async function WeeklyInvoiceDetailPage({
         </div>
         <p className="lead">{labelDateLong(inv.date)} 주간발주</p>
 
-        <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" band />
+        <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" />
 
         {inv.status === "ISSUED" && (
-          <div className="card" style={{ marginTop: 16 }}>
-            <div style={{ color: "var(--muted)", fontSize: 14 }}>입금하실 금액</div>
-            <div style={{ fontWeight: 800, fontSize: 22, color: "var(--black)" }}>
-              {won(inv.total)}원
-            </div>
-            <div style={{ marginTop: 8, fontSize: 14 }}>
+          <div className="payband">
+            <div className="payband__label">입금하실 금액</div>
+            <div className="payband__amt">{won(inv.total)}원</div>
+            <div className="payband__acct">
               {SAEROP_BANK_ACCOUNT} 예금주 {SAEROP_ACCOUNT_HOLDER}
             </div>
           </div>

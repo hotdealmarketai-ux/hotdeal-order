@@ -24,7 +24,6 @@ export default async function InventoryPage() {
     <>
       <Topbar title="재고현황" />
       <div className="page">
-        <h1 className="h1">재고현황</h1>
         <p
           className="lead"
           style={{ marginTop: 6, marginBottom: 24, fontSize: 13.5 }}

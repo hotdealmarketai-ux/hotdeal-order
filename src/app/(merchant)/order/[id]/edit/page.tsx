@@ -44,6 +44,9 @@ export default async function EditOrderPage(props: {
     <>
       <Topbar backHref={backHref} title="발주 수정" />
       <div className="page">
+        <div className="notice notice--mute" style={{ marginBottom: 14 }}>
+          저장하면 업체 화면에 &lsquo;발주 수정&rsquo;으로 표시돼요.
+        </div>
         <EditOrderForm
           orderId={order.id}
           category={order.category as Category}

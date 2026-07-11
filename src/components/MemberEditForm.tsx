@@ -108,37 +108,39 @@ export function MemberEditForm({
           />
         </div>
 
-        <div className="field">
-          <label className="label" htmlFor="role">역할</label>
-          <select
-            id="role"
-            name="role"
-            className="input"
-            defaultValue={initial.role}
-            disabled={isSelf}
-          >
-            {ALL_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABEL[r as Role]}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label className="label" htmlFor="status">상태</label>
-          <select
-            id="status"
-            name="status"
-            className="input"
-            defaultValue={initial.status}
-            disabled={isSelf}
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </option>
-            ))}
-          </select>
+        <div style={{ display: "flex", gap: 10 }}>
+          <div className="field" style={{ flex: 1 }}>
+            <label className="label" htmlFor="role">역할</label>
+            <select
+              id="role"
+              name="role"
+              className="input"
+              defaultValue={initial.role}
+              disabled={isSelf}
+            >
+              {ALL_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABEL[r as Role]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field" style={{ flex: 1 }}>
+            <label className="label" htmlFor="status">상태</label>
+            <select
+              id="status"
+              name="status"
+              className="input"
+              defaultValue={initial.status}
+              disabled={isSelf}
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         {isSelf && (
           <p className="hint">본인 계정은 역할·상태를 바꿀 수 없어요(잠금 방지).</p>
@@ -165,17 +167,20 @@ export function MemberEditForm({
             {pwState.error}
           </div>
         )}
-        <div className="field">
-          <label className="label" htmlFor="password">새 비밀번호</label>
+        <label className="label" htmlFor="password">새 비밀번호</label>
+        <div style={{ display: "flex", gap: 8 }}>
           <input
             id="password"
             name="password"
             className="input"
-            placeholder="새 비밀번호 (4자 이상)"
+            placeholder="4자 이상"
             autoComplete="new-password"
+            style={{ flex: 1 }}
           />
+          <SubmitButton className="btn btn--soft btn--sm" pendingText="변경 중…">
+            변경
+          </SubmitButton>
         </div>
-        <SubmitButton pendingText="변경 중…">비밀번호 변경</SubmitButton>
       </form>
 
       {/* 회원 삭제 */}

@@ -30,7 +30,7 @@ export function SplitPaymentButton({
         style={{ marginTop: 12 }}
         onClick={() => setOpen(true)}
       >
-        분할 입금 요청
+        나눠서 입금할게요 (분할 요청)
       </button>
     );
   }

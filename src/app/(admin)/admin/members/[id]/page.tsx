@@ -19,7 +19,7 @@ export default async function AdminMemberDetail(props: {
 
   return (
     <>
-      <Topbar backHref="/admin/members" title="회원 정보" />
+      <Topbar backHref="/admin/members" title="회원 관리" />
       <div className="page">
         <div className="card card--flat" style={{ marginBottom: 16 }}>
           <div className="kv">

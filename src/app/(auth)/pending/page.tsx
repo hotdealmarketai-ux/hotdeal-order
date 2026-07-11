@@ -16,7 +16,7 @@ export default async function PendingPage() {
     ? "계정이 정지되었어요"
     : rejected
       ? "가입이 반려되었어요"
-      : "승인 대기 중이에요";
+      : "가입 신청이 접수되었어요";
   const message = suspended
     ? "계정이 정지된 상태예요. 본사에 문의해 주세요."
     : rejected
@@ -57,7 +57,7 @@ export default async function PendingPage() {
             <span className="kv__k">상태</span>
             <span className="kv__v">
               <span
-                className={`badge ${suspended ? "badge--danger" : rejected ? "badge--mute" : "badge--wait"}`}
+                className={`badge ${suspended ? "badge--danger" : rejected ? "badge--mute" : "badge--ok"}`}
               >
                 {statusLabel}
               </span>
@@ -68,8 +68,8 @@ export default async function PendingPage() {
         <p className="hint center" style={{ marginTop: 18 }}>
           승인 후 이 화면을 새로고침하면 발주 화면으로 이동해요.
         </p>
-        <div style={{ marginTop: 18 }}>
-          <LogoutButton />
+        <div style={{ marginTop: 18, textAlign: "center" }}>
+          <LogoutButton className="linkbtn" />
         </div>
       </div>
     </div>

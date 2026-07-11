@@ -31,17 +31,18 @@ export function InvoiceAdminActions({
           <div className="confirm__actions">
             <button
               type="button"
-              className="btn btn--ghost"
-              onClick={() => setConfirmVoid(true)}
+              className="btn btn--primary"
+              style={{ flex: 1.4 }}
+              onClick={() => setConfirmPaid(true)}
             >
-              계산서 취소
+              수동입금확인
             </button>
             <button
               type="button"
-              className="btn btn--primary"
-              onClick={() => setConfirmPaid(true)}
+              className="btn btn--danger"
+              onClick={() => setConfirmVoid(true)}
             >
-              입금 확인
+              계산서 취소
             </button>
           </div>
         )}

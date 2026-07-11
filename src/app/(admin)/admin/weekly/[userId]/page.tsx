@@ -78,7 +78,7 @@ export default async function AdminWeeklyStorePage({
 
   return (
     <>
-      <Topbar brand="핫딜오더" title="주간발주 · 지점" />
+      <Topbar backHref={`/admin/weekly?week=${weekKey}`} title="주간발주 · 지점" />
       <div className="page">
         <div
           style={{

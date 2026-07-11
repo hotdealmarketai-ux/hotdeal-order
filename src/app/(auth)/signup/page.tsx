@@ -12,7 +12,6 @@ export default async function SignupPage() {
     <div className="app">
       <Topbar backHref="/login" title="가입 신청" />
       <div className="page">
-        <h1 className="h1">가입 신청</h1>
         <p className="lead">
           아래 정보를 입력하면 본사 승인 후 발주를 넣을 수 있어요.
         </p>

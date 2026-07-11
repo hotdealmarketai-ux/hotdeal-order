@@ -157,7 +157,9 @@ export default async function WeeklyOrderPage({
                 style={{
                   whiteSpace: "nowrap",
                   textDecoration: "none",
-                  opacity: w === selWeek ? 1 : 0.5,
+                  ...(w === selWeek
+                    ? { background: "var(--green-700)", color: "#fff", borderColor: "transparent" }
+                    : {}),
                 }}
               >
                 {labelDateLong(w)}

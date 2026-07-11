@@ -15,7 +15,7 @@ export function ResetOrdersButton() {
         className="topbar__reset"
         onClick={() => setConfirming(true)}
       >
-        전체 발주 초기화
+        초기화
       </button>
 
       {confirming && (

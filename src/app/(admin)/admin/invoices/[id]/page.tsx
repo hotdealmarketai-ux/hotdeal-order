@@ -167,7 +167,7 @@ export default async function AdminInvoiceDetail(props: {
                       {String(it.qty)} × {fmt(it.unitPrice)}
                     </span>
                   </span>
-                  <span className="invline__amt">{fmt(it.amount)}</span>
+                  <span className="invline__amt">{fmt(it.amount)}원</span>
                 </div>
               ))}
             </div>

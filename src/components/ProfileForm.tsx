@@ -35,7 +35,7 @@ export function ProfileForm({
       </div>
       <div className="field">
         <label className="label" htmlFor="address">
-          업장 주소
+          주소
         </label>
         <input id="address" name="address" className="input" defaultValue={address} required />
       </div>

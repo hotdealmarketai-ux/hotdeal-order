@@ -10,9 +10,8 @@ export default async function AdminWeeklyProductsPage() {
 
   return (
     <>
-      <Topbar brand="핫딜오더" title="상품 관리" />
+      <Topbar backHref="/admin/weekly" title="상품 관리" />
       <div className="page">
-        <h1 className="h1">주간발주 상품 관리</h1>
         <WeeklyProductForm initial={products} />
         <div style={{ marginTop: 20 }}>
           <Link href="/admin/weekly" className="btn btn--ghost btn--block">

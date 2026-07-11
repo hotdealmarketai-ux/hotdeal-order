@@ -15,7 +15,6 @@ export default async function ApprovalsPage() {
     <>
       <Topbar backHref="/admin" title="가입 승인" />
       <div className="page">
-        <h1 className="h1">가입 승인</h1>
         <p className="lead">신청자를 승인하면서 발주 유형을 정해주세요.</p>
 
         {pending.length === 0 ? (

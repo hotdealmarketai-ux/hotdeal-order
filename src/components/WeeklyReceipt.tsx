@@ -38,7 +38,7 @@ export function WeeklyReceipt({
             {it.name}
             <span className="invline__meta">{it.sub}</span>
           </span>
-          <span className="invline__amt">{won(it.amount)}</span>
+          <span className="invline__amt">{won(it.amount)}원</span>
         </div>
       ))}
     </div>

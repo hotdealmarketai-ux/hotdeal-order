@@ -33,12 +33,10 @@ export default async function WeeklyInvoicesPage() {
         <h1 className="h1">주간발주 입금요청서</h1>
 
         {unpaid > 0 && (
-          <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ color: "var(--muted)", fontSize: 14 }}>입금하실 금액</div>
-            <div style={{ fontWeight: 800, fontSize: 22, color: "var(--black)" }}>
-              {won(unpaid)}원
-            </div>
-            <div style={{ marginTop: 8, fontSize: 14 }}>
+          <div className="payband" style={{ marginBottom: 16, marginTop: 0 }}>
+            <div className="payband__label">입금하실 금액</div>
+            <div className="payband__amt">{won(unpaid)}원</div>
+            <div className="payband__acct">
               {SAEROP_BANK_ACCOUNT} 예금주 {SAEROP_ACCOUNT_HOLDER}
             </div>
           </div>

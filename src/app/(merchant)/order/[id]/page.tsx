@@ -68,19 +68,18 @@ export default async function ReceiptPage(props: {
           }))}
           rawText={order.rawText}
           isNew={isNew === "1"}
-          showPrintButton={false}
         />
 
-        <div className="confirm__actions" style={{ marginTop: 18 }}>
-          {canEdit && (
-            <Link href={`/order/${order.id}/edit`} className="btn btn--ghost">
+        {canEdit && (
+          <div style={{ marginTop: 12 }}>
+            <Link
+              href={`/order/${order.id}/edit`}
+              className="btn btn--ghost btn--block"
+            >
               발주 수정
             </Link>
-          )}
-          <Link href="/order" className="btn btn--primary">
-            새 발주하기
-          </Link>
-        </div>
+          </div>
+        )}
       </div>
     </>
   );
