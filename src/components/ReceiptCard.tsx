@@ -31,7 +31,7 @@ export function ReceiptCard(props: {
   const origBtn = showOriginalButton ? (
     <button
       type="button"
-      className="btn btn--xs btn--soft"
+      className="btn btn--xs btn--ghost"
       onClick={() => setOrig((o) => !o)}
     >
       {orig ? "정리본" : "원본 보기"}
@@ -89,11 +89,9 @@ export function ReceiptCard(props: {
             </div>
             {props.aiSummary && (
               <div className="receipt__section">
-                <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-                  <span className="kv__k" style={{ flexShrink: 0 }}>메모</span>
-                  <span className="kv__v" style={{ textAlign: "left", flex: 1 }}>
-                    {props.aiSummary}
-                  </span>
+                <div className="kv">
+                  <span className="kv__k">메모</span>
+                  <span className="kv__v">{props.aiSummary}</span>
                 </div>
               </div>
             )}
