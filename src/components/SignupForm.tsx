@@ -1,11 +1,12 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { signupAction, type FormState } from "@/app/actions/auth";
 import { SubmitButton } from "./SubmitButton";
 
 export function SignupForm() {
   const [state, formAction] = useActionState<FormState, FormData>(signupAction, {});
+  const [fileName, setFileName] = useState("");
   return (
     <form action={formAction} className="stack">
       {state?.error && <div className="notice notice--error">{state.error}</div>}
@@ -85,15 +86,19 @@ export function SignupForm() {
         <label className="label" htmlFor="businessCert">
           사업자등록증
         </label>
-        <input
-          id="businessCert"
-          name="businessCert"
-          type="file"
-          accept="image/*,application/pdf"
-          capture="environment"
-          className="file-input"
-        />
-        <p className="hint">사진을 찍거나 파일을 올려주세요. (선택)</p>
+        <label className="file-drop">
+          <input
+            id="businessCert"
+            name="businessCert"
+            type="file"
+            accept="image/*,application/pdf"
+            capture="environment"
+            className="sr-only"
+            onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
+          />
+          <span className="file-drop__title">{fileName || "파일 올리기"}</span>
+          <span className="file-drop__sub">jpg · png · pdf, 10MB 이하</span>
+        </label>
       </div>
 
       <SubmitButton pendingText="신청 중…">가입 신청하기</SubmitButton>

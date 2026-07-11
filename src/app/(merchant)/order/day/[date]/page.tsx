@@ -92,7 +92,7 @@ export default async function DayReceiptPage(props: {
         )}
 
         {showInvoiceTab && (
-          <div className="cattabs" style={{ marginBottom: 16 }}>
+          <div className="cattabs cattabs--seg" style={{ marginBottom: 16 }}>
             <Link
               href={`/order/day/${date}`}
               className={`cattab ${activeView === "orders" ? "is-active" : ""}`}
