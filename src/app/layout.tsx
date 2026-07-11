@@ -25,7 +25,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   // 어르신 확대 가능하도록 maximumScale 제한하지 않음
-  themeColor: "#0b1120",
+  themeColor: "#033826", // 핫딜오더 브랜드 초록
 };
 
 export default function RootLayout({
