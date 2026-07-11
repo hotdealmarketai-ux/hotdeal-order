@@ -18,7 +18,11 @@
 "use client";
 
 import { useActionState, useMemo, useRef, useState } from "react";
-import { createOrderAction, type OrderFormState } from "@/app/actions/order";
+import {
+  createOrderAction,
+  previewGridOrderAction,
+  type OrderFormState,
+} from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
 import {
@@ -59,6 +63,7 @@ export function OrderForm({
   const [pickup, setPickup] = useState("");
   const [tofuQty, setTofuQty] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [localError, setLocalError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
     createOrderAction,
@@ -128,6 +133,44 @@ export function OrderForm({
 
   const multi = categories.length > 1;
 
+  // '발주 확정' → AI가 먼저 정리(오타→고유명사 등)한 결과를 확인 시트에 보여준다(채팅 발주와 동일).
+  // 정리된 값으로 칸을 갱신 → 시트에서 확인·수정 후 최종 발주(preNormalized=1로 그대로 저장).
+  async function handleConfirmClick() {
+    if (totalItems === 0) {
+      setLocalError("발주할 품목을 한 개 이상 입력하세요.");
+      return;
+    }
+    setLocalError("");
+    setPreviewing(true);
+    try {
+      const res = await previewGridOrderAction(JSON.stringify(payload));
+      if (!res.ok) {
+        setLocalError(res.error ?? "정리에 실패했어요. 다시 시도해 주세요.");
+        return;
+      }
+      // AI 정리 결과로 비-TOFU 칸을 갱신(TOFU는 tofuQty 그대로) → 시트가 '정리된 값'을 보여줌
+      setRowsByCat((prev) => {
+        const next = { ...prev };
+        for (const g of res.groups ?? []) {
+          next[g.category] = withTrailingEmpty(
+            g.items.map((it) => ({
+              id: ++uid.current,
+              name: it.name,
+              qty: it.qty,
+              note: it.note,
+            })),
+          );
+        }
+        return next;
+      });
+      setConfirming(true);
+    } catch {
+      setLocalError("정리 중 문제가 생겼어요. 다시 시도해 주세요.");
+    } finally {
+      setPreviewing(false);
+    }
+  }
+
   if (mode === "chat") {
     return (
       <div>
@@ -152,6 +195,9 @@ export function OrderForm({
   return (
     <form action={formAction}>
       <input type="hidden" name="payload" value={JSON.stringify(payload)} />
+      {/* 확인 시트의 값은 이미 AI가 정리한(그리고 점주가 확인·수정한) 결과 →
+          저장 시 재정규화하지 않고 그대로 저장(승인=저장 보장). */}
+      <input type="hidden" name="preNormalized" value="1" />
       {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
 
       {/* ③ 제목 삭제 → 채팅 발주 칩 */}
@@ -303,17 +349,12 @@ export function OrderForm({
           <button
             type="button"
             className="btn btn--primary btn--block"
-            disabled={locked}
-            onClick={() => {
-              if (totalItems === 0) {
-                setLocalError("발주할 품목을 한 개 이상 입력하세요.");
-                return;
-              }
-              setLocalError("");
-              setConfirming(true);
-            }}
+            disabled={locked || previewing}
+            onClick={handleConfirmClick}
           >
-            발주 확정{totalItems > 0 ? ` · ${totalItems}건` : ""}
+            {previewing
+              ? "AI가 정리 중…"
+              : `발주 확정${totalItems > 0 ? ` · ${totalItems}건` : ""}`}
           </button>
         </div>
 
@@ -340,7 +381,7 @@ export function OrderForm({
                 </button>
               </div>
               <p className="sheet__hint">
-                아래 내용이 맞는지 확인하세요. 여기서 바로 수정할 수 있어요.
+                AI가 이렇게 정리했어요. 맞는지 확인하고 고칠 부분은 바로 수정해 주세요.
               </p>
 
               {(state?.error || localError) && (
@@ -429,7 +470,7 @@ export function OrderForm({
 
               <div className="sheet__foot">
                 <div className="sheet__count">총 {totalItems}건</div>
-                <SubmitButton pendingText="AI가 정리 중…">
+                <SubmitButton pendingText="발주 넣는 중…">
                   네, 발주할게요
                 </SubmitButton>
               </div>

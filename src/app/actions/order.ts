@@ -80,6 +80,69 @@ export async function parseChatOrderAction(text: string): Promise<ChatParseState
   return { ok: true, groups, pickupTime: parsed.pickupTime || "" };
 }
 
+// 칸(그리드) 발주 미리보기 — '발주 확정' 눌렀을 때 AI가 정리한 결과를 확인 시트에 보여주기 위함.
+// 저장은 안 하고 정리 결과만 반환한다(채팅 미리보기와 동일한 역할). 확정 시엔 preNormalized로 그대로 저장.
+export async function previewGridOrderAction(
+  payloadJson: string,
+): Promise<ChatParseState> {
+  const user = await requireMerchant();
+
+  if (hasOrderWindow(user.role) && !isOrderOpen()) {
+    return {
+      ok: false,
+      error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
+    };
+  }
+
+  let payload: { category?: string; items?: RawRow[] }[] = [];
+  try {
+    payload = JSON.parse(String(payloadJson ?? "[]"));
+  } catch {
+    payload = [];
+  }
+
+  const allowed = allowedCategoriesFor(user.role);
+  const groups: Group[] = [];
+  for (const g of payload) {
+    const category = String(g.category ?? "") as Category;
+    if (!allowed.includes(category)) continue;
+    const items = cleanItems(Array.isArray(g.items) ? g.items : []);
+    if (items.length === 0) continue;
+    groups.push({ category, items });
+  }
+  if (groups.length === 0) {
+    return { ok: false, error: "발주할 품목을 한 개 이상 입력하세요." };
+  }
+
+  // 채움채(TOFU)는 체크리스트라 정리 안 함(정확한 이름 보존) — 미리보기에서도 제외(원본은 화면 tofuQty 그대로).
+  const normalized = await Promise.all(
+    groups.map((g) =>
+      g.category === "TOFU"
+        ? Promise.resolve({ engine: "rule" as const, items: g.items, summary: "" })
+        : normalizeOrder({ categoryLabel: CATEGORIES[g.category].label, items: g.items }),
+    ),
+  );
+
+  const outGroups = groups
+    .map((g, gi) => {
+      const result = normalized[gi];
+      // 정리본은 개수가 1:1일 때만 신뢰(인덱스 어긋남 방지) — 아니면 원본 유지
+      const clean = result.items.length === g.items.length ? result.items : g.items;
+      return {
+        category: g.category,
+        items: clean.map((it, i) => ({
+          name: it.name || g.items[i]?.name || "",
+          qty: displayQty(it.qty ?? g.items[i]?.qty ?? ""),
+          note: it.note ?? g.items[i]?.note ?? "",
+        })),
+      };
+    })
+    // TOFU는 시트가 tofuQty로 직접 그리므로 미리보기 응답에선 제외(비-TOFU만 rowsByCat 갱신용)
+    .filter((g) => g.category !== "TOFU");
+
+  return { ok: true, groups: outGroups };
+}
+
 async function buildPickup(
   role: Role,
   formData: FormData,
