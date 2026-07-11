@@ -44,7 +44,6 @@ export default async function AdminSummary(props: {
     <>
       <Topbar backHref={`${sel.backHref}&date=${date}`} title={`${sel.label} 집계`} />
       <div className="page">
-        <h1 className="h1">{sel.label} 집계</h1>
         <p className="lead">
           {labelDate(date)}
           {date === kstToday() ? " (오늘)" : ""}

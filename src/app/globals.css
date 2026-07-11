@@ -750,11 +750,11 @@ a {
 /* ---- 발주 확인 패널 ---- */
 .confirm {
   margin-top: 18px;
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card);
-  padding: 18px;
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 14px);
+  box-shadow: none;
+  padding: 16px;
 }
 .confirm__title {
   font-size: 17px;
@@ -855,10 +855,10 @@ a {
 }
 .chatbubble--me {
   align-self: flex-end;
-  background: var(--black);
+  background: var(--green-700);
   color: #fff;
   border-bottom-right-radius: 6px;
-  box-shadow: var(--shadow-pill);
+  box-shadow: none;
 }
 .chatbubble__hint {
   margin-top: 8px;
@@ -975,7 +975,7 @@ a {
   gap: 12px;
   padding: 6px 8px 6px 14px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   background: var(--surface);
 }
 .tofuitem.is-on {
@@ -997,8 +997,8 @@ a {
 /* 주간발주 품목 보조정보(박스단위·공급가) */
 .tofuitem__sub {
   margin-top: 2px;
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 12.5px;
+  color: var(--muted-2);
   letter-spacing: -0.01em;
 }
 /* 확인 시트 — 수량·금액 텍스트(우측) */
@@ -1105,18 +1105,16 @@ a {
   position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
+  align-items: flex-start;
+  text-align: left;
   gap: 4px;
-  min-height: 84px;
-  padding: 12px 8px;
-  border: 1px solid var(--line-strong);
+  padding: 16px 16px;
+  border: 1px solid var(--line);
   border-radius: var(--radius-md, 14px);
   background: var(--surface);
   color: var(--fg);
   text-decoration: none;
-  box-shadow: var(--shadow-row);
+  box-shadow: none;
 }
 .admcard:active {
   transform: translateY(1px);
@@ -1127,8 +1125,9 @@ a {
   letter-spacing: -0.01em;
 }
 .admcard__sub {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green-700);
 }
 .admcard__badge {
   position: absolute;
@@ -1583,12 +1582,18 @@ a {
   color: var(--fg);
 }
 .sheet__close {
-  background: none;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--chip-mute-bg);
   border: none;
-  font-size: 20px;
+  font-size: 14px;
   color: var(--muted);
   cursor: pointer;
-  padding: 4px 8px;
+  padding: 0;
+  border-radius: 999px;
 }
 .sheet__hint {
   font-size: 13px;
@@ -2100,19 +2105,20 @@ a {
 
 /* ---- ⑥ 발주 품목: 리스트 카드 + 파란 좌측 보더 행 ---- */
 .oitems {
-  background: #fff;
-  border: 1px solid #e3e7e0;
-  border-radius: 12px;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .oitem {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  padding: 12px 13px 12px 10px;
+  padding: 12px 13px 12px 12px;
+  background: #fff;
+  border: 1px solid #e3e7e0;
+  border-radius: 14px;
   border-left: 3px solid transparent;
 }
-.oitem + .oitem { border-top: 1px solid #f1f3ef; }
 .oitem.is-filled { border-left-color: #1c4a2f; }
 .oitem__num {
   flex: 0 0 auto;
@@ -2137,9 +2143,9 @@ a {
   flex: 0 0 auto;
   border: 0;
   background: none;
-  color: #c0392b;
+  color: #98a79b;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 14px 2px 0;
   cursor: pointer;
 }

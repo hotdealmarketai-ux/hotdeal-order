@@ -18,8 +18,8 @@ export function ManualPayButton({
     return (
       <button
         type="button"
-        className={block ? "btn btn--block btn--soft" : "btn btn--xs btn--soft"}
-        style={block ? undefined : { width: "100%" }}
+        className={block ? "btn btn--block btn--soft" : "btn btn--xs btn--ghost"}
+        style={block ? undefined : { width: "auto" }}
         onClick={() => setOpen(true)}
       >
         수동 입금확인

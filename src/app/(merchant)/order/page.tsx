@@ -76,7 +76,7 @@ export default async function OrderPage() {
             <span style={{ color: "var(--muted)" }}>
               현재 미수 · {receivable.count}건
             </span>
-            <span style={{ fontWeight: 800, color: "var(--black)" }}>
+            <span style={{ fontWeight: 800, fontSize: 15, color: "var(--danger)" }}>
               {receivable.balance.toLocaleString("ko-KR")}원 ›
             </span>
           </Link>

@@ -139,7 +139,7 @@ export default async function WeeklyOrderPage({
           <span style={{ color: "var(--muted)" }}>
             주간발주 입금요청서{receivable.count > 0 ? ` · 미입금 ${receivable.count}건` : ""}
           </span>
-          <span style={{ fontWeight: 800, color: "var(--black)" }}>
+          <span style={{ fontWeight: 800, fontSize: 15, color: "var(--danger)" }}>
             {receivable.balance > 0 ? `${won(receivable.balance)}원 ›` : "보기 ›"}
           </span>
         </Link>

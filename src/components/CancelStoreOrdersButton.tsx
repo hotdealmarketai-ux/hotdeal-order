@@ -33,14 +33,15 @@ export function CancelStoreOrdersButton({
     <>
       <button
         type="button"
-        className="btn btn--xs btn--danger"
+        className="linkbtn linkbtn--danger"
+        style={{ fontSize: 12.5, fontWeight: 700 }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setConfirming(true);
         }}
       >
-        발주 취소
+        발주취소
       </button>
 
       {confirming && (

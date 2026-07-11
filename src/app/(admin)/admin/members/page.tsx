@@ -21,7 +21,6 @@ export default async function AdminMembers() {
     <>
       <Topbar backHref="/admin" title="회원 관리" />
       <div className="page">
-        <h1 className="h1">회원 관리</h1>
         <p className="lead">전체 {members.length}명</p>
 
         {members.length === 0 ? (
