@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { notifyMerchantInvoicePaid } from "@/lib/push";
 import { kstDateOf } from "@/lib/date";
+import { clearWeeklyUnlockIfSettled } from "@/lib/weekly";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -252,7 +253,9 @@ export async function tryAutoPayInvoice(
   });
   if (upd.count === 1) {
     await notifyMerchantInvoicePaid(userId, inv.date, inv._count.items, inv.total);
+    // 결제된 계산서가 일일이든 주간이든, 해당 종류의 미수가 모두 없어지면 그 잠금해제를 원복.
     await clearOrderUnlockIfSettled(userId);
+    await clearWeeklyUnlockIfSettled(userId);
     return inv.id;
   }
   return null;

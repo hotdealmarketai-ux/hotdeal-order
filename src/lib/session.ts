@@ -15,6 +15,8 @@ export type AppUser = {
   businessCert: string | null;
   orderUnlock: boolean;
   orderUnlockAt: Date | null;
+  weeklyOrderUnlock: boolean;
+  weeklyOrderUnlockAt: Date | null;
 };
 
 export async function getCurrentUser(): Promise<AppUser | null> {
@@ -35,6 +37,8 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       businessCert: u.businessCert,
       orderUnlock: u.orderUnlock,
       orderUnlockAt: u.orderUnlockAt,
+      weeklyOrderUnlock: u.weeklyOrderUnlock,
+      weeklyOrderUnlockAt: u.weeklyOrderUnlockAt,
     };
   } catch (err) {
     // DB 미연결/장애 시 앱이 죽지 않고 비로그인으로 처리(로그인 화면 표시)

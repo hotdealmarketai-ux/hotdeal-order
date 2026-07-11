@@ -41,7 +41,7 @@ export async function receivableOf(
   userId: string,
 ): Promise<{ balance: number; count: number }> {
   const ar = await prisma.invoice.aggregate({
-    where: { userId, status: "ISSUED" },
+    where: { userId, status: "ISSUED", kind: "DAILY" },
     _sum: { total: true },
     _count: true,
   });
@@ -62,7 +62,7 @@ export async function orderLockOf(
   const unlockedThisWindow = isUnlockActiveThisWindow(orderUnlock, orderUnlockAt, now);
   const windowStartDate = kstDateOf(windowStart);
   const past = await prisma.invoice.findFirst({
-    where: { userId, status: "ISSUED", date: { lt: windowStartDate } },
+    where: { userId, status: "ISSUED", kind: "DAILY", date: { lt: windowStartDate } },
     orderBy: { date: "asc" },
     select: { date: true, total: true },
   });

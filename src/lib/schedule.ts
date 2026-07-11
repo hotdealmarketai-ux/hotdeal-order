@@ -70,3 +70,58 @@ export function nextOpenUtc(now: number = Date.now()): number {
   }
   return now;
 }
+
+// ============================================================
+//  주간발주 창 — 매주 '토요일 12~20시' 딱 1회. 일일 발주창과 완전 독립.
+// ============================================================
+export const WEEKLY_DOW = 6; // 0=일 ... 6=토
+export const WEEKLY_OPEN_LABEL = "매주 토요일 점심 12시";
+export const WEEKLY_CLOSE_LABEL = "오후 8시";
+const DAY = 24 * 60 * 60 * 1000;
+
+/** 지금(KST) 주간발주 가능 시간대인가 — 토요일 12시~20시만 */
+export function isWeeklyOpen(now: number = Date.now()): boolean {
+  const { dow, h } = parts(now);
+  return dow === WEEKLY_DOW && h >= OPEN_HOUR && h < CLOSE_HOUR;
+}
+
+/** 이번 주간 사이클 시작 instant = 가장 최근 '토요일 12시(KST)' ≤ now. 주(週) 식별 키의 기준. */
+export function currentWeeklyWindowStartUtc(now: number = Date.now()): number {
+  for (let i = 0; i < 8; i++) {
+    const base = new Date(now + KST - i * DAY);
+    if (base.getUTCDay() === WEEKLY_DOW) {
+      const start = utcAt(
+        base.getUTCFullYear(),
+        base.getUTCMonth(),
+        base.getUTCDate(),
+        OPEN_HOUR,
+      );
+      if (start <= now) return start;
+    }
+  }
+  const { y, mo, da } = parts(now);
+  return utcAt(y, mo, da, OPEN_HOUR); // 폴백(도달 불가)
+}
+
+/** 이번 주간창 마감 instant = 그 토요일 20시 */
+export function currentWeeklyDeadlineUtc(now: number = Date.now()): number {
+  const p = parts(currentWeeklyWindowStartUtc(now));
+  return utcAt(p.y, p.mo, p.da, CLOSE_HOUR);
+}
+
+/** 다음 주간발주 오픈(토요일 12시) instant */
+export function nextWeeklyOpenUtc(now: number = Date.now()): number {
+  for (let i = 0; i < 8; i++) {
+    const base = new Date(now + KST + i * DAY);
+    if (base.getUTCDay() === WEEKLY_DOW) {
+      const start = utcAt(
+        base.getUTCFullYear(),
+        base.getUTCMonth(),
+        base.getUTCDate(),
+        OPEN_HOUR,
+      );
+      if (start > now) return start;
+    }
+  }
+  return now;
+}

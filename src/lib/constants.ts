@@ -152,6 +152,11 @@ export function canViewInventory(role: Role): boolean {
   return role === "MERCHANT_HOTDEAL";
 }
 
+// 주간발주(항시품목)는 핫딜마켓 가맹점만 — 하단 네비·페이지 노출 게이팅
+export function canOrderWeekly(role: Role): boolean {
+  return role === "MERCHANT_HOTDEAL";
+}
+
 export function allowedCategoriesFor(role: Role): Category[] {
   return ALLOWED_CATEGORIES[role] ?? [];
 }

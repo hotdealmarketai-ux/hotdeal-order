@@ -46,7 +46,7 @@ export default async function AdminDepositStore(props: {
 
   const [invoices, deposits, ar, lock] = await Promise.all([
     prisma.invoice.findMany({
-      where: { userId, status: { not: "VOID" } },
+      where: { userId, kind: "DAILY", status: { not: "VOID" } },
       select: {
         id: true,
         date: true,

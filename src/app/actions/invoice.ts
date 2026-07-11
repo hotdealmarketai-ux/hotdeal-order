@@ -19,6 +19,7 @@ import {
 } from "@/lib/push";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { clearOrderUnlockIfSettled } from "@/lib/bank";
+import { clearWeeklyUnlockIfSettled } from "@/lib/weekly";
 
 export type InvoiceFormState = { error?: string };
 
@@ -296,6 +297,7 @@ export async function markInvoicePaidAction(formData: FormData) {
     }
     await notifyMerchantInvoicePaid(inv.userId, inv.date, inv._count.items, inv.total);
     await clearOrderUnlockIfSettled(inv.userId);
+    await clearWeeklyUnlockIfSettled(inv.userId);
     revalidatePath(`/order/day/${inv.date}`);
   }
   revalidatePath("/admin/deposits");

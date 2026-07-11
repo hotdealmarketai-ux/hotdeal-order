@@ -29,6 +29,7 @@ export async function GET(request: Request) {
   const invoices = await prisma.invoice.findMany({
     where: {
       status: "ISSUED",
+      kind: "DAILY", // 주간(WEEKLY) 요청서는 이 일일 연체 안내 대상 아님(주간은 토요일 마감 기준)
       splitRequested: false, // 분할 요청/승인 건은 제외(자동매칭 게이트와 동일)
       overdueRemindedAt: null, // 아직 안내 안 보낸 것만(멱등)
       issuedAt: { gte: floor, lte: cutoff },

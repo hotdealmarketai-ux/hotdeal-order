@@ -26,12 +26,12 @@ export default async function AdminDeposits() {
     // 미입금 계산서(ISSUED) 합 = 남은 결제잔액 (마이페이지·발주잠금과 동일 기준)
     prisma.invoice.groupBy({
       by: ["userId"],
-      where: { status: "ISSUED" },
+      where: { status: "ISSUED", kind: "DAILY" },
       _sum: { total: true },
       _count: true,
     }),
     prisma.invoice.findMany({
-      where: { status: "ISSUED", splitRequested: true, splitApprovedAt: null },
+      where: { status: "ISSUED", kind: "DAILY", splitRequested: true, splitApprovedAt: null },
       select: { userId: true },
       distinct: ["userId"],
     }),

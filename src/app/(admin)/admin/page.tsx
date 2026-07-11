@@ -3,6 +3,7 @@ import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { kstToday, kstDayRange } from "@/lib/date";
+import { weeklyKeyAt } from "@/lib/weekly";
 import { LogoutButton } from "@/components/LogoutButton";
 
 export default async function AdminHome() {
@@ -12,7 +13,7 @@ export default async function AdminHome() {
   const { start, end } = kstDayRange(kstToday());
   const today = { gte: start, lt: end };
   // 건수 = '오늘 주문한 점포 수'(중복 제거). 한 점포가 여러 종류를 넣어도 1로 계산.
-  const [pending, allStores, hotdealStores] = await Promise.all([
+  const [pending, allStores, hotdealStores, weeklyCount] = await Promise.all([
     prisma.user.count({ where: { status: "PENDING" } }),
     prisma.order.findMany({
       where: { createdAt: today },
@@ -24,6 +25,7 @@ export default async function AdminHome() {
       select: { userId: true },
       distinct: ["userId"],
     }),
+    prisma.weeklyOrder.count({ where: { weekKey: weeklyKeyAt() } }),
   ]);
   const totalOrders = allStores.length;
   const hotdealOrders = hotdealStores.length;
@@ -38,6 +40,12 @@ export default async function AdminHome() {
     { href: "/admin/members", title: "회원 관리", sub: "회원 조회·수정·정지" },
     { href: "/admin/orders", title: "전체 발주 목록", sub: `${totalOrders}건` },
     { href: "/admin/hotdeal", title: "핫딜마켓 발주관리", sub: `${hotdealOrders}건` },
+    {
+      href: "/admin/weekly",
+      title: "주간발주 수령",
+      sub: "이번 주 항시품목 발주",
+      badge: weeklyCount > 0 ? weeklyCount : undefined,
+    },
     { href: "/admin/deposits", title: "입금 관리", sub: "오늘 입금 현황" },
     { href: "/admin/inventory", title: "재고", sub: "" },
     { href: "/admin/audit", title: "감사 로그", sub: "관리자 작업 이력(삭제·취소·초기화)" },

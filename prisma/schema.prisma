@@ -34,7 +34,12 @@ model User {
   // 해제한 시각 — 그 '발주창'에만 유효(1회성). 다음 창엔 미수가 남아있으면 다시 잠긴다.
   orderUnlockAt DateTime?
 
+  // 주간발주 미수 잠금 1회성 해제(일일 발주 잠금과 독립) — 주간 미납이 있어도 이번 주간발주 허용
+  weeklyOrderUnlock   Boolean   @default(false)
+  weeklyOrderUnlockAt DateTime?
+
   orders          Order[]
+  weeklyOrders    WeeklyOrder[]
   pushSubs        PushSubscription[]
   matchedDeposits Deposit[]
   invoices        Invoice[]
@@ -98,6 +103,38 @@ model OrderItem {
   note String @default("") // 정리된 부연설명
 }
 
+// 주간발주 — 매주 토요일 12~20시 1회, 항시품목(과자류/유제품/건어물/계란) 카탈로그 체크리스트.
+// 일일 발주(Order)와 완전 분리. 주(週)당 점포 1건(weekKey=그 주 토요일 KST 날짜).
+model WeeklyOrder {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id])
+  weekKey String // 그 주간창 시작일(토요일, KST YYYY-MM-DD)
+
+  edited    Boolean   @default(false)
+  editedAt  DateTime?
+  items     WeeklyOrderItem[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, weekKey]) // 주당 점포 1건(원자적 중복 방지)
+  @@index([weekKey, createdAt])
+}
+
+model WeeklyOrderItem {
+  id            String      @id @default(cuid())
+  weeklyOrderId String
+  weeklyOrder   WeeklyOrder @relation(fields: [weeklyOrderId], references: [id], onDelete: Cascade)
+  sortOrder     Int         @default(0)
+
+  code      String // 카탈로그 seq(예: S01)
+  category  String // SNACK | DAIRY | DRIED | EGG
+  name      String
+  boxUnit   String @default("")
+  qty       Int    @default(0) // 발주 박스 수
+  unitPrice Int    @default(0) // 발주 시점 박스 공급가 스냅샷(원)
+}
+
 // 앱 전역 메타(키-값 타임스탬프) — 예: 팝빌 계좌 최신 동기화 시각(bank_sync)
 model AppMeta {
   key      String   @id
@@ -121,6 +158,9 @@ model Invoice {
   userId String
   user   User   @relation(fields: [userId], references: [id])
   date   String // 출고 기준일 (KST, YYYY-MM-DD) — 합본 발주서 날짜와 동일 단위
+
+  // kind: DAILY(일일 발주 계산서) | WEEKLY(주간발주 입금요청서) — 잠금/미수 계산이 서로 오염되지 않게 분리
+  kind   String @default("DAILY")
 
   // status: DRAFT(작성중) | ISSUED(발행·입금대기) | PAID(입금확인) | VOID(취소)
   status String @default("DRAFT")
@@ -146,6 +186,7 @@ model Invoice {
 
   @@index([userId, date])
   @@index([status, issuedAt])
+  @@index([userId, kind, status])
 }
 
 model InvoiceItem {

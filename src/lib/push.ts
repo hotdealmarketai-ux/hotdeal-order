@@ -105,6 +105,32 @@ export async function notifyVendorNewOrder(role: Role, fromStoreName: string) {
   }
 }
 
+// 새롭(관리자)에게 '주간발주 접수' 알림
+export async function notifyAdminNewWeeklyOrder(fromStoreName: string) {
+  try {
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: `${fromStoreName} 님이 주간발주를 넣었습니다.`,
+      body: "",
+      url: "/admin/weekly",
+    });
+  } catch (err) {
+    logError("push.notifyAdminNewWeeklyOrder", err, {});
+  }
+}
+
+// 점주에게 '주간발주 입금요청서 발행' 알림
+export async function notifyMerchantWeeklyInvoiceIssued(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "주간발주 입금요청서가 도착했습니다.",
+      body: "",
+      url: "/weekly/invoices",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantWeeklyInvoiceIssued", err, { userId });
+  }
+}
+
 // 점주에게 '입금요청서(계산서) 발행' 알림 — 지난 발주의 해당 날짜 입금요청서로 이동
 export async function notifyMerchantInvoiceIssued(userId: string, date: string) {
   try {

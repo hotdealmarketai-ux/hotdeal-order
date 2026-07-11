@@ -9,9 +9,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { canViewInventory, type Role } from "@/lib/constants";
+import { canViewInventory, canOrderWeekly, type Role } from "@/lib/constants";
 
 const ICONS = {
+  weekly: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 9.5h17" />
+      <path d="M8 3v3M16 3v3" />
+      <path d="M8.5 13.5h3M8.5 16.5h5" />
+    </svg>
+  ),
   order: (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
       <rect x="5" y="4" width="14" height="17" rx="2.5" />
@@ -45,6 +53,9 @@ export function BottomNav({
   const path = usePathname();
   const items = [
     { href: "/order", label: "발주", icon: ICONS.order, badge: 0 },
+    ...(canOrderWeekly(role)
+      ? [{ href: "/weekly", label: "주간발주", icon: ICONS.weekly, badge: 0 }]
+      : []),
     ...(canViewInventory(role)
       ? [{ href: "/inventory", label: "재고현황", icon: ICONS.inventory, badge: 0 }]
       : []),

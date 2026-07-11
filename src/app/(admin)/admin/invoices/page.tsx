@@ -18,11 +18,12 @@ export default async function AdminInvoices() {
 
   const [ar, invoices] = await Promise.all([
     prisma.invoice.aggregate({
-      where: { status: "ISSUED" },
+      where: { status: "ISSUED", kind: "DAILY" },
       _sum: { total: true },
       _count: true,
     }),
     prisma.invoice.findMany({
+      where: { kind: "DAILY" }, // 주간(WEEKLY)은 /admin/weekly 에서 별도 관리
       orderBy: { updatedAt: "desc" },
       take: 200,
       include: { user: { select: { storeName: true } } },
