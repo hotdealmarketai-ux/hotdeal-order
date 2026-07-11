@@ -7,8 +7,8 @@ import { formatKStamp } from "@/lib/format";
 
 function stockBadgeClass(status: string): string {
   if (status.includes("넉넉") || status.includes("많")) return "badge--ok";
-  if (status.includes("부족") || status.includes("없") || status.includes("품절"))
-    return "badge--wait";
+  if (status.includes("없") || status.includes("품절")) return "badge--danger";
+  if (status.includes("부족")) return "badge--wait";
   return "badge--mute";
 }
 

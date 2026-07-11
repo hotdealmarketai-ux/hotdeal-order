@@ -38,7 +38,7 @@ export default async function ApprovalsPage() {
                   <span className="kv__v">{u.phone}</span>
                 </div>
                 <div className="kv">
-                  <span className="kv__k">소재지</span>
+                  <span className="kv__k">주소</span>
                   <span className="kv__v">{u.address}</span>
                 </div>
                 {u.businessCert && (
@@ -56,9 +56,6 @@ export default async function ApprovalsPage() {
                   </div>
                 )}
                 <div className="divider" />
-                <div className="section-label" style={{ margin: "0 0 8px" }}>
-                  발주 유형 배정 후 승인
-                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <form action={approveUserAction} style={{ flex: 1 }}>
                     <input type="hidden" name="userId" value={u.id} />

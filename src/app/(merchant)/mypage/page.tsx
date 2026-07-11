@@ -107,7 +107,7 @@ export default async function MyPage(props: {
             <span className="kv__v">{user.phone}</span>
           </div>
           <div className="kv">
-            <span className="kv__k">소재지</span>
+            <span className="kv__k">주소</span>
             <span className="kv__v">{user.address}</span>
           </div>
           <div className={`kv kv--strong ${ar.balance > 0 ? "kv--due" : ""}`}>

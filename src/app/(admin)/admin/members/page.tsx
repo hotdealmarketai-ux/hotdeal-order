@@ -6,7 +6,7 @@ import { ROLE_LABEL, STATUS_LABEL, type Role, type Status } from "@/lib/constant
 
 function statusBadge(status: Status): string {
   if (status === "APPROVED") return "badge--ok";
-  if (status === "SUSPENDED") return "badge--edit";
+  if (status === "SUSPENDED") return "badge--danger";
   if (status === "PENDING") return "badge--wait";
   return "badge--mute";
 }

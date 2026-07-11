@@ -28,9 +28,13 @@ export default async function PendingPage() {
     <div className="app">
       <div className="page" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <div className="center" style={{ padding: "20px 0 28px" }}>
-          <div
-            className={`statusring ${stopped ? "statusring--rejected" : ""}`}
-            aria-hidden
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="핫딜오더"
+            width={96}
+            height={96}
+            style={{ display: "block", margin: "0 auto", objectFit: "contain" }}
           />
           <h1 className="h1" style={{ marginTop: 20 }}>
             {heading}
@@ -53,7 +57,7 @@ export default async function PendingPage() {
             <span className="kv__k">상태</span>
             <span className="kv__v">
               <span
-                className={`badge ${suspended ? "badge--edit" : rejected ? "badge--mute" : "badge--wait"}`}
+                className={`badge ${suspended ? "badge--danger" : rejected ? "badge--mute" : "badge--wait"}`}
               >
                 {statusLabel}
               </span>

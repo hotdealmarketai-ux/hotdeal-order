@@ -49,7 +49,7 @@ export default async function WeeklyInvoiceDetailPage({
         </div>
         <p className="lead">{labelDateLong(inv.date)} 주간발주</p>
 
-        <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" />
+        <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" band />
 
         {inv.status === "ISSUED" && (
           <div className="card" style={{ marginTop: 16 }}>

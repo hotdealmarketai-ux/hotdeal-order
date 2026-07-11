@@ -25,7 +25,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   // 어르신 확대 가능하도록 maximumScale 제한하지 않음
-  themeColor: "#033826", // 핫딜오더 브랜드 초록
+  themeColor: "#1C4A2F", // 핫딜오더 브랜드 그린(헤더 메인)
 };
 
 export default function RootLayout({
@@ -36,7 +36,7 @@ export default function RootLayout({
       <head>
         <link
           rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
         />
       </head>
       <body>{children}</body>

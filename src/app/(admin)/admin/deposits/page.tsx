@@ -96,7 +96,7 @@ export default async function AdminDeposits() {
       <Topbar backHref="/admin" title="입금 관리" />
       <div className="page">
         <p className="lead" style={{ marginTop: 0, marginBottom: 4 }}>
-          미수 {dueStores}곳 · 합계 {fmt(totalDue)}원
+          미수 {dueStores}건 · 합계 {fmt(totalDue)}원
         </p>
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
           최신 계좌 동기화 : {syncedAt ? formatKDateTime(syncedAt) : "동기화 전"}
@@ -115,7 +115,7 @@ export default async function AdminDeposits() {
                       <div className="row__title">
                         {s.user.storeName} · {fmt(s.total)}원
                       </div>
-                      <div className="row__sub">{s.date} 계산서 · 나눠 입금 요청</div>
+                      <div className="row__sub">{s.date} 계산서</div>
                     </div>
                     <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                       <form action={approveSplitAction}>
@@ -180,7 +180,7 @@ export default async function AdminDeposits() {
 
         {unmatched.length > 0 && (
           <>
-            <div className="section-label">미매칭 입금 (예금주 미등록)</div>
+            <div className="section-label">미매칭 입금</div>
             <div className="list">
               {unmatched.map((d) => (
                 <div className="deprow" key={d.id}>
@@ -193,7 +193,7 @@ export default async function AdminDeposits() {
                         {formatKDateTime(d.txAt)}
                         {suggestions.get(d.id) && (
                           <span style={{ color: "var(--black)", marginLeft: 6 }}>
-                            · 제안: {suggestions.get(d.id)!.reason}
+                            · {suggestions.get(d.id)!.reason}
                           </span>
                         )}
                       </div>

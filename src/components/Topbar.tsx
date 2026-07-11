@@ -36,7 +36,13 @@ export function Topbar({
             ‹
           </Link>
         ) : null}
-        {brand ? <span className="tbar__brand">{brand}</span> : null}
+        {brand ? (
+          <span className="tbar__brand">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo-white.png" alt="" width={34} height={34} />
+            {brand}
+          </span>
+        ) : null}
         {title ? <span className="tbar__title">{title}</span> : null}
         <span className="tbar__spacer" />
         {right}

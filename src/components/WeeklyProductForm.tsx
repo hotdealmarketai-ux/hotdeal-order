@@ -125,7 +125,7 @@ export function WeeklyProductForm({ initial }: { initial: WeeklyProductRow[] }) 
           />
           <div className="wprow__nums">
             <span className="wprow__field">
-              1박스에{" "}
+              1박스{" "}
               <input
                 className="input"
                 inputMode="numeric"

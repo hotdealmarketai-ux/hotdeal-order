@@ -119,8 +119,7 @@ export default async function DayReceiptPage(props: {
               </div>
             ) : (
               <div className="notice notice--info" style={{ marginBottom: 14 }}>
-                아래 금액을 새롭으로 입금해 주세요. 입금이 확인되면 완료로
-                표시돼요.
+                아래 금액을 입금해주세요. 입금이 확인되면 완료로 표시됩니다.
               </div>
             )}
 
@@ -141,7 +140,7 @@ export default async function DayReceiptPage(props: {
                           {String(it.qty)} × {fmt(it.unitPrice)}
                         </span>
                       </span>
-                      <span className="invline__amt">{fmt(it.amount)}</span>
+                      <span className="invline__amt">{fmt(it.amount)}원</span>
                     </div>
                   ))}
                 </div>

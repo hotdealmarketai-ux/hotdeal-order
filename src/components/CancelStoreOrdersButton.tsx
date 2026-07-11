@@ -7,7 +7,7 @@ import {
 } from "@/app/actions/admin";
 import { SubmitButton } from "./SubmitButton";
 
-// 지점 발주 전체 취소 — 관리자가 핫딜마켓 발주관리에서 지점별로 취소.
+// 지점 발주 전체 취소 — 관리자가 핫딜마켓 발주에서 지점별로 취소.
 // useActionState로 결과를 받아 성공 시 모달을 명시적으로 닫는다(리다이렉트 상태 잔존으로
 // 확인창이 계속 다시 뜨던 문제 방지). 삭제되면 revalidate로 지점 행 자체가 사라진다.
 export function CancelStoreOrdersButton({

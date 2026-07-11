@@ -27,7 +27,7 @@ export default async function VendorOrderDetail(props: {
       <div className="page">
         {order.edited && !order.confirmed ? (
           <div className="notice notice--edit" style={{ marginBottom: 14 }}>
-            발주수정 — 점주가 발주를 수정했어요. 내용 확인 후 다시 발주 확인을 눌러주세요.
+            발주 수정 — 점주가 발주를 수정했어요. 내용 확인 후 다시 발주 확인을 눌러주세요.
           </div>
         ) : null}
         {order.confirmed ? (
@@ -65,7 +65,7 @@ export default async function VendorOrderDetail(props: {
             <span className="kv__v">{order.user.phone}</span>
           </div>
           <div className="kv">
-            <span className="kv__k">소재지</span>
+            <span className="kv__k">주소</span>
             <span className="kv__v">{order.user.address}</span>
           </div>
         </div>

@@ -34,7 +34,7 @@ export function SignupForm() {
 
       <div className="field">
         <label className="label" htmlFor="address">
-          업장 소재지<span className="req">*</span>
+          업장 주소<span className="req">*</span>
         </label>
         <input id="address" name="address" className="input" required />
       </div>

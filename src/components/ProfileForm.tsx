@@ -35,13 +35,13 @@ export function ProfileForm({
       </div>
       <div className="field">
         <label className="label" htmlFor="address">
-          업장 소재지
+          업장 주소
         </label>
         <input id="address" name="address" className="input" defaultValue={address} required />
       </div>
       <div className="field">
         <label className="label" htmlFor="password">
-          새 비밀번호 (변경 시에만 입력)
+          새 비밀번호
         </label>
         <input
           id="password"

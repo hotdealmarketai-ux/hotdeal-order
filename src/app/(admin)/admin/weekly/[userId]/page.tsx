@@ -120,7 +120,7 @@ export default async function AdminWeeklyStorePage({
                 <span className={`badge ${status.cls}`}>{status.label}</span>
               </div>
             </div>
-            <WeeklyReceipt items={invoiceReceipt} totalLabel="총 결제요청 금액" />
+            <WeeklyReceipt items={invoiceReceipt} totalLabel="총 결제요청 금액" band />
             {invoice.status === "ISSUED" && (
               <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
                 <ManualPayButton invoiceId={invoice.id} block />

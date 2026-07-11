@@ -70,7 +70,7 @@ export default async function VendorPage(props: {
                     </div>
                   </div>
                   {o.edited && !o.confirmed ? (
-                    <span className="badge badge--edit">발주수정</span>
+                    <span className="badge badge--edit">발주 수정</span>
                   ) : o.confirmed ? (
                     <span className="badge badge--ok">발주 확인</span>
                   ) : (

@@ -105,7 +105,7 @@ export default async function OrderPage() {
           <>
             <h1 className="h1">발주하기</h1>
             <div className="notice notice--mute" style={{ marginBottom: 16 }}>
-              이미 주문이 진행됐으므로, 발주수정만 가능합니다.
+              이미 주문이 진행됐으므로, 발주 수정만 가능합니다.
             </div>
             <Link
               href={`/order/day/${existingOrderDate}`}

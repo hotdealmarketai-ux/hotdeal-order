@@ -95,7 +95,7 @@ export function MemberEditForm({
           <input id="phone" name="phone" className="input" defaultValue={initial.phone} />
         </div>
         <div className="field">
-          <label className="label" htmlFor="address">소재지</label>
+          <label className="label" htmlFor="address">주소</label>
           <input id="address" name="address" className="input" defaultValue={initial.address} />
         </div>
         <div className="field">

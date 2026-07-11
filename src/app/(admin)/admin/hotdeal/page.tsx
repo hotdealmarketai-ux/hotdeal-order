@@ -72,7 +72,7 @@ export default async function AdminHotdeal(props: {
 
   return (
     <>
-      <Topbar backHref="/admin" title="핫딜마켓 발주관리" />
+      <Topbar backHref="/admin" title="핫딜마켓 발주" />
       <div className="page page--tight">
         <div className="cattabs">
           {SCOPES.map((s) => (

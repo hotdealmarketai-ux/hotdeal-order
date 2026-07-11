@@ -13,9 +13,11 @@ export type ReceiptItem = {
 export function WeeklyReceipt({
   items,
   totalLabel = "합계",
+  band = false,
 }: {
   items: ReceiptItem[];
   totalLabel?: string;
+  band?: boolean; // 총액을 다크 그린 밴드로
 }) {
   const total = items.reduce((n, it) => n + it.amount, 0);
   const cats = WEEKLY_CATEGORIES.filter((c) =>
@@ -52,10 +54,17 @@ export function WeeklyReceipt({
         ),
       )}
       {others.length > 0 && renderGroup("기타", others, "_others")}
-      <div className="invtotal" style={{ marginTop: 8 }}>
-        <span>{totalLabel}</span>
-        <b>{won(total)}원</b>
-      </div>
+      {band ? (
+        <div className="grandband">
+          <span className="grandband__label">{totalLabel}</span>
+          <span className="grandband__amt">{won(total)}원</span>
+        </div>
+      ) : (
+        <div className="invtotal" style={{ marginTop: 8 }}>
+          <span>{totalLabel}</span>
+          <b>{won(total)}원</b>
+        </div>
+      )}
     </div>
   );
 }

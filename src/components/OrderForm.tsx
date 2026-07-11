@@ -181,15 +181,23 @@ export function OrderForm({
   if (mode === "chat") {
     return (
       <div>
-        <div className="modetoggle">
-          <button
-            type="button"
-            className="chatchip"
-            onClick={() => setMode("grid")}
-          >
-            칸에 직접 입력하기
-          </button>
-        </div>
+        <button
+          type="button"
+          className="entrycard"
+          onClick={() => setMode("grid")}
+        >
+          <span className="entrycard__ic">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <path d="M4 10h16M10 4v16" />
+            </svg>
+          </span>
+          <span className="entrycard__main">
+            <span className="entrycard__title">칸에 직접 입력하기</span>
+            <span className="entrycard__sub">품목·수량을 칸에 하나씩 적어요</span>
+          </span>
+          <span className="entrycard__chev">›</span>
+        </button>
         <ChatOrder
           categories={categories}
           needsPickup={needsPickup}
@@ -207,16 +215,23 @@ export function OrderForm({
       <input type="hidden" name="preNormalized" value="1" />
       {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
 
-      {/* ③ 제목 삭제 → 채팅 발주 칩 */}
-      <div className="modetoggle">
-        <button
-          type="button"
-          className="chatchip"
-          onClick={() => setMode("chat")}
-        >
-          💬 채팅으로 발주하기
-        </button>
-      </div>
+      {/* 채팅 발주 진입 카드 (미수 카드 아래 풀폭) */}
+      <button
+        type="button"
+        className="entrycard"
+        onClick={() => setMode("chat")}
+      >
+        <span className="entrycard__ic">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 5h16v11H8l-4 4V5Z" />
+          </svg>
+        </span>
+        <span className="entrycard__main">
+          <span className="entrycard__title">채팅으로 발주하기</span>
+          <span className="entrycard__sub">말하듯 적으면 AI가 발주서로 정리해요</span>
+        </span>
+        <span className="entrycard__chev">›</span>
+      </button>
 
       {locked && (
         <div className="notice notice--mute" style={{ marginBottom: 14 }}>
