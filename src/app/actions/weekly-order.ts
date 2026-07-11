@@ -5,8 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireMerchant } from "@/lib/session";
 import { canOrderWeekly } from "@/lib/constants";
 import { WEEKLY_OPEN_LABEL, WEEKLY_CLOSE_LABEL } from "@/lib/schedule";
-import { weeklyKeyAt, weeklyLockOf, weeklyOpenNow, weeklyPriceMap } from "@/lib/weekly";
-import { WEEKLY_BY_SEQ } from "@/lib/weekly-catalog";
+import { weeklyKeyAt, weeklyLockOf, weeklyOpenNow, weeklyProductMap } from "@/lib/weekly";
 import { notifyAdminNewWeeklyOrder } from "@/lib/push";
 
 export type WeeklyOrderState = { error?: string };
@@ -45,7 +44,7 @@ export async function createWeeklyOrderAction(
     payload = [];
   }
 
-  const priceMap = await weeklyPriceMap(); // 관리자 오버라이드 반영 단가
+  const productMap = await weeklyProductMap(); // DB 카탈로그(단가 포함)
   const rows: {
     sortOrder: number;
     code: string;
@@ -57,18 +56,18 @@ export async function createWeeklyOrderAction(
   }[] = [];
   let sort = 0;
   for (const p of Array.isArray(payload) ? payload : []) {
-    const item = WEEKLY_BY_SEQ[String(p.code ?? "")];
+    const item = productMap[String(p.code ?? "")];
     if (!item) continue; // 카탈로그에 없는 코드는 무시(위조 방지)
     const qty = Math.floor(Number(String(p.qty ?? "").replace(/[^0-9.]/g, "")));
     if (!Number.isFinite(qty) || qty <= 0) continue;
     rows.push({
       sortOrder: sort++,
-      code: item.seq,
+      code: item.code,
       category: item.category,
       name: item.name,
-      boxUnit: item.boxUnit,
+      boxUnit: `1박스 ${item.perBox}개`,
       qty: Math.min(qty, 9999),
-      unitPrice: priceMap[item.seq] ?? item.boxPrice, // 발주 시점 단가 스냅샷
+      unitPrice: item.supplyPrice, // 발주 시점 단가 스냅샷
     });
   }
   if (rows.length === 0) {
@@ -87,7 +86,14 @@ export async function createWeeklyOrderAction(
         prisma.weeklyOrderItem.deleteMany({ where: { weeklyOrderId: existing.id } }),
         prisma.weeklyOrder.update({
           where: { id: existing.id },
-          data: { edited: true, editedAt: new Date(), items: { create: rows } },
+          // 수정하면 발주확인 리셋 → 관리자에 '수정 요청'으로 표시
+          data: {
+            edited: true,
+            editedAt: new Date(),
+            confirmed: false,
+            confirmedAt: null,
+            items: { create: rows },
+          },
         }),
       ]);
     } else {

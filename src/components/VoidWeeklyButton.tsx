@@ -11,7 +11,8 @@ export function VoidWeeklyButton({ invoiceId }: { invoiceId: string }) {
     return (
       <button
         type="button"
-        className="linkbtn linkbtn--danger"
+        className="btn btn--block btn--ghost"
+        style={{ color: "var(--danger)" }}
         onClick={() => setOpen(true)}
       >
         입금요청서 취소

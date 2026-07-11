@@ -5,15 +5,21 @@ import { markInvoicePaidAction } from "@/app/actions/invoice";
 import { SubmitButton } from "./SubmitButton";
 
 // 관리자 수동 입금확인 — 분할입금·차액 등 자동매칭이 못 잡는 건을 확정
-export function ManualPayButton({ invoiceId }: { invoiceId: string }) {
+export function ManualPayButton({
+  invoiceId,
+  block = false,
+}: {
+  invoiceId: string;
+  block?: boolean;
+}) {
   const [open, setOpen] = useState(false);
 
   if (!open) {
     return (
       <button
         type="button"
-        className="btn btn--xs btn--soft"
-        style={{ width: "100%" }}
+        className={block ? "btn btn--block btn--soft" : "btn btn--xs btn--soft"}
+        style={block ? undefined : { width: "100%" }}
         onClick={() => setOpen(true)}
       >
         수동 입금확인

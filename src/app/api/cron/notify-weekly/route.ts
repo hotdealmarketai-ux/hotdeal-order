@@ -56,6 +56,14 @@ export async function GET(request: Request) {
     body: "",
     url: "/weekly",
   });
+  // 마감(20시)엔 새롭 관리자에게도 확인 요청 푸시
+  if (job.type === "deadline") {
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: "주간발주가 마감되었습니다. 지금 확인해주세요!",
+      body: "",
+      url: "/admin/weekly",
+    });
+  }
   await prisma.appMeta.upsert({
     where: { key },
     create: { key, syncedAt: new Date() },

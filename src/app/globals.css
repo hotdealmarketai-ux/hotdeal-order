@@ -978,6 +978,143 @@ a {
   color: var(--muted);
   white-space: nowrap;
 }
+/* 주간발주 상품 관리 행 */
+.wprow {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--surface);
+}
+.wprow__name {
+  margin-bottom: 8px;
+}
+.wprow__nums {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.wprow__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.wprow__field .input {
+  width: 72px;
+  padding: 7px 8px;
+  text-align: center;
+  font-size: 15px;
+}
+/* 주간 입금요청서 — 품목명(읽기전용) */
+.wlname {
+  align-self: center;
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 품목 추가 팝업 — 선택 버튼 */
+.wpick {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  margin-bottom: 6px;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+.wpick:active {
+  background: var(--surface-2, #f2f4f8);
+}
+.wpick__price {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+/* 총 집계 접기/펼치기 */
+.wagg {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  background: var(--surface);
+}
+.wagg__sum {
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.wagg__sum::-webkit-details-marker {
+  display: none;
+}
+.wagg__sum::after {
+  content: " ▾";
+  color: var(--muted);
+}
+.wagg[open] .wagg__sum::after {
+  content: " ▴";
+}
+/* 관리자 메뉴 3열 그리드 */
+.admgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.admcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  min-height: 84px;
+  padding: 12px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md, 14px);
+  background: var(--surface);
+  color: var(--fg);
+  text-decoration: none;
+  box-shadow: var(--shadow-row);
+}
+.admcard:active {
+  transform: translateY(1px);
+}
+.admcard__title {
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.admcard__sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.admcard__badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger, #e5484d);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* ---- 큰 카테고리 카드(홈) ---- */
 .catgrid {

@@ -46,15 +46,17 @@ const ICONS = {
 export function BottomNav({
   role,
   myBadge = 0,
+  weeklyBadge = 0,
 }: {
   role: Role;
   myBadge?: number;
+  weeklyBadge?: number;
 }) {
   const path = usePathname();
   const items = [
     { href: "/order", label: "발주", icon: ICONS.order, badge: 0 },
     ...(canOrderWeekly(role)
-      ? [{ href: "/weekly", label: "주간발주", icon: ICONS.weekly, badge: 0 }]
+      ? [{ href: "/weekly", label: "주간발주", icon: ICONS.weekly, badge: weeklyBadge }]
       : []),
     ...(canViewInventory(role)
       ? [{ href: "/inventory", label: "재고현황", icon: ICONS.inventory, badge: 0 }]

@@ -37,6 +37,17 @@ export function labelDate(dateStr: string): string {
   }).format(d);
 }
 
+/** 표시용: YYYY-MM-DD -> "7월 15일 수요일" (연도 없이, 요일 전체) */
+export function labelDateLong(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00+09:00`);
+  return new Intl.DateTimeFormat("ko-KR", {
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+    timeZone: "Asia/Seoul",
+  }).format(d);
+}
+
 /** 표시용 풀 라벨: YYYY-MM-DD -> "2026년 6월 27일 토요일" */
 export function fullKLabel(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00+09:00`);

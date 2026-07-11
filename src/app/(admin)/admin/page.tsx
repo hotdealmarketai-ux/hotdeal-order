@@ -34,21 +34,19 @@ export default async function AdminHome() {
     {
       href: "/admin/approvals",
       title: "가입 대기",
-      sub: pending > 0 ? `${pending}건 대기 중` : "대기 없음",
       badge: pending > 0 ? pending : undefined,
     },
-    { href: "/admin/members", title: "회원 관리", sub: "회원 조회·수정·정지" },
+    { href: "/admin/members", title: "회원 관리" },
     { href: "/admin/orders", title: "전체 발주 목록", sub: `${totalOrders}건` },
     { href: "/admin/hotdeal", title: "핫딜마켓 발주관리", sub: `${hotdealOrders}건` },
     {
       href: "/admin/weekly",
-      title: "주간발주 수령",
-      sub: "이번 주 항시품목 발주",
+      title: "주간발주",
       badge: weeklyCount > 0 ? weeklyCount : undefined,
     },
-    { href: "/admin/deposits", title: "입금 관리", sub: "오늘 입금 현황" },
-    { href: "/admin/inventory", title: "재고", sub: "" },
-    { href: "/admin/audit", title: "감사 로그", sub: "관리자 작업 이력(삭제·취소·초기화)" },
+    { href: "/admin/deposits", title: "입금 관리" },
+    { href: "/admin/inventory", title: "재고" },
+    { href: "/admin/audit", title: "로그 내역" },
   ];
 
   return (
@@ -58,18 +56,12 @@ export default async function AdminHome() {
         <h1 className="h1">관리자</h1>
         <p className="lead">전체 발주를 확인하고 가맹점을 관리하세요.</p>
 
-        <div className="list">
+        <div className="admgrid">
           {menu.map((m) => (
-            <Link href={m.href} className="row" key={m.href}>
-              <div className="row__main">
-                <div className="row__title">{m.title}</div>
-                {m.sub ? <div className="row__sub">{m.sub}</div> : null}
-              </div>
-              {m.badge ? (
-                <span className="badge badge--wait">{m.badge}</span>
-              ) : (
-                <span className="row__chev">›</span>
-              )}
+            <Link href={m.href} className="admcard" key={m.href}>
+              {m.badge ? <span className="admcard__badge">{m.badge}</span> : null}
+              <div className="admcard__title">{m.title}</div>
+              {m.sub ? <div className="admcard__sub">{m.sub}</div> : null}
             </Link>
           ))}
         </div>

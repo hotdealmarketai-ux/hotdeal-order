@@ -20,13 +20,8 @@ export default async function AdminAudit() {
 
   return (
     <>
-      <Topbar backHref="/admin" title="감사 로그" />
+      <Topbar backHref="/admin" title="로그 내역" />
       <div className="page">
-        <p className="lead" style={{ marginTop: 0 }}>
-          관리자의 삭제·취소·초기화 작업 최근 {logs.length}건. 되돌릴 수 없는 작업의 추적·복구
-          참고용이에요.
-        </p>
-
         {logs.length === 0 ? (
           <div className="empty">
             <p>아직 기록된 작업이 없습니다.</p>

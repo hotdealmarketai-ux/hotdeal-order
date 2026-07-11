@@ -7,17 +7,51 @@ import {
   nextWeeklyOpenUtc,
   isWeeklyOpen,
 } from "@/lib/schedule";
-import { WEEKLY_CATALOG } from "@/lib/weekly-catalog";
+// 주간발주 상품(DB 카탈로그) 한 줄
+export type WeeklyProductRow = {
+  code: string;
+  category: string;
+  name: string;
+  perBox: number;
+  supplyPrice: number;
+  sortOrder: number;
+};
 
-// 코드→박스단가 맵 = 카탈로그 기본값에 DB 오버라이드(WeeklyPrice)를 덮어씀.
-export async function weeklyPriceMap(): Promise<Record<string, number>> {
-  const overrides = await prisma.weeklyPrice.findMany({
-    select: { code: true, boxPrice: true },
+// 활성 상품 목록(관리자가 추가/삭제/수정하는 DB 카탈로그). sortOrder 순.
+export async function getWeeklyProducts(): Promise<WeeklyProductRow[]> {
+  return prisma.weeklyProduct.findMany({
+    where: { active: true },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    select: {
+      code: true,
+      category: true,
+      name: true,
+      perBox: true,
+      supplyPrice: true,
+      sortOrder: true,
+    },
   });
-  const map: Record<string, number> = {};
-  for (const it of WEEKLY_CATALOG) map[it.seq] = it.boxPrice;
-  for (const o of overrides) map[o.code] = o.boxPrice;
-  return map;
+}
+
+// 코드→상품 맵
+export async function weeklyProductMap(): Promise<Record<string, WeeklyProductRow>> {
+  const list = await getWeeklyProducts();
+  return Object.fromEntries(list.map((p) => [p.code, p]));
+}
+
+// 주간발주 상태 배지 — 발주요청 → 발주확인 → 입금대기 → 입금완료(+수정요청). 관리자·점주 공용.
+export function weeklyStatusOf(
+  order: { confirmed: boolean; edited: boolean } | null,
+  invoice: { status: string } | null,
+): { label: string; cls: string } {
+  if (invoice) {
+    if (invoice.status === "PAID") return { label: "입금완료", cls: "badge--ok" };
+    return { label: "입금대기", cls: "badge--wait" };
+  }
+  if (!order) return { label: "발주 없음", cls: "badge--mute" };
+  if (order.confirmed) return { label: "발주 확인", cls: "badge--ai" };
+  if (order.edited) return { label: "수정 요청", cls: "badge--edit" };
+  return { label: "발주 요청", cls: "badge--wait" };
 }
 
 // 이번 주간 사이클 키(그 주 토요일 KST 날짜) — 주(週) 식별자.

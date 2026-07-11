@@ -111,6 +111,10 @@ model WeeklyOrder {
   user    User   @relation(fields: [userId], references: [id])
   weekKey String // 그 주간창 시작일(토요일, KST YYYY-MM-DD)
 
+  // 상태: 점주가 넣으면 confirmed=false(발주 요청) → 관리자 '발주 확인' 시 true → 이후 계산서 발행.
+  // 점주가 수정하면 confirmed=false로 되돌림(관리자에 '수정 요청'으로 표시).
+  confirmed   Boolean   @default(false)
+  confirmedAt DateTime?
   edited    Boolean   @default(false)
   editedAt  DateTime?
   items     WeeklyOrderItem[]
@@ -135,11 +139,19 @@ model WeeklyOrderItem {
   unitPrice Int    @default(0) // 발주 시점 박스 공급가 스냅샷(원)
 }
 
-// 주간발주 카탈로그 단가 오버라이드 — 관리자가 화면에서 수정. 없으면 코드 카탈로그 기본값 사용.
-model WeeklyPrice {
-  code      String   @id // 카탈로그 seq
-  boxPrice  Int // 박스(발주 1단위)당 공급가(원)
-  updatedAt DateTime @updatedAt
+// 주간발주 상품 카탈로그(DB) — 관리자가 추가/삭제/수정. 정적 파일(weekly-catalog.ts)에서 시드.
+model WeeklyProduct {
+  code        String   @id @default(cuid())
+  category    String // SNACK | DAIRY | DRIED | EGG
+  name        String
+  perBox      Int      @default(1) // 1박스에 몇 개(박스단위)
+  supplyPrice Int      @default(0) // 박스당 공급가(원) — 가맹점 납품가/결제 단가
+  sortOrder   Int      @default(0)
+  active       Boolean  @default(true) // false=삭제(소프트)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, sortOrder])
 }
 
 // 앱 전역 메타(키-값 타임스탬프) — 예: 팝빌 계좌 최신 동기화 시각(bank_sync)
