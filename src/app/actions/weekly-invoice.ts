@@ -8,6 +8,8 @@ import { isMerchant, type Role } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { notifyMerchantWeeklyInvoiceIssued } from "@/lib/push";
 import { writeAudit } from "@/lib/audit";
+import { setWeeklyForceOpen } from "@/lib/weekly";
+import { WEEKLY_BY_SEQ } from "@/lib/weekly-catalog";
 
 export type WeeklyInvoiceState = { error?: string };
 
@@ -118,6 +120,87 @@ export async function saveWeeklyInvoiceAction(
   revalidatePath("/admin/weekly");
   revalidatePath(`/admin/weekly/${userId}`);
   redirect(`/admin/weekly/${userId}?issued=1`);
+}
+
+export type WeeklyPriceState = { ok?: boolean; error?: string; saved?: number };
+
+// 주간발주 카탈로그 단가 저장 — 기본값과 다르면 오버라이드 upsert, 같으면 오버라이드 삭제.
+export async function saveWeeklyPricesAction(
+  _prev: WeeklyPriceState,
+  formData: FormData,
+): Promise<WeeklyPriceState> {
+  await requireAdmin();
+  let payload: { code?: string; boxPrice?: string | number }[] = [];
+  try {
+    payload = JSON.parse(String(formData.get("payload") ?? "[]"));
+  } catch {
+    payload = [];
+  }
+  const ops = [];
+  for (const p of Array.isArray(payload) ? payload : []) {
+    const item = WEEKLY_BY_SEQ[String(p.code ?? "")];
+    if (!item) continue;
+    const price = Math.floor(Number(String(p.boxPrice ?? "").replace(/[^0-9]/g, "")));
+    if (!Number.isFinite(price) || price < 0) continue;
+    if (price === item.boxPrice) {
+      ops.push(prisma.weeklyPrice.deleteMany({ where: { code: item.seq } }));
+    } else {
+      ops.push(
+        prisma.weeklyPrice.upsert({
+          where: { code: item.seq },
+          create: { code: item.seq, boxPrice: price },
+          update: { boxPrice: price },
+        }),
+      );
+    }
+  }
+  if (ops.length > 0) await prisma.$transaction(ops);
+  revalidatePath("/admin/weekly/prices");
+  revalidatePath("/weekly");
+  return { ok: true, saved: ops.length };
+}
+
+// 관리자 전역 강제 오픈 토글 — 토요일 12~20시가 아니어도 주간발주를 열 수 있음(테스트/특례).
+export async function setWeeklyForceOpenAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const on = formData.get("on") === "true";
+  await setWeeklyForceOpen(on);
+  await writeAudit({
+    action: "weekly.forceOpen",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "weekly",
+    targetId: "global",
+    summary: `주간발주 강제 오픈 ${on ? "ON" : "OFF"}`,
+  });
+  revalidatePath("/admin/weekly");
+  revalidatePath("/weekly");
+}
+
+// 주간발주 입금요청서 취소(VOID) — 잘못 발행 시. 발행(ISSUED) 상태만.
+export async function voidWeeklyInvoiceAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("invoiceId") ?? "");
+  if (!id || String(formData.get("confirm") ?? "") !== "VOID-WEEKLY") return;
+  const upd = await prisma.invoice.updateMany({
+    where: { id, kind: "WEEKLY", status: "ISSUED" },
+    data: { status: "VOID", voidedAt: new Date() },
+  });
+  if (upd.count === 0) return;
+  const inv = await prisma.invoice.findUnique({
+    where: { id },
+    select: { userId: true, date: true, total: true },
+  });
+  await writeAudit({
+    action: "weeklyInvoice.void",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "invoice",
+    targetId: id,
+    summary: `주간발주 입금요청서 취소 · ${inv?.date ?? ""} · ${(inv?.total ?? 0).toLocaleString("ko-KR")}원`,
+  });
+  revalidatePath("/admin/weekly");
+  if (inv) revalidatePath(`/admin/weekly/${inv.userId}`);
 }
 
 // 주간발주 잠금 해제/재잠금 — 1회성(그 주간 사이클만). 미납이어도 이번 주간발주 허용.

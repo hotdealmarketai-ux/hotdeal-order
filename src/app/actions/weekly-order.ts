@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireMerchant } from "@/lib/session";
 import { canOrderWeekly } from "@/lib/constants";
-import { isWeeklyOpen, WEEKLY_OPEN_LABEL, WEEKLY_CLOSE_LABEL } from "@/lib/schedule";
-import { weeklyKeyAt, weeklyLockOf } from "@/lib/weekly";
+import { WEEKLY_OPEN_LABEL, WEEKLY_CLOSE_LABEL } from "@/lib/schedule";
+import { weeklyKeyAt, weeklyLockOf, weeklyOpenNow, weeklyPriceMap } from "@/lib/weekly";
 import { WEEKLY_BY_SEQ } from "@/lib/weekly-catalog";
 import { notifyAdminNewWeeklyOrder } from "@/lib/push";
 
@@ -20,7 +20,7 @@ export async function createWeeklyOrderAction(
   if (!canOrderWeekly(user.role)) {
     return { error: "주간발주 대상 점포가 아니에요." };
   }
-  if (!isWeeklyOpen()) {
+  if (!(await weeklyOpenNow())) {
     return {
       error: `지금은 주간발주 시간이 아니에요. (${WEEKLY_OPEN_LABEL} ~ ${WEEKLY_CLOSE_LABEL})`,
     };
@@ -45,6 +45,7 @@ export async function createWeeklyOrderAction(
     payload = [];
   }
 
+  const priceMap = await weeklyPriceMap(); // 관리자 오버라이드 반영 단가
   const rows: {
     sortOrder: number;
     code: string;
@@ -67,7 +68,7 @@ export async function createWeeklyOrderAction(
       name: item.name,
       boxUnit: item.boxUnit,
       qty: Math.min(qty, 9999),
-      unitPrice: item.boxPrice, // 발주 시점 단가 스냅샷
+      unitPrice: priceMap[item.seq] ?? item.boxPrice, // 발주 시점 단가 스냅샷
     });
   }
   if (rows.length === 0) {

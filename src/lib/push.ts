@@ -131,6 +131,22 @@ export async function notifyMerchantWeeklyInvoiceIssued(userId: string) {
   }
 }
 
+// 점주에게 '주간발주 미입금' 안내(토요일 마감 전) — 계산서당 1회(overdueRemindedAt 멱등)
+export async function notifyMerchantWeeklyInvoiceOverdue(
+  userId: string,
+  total: number,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: `주간발주 입금 ${total.toLocaleString("ko-KR")}원이 아직 확인되지 않았습니다. 토요일 전 입금 부탁드립니다.`,
+      body: "",
+      url: "/weekly/invoices",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantWeeklyInvoiceOverdue", err, { userId });
+  }
+}
+
 // 점주에게 '입금요청서(계산서) 발행' 알림 — 지난 발주의 해당 날짜 입금요청서로 이동
 export async function notifyMerchantInvoiceIssued(userId: string, date: string) {
   try {

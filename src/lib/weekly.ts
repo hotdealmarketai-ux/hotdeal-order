@@ -7,10 +7,46 @@ import {
   nextWeeklyOpenUtc,
   isWeeklyOpen,
 } from "@/lib/schedule";
+import { WEEKLY_CATALOG } from "@/lib/weekly-catalog";
+
+// 코드→박스단가 맵 = 카탈로그 기본값에 DB 오버라이드(WeeklyPrice)를 덮어씀.
+export async function weeklyPriceMap(): Promise<Record<string, number>> {
+  const overrides = await prisma.weeklyPrice.findMany({
+    select: { code: true, boxPrice: true },
+  });
+  const map: Record<string, number> = {};
+  for (const it of WEEKLY_CATALOG) map[it.seq] = it.boxPrice;
+  for (const o of overrides) map[o.code] = o.boxPrice;
+  return map;
+}
 
 // 이번 주간 사이클 키(그 주 토요일 KST 날짜) — 주(週) 식별자.
 export function weeklyKeyAt(nowMs: number = Date.now()): string {
   return kstDateOf(new Date(currentWeeklyWindowStartUtc(nowMs)));
+}
+
+// 관리자 전역 강제 오픈 토글 — 토요일 12~20시가 아니어도 주간발주를 임의로 열 수 있음.
+// AppMeta 키 존재 여부로 on/off(값 필드 없이 presence로). 켜면 끌 때까지 유지.
+const WEEKLY_FORCE_KEY = "weekly_force_open";
+export async function weeklyForceOpen(): Promise<boolean> {
+  const m = await prisma.appMeta.findUnique({ where: { key: WEEKLY_FORCE_KEY } });
+  return !!m;
+}
+export async function setWeeklyForceOpen(on: boolean): Promise<void> {
+  if (on) {
+    await prisma.appMeta.upsert({
+      where: { key: WEEKLY_FORCE_KEY },
+      create: { key: WEEKLY_FORCE_KEY },
+      update: { syncedAt: new Date() },
+    });
+  } else {
+    await prisma.appMeta.deleteMany({ where: { key: WEEKLY_FORCE_KEY } });
+  }
+}
+// 지금 주간발주가 열려있는가 = 토요일 창 OR 관리자 강제 오픈.
+export async function weeklyOpenNow(nowMs: number = Date.now()): Promise<boolean> {
+  if (isWeeklyOpen(nowMs)) return true;
+  return weeklyForceOpen();
 }
 
 // 해제(unlock)가 겨냥하는 주간 사이클 키. 주간창이 열려있을 때 누르면 그 주,

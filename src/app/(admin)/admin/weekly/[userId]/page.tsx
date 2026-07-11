@@ -12,6 +12,7 @@ import {
 } from "@/lib/weekly";
 import { WeeklyInvoiceForm } from "@/components/WeeklyInvoiceForm";
 import { ManualPayButton } from "@/components/ManualPayButton";
+import { VoidWeeklyButton } from "@/components/VoidWeeklyButton";
 import { setWeeklyOrderUnlockAction } from "@/app/actions/weekly-invoice";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -114,6 +115,9 @@ export default async function AdminWeeklyStorePage({
             {invoice.status === "ISSUED" && (
               <div style={{ marginTop: 12 }}>
                 <ManualPayButton invoiceId={invoice.id} />
+                <div style={{ marginTop: 10, textAlign: "center" }}>
+                  <VoidWeeklyButton invoiceId={invoice.id} />
+                </div>
               </div>
             )}
           </>

@@ -135,6 +135,13 @@ model WeeklyOrderItem {
   unitPrice Int    @default(0) // 발주 시점 박스 공급가 스냅샷(원)
 }
 
+// 주간발주 카탈로그 단가 오버라이드 — 관리자가 화면에서 수정. 없으면 코드 카탈로그 기본값 사용.
+model WeeklyPrice {
+  code      String   @id // 카탈로그 seq
+  boxPrice  Int // 박스(발주 1단위)당 공급가(원)
+  updatedAt DateTime @updatedAt
+}
+
 // 앱 전역 메타(키-값 타임스탬프) — 예: 팝빌 계좌 최신 동기화 시각(bank_sync)
 model AppMeta {
   key      String   @id

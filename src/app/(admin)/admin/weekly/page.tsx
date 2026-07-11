@@ -2,7 +2,9 @@ import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { weeklyKeyAt } from "@/lib/weekly";
+import { weeklyKeyAt, weeklyForceOpen } from "@/lib/weekly";
+import { isWeeklyOpen } from "@/lib/schedule";
+import { setWeeklyForceOpenAction } from "@/app/actions/weekly-invoice";
 import { labelDate } from "@/lib/date";
 import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
 
@@ -16,6 +18,8 @@ export default async function AdminWeeklyPage({
   await requireAdmin();
   const sp = await searchParams;
   const weekKey = /^\d{4}-\d{2}-\d{2}$/.test(sp.week ?? "") ? sp.week! : weeklyKeyAt();
+  const forceOpen = await weeklyForceOpen();
+  const inWindow = isWeeklyOpen();
 
   const orders = await prisma.weeklyOrder.findMany({
     where: { weekKey },
@@ -67,6 +71,43 @@ export default async function AdminWeeklyPage({
         <p className="lead">
           지점 {totalStores}곳 · 이번 주 토요일 발주분. 총 집계는 거래처 발주용, 지점별은 입금요청서 발행용.
         </p>
+
+        {/* 강제 오픈 토글 + 단가 관리 */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700 }}>주간발주 강제 오픈</div>
+              <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 2 }}>
+                {inWindow
+                  ? "지금은 토요일 발주시간이라 이미 열려 있어요."
+                  : forceOpen
+                    ? "지금 강제로 열려 있어요(토요일 아님)."
+                    : "토요일 12~20시가 아니어도 임의로 열 수 있어요."}
+              </div>
+            </div>
+            <form action={setWeeklyForceOpenAction}>
+              <input type="hidden" name="on" value={forceOpen ? "false" : "true"} />
+              <button
+                type="submit"
+                role="switch"
+                aria-checked={forceOpen}
+                aria-label="주간발주 강제 오픈"
+                className={`switch ${forceOpen ? "is-on" : ""}`}
+              >
+                <span className="switch__knob" />
+              </button>
+            </form>
+          </div>
+          <Link
+            href="/admin/weekly/prices"
+            className="btn btn--xs btn--soft"
+            style={{ width: "100%", marginTop: 10 }}
+          >
+            단가 관리
+          </Link>
+        </div>
 
         {totalStores === 0 ? (
           <div className="notice notice--mute">이번 주 주간발주가 아직 없어요.</div>

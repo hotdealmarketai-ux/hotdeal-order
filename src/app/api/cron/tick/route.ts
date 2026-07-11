@@ -93,6 +93,8 @@ export async function GET(request: Request) {
   await timed("tick:weekly-open", 12, 0, [6], "/api/cron/notify-weekly?type=open", 30);
   await timed("tick:weekly-warn", 19, 0, [6], "/api/cron/notify-weekly?type=warn", 30);
   await timed("tick:weekly-deadline", 20, 0, [6], "/api/cron/notify-weekly?type=deadline", 30);
+  // 주간발주 미입금 안내 — 금요일(dow 5) 10시(토요일 마감 전날). 계산서당 1회(멱등).
+  await timed("tick:weekly-overdue", 10, 0, [5], "/api/cron/weekly-overdue", 720);
 
   // 입금 자동수집 — 24시간, 약 10분 간격. 슬롯을 먼저 선점(팝빌 지연/타임아웃 나도 매분 재시도 방지).
   if (now - (await lastFired("tick:collect")) >= 9.5 * 60 * 1000) {

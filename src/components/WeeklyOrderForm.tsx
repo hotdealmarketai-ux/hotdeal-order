@@ -17,10 +17,14 @@ const won = (n: number) => n.toLocaleString("ko-KR");
 export function WeeklyOrderForm({
   locked = false,
   initialQty = {},
+  priceByCode,
 }: {
   locked?: boolean;
   initialQty?: Record<string, string>;
+  priceByCode?: Record<string, number>;
 }) {
+  const priceOf = (seq: string, fallback: number) =>
+    priceByCode?.[seq] ?? fallback;
   const [qtyByCode, setQtyByCode] = useState<Record<string, string>>(initialQty);
   const [active, setActive] = useState<WeeklyCategory>(WEEKLY_CATEGORIES[0].key);
   const [confirming, setConfirming] = useState(false);
@@ -40,9 +44,13 @@ export function WeeklyOrderForm({
     () =>
       WEEKLY_CATALOG.map((it) => {
         const qty = Math.floor(Number((qtyByCode[it.seq] ?? "").replace(/[^0-9.]/g, "")));
-        return { it, qty: Number.isFinite(qty) && qty > 0 ? qty : 0 };
+        return {
+          it,
+          qty: Number.isFinite(qty) && qty > 0 ? qty : 0,
+          price: priceByCode?.[it.seq] ?? it.boxPrice,
+        };
       }).filter((r) => r.qty > 0),
-    [qtyByCode],
+    [qtyByCode, priceByCode],
   );
 
   const payload = useMemo(
@@ -50,7 +58,7 @@ export function WeeklyOrderForm({
     [chosen],
   );
   const totalItems = chosen.length;
-  const totalAmount = chosen.reduce((n, r) => n + r.qty * r.it.boxPrice, 0);
+  const totalAmount = chosen.reduce((n, r) => n + r.qty * r.price, 0);
 
   const countByCat = useMemo(() => {
     const m: Record<string, number> = {};
@@ -111,7 +119,7 @@ export function WeeklyOrderForm({
                   <div className="tofuitem__name">{it.name}</div>
                   <div className="tofuitem__sub">
                     {it.boxUnit && <span>{it.boxUnit}</span>}
-                    <span> · 박스 {won(it.boxPrice)}원</span>
+                    <span> · 박스 {won(priceOf(it.seq, it.boxPrice))}원</span>
                   </div>
                 </div>
                 <input
@@ -183,7 +191,7 @@ export function WeeklyOrderForm({
                         <div className="confitem" key={r.it.seq}>
                           <span className="confitem__name">{r.it.name}</span>
                           <span className="confitem__qtytext">
-                            {r.qty}박스 · {won(r.qty * r.it.boxPrice)}원
+                            {r.qty}박스 · {won(r.qty * r.price)}원
                           </span>
                         </div>
                       ))}
