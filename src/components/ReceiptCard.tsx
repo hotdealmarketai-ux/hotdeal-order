@@ -28,6 +28,16 @@ export function ReceiptCard(props: {
   const showPrintButton = props.showPrintButton ?? true;
   const aiOn = props.aiEngine === "claude";
 
+  const origBtn = showOriginalButton ? (
+    <button
+      type="button"
+      className="btn btn--xs btn--soft"
+      onClick={() => setOrig((o) => !o)}
+    >
+      {orig ? "정리본" : "원본 보기"}
+    </button>
+  ) : null;
+
   return (
     <div>
       {props.isNew && (
@@ -38,31 +48,31 @@ export function ReceiptCard(props: {
 
       <div className="receipt" id="receipt-print">
         <div className="receipt__head">
-          <div className="spread">
-            <div>
-              {showStore && (
-                <div className="receipt__store">{props.storeName}</div>
-              )}
+          {showStore && (
+            <div className="spread">
+              <div className="receipt__store">{props.storeName}</div>
+              {origBtn}
             </div>
-            {showOriginalButton && (
-              <button
-                type="button"
-                className="btn btn--xs btn--soft"
-                onClick={() => setOrig((o) => !o)}
-              >
-                {orig ? "정리본" : "원본 보기"}
-              </button>
-            )}
-          </div>
+          )}
           <div
             className="receipt__meta"
-            style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}
+            style={{
+              marginTop: showStore ? 10 : 0,
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
           >
-            <span className="badge badge--mute">{props.dateText}</span>
-            {aiOn && <span className="badge badge--ai">AI 정리</span>}
-            {props.pickupTime && (
-              <span className="badge badge--wait">픽업 {props.pickupTime}</span>
-            )}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              <span className="badge badge--mute">{props.dateText}</span>
+              {aiOn && <span className="badge badge--ai">AI 정리</span>}
+              {props.pickupTime && (
+                <span className="badge badge--wait">픽업 {props.pickupTime}</span>
+              )}
+            </div>
+            {!showStore && origBtn}
           </div>
         </div>
 
@@ -79,9 +89,11 @@ export function ReceiptCard(props: {
             </div>
             {props.aiSummary && (
               <div className="receipt__section">
-                <div className="kv">
-                  <span className="kv__k">메모</span>
-                  <span className="kv__v">{props.aiSummary}</span>
+                <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                  <span className="kv__k" style={{ flexShrink: 0 }}>메모</span>
+                  <span className="kv__v" style={{ textAlign: "left", flex: 1 }}>
+                    {props.aiSummary}
+                  </span>
                 </div>
               </div>
             )}

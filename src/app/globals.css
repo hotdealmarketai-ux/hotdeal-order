@@ -2218,7 +2218,7 @@ a {
 .kv--due .kv__v { color: var(--danger); font-weight: 800; }
 
 /* 3.6 배지 */
-.badge { border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 800; }
+.badge { border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 800; white-space: nowrap; flex-shrink: 0; }
 .badge--ok, .badge--ai { background: var(--green-100); color: var(--green-700); }
 .badge--wait, .badge--edit { background: var(--wait-bg); color: var(--wait-fg); }
 .badge--danger { background: var(--danger-bg); color: var(--danger); }
