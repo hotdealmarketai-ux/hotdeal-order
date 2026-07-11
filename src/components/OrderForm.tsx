@@ -64,6 +64,7 @@ export function OrderForm({
   const [tofuQty, setTofuQty] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [confirmTab, setConfirmTab] = useState<Category>(categories[0]);
   const [localError, setLocalError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
     createOrderAction,
@@ -132,6 +133,12 @@ export function OrderForm({
   }, [payload]);
 
   const multi = categories.length > 1;
+
+  // 확인 시트 탭 — 품목이 있는 종류만, 활성 탭이 비면 첫 종류로 자동 이동
+  const sheetCats = categories.filter((c) => (countByCat[c] ?? 0) > 0);
+  const activeConfirm = sheetCats.includes(confirmTab)
+    ? confirmTab
+    : sheetCats[0] ?? categories[0];
 
   // '발주 확정' → AI가 먼저 정리(오타→고유명사 등)한 결과를 확인 시트에 보여준다(채팅 발주와 동일).
   // 정리된 값으로 칸을 갱신 → 시트에서 확인·수정 후 최종 발주(preNormalized=1로 그대로 저장).
@@ -390,15 +397,33 @@ export function OrderForm({
                 </div>
               )}
 
+              {/* 종류 탭 — 발주가 많아도 종류별로 나눠 확인/수정(스크롤 짧게) */}
+              {sheetCats.length > 1 && (
+                <div className="cattabs cattabs--seg" style={{ marginBottom: 4 }}>
+                  {sheetCats.map((c) => (
+                    <button
+                      type="button"
+                      key={c}
+                      className={`cattab ${activeConfirm === c ? "is-active" : ""}`}
+                      onClick={() => setConfirmTab(c)}
+                    >
+                      {CATEGORIES[c].label}
+                      <span className="cattab__count">{countByCat[c] ?? 0}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="sheet__body">
-                {categories.map((c) => {
+                {(() => {
+                  const c = activeConfirm;
                   if (c === "TOFU") {
                     const items = CHAEUMCHAE_CATALOG.filter(
                       (p) => (tofuQty[p.seq] ?? "").trim(),
                     );
                     if (items.length === 0) return null;
                     return (
-                      <div className="confsec" key={c}>
+                      <div className="confsec">
                         <div className="confsec__head">
                           <span className="chip">{CATEGORIES[c].label}</span>
                           <span className="confsec__dest">
@@ -428,7 +453,7 @@ export function OrderForm({
                   const rows = (rowsByCat[c] ?? []).filter(isFilled);
                   if (rows.length === 0) return null;
                   return (
-                    <div className="confsec" key={c}>
+                    <div className="confsec">
                       <div className="confsec__head">
                         <span className="chip">{CATEGORIES[c].label}</span>
                         <span className="confsec__dest">
@@ -465,7 +490,7 @@ export function OrderForm({
                       ))}
                     </div>
                   );
-                })}
+                })()}
               </div>
 
               <div className="sheet__foot">

@@ -33,6 +33,8 @@ export function ChatOrder({
   const chatCats = categories.filter((c) => c !== "TOFU");
   const hasTofu = categories.includes("TOFU");
   const multi = chatCats.length > 1;
+  // 카테고리가 2개 이상이면 미리보기를 '탭'으로 나눠 보여준다(발주 많아도 스크롤 짧게).
+  const showTabs = categories.length > 1;
   const uid = useRef(0);
 
   const [text, setText] = useState("");
@@ -42,6 +44,7 @@ export function ChatOrder({
   // 채움채 발주 온오프(기본 오프) — 켜야 채움채 품목 선택이 열림
   const [tofuOpen, setTofuOpen] = useState(false);
   const [pickup, setPickup] = useState("");
+  const [previewTab, setPreviewTab] = useState<Category>(categories[0]);
   const [error, setError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
     createOrderAction,
@@ -60,6 +63,7 @@ export function ChatOrder({
     if (!text.trim()) {
       // 채움채만 발주
       setItems([]);
+      if (hasTofu) setPreviewTab("TOFU");
       setPhase("preview");
       return;
     }
@@ -81,6 +85,9 @@ export function ChatOrder({
         }
       }
       setItems(flat);
+      // 미리보기를 '품목이 있는 첫 종류' 탭으로 연다(빈 탭에서 시작하지 않게)
+      if (flat.length) setPreviewTab(flat[0].category);
+      else if (hasTofu) setPreviewTab("TOFU");
       if (needsPickup && res.pickupTime) setPickup(res.pickupTime);
       setPhase("preview");
     } catch {
@@ -124,6 +131,19 @@ export function ChatOrder({
   }, [items, tofuQty, hasTofu, tofuOpen]);
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
+
+  // 미리보기 탭 뱃지용 — 카테고리별 건수
+  const previewCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const it of items) {
+      if (!(it.name.trim() || it.qty.trim() || it.note.trim())) continue;
+      m[it.category] = (m[it.category] ?? 0) + 1;
+    }
+    return m;
+  }, [items]);
+  const tofuCount = CHAEUMCHAE_CATALOG.filter(
+    (p) => (tofuQty[p.seq] ?? "").trim(),
+  ).length;
 
   // 여러 종류를 넣는 점주(핫딜)만 종류 안내, 단일(서부일광 소매)은 한 줄만
   const greetingLines = multi
@@ -246,61 +266,103 @@ export function ChatOrder({
             </div>
           </div>
 
-          {items.length > 0 && (
-            <div className="chatedit">
-              {items.map((it) => (
-                <div className="chatedit__item" key={it.id}>
-                  <div className="chatedit__head">
-                    {multi ? (
-                      <select
-                        className="chatedit__cat"
-                        value={it.category}
-                        onChange={(e) => updateItem(it.id, "category", e.target.value)}
-                        aria-label="종류"
-                      >
-                        {chatCats.map((c) => (
-                          <option key={c} value={c}>
-                            {CATEGORIES[c].label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="chip">{CATEGORIES[chatCats[0]].label}</span>
-                    )}
-                    <button
-                      type="button"
-                      className="linkbtn linkbtn--danger"
-                      onClick={() => removeItem(it.id)}
-                    >
-                      삭제
-                    </button>
-                  </div>
-                  <div className="chatedit__fields">
-                    <input
-                      className="input chatedit__name"
-                      value={it.name}
-                      onChange={(e) => updateItem(it.id, "name", e.target.value)}
-                      placeholder="품목"
-                    />
-                    <input
-                      className="input chatedit__qty"
-                      value={it.qty}
-                      onChange={(e) => updateItem(it.id, "qty", e.target.value)}
-                      placeholder="수량"
-                    />
-                    <input
-                      className="input chatedit__note"
-                      value={it.note}
-                      onChange={(e) => updateItem(it.id, "note", e.target.value)}
-                      placeholder="설명"
-                    />
-                  </div>
-                </div>
-              ))}
+          {/* 카테고리 탭 — 발주가 많아도 종류별로 나눠 확인/수정(세로 스크롤 짧게) */}
+          {showTabs && (
+            <div className="cattabs cattabs--seg" style={{ marginTop: 12 }}>
+              {categories.map((c) => {
+                const n = c === "TOFU" ? tofuCount : previewCounts[c] ?? 0;
+                return (
+                  <button
+                    type="button"
+                    key={c}
+                    className={`cattab ${previewTab === c ? "is-active" : ""}`}
+                    onClick={() => setPreviewTab(c)}
+                  >
+                    {CATEGORIES[c].label}
+                    {n > 0 && <span className="cattab__count">{n}</span>}
+                  </button>
+                );
+              })}
             </div>
           )}
 
-          {tofuList}
+          {/* 채움채 탭 = 체크리스트, 그 외 탭 = 해당 종류의 품목 카드 */}
+          {showTabs && previewTab === "TOFU" ? (
+            tofuList
+          ) : (
+            (() => {
+              const shown = showTabs
+                ? items.filter((it) => it.category === previewTab)
+                : items;
+              if (shown.length === 0) {
+                return (
+                  <div className="notice notice--mute" style={{ marginTop: 12 }}>
+                    이 종류엔 발주가 없어요.
+                  </div>
+                );
+              }
+              return (
+                <div className="chatedit">
+                  {shown.map((it) => (
+                    <div className="chatedit__item" key={it.id}>
+                      <div className="chatedit__head">
+                        {multi ? (
+                          <select
+                            className="chatedit__cat"
+                            value={it.category}
+                            onChange={(e) =>
+                              updateItem(it.id, "category", e.target.value)
+                            }
+                            aria-label="종류"
+                          >
+                            {chatCats.map((c) => (
+                              <option key={c} value={c}>
+                                {CATEGORIES[c].label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="chip">
+                            {CATEGORIES[chatCats[0]].label}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="linkbtn linkbtn--danger"
+                          onClick={() => removeItem(it.id)}
+                        >
+                          삭제
+                        </button>
+                      </div>
+                      <div className="chatedit__fields">
+                        <input
+                          className="input chatedit__name"
+                          value={it.name}
+                          onChange={(e) => updateItem(it.id, "name", e.target.value)}
+                          placeholder="품목"
+                        />
+                        <input
+                          className="input chatedit__qty"
+                          value={it.qty}
+                          onChange={(e) => updateItem(it.id, "qty", e.target.value)}
+                          placeholder="수량"
+                        />
+                        <input
+                          className="input chatedit__note"
+                          value={it.note}
+                          onChange={(e) => updateItem(it.id, "note", e.target.value)}
+                          placeholder="설명"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()
+          )}
+
+          {/* 탭이 없을 때(단일 종류)만 채움채 체크리스트를 아래에 붙인다 */}
+          {!showTabs && tofuList}
 
           {needsPickup && (
             <div className="field" style={{ marginTop: 14 }}>
