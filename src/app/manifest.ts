@@ -15,7 +15,8 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      // 마스커블은 모서리를 런처가 직접 깎으므로 '정사각 불투명' 버전을 사용(투명 모서리 방지)
+      { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }
