@@ -19,6 +19,7 @@ import { formatKDateTime } from "@/lib/format";
 import { kstDayRange, kstToday, labelDate, normalizeDateStr } from "@/lib/date";
 import { ReceiptCard } from "@/components/ReceiptCard";
 import { SplitPaymentButton } from "@/components/SplitPaymentButton";
+import { PrintButton } from "@/components/PrintButton";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -229,6 +230,9 @@ export default async function DayReceiptPage(props: {
               </div>
             );
           })}
+          <div style={{ marginTop: 8 }}>
+            <PrintButton />
+          </div>
           </>
         )}
       </div>
