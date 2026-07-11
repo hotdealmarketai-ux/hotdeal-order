@@ -2191,8 +2191,9 @@ a {
 
 /* 3.3 버튼 */
 .btn { border-radius: 14px; }
-.btn--sm { border-radius: 12px; }
-.btn--xs { border-radius: 999px; }
+/* 작은 버튼은 .btn의 min-height:52px(어르신 배려)를 물려받으면 안 됨 → 작은 칩 높이 재지정 */
+.btn--sm { border-radius: 12px; min-height: 44px; font-size: 15px; }
+.btn--xs { border-radius: 999px; min-height: 32px; font-size: 12.5px; padding: 0 14px; }
 .btn--primary { background: var(--green-800); color: #fff; font-weight: 800; border-color: transparent; box-shadow: var(--shadow-pill); }
 .btn--ghost { background: #fff; border: 1.5px solid #cbd6cc; color: var(--green-700); font-weight: 800; box-shadow: none; }
 .btn--soft { background: var(--green-100); color: var(--green-700); font-weight: 800; border-color: transparent; }
