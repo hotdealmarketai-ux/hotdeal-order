@@ -118,6 +118,19 @@ export async function notifyAdminNewWeeklyOrder(fromStoreName: string) {
   }
 }
 
+// 점주에게 '관리자가 주간발주 취소' 알림
+export async function notifyMerchantWeeklyCancelled(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "관리자에 의해 주간발주가 취소되었습니다.",
+      body: "",
+      url: "/weekly",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantWeeklyCancelled", err, { userId });
+  }
+}
+
 // 점주에게 '주간발주 입금요청서 발행' 알림
 export async function notifyMerchantWeeklyInvoiceIssued(userId: string) {
   try {

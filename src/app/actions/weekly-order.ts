@@ -2,11 +2,12 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireMerchant } from "@/lib/session";
+import { requireMerchant, requireAdmin } from "@/lib/session";
 import { canOrderWeekly } from "@/lib/constants";
 import { WEEKLY_OPEN_LABEL, WEEKLY_CLOSE_LABEL } from "@/lib/schedule";
 import { weeklyKeyAt, weeklyLockOf, weeklyOpenNow, weeklyProductMap } from "@/lib/weekly";
-import { notifyAdminNewWeeklyOrder } from "@/lib/push";
+import { notifyAdminNewWeeklyOrder, notifyMerchantWeeklyCancelled } from "@/lib/push";
+import { writeAudit } from "@/lib/audit";
 
 export type WeeklyOrderState = { error?: string };
 
@@ -111,4 +112,75 @@ export async function createWeeklyOrderAction(
 
   await notifyAdminNewWeeklyOrder(user.storeName).catch(() => {});
   redirect("/weekly?ok=1");
+}
+
+// 점주: 이번 주 주간발주 취소(삭제) — 입금요청서 발행 전에만 가능
+export async function cancelWeeklyOrderAction(formData: FormData) {
+  const user = await requireMerchant();
+  if (!canOrderWeekly(user.role)) redirect("/order");
+  if (String(formData.get("confirm") ?? "") !== "CANCEL-WEEKLY") redirect("/weekly");
+
+  const weekKey = weeklyKeyAt();
+  const order = await prisma.weeklyOrder.findUnique({
+    where: { userId_weekKey: { userId: user.id, weekKey } },
+    select: { id: true },
+  });
+  if (!order) redirect("/weekly");
+
+  // 이미 입금요청서(발행/입금)가 있으면 취소 불가 — 관리자 문의
+  const invoice = await prisma.invoice.findFirst({
+    where: {
+      userId: user.id,
+      kind: "WEEKLY",
+      date: weekKey,
+      status: { in: ["ISSUED", "PAID"] },
+    },
+    select: { id: true },
+  });
+  if (invoice) redirect("/weekly?err=invoiced");
+
+  await prisma.weeklyOrder.delete({ where: { id: order.id } });
+  redirect("/weekly?cancelled=1");
+}
+
+// 관리자: 특정 지점 주간발주 삭제 — 관련 입금요청서 취소 + 점주에게 취소 알림
+export async function deleteWeeklyOrderAction(formData: FormData) {
+  const admin = await requireAdmin();
+  if (String(formData.get("confirm") ?? "") !== "DELETE-WEEKLY-ORDER") {
+    redirect("/admin/weekly");
+  }
+  const orderId = String(formData.get("orderId") ?? "");
+  if (!orderId) redirect("/admin/weekly");
+
+  const order = await prisma.weeklyOrder.findUnique({
+    where: { id: orderId },
+    include: { user: { select: { id: true, storeName: true } }, items: true },
+  });
+  if (!order) redirect("/admin/weekly");
+
+  const weekKey = order.weekKey;
+  // 관련 주간 계산서(작성중/발행)도 함께 취소(VOID)
+  await prisma.invoice.updateMany({
+    where: {
+      userId: order.userId,
+      kind: "WEEKLY",
+      date: weekKey,
+      status: { in: ["DRAFT", "ISSUED"] },
+    },
+    data: { status: "VOID", voidedAt: new Date() },
+  });
+  await prisma.weeklyOrder.delete({ where: { id: orderId } });
+
+  await writeAudit({
+    action: "weeklyOrder.delete",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "weeklyOrder",
+    targetId: orderId,
+    summary: `${order.user.storeName} ${weekKey} 주간발주 삭제`,
+    snapshot: { weekKey, items: order.items },
+  });
+  await notifyMerchantWeeklyCancelled(order.user.id).catch(() => {});
+
+  redirect(`/admin/weekly?week=${weekKey}`);
 }

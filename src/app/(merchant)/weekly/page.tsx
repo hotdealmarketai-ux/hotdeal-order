@@ -17,6 +17,7 @@ import {
 import { WeeklyOrderForm } from "@/components/WeeklyOrderForm";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { PushToggle } from "@/components/PushToggle";
+import { CancelWeeklyOrderButton } from "@/components/CancelWeeklyOrderButton";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
@@ -37,7 +38,7 @@ function Header({ storeName }: { storeName: string }) {
 export default async function WeeklyOrderPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string; edit?: string; ok?: string }>;
+  searchParams: Promise<{ date?: string; edit?: string; ok?: string; cancelled?: string; err?: string }>;
 }) {
   const user = await requireMerchant();
   if (!canOrderWeekly(user.role)) redirect("/order");
@@ -122,6 +123,16 @@ export default async function WeeklyOrderPage({
             발주가 완료되었습니다.
           </div>
         )}
+        {sp.cancelled === "1" && (
+          <div className="notice notice--mute" style={{ marginBottom: 12 }}>
+            주간발주가 취소되었어요.
+          </div>
+        )}
+        {sp.err === "invoiced" && (
+          <div className="notice notice--error" style={{ marginBottom: 12 }}>
+            입금요청서가 이미 발행되어 취소할 수 없어요. 새롭에 문의해 주세요.
+          </div>
+        )}
 
         <Link
           href="/weekly/invoices"
@@ -194,10 +205,11 @@ export default async function WeeklyOrderPage({
             </div>
             <WeeklyReceipt items={receiptItems} />
             {open && isCurrent && (
-              <div style={{ marginTop: 16 }}>
+              <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
                 <Link href="/weekly?edit=1" className="btn btn--primary btn--block">
                   수정하러 가기
                 </Link>
+                {(!invoice || invoice.status === "DRAFT") && <CancelWeeklyOrderButton />}
               </div>
             )}
           </>

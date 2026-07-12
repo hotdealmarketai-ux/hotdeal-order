@@ -16,6 +16,7 @@ import { WeeklyInvoiceForm } from "@/components/WeeklyInvoiceForm";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { ManualPayButton } from "@/components/ManualPayButton";
 import { VoidWeeklyButton } from "@/components/VoidWeeklyButton";
+import { DeleteWeeklyOrderButton } from "@/components/DeleteWeeklyOrderButton";
 import {
   setWeeklyOrderUnlockAction,
   confirmWeeklyOrderAction,
@@ -165,6 +166,11 @@ export default async function AdminWeeklyStorePage({
               </Link>
             </div>
           </>
+        )}
+        {order && (
+          <div style={{ marginTop: 14 }}>
+            <DeleteWeeklyOrderButton orderId={order.id} />
+          </div>
         )}
       </div>
     </>
