@@ -15,9 +15,9 @@ export async function confirmOrderAction(formData: FormData) {
   // 본인(업자)에게 온 발주만 확인 가능
   const order = await prisma.order.findUnique({
     where: { id: orderId },
-    select: { vendorRole: true, userId: true },
+    select: { vendorRole: true, userId: true, status: true },
   });
-  if (!order || order.vendorRole !== user.role) return;
+  if (!order || order.vendorRole !== user.role || order.status === "CANCELLED") return;
 
   await prisma.order.update({
     where: { id: orderId },

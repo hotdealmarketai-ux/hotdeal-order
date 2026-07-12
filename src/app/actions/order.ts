@@ -26,6 +26,7 @@ import {
   notifyVendorNewOrder,
   notifyMerchantOrderPlaced,
   notifyVendorOrderEdited,
+  notifyAdminOrderEdited,
 } from "@/lib/push";
 
 export type OrderFormState = { error?: string };
@@ -197,7 +198,7 @@ export async function createOrderAction(
   if (hasOrderWindow(user.role)) {
     const since = new Date(currentWindowStartUtc());
     const existing = await prisma.order.findFirst({
-      where: { userId: user.id, createdAt: { gte: since } },
+      where: { userId: user.id, createdAt: { gte: since }, status: { not: "CANCELLED" } },
       select: { id: true },
     });
     if (existing) {
@@ -433,8 +434,9 @@ export async function updateOrderAction(
     return { error: "수정 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
   }
 
-  // 받는 업체에 '발주 수정' 알림
+  // 받는 업체 + 관리자(새롭)에 '발주 수정' 알림
   await notifyVendorOrderEdited(vendorRoleForCategory(category), user.storeName);
+  await notifyAdminOrderEdited(user.storeName);
 
   if (hasOrderWindow(user.role)) {
     redirect(`/order/day/${orderDate}?edited=1`);

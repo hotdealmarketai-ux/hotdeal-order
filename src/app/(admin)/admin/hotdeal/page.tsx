@@ -14,6 +14,7 @@ import {
 } from "@/lib/date";
 import { DateBar } from "@/components/DateBar";
 import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
+import { CancelRequestActions } from "@/components/CancelRequestActions";
 
 // 핫딜마켓 가맹점 발주를 '카테고리(보내는 곳)'별로.
 const HOTDEAL = { user: { role: "MERCHANT_HOTDEAL" } } as const;
@@ -50,6 +51,10 @@ export default async function AdminHotdeal(props: {
     date: string;
     cats: Category[];
     items: number;
+    total: number;
+    cancelledCount: number;
+    cancelReq: boolean;
+    edited: boolean;
   }[] = [];
   if (combined) {
     const map = new Map<string, (typeof groups)[number]>();
@@ -58,13 +63,27 @@ export default async function AdminHotdeal(props: {
       const key = `${o.userId}__${d}`;
       let g = map.get(key);
       if (!g) {
-        g = { userId: o.userId, store: o.user.storeName, date: d, cats: [], items: 0 };
+        g = {
+          userId: o.userId,
+          store: o.user.storeName,
+          date: d,
+          cats: [],
+          items: 0,
+          total: 0,
+          cancelledCount: 0,
+          cancelReq: false,
+          edited: false,
+        };
         map.set(key, g);
         groups.push(g);
       }
       const c = o.category as Category;
       if (!g.cats.includes(c)) g.cats.push(c);
       g.items += o._count.items;
+      g.total += 1;
+      if (o.status === "CANCELLED") g.cancelledCount += 1;
+      if (o.cancelRequested && o.status !== "CANCELLED") g.cancelReq = true;
+      if (o.edited && !o.confirmed && o.status !== "CANCELLED") g.edited = true;
     }
     for (const g of groups)
       g.cats.sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
@@ -106,26 +125,48 @@ export default async function AdminHotdeal(props: {
           </div>
         ) : combined ? (
           <div className="list">
-            {groups.map((g) => (
-              <div className="row" key={`${g.userId}-${g.date}`}>
-                <Link
-                  href={`/admin/combined/${g.userId}/${g.date}`}
-                  className="row__main"
-                  style={{ textDecoration: "none" }}
-                >
-                  <div className="row__title">{g.store}</div>
-                  <div className="row__sub">
-                    {labelDate(g.date)} ·{" "}
-                    {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
-                  </div>
-                </Link>
-                <CancelStoreOrdersButton
-                  userId={g.userId}
-                  date={g.date}
-                  store={g.store}
-                />
-              </div>
-            ))}
+            {groups.map((g) => {
+              const cancelled = g.total > 0 && g.cancelledCount === g.total;
+              return (
+                <div className="row" key={`${g.userId}-${g.date}`}>
+                  <Link
+                    href={`/admin/combined/${g.userId}/${g.date}`}
+                    className="row__main"
+                    style={{ textDecoration: "none" }}
+                  >
+                    <div className="row__title">
+                      {g.store}
+                      {cancelled ? (
+                        <span className="badge badge--danger" style={{ marginLeft: 8 }}>
+                          취소 완료
+                        </span>
+                      ) : g.cancelReq ? (
+                        <span className="badge badge--req" style={{ marginLeft: 8 }}>
+                          취소 요청
+                        </span>
+                      ) : g.edited ? (
+                        <span className="badge badge--edit" style={{ marginLeft: 8 }}>
+                          발주 수정
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="row__sub">
+                      {labelDate(g.date)} ·{" "}
+                      {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
+                    </div>
+                  </Link>
+                  {cancelled ? null : g.cancelReq ? (
+                    <CancelRequestActions userId={g.userId} store={g.store} />
+                  ) : (
+                    <CancelStoreOrdersButton
+                      userId={g.userId}
+                      date={g.date}
+                      store={g.store}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="list">
@@ -139,7 +180,15 @@ export default async function AdminHotdeal(props: {
                       {formatKDateTime(o.createdAt)} · {cat.label} · {o._count.items}건
                     </div>
                   </div>
-                  <span className="row__chev">›</span>
+                  {o.status === "CANCELLED" ? (
+                    <span className="badge badge--danger">취소 완료</span>
+                  ) : o.cancelRequested ? (
+                    <span className="badge badge--req">취소 요청</span>
+                  ) : o.edited && !o.confirmed ? (
+                    <span className="badge badge--edit">발주 수정</span>
+                  ) : (
+                    <span className="row__chev">›</span>
+                  )}
                 </Link>
               );
             })}

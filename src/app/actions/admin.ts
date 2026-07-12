@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { kstDayRange } from "@/lib/date";
+import { kstDayRange, kstDateOf } from "@/lib/date";
 import {
   currentWindowStartUtc,
   currentDeadlineUtc,
@@ -209,10 +209,11 @@ export async function resetAllOrdersAction(formData: FormData) {
   redirect(`/admin/orders?reset=${res.count}`);
 }
 
-// 지점 발주 전체 취소 — 관리자 전용. 해당 점주가 그 날짜에 넣은 발주(전 카테고리)를 삭제.
-// 점주에게 '발주가 취소되었습니다' 푸시. 발주를 넣어 잠겼던 발주창은 삭제로 자동 재오픈됨.
+// 지점 발주 전체 취소 — 관리자 전용. 해당 점주가 그 날짜에 넣은 발주(전 카테고리)를 CANCELLED로.
+// 하드삭제가 아니라 status=CANCELLED로 남겨 양쪽에 '취소 완료'로 보이고, 잠겼던 발주창은 다시 열림.
+// 계산서(미수)가 발행됐으면 취소 불가(먼저 VOID). 점주에게 '관리자에 의해 발주가 취소되었습니다' 푸시.
 // useActionState로 결과를 반환(리다이렉트 X) — 모달이 결과를 받아 스스로 닫히게(재로딩 방지).
-export type CancelOrdersState = { ok?: boolean; count?: number };
+export type CancelOrdersState = { ok?: boolean; count?: number; error?: string };
 
 export async function cancelStoreOrdersAction(
   _prev: CancelOrdersState,
@@ -242,8 +243,26 @@ export async function cancelStoreOrdersAction(
   } else {
     ({ start, end } = kstDayRange(date));
   }
-  const res = await prisma.order.deleteMany({
-    where: { userId, createdAt: { gte: start, lt: end } },
+  // 취소 대상(아직 취소되지 않은 이 창의 발주)
+  const targets = await prisma.order.findMany({
+    where: { userId, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
+    select: { id: true, createdAt: true },
+  });
+  // 계산서(미수)가 발행됐으면 취소 불가 — 먼저 계산서 VOID 필요
+  const invDates = [...new Set(targets.map((o) => kstDateOf(o.createdAt)))];
+  if (invDates.length > 0) {
+    const inv = await prisma.invoice.findFirst({
+      where: { userId, kind: "DAILY", date: { in: invDates }, status: { in: ["ISSUED", "PAID"] } },
+      select: { id: true },
+    });
+    if (inv) {
+      return { error: "계산서가 발행되어 취소할 수 없어요. 먼저 계산서를 취소(VOID)하세요." };
+    }
+  }
+  // 하드삭제 대신 CANCELLED 로 남겨 양쪽에 '취소 완료'로 보이게
+  const res = await prisma.order.updateMany({
+    where: { id: { in: targets.map((o) => o.id) } },
+    data: { status: "CANCELLED", cancelledAt: new Date(), cancelRequested: false },
   });
   if (res.count > 0) {
     await writeAudit({

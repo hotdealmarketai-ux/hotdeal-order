@@ -82,7 +82,7 @@ async function AggSection({
 }) {
   const { start, end } = kstDayRange(date);
   const orders = await prisma.order.findMany({
-    where: { ...where, createdAt: { gte: start, lt: end } },
+    where: { ...where, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     include: { user: true, items: { orderBy: { sortOrder: "asc" } } },
     orderBy: { createdAt: "asc" },
   });

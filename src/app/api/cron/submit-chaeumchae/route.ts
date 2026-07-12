@@ -46,6 +46,7 @@ export async function GET(request: Request) {
       category: "TOFU",
       createdAt: { gte: since },
       user: { role: "MERCHANT_HOTDEAL" },
+      status: { not: "CANCELLED" },
     },
     include: { items: true },
   });

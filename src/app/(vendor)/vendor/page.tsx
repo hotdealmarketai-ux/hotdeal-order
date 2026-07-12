@@ -19,7 +19,7 @@ export default async function VendorPage(props: {
   const isToday = date === kstToday();
 
   const orders = await prisma.order.findMany({
-    where: { vendorRole: user.role, createdAt: { gte: start, lt: end } },
+    where: { vendorRole: user.role, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     include: { user: true, _count: { select: { items: true } } },
     orderBy: { createdAt: "desc" },
   });

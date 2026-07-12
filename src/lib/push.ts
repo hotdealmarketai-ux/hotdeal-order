@@ -234,11 +234,11 @@ export async function notifyMerchantSplitRejected(userId: string, date: string) 
   }
 }
 
-// 관리자가 지점 발주를 전체 취소했을 때 점주에게 알림
+// 관리자가 임의로 발주를 취소했을 때 점주에게 알림
 export async function notifyMerchantOrdersCancelled(userId: string) {
   try {
     await sendPushToUser(userId, {
-      title: "발주가 취소되었습니다.",
+      title: "관리자에 의해 발주가 취소되었습니다.",
       body: "",
       url: "/order",
     });
@@ -262,5 +262,57 @@ export async function notifyVendorOrderEdited(role: Role, fromStoreName: string)
     });
   } catch (err) {
     console.error("[push] notifyVendorOrderEdited failed:", err);
+  }
+}
+
+// 점주 발주 수정 시 관리자(새롭)에게도 알림
+export async function notifyAdminOrderEdited(fromStoreName: string) {
+  try {
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: `${fromStoreName} 님의 발주가 수정되었습니다. 확인해주세요.`,
+      body: "",
+      url: "/admin/hotdeal",
+    });
+  } catch (err) {
+    logError("push.notifyAdminOrderEdited", err, {});
+  }
+}
+
+// 점주가 '발주 취소'를 요청했을 때 관리자에게 알림
+export async function notifyAdminOrderCancelRequest(fromStoreName: string) {
+  try {
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: `${fromStoreName} 님이 발주 취소를 요청했습니다.`,
+      body: "",
+      url: "/admin/hotdeal",
+    });
+  } catch (err) {
+    logError("push.notifyAdminOrderCancelRequest", err, {});
+  }
+}
+
+// 취소 요청을 관리자가 승인(취소 완료)했을 때 점주에게 알림
+export async function notifyMerchantCancelApproved(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "취소 요청 승인이 완료되었습니다.",
+      body: "",
+      url: "/order",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantCancelApproved", err, { userId });
+  }
+}
+
+// 취소 요청을 관리자가 반려했을 때 점주에게 알림
+export async function notifyMerchantCancelRejected(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "발주 취소 요청이 반려되었습니다.",
+      body: "",
+      url: "/order",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantCancelRejected", err, { userId });
   }
 }

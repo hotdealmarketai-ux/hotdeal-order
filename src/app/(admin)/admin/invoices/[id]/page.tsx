@@ -49,7 +49,7 @@ export default async function AdminInvoiceDetail(props: {
   if (inv.status === "DRAFT") {
     const { start, end } = kstDayRange(inv.date);
     const orders = await prisma.order.findMany({
-      where: { userId: inv.userId, createdAt: { gte: start, lt: end } },
+      where: { userId: inv.userId, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     });
     const refMap = new Map<Category, InvoiceRefGroup["items"]>();

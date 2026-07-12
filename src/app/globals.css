@@ -376,6 +376,11 @@ a {
   background: var(--danger);
   color: #fff;
 }
+.badge--req {
+  background: transparent;
+  color: var(--danger);
+  box-shadow: inset 0 0 0 1.5px var(--danger-line);
+}
 .kv--strong {
   margin-top: 6px;
   padding-top: 10px;
@@ -2241,6 +2246,7 @@ a {
 .badge--ok, .badge--ai { background: var(--green-100); color: var(--green-700); }
 .badge--wait, .badge--edit { background: var(--wait-bg); color: var(--wait-fg); }
 .badge--danger { background: var(--danger-bg); color: var(--danger); }
+.badge--req { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1.5px var(--danger-line); }
 .badge--mute { background: var(--chip-mute-bg); color: var(--muted); }
 
 /* 3.7 Notice — edit는 소프트 레드(옐로 금지) */

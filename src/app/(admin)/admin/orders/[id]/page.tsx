@@ -24,6 +24,11 @@ export default async function AdminOrderDetail(props: {
     <>
       <Topbar backHref="/admin/orders" title="발주서" />
       <div className="page">
+        {order.status === "CANCELLED" && (
+          <div className="notice notice--error" style={{ marginBottom: 14 }}>
+            <b>취소 완료</b> · 이 발주는 취소되었습니다.
+          </div>
+        )}
         <div className="card card--flat" style={{ marginBottom: 14 }}>
           <div className="kv">
             <span className="kv__k">상호명</span>

@@ -49,6 +49,8 @@ export default async function AdminOrders(props: {
     date: string;
     cats: Category[];
     items: number;
+    total: number;
+    cancelledCount: number;
   }[] = [];
   if (combined) {
     const map = new Map<string, (typeof groups)[number]>();
@@ -57,13 +59,23 @@ export default async function AdminOrders(props: {
       const key = `${o.userId}__${d}`;
       let g = map.get(key);
       if (!g) {
-        g = { userId: o.userId, store: o.user.storeName, date: d, cats: [], items: 0 };
+        g = {
+          userId: o.userId,
+          store: o.user.storeName,
+          date: d,
+          cats: [],
+          items: 0,
+          total: 0,
+          cancelledCount: 0,
+        };
         map.set(key, g);
         groups.push(g);
       }
       const c = o.category as Category;
       if (!g.cats.includes(c)) g.cats.push(c);
       g.items += o._count.items;
+      g.total += 1;
+      if (o.status === "CANCELLED") g.cancelledCount += 1;
     }
     for (const g of groups)
       g.cats.sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
@@ -111,22 +123,32 @@ export default async function AdminOrders(props: {
           </div>
         ) : combined ? (
           <div className="list">
-            {groups.map((g) => (
-              <Link
-                href={`/admin/combined/${g.userId}/${g.date}`}
-                className="row"
-                key={`${g.userId}-${g.date}`}
-              >
-                <div className="row__main">
-                  <div className="row__title">{g.store}</div>
-                  <div className="row__sub">
-                    {labelDate(g.date)} ·{" "}
-                    {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
+            {groups.map((g) => {
+              const cancelled = g.total > 0 && g.cancelledCount === g.total;
+              return (
+                <Link
+                  href={`/admin/combined/${g.userId}/${g.date}`}
+                  className="row"
+                  key={`${g.userId}-${g.date}`}
+                >
+                  <div className="row__main">
+                    <div className="row__title">
+                      {g.store}
+                      {cancelled && (
+                        <span className="badge badge--danger" style={{ marginLeft: 8 }}>
+                          취소 완료
+                        </span>
+                      )}
+                    </div>
+                    <div className="row__sub">
+                      {labelDate(g.date)} ·{" "}
+                      {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
+                    </div>
                   </div>
-                </div>
-                <span className="row__chev">›</span>
-              </Link>
-            ))}
+                  <span className="row__chev">›</span>
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <div className="list">
@@ -140,7 +162,11 @@ export default async function AdminOrders(props: {
                       {formatKDateTime(o.createdAt)} · {cat.label} · {o._count.items}건
                     </div>
                   </div>
-                  <span className="row__chev">›</span>
+                  {o.status === "CANCELLED" ? (
+                    <span className="badge badge--danger">취소 완료</span>
+                  ) : (
+                    <span className="row__chev">›</span>
+                  )}
                 </Link>
               );
             })}

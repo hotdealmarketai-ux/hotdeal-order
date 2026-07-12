@@ -25,6 +25,12 @@ export default async function VendorOrderDetail(props: {
     <>
       <Topbar backHref="/vendor" title="발주서" />
       <div className="page">
+        {order.status === "CANCELLED" ? (
+          <div className="notice notice--error" style={{ marginBottom: 14 }}>
+            <b>취소 완료</b> · 이 발주는 취소되었습니다. 준비하지 않으셔도 돼요.
+          </div>
+        ) : (
+          <>
         {order.edited && !order.confirmed ? (
           <div className="notice notice--edit" style={{ marginBottom: 14 }}>
             발주 수정 — 점주가 발주를 수정했어요. 내용 확인 후 다시 발주 확인을 눌러주세요.
@@ -53,6 +59,8 @@ export default async function VendorOrderDetail(props: {
             <input type="hidden" name="next" value="true" />
             <button className="btn btn--primary">발주 확인</button>
           </form>
+        )}
+          </>
         )}
 
         <div className="card card--flat" style={{ marginBottom: 14 }}>

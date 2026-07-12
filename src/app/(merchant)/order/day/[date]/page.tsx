@@ -47,6 +47,8 @@ export default async function DayReceiptPage(props: {
   ]);
   if (orders.length === 0) notFound();
 
+  const allCancelled = orders.every((o) => o.status === "CANCELLED");
+
   const sorted = [...orders].sort(
     (a, b) =>
       CATEGORY_ORDER.indexOf(a.category as Category) -
@@ -88,6 +90,11 @@ export default async function DayReceiptPage(props: {
         {edited === "1" && (
           <div className="notice notice--ai" style={{ marginBottom: 14 }}>
             ✓ 발주가 수정되었어요.
+          </div>
+        )}
+        {allCancelled && (
+          <div className="notice notice--error" style={{ marginBottom: 14 }}>
+            <b>취소 완료</b> · 이 발주는 취소되었습니다.
           </div>
         )}
 
@@ -189,19 +196,22 @@ export default async function DayReceiptPage(props: {
                 <div className="spread" style={{ marginBottom: 8 }}>
                   <span className="chip">{cat.label}</span>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    {isPastDay ? (
+                    {order.status === "CANCELLED" ? (
+                      <span className="badge badge--danger">취소 완료</span>
+                    ) : isPastDay ? (
                       <span className="badge badge--ok">완료</span>
                     ) : order.confirmed ? (
                       <span className="badge badge--ok">확인됨 · 준비 중</span>
                     ) : null}
-                    {canEditOrder(order.createdAt) && (
-                      <Link
-                        href={`/order/${order.id}/edit`}
-                        className="btn btn--xs btn--soft"
-                      >
-                        수정
-                      </Link>
-                    )}
+                    {canEditOrder(order.createdAt) &&
+                      order.status !== "CANCELLED" && (
+                        <Link
+                          href={`/order/${order.id}/edit`}
+                          className="btn btn--xs btn--soft"
+                        >
+                          수정
+                        </Link>
+                      )}
                   </div>
                 </div>
                 <ReceiptCard

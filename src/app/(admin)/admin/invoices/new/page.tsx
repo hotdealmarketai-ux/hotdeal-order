@@ -33,7 +33,7 @@ export default async function NewInvoicePage(props: {
   // 그날 발주 내역 — 참고용(출고 기준으로 직접 입력하므로 자동 채움 안 함)
   const { start, end } = kstDayRange(date);
   const orders = await prisma.order.findMany({
-    where: { userId, createdAt: { gte: start, lt: end } },
+    where: { userId, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
   const refMap = new Map<Category, InvoiceRefGroup["items"]>();

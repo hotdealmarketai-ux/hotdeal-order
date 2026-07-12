@@ -49,6 +49,7 @@ export default async function MyPage(props: {
     items: number;
     orders: number;
     confirmed: number;
+    cancelled: number;
   }[] = [];
   if (groupByDate) {
     const map = new Map<string, (typeof dayGroups)[number]>();
@@ -56,7 +57,7 @@ export default async function MyPage(props: {
       const d = kstDateOf(o.createdAt);
       let g = map.get(d);
       if (!g) {
-        g = { date: d, cats: [], items: 0, orders: 0, confirmed: 0 };
+        g = { date: d, cats: [], items: 0, orders: 0, confirmed: 0, cancelled: 0 };
         map.set(d, g);
         dayGroups.push(g);
       }
@@ -65,6 +66,7 @@ export default async function MyPage(props: {
       g.items += o._count.items;
       g.orders += 1;
       if (o.confirmed) g.confirmed += 1;
+      if (o.status === "CANCELLED") g.cancelled += 1;
     }
     for (const g of dayGroups) {
       g.cats.sort(
@@ -139,17 +141,21 @@ export default async function MyPage(props: {
                     {g.items}건
                   </div>
                 </div>
-                {dayBadge(
-                  g.date,
-                  g.date < today ? (
-                    <span className="badge badge--ok">완료</span>
-                  ) : g.confirmed >= g.orders ? (
-                    <span className="badge badge--mute">준비 중</span>
-                  ) : g.confirmed > 0 ? (
-                    <span className="badge badge--mute">일부 확인</span>
-                  ) : (
-                    <span className="row__chev">›</span>
-                  ),
+                {g.cancelled === g.orders && g.orders > 0 ? (
+                  <span className="badge badge--danger">취소 완료</span>
+                ) : (
+                  dayBadge(
+                    g.date,
+                    g.date < today ? (
+                      <span className="badge badge--ok">완료</span>
+                    ) : g.confirmed >= g.orders ? (
+                      <span className="badge badge--mute">준비 중</span>
+                    ) : g.confirmed > 0 ? (
+                      <span className="badge badge--mute">일부 확인</span>
+                    ) : (
+                      <span className="row__chev">›</span>
+                    ),
+                  )
                 )}
               </Link>
             ))}
@@ -170,15 +176,19 @@ export default async function MyPage(props: {
                       {receiverLabel(o.category as Category, user.role)}
                     </div>
                   </div>
-                  {dayBadge(
-                    d,
-                    d < today ? (
-                      <span className="badge badge--ok">완료</span>
-                    ) : o.confirmed ? (
-                      <span className="badge badge--mute">준비 중</span>
-                    ) : (
-                      <span className="row__chev">›</span>
-                    ),
+                  {o.status === "CANCELLED" ? (
+                    <span className="badge badge--danger">취소 완료</span>
+                  ) : (
+                    dayBadge(
+                      d,
+                      d < today ? (
+                        <span className="badge badge--ok">완료</span>
+                      ) : o.confirmed ? (
+                        <span className="badge badge--mute">준비 중</span>
+                      ) : (
+                        <span className="row__chev">›</span>
+                      ),
+                    )
                   )}
                 </Link>
               );

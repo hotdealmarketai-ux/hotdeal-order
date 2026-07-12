@@ -7,9 +7,10 @@ import {
 } from "@/app/actions/admin";
 import { SubmitButton } from "./SubmitButton";
 
-// 지점 발주 전체 취소 — 관리자가 핫딜마켓 발주에서 지점별로 취소.
-// useActionState로 결과를 받아 성공 시 모달을 명시적으로 닫는다(리다이렉트 상태 잔존으로
-// 확인창이 계속 다시 뜨던 문제 방지). 삭제되면 revalidate로 지점 행 자체가 사라진다.
+// 지점 발주 전체 취소 — 관리자가 핫딜마켓 발주에서 지점별로 임의 취소.
+// 하드삭제가 아니라 status=CANCELLED로 남겨 양쪽에 '취소 완료'로 표시되고 발주창이 다시 열린다.
+// useActionState로 결과를 받아 성공 시 모달을 명시적으로 닫고(리다이렉트 상태 잔존으로
+// 확인창이 계속 다시 뜨던 문제 방지), 계산서 발행 등으로 막히면 state.error를 그대로 보여준다.
 export function CancelStoreOrdersButton({
   userId,
   date,
@@ -66,10 +67,19 @@ export function CancelStoreOrdersButton({
               </button>
             </div>
             <p className="sheet__hint">
-              이 지점이 이 날짜에 넣은 발주가 <b>모두 취소·삭제</b>됩니다.
-              점주에게 &lsquo;발주가 취소되었습니다&rsquo; 알림이 가고, 잠겨 있던
-              발주창은 다시 열려요. 되돌릴 수 없어요.
+              이 지점이 이 날짜에 넣은 발주가 <b>모두 취소</b>돼요. 양쪽에
+              &lsquo;취소 완료&rsquo;로 표시되고, 점주에게 &lsquo;관리자에 의해
+              발주가 취소되었습니다&rsquo; 알림이 가요. 잠겨 있던 발주창은 다시
+              열려요.
             </p>
+            {state?.error && (
+              <p
+                className="sheet__hint"
+                style={{ color: "var(--danger)", fontWeight: 700, marginTop: 0 }}
+              >
+                {state.error}
+              </p>
+            )}
             <div className="sheet__foot">
               <button
                 type="button"

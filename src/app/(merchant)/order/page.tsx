@@ -21,8 +21,12 @@ import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import { PushToggle } from "@/components/PushToggle";
+import { RequestCancelButton } from "@/components/RequestCancelButton";
 
-export default async function OrderPage() {
+export default async function OrderPage(props: {
+  searchParams: Promise<{ cancelReq?: string; cancelErr?: string }>;
+}) {
+  const { cancelReq, cancelErr } = await props.searchParams;
   const user = await requireMerchant();
   const windowed = hasOrderWindow(user.role);
   const open = !windowed || isOrderOpen();
@@ -32,16 +36,25 @@ export default async function OrderPage() {
   // 현재 미수 요약(발행·미입금 계산서 전체) — 발주 화면 상단 카드로 노출
   const receivable = await receivableOf(user.id);
 
-  // 가맹점: 이번 발주 창에 이미 넣은 발주가 있으면 새 발주는 잠그고 수정만
+  // 가맹점: 이번 발주 창에 이미 넣은 발주가 있으면 새 발주는 잠그고 수정만.
+  // 취소(CANCELLED)된 발주는 제외 → 취소되면 발주창이 자동으로 다시 열린다.
   let existingOrderDate: string | null = null;
+  let cancelPending = false;
   if (windowed && open) {
     const since = new Date(currentWindowStartUtc());
     const existing = await prisma.order.findFirst({
-      where: { userId: user.id, createdAt: { gte: since } },
+      where: {
+        userId: user.id,
+        createdAt: { gte: since },
+        status: { not: "CANCELLED" },
+      },
       orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
+      select: { createdAt: true, cancelRequested: true },
     });
-    if (existing) existingOrderDate = kstDateOf(existing.createdAt);
+    if (existing) {
+      existingOrderDate = kstDateOf(existing.createdAt);
+      cancelPending = existing.cancelRequested;
+    }
   }
   const lockedToEdit = !!existingOrderDate;
 
@@ -81,6 +94,16 @@ export default async function OrderPage() {
             </span>
           </Link>
         )}
+        {cancelReq === "1" && (
+          <div className="notice notice--ok" style={{ marginBottom: 16 }}>
+            발주 취소 요청이 접수되었어요. 관리자 승인 후 취소가 완료됩니다.
+          </div>
+        )}
+        {cancelErr === "invoiced" && (
+          <div className="notice notice--error" style={{ marginBottom: 16 }}>
+            계산서가 이미 발행되어 취소 요청을 할 수 없어요. 새롭에 문의해 주세요.
+          </div>
+        )}
         {receivableLock.locked ? (
           <>
             <h1 className="h1">발주하기</h1>
@@ -104,15 +127,27 @@ export default async function OrderPage() {
         ) : lockedToEdit ? (
           <>
             <h1 className="h1">발주하기</h1>
-            <div className="notice notice--mute" style={{ marginBottom: 16 }}>
-              이미 주문이 진행됐으므로, 발주 수정만 가능합니다.
-            </div>
+            {cancelPending ? (
+              <div className="notice notice--edit" style={{ marginBottom: 16 }}>
+                <b>취소 요청됨</b> · 관리자 승인 대기중이에요. 승인되면 발주가
+                취소되고 발주창이 다시 열려요.
+              </div>
+            ) : (
+              <div className="notice notice--mute" style={{ marginBottom: 16 }}>
+                이미 주문이 진행됐으므로, 발주 수정만 가능합니다.
+              </div>
+            )}
             <Link
               href={`/order/day/${existingOrderDate}`}
               className="btn btn--primary"
             >
               발주 수정하러 가기
             </Link>
+            {!cancelPending && (
+              <div style={{ marginTop: 12 }}>
+                <RequestCancelButton />
+              </div>
+            )}
           </>
         ) : (
           <OrderForm

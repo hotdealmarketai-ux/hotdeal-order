@@ -16,12 +16,12 @@ export default async function AdminHome() {
   const [pending, allStores, hotdealStores, weeklyCount] = await Promise.all([
     prisma.user.count({ where: { status: "PENDING" } }),
     prisma.order.findMany({
-      where: { createdAt: today },
+      where: { createdAt: today, status: { not: "CANCELLED" } },
       select: { userId: true },
       distinct: ["userId"],
     }),
     prisma.order.findMany({
-      where: { user: { role: "MERCHANT_HOTDEAL" }, createdAt: today },
+      where: { user: { role: "MERCHANT_HOTDEAL" }, createdAt: today, status: { not: "CANCELLED" } },
       select: { userId: true },
       distinct: ["userId"],
     }),

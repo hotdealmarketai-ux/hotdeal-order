@@ -25,10 +25,14 @@ export default async function AdminCombinedReceipt(props: {
   });
   if (orders.length === 0) notFound();
 
+  // 취소된 발주는 집계에서 빼되, 전부 취소면 '취소 완료' 화면으로(양쪽 모두 취소 완료 표시).
+  const active = orders.filter((o) => o.status !== "CANCELLED");
+  const allCancelled = active.length === 0;
+
   // 같은 종류(과일/야채/공구/두부)는 한 섹션으로 병합 — 4종이 합쳐진 하나의 발주서
   type Item = { name: string; qty: string; note: string };
   const byCat = new Map<Category, Item[]>();
-  for (const o of orders) {
+  for (const o of active) {
     const c = o.category as Category;
     const list = byCat.get(c) ?? [];
     for (const it of o.items) list.push({ name: it.name, qty: it.qty, note: it.note });
@@ -58,18 +62,24 @@ export default async function AdminCombinedReceipt(props: {
     <>
       <Topbar backHref="/admin/hotdeal" title="발주서" />
       <div className="page">
-        <div style={{ marginBottom: 16 }}>
-          <Link
-            href={
-              invoice
-                ? `/admin/invoices/${invoice.id}`
-                : `/admin/invoices/new?user=${userId}&date=${date}`
-            }
-            className="btn btn--primary"
-          >
-            {invoiceLabel}
-          </Link>
-        </div>
+        {allCancelled ? (
+          <div className="notice notice--error" style={{ marginBottom: 16 }}>
+            <b>취소 완료</b> · 이 발주는 취소되었습니다.
+          </div>
+        ) : (
+          <div style={{ marginBottom: 16 }}>
+            <Link
+              href={
+                invoice
+                  ? `/admin/invoices/${invoice.id}`
+                  : `/admin/invoices/new?user=${userId}&date=${date}`
+              }
+              className="btn btn--primary"
+            >
+              {invoiceLabel}
+            </Link>
+          </div>
+        )}
 
         <div className="receipt" id="receipt-print">
           <div className="receipt__head">
@@ -79,9 +89,13 @@ export default async function AdminCombinedReceipt(props: {
               style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}
             >
               <span className="badge badge--mute">{labelDate(date)}</span>
-              <span className="badge badge--mute">
-                {sections.length}종 · {totalItems}건
-              </span>
+              {allCancelled ? (
+                <span className="badge badge--danger">취소 완료</span>
+              ) : (
+                <span className="badge badge--mute">
+                  {sections.length}종 · {totalItems}건
+                </span>
+              )}
             </div>
           </div>
 
@@ -106,9 +120,11 @@ export default async function AdminCombinedReceipt(props: {
           })}
         </div>
 
-        <div style={{ marginTop: 14 }}>
-          <PrintButton />
-        </div>
+        {!allCancelled && (
+          <div style={{ marginTop: 14 }}>
+            <PrintButton />
+          </div>
+        )}
       </div>
     </>
   );
