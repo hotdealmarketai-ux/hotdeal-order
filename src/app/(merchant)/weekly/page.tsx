@@ -116,7 +116,7 @@ export default async function WeeklyOrderPage({
     <>
       <Header storeName={user.storeName} />
       <div className="page">
-        <h1 className="h1">주간발주</h1>
+        <h1 className="h1" style={{ marginBottom: 20 }}>주간발주</h1>
 
         {sp.ok === "1" && (
           <div className="notice notice--ok" style={{ marginBottom: 12 }}>
@@ -136,21 +136,31 @@ export default async function WeeklyOrderPage({
 
         <Link
           href="/weekly/invoices"
-          className="card"
           style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
             gap: 12,
-            margin: "0 0 14px",
+            margin: "0 0 16px",
+            padding: "17px 18px",
+            minHeight: 58,
+            background: "var(--green-800)",
+            borderRadius: "var(--radius)",
+            boxShadow: "var(--shadow-pill)",
             textDecoration: "none",
-            color: "inherit",
           }}
         >
-          <span style={{ color: "var(--muted)" }}>
+          <span style={{ color: "#fff", fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>
             주간발주 입금요청서{receivable.count > 0 ? ` · 미입금 ${receivable.count}건` : ""}
           </span>
-          <span style={{ fontWeight: 800, fontSize: 15, color: "var(--danger)" }}>
+          <span
+            style={{
+              fontWeight: 800,
+              fontSize: 15,
+              whiteSpace: "nowrap",
+              color: receivable.balance > 0 ? "#ffd98a" : "rgba(255,255,255,0.92)",
+            }}
+          >
             {receivable.balance > 0 ? `${won(receivable.balance)}원 ›` : "보기 ›"}
           </span>
         </Link>

@@ -30,7 +30,7 @@ export default async function WeeklyInvoicesPage() {
     <>
       <Topbar brand="핫딜오더" right={<TopbarChip>{user.storeName}</TopbarChip>} />
       <div className="page">
-        <h1 className="h1">주간발주 입금요청서</h1>
+        <h1 className="h1" style={{ marginBottom: 20 }}>주간발주 입금요청서</h1>
 
         {unpaid > 0 && (
           <div className="payband" style={{ marginBottom: 16, marginTop: 0 }}>
