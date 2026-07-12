@@ -6,6 +6,7 @@ import {
   type CancelOrdersState,
 } from "@/app/actions/admin";
 import { SubmitButton } from "./SubmitButton";
+import { Sheet } from "./Sheet";
 
 // 지점 발주 전체 취소 — 관리자가 핫딜마켓 발주에서 지점별로 임의 취소.
 // 하드삭제가 아니라 status=CANCELLED로 남겨 양쪽에 '취소 완료'로 표시되고 발주창이 다시 열린다.
@@ -46,14 +47,7 @@ export function CancelStoreOrdersButton({
       </button>
 
       {confirming && (
-        <div
-          className="sheet"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setConfirming(false);
-          }}
-        >
+        <Sheet onClose={() => setConfirming(false)}>
           <div className="sheet__panel" style={{ maxWidth: 460 }}>
             <div className="sheet__head">
               <div className="sheet__title">{store} 발주를 취소할까요?</div>
@@ -98,7 +92,7 @@ export function CancelStoreOrdersButton({
               </form>
             </div>
           </div>
-        </div>
+        </Sheet>
       )}
     </>
   );

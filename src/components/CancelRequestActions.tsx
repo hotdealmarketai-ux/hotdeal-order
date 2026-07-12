@@ -6,6 +6,7 @@ import {
   rejectCancelRequestAction,
 } from "@/app/actions/order-cancel";
 import { SubmitButton } from "./SubmitButton";
+import { Sheet } from "./Sheet";
 
 // 점주가 올린 발주 취소요청을 관리자가 승인/반려한다.
 // 승인 → status=CANCELLED + 점주에게 '취소 요청 승인이 완료되었습니다' 알림.
@@ -35,14 +36,7 @@ export function CancelRequestActions({
       </button>
 
       {open && (
-        <div
-          className="sheet"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
-          }}
-        >
+        <Sheet onClose={() => setOpen(false)}>
           <div className="sheet__panel" style={{ maxWidth: 460 }}>
             <div className="sheet__head">
               <div className="sheet__title">{store} 취소 요청</div>
@@ -75,7 +69,7 @@ export function CancelRequestActions({
               </form>
             </div>
           </div>
-        </div>
+        </Sheet>
       )}
     </>
   );

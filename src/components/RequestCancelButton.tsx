@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { requestCancelOrderAction } from "@/app/actions/order-cancel";
 import { SubmitButton } from "./SubmitButton";
+import { Sheet } from "./Sheet";
 
 // 점주: 이미 넣은 발주를 '취소 요청'. 확인창(예/아니오) 후 관리자에게 취소 요청을 보낸다.
 // 실제 취소는 관리자 승인 시. requestCancelOrderAction이 redirect(?cancelReq=1 | ?cancelErr=)하므로 재로딩으로 반영.
@@ -20,14 +21,7 @@ export function RequestCancelButton() {
       </button>
 
       {open && (
-        <div
-          className="sheet"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setOpen(false);
-          }}
-        >
+        <Sheet onClose={() => setOpen(false)}>
           <div className="sheet__panel" style={{ maxWidth: 460 }}>
             <div className="sheet__head">
               <div className="sheet__title">진짜 발주를 취소하시겠습니까?</div>
@@ -61,7 +55,7 @@ export function RequestCancelButton() {
               </form>
             </div>
           </div>
-        </div>
+        </Sheet>
       )}
     </>
   );

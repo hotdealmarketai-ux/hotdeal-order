@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { resetAllOrdersAction } from "@/app/actions/admin";
 import { SubmitButton } from "./SubmitButton";
+import { Sheet } from "./Sheet";
 
-// 관리자 전용 '전체 발주 초기화' — 헤더에 놓아도 안 깨지게 확인은 오버레이 모달로.
+// 관리자 전용 '전체 발주 초기화' — 헤더(sticky .tbar)에 놓여도 안 깨지게 확인 모달을
+// body로 포탈(Sheet). 안 그러면 .tbar 스택 컨텍스트에 갇혀 하단 네비 뒤로 숨는다.
 export function ResetOrdersButton() {
   const [confirming, setConfirming] = useState(false);
 
@@ -19,14 +21,7 @@ export function ResetOrdersButton() {
       </button>
 
       {confirming && (
-        <div
-          className="sheet"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setConfirming(false);
-          }}
-        >
+        <Sheet onClose={() => setConfirming(false)}>
           <div className="sheet__panel" style={{ maxWidth: 460 }}>
             <div className="sheet__head">
               <div className="sheet__title">정말 전체 발주를 지울까요?</div>
@@ -59,7 +54,7 @@ export function ResetOrdersButton() {
               </form>
             </div>
           </div>
-        </div>
+        </Sheet>
       )}
     </>
   );
