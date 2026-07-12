@@ -256,7 +256,7 @@ export async function cancelStoreOrdersAction(
       select: { id: true },
     });
     if (inv) {
-      return { error: "계산서가 발행되어 취소할 수 없어요. 먼저 계산서를 취소(VOID)하세요." };
+      return { error: "계산서가 발행되어 취소할 수 없어요. 먼저 계산서를 취소하세요." };
     }
   }
   // 하드삭제 대신 CANCELLED 로 남겨 양쪽에 '취소 완료'로 보이게

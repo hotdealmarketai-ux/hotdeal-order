@@ -61,10 +61,7 @@ export function CancelStoreOrdersButton({
               </button>
             </div>
             <p className="sheet__hint">
-              이 지점이 이 날짜에 넣은 발주가 <b>모두 취소</b>돼요. 양쪽에
-              &lsquo;취소 완료&rsquo;로 표시되고, 점주에게 &lsquo;관리자에 의해
-              발주가 취소되었습니다&rsquo; 알림이 가요. 잠겨 있던 발주창은 다시
-              열려요.
+              이 지점이 이 날짜에 넣은 발주가 <b>모두 취소</b>됩니다.
             </p>
             {state?.error && (
               <p

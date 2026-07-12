@@ -35,9 +35,7 @@ export function RequestCancelButton() {
               </button>
             </div>
             <p className="sheet__hint">
-              관리자에게 <b>발주 취소를 요청</b>해요. 관리자가 승인하면 발주가
-              취소되고 발주창이 다시 열려요. (이미 계산서가 발행된 경우에는 취소할
-              수 없어요.)
+              이미 계산서가 발행된 경우에는 취소할 수 없어요.
             </p>
             <div className="sheet__foot">
               <button

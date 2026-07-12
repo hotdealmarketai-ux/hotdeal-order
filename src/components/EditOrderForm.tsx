@@ -209,7 +209,7 @@ export function EditOrderForm({
         <div className="confirm">
           <div className="confirm__title">이대로 수정할까요?</div>
           <p className="confirm__hint">
-            수정하면 발주 받는 곳에 &lsquo;발주 수정&rsquo;으로 다시 표시됩니다.
+            수정하면 &lsquo;발주 수정&rsquo;으로 다시 표시됩니다.
           </p>
           <div className="confirm__actions">
             <button

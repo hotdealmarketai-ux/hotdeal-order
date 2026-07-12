@@ -26,7 +26,7 @@ export function DeleteWeeklyOrderButton({ orderId }: { orderId: string }) {
       <div className="confirm__title">이 지점의 주간발주를 삭제할까요?</div>
       <p className="confirm__hint">
         삭제하면 주간발주와 관련 입금요청서가 취소되고, 점주에게 &lsquo;관리자에 의해
-        주간발주가 취소되었습니다&rsquo; 알림이 갑니다. 되돌릴 수 없어요.
+        주간발주가 취소되었습니다&rsquo; 알림이 갑니다.
       </p>
       <div className="confirm__actions">
         <button

@@ -32,7 +32,7 @@ export function ManualPayButton({
       <input type="hidden" name="invoiceId" value={invoiceId} />
       <div className="confirm__title">입금 확인 처리할까요?</div>
       <p className="confirm__hint">
-        점주에게 입금 확인 알림이 가고, 이후 자동매칭이 되돌리지 않아요.
+        점주에게 입금 확인 알림이 가고, 이후 자동매칭이 되지 않아요.
       </p>
       <div className="confirm__actions">
         <button

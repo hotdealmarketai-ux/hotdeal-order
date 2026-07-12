@@ -24,7 +24,7 @@ export function CancelWeeklyOrderButton() {
       <input type="hidden" name="confirm" value="CANCEL-WEEKLY" />
       <div className="confirm__title">이번 주간발주를 취소할까요?</div>
       <p className="confirm__hint">
-        취소하면 이번 주 주간발주가 삭제돼요. 다시 넣으려면 주간발주 시간에 새로 넣어야 해요.
+        취소하면 이번 주 주간발주가 삭제됩니다.
       </p>
       <div className="confirm__actions">
         <button

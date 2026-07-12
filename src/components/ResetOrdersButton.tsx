@@ -35,8 +35,7 @@ export function ResetOrdersButton() {
               </button>
             </div>
             <p className="sheet__hint">
-              모든 발주 내역이 영구히 삭제됩니다. 되돌릴 수 없어요. (회원·재고는
-              유지)
+              모든 발주 내역이 영구히 삭제됩니다. 되돌릴 수 없어요.
             </p>
             <div className="sheet__foot">
               <button

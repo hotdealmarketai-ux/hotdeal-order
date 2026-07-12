@@ -50,9 +50,7 @@ export function CancelRequestActions({
               </button>
             </div>
             <p className="sheet__hint">
-              점주가 이 발주의 <b>취소를 요청</b>했어요. 승인하면 발주가 취소되고
-              점주에게 &lsquo;취소 요청 승인이 완료되었습니다&rsquo; 알림이 가요.
-              반려하면 발주는 그대로 유지되고 점주에게 반려 알림이 가요.
+              점주가 이 발주의 <b>취소를 요청</b>했어요.
             </p>
             <div className="sheet__foot">
               <form action={rejectCancelRequestAction} style={{ flex: 1 }}>

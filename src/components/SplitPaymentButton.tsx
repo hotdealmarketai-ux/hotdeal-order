@@ -44,7 +44,7 @@ export function SplitPaymentButton({
       <input type="hidden" name="invoiceId" value={invoiceId} />
       <div className="confirm__title">나눠서 입금할까요?</div>
       <p className="confirm__hint">
-        요청하면 새롭에서 확인하고, 입금 상황에 맞춰 수동으로 처리해 드려요.
+        분할 입금 후 관리자에게 1:1 문의 바랍니다.
       </p>
       <div className="confirm__actions">
         <button

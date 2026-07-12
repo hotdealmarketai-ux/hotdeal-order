@@ -54,8 +54,7 @@ export function InvoiceAdminActions({
               정말 입금 확인 처리할까요? · {fmt(total)}원
             </div>
             <p className="confirm__hint">
-              점주에게 &lsquo;입금이 확인되었습니다&rsquo; 알림이 가고, 미수에서
-              빠져요.
+              점주에게 &lsquo;입금이 확인되었습니다&rsquo; 알림이 갑니다.
             </p>
             <div className="confirm__actions">
               <button
@@ -76,8 +75,8 @@ export function InvoiceAdminActions({
             <input type="hidden" name="confirm" value="VOID-INVOICE" />
             <div className="confirm__title">정말 이 계산서를 취소할까요?</div>
             <p className="confirm__hint">
-              점주 화면에서 사라지고 되돌릴 수 없어요. 다시 보내려면 합본
-              발주서에서 새로 작성하세요.
+              점주 화면에서 사라지고 되돌릴 수 없어요. 다시 보내려면 발주서에서
+              새로 작성하세요.
             </p>
             <div className="confirm__actions">
               <button
