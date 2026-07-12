@@ -103,6 +103,9 @@ export async function GET(request: Request) {
     ran.push("tick:collect");
   }
 
+  // #12 재고 구글시트 동기화 — 매 분(시트=기준). 실패해도 다음 분 재시도.
+  if (await hit("/api/cron/inventory-sync")) ran.push("tick:inventory");
+
   return Response.json({
     ok: true,
     kst: `${p.h}:${String(p.mi).padStart(2, "0")}`,

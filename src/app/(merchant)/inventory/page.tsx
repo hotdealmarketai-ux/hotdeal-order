@@ -4,31 +4,28 @@ import { requireMerchant } from "@/lib/session";
 import { canViewInventory } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { formatKStamp } from "@/lib/format";
+import { lastInventorySyncAt } from "@/lib/inventory-sheet";
 
-function stockBadgeClass(status: string): string {
-  if (status.includes("넉넉") || status.includes("많")) return "badge--ok";
-  if (status.includes("없") || status.includes("품절")) return "badge--danger";
-  if (status.includes("부족")) return "badge--wait";
-  return "badge--mute";
-}
+const won = (n: number) => n.toLocaleString("ko-KR");
 
+// 재고현황 — 구글시트(품목/남은수량/공급가)를 1분마다 동기화(#12). 시트가 기준.
 export default async function InventoryPage() {
   const user = await requireMerchant();
   if (!canViewInventory(user.role)) redirect("/order");
 
-  const items = await prisma.inventoryItem.findMany({
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  });
+  const [items, syncedAt] = await Promise.all([
+    prisma.inventoryItem.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    }),
+    lastInventorySyncAt(),
+  ]);
 
   return (
     <>
       <Topbar title="재고현황" />
       <div className="page">
-        <p
-          className="lead"
-          style={{ marginTop: 6, marginBottom: 24, fontSize: 13.5 }}
-        >
-          재고는 실시간 반영이 되지 않으므로, 실제와 다를 수 있습니다.
+        <p className="hint" style={{ marginTop: 6, marginBottom: 16 }}>
+          동기화 시간 : {syncedAt ? formatKStamp(syncedAt) : "동기화 전"}
         </p>
 
         {items.length === 0 ? (
@@ -41,19 +38,22 @@ export default async function InventoryPage() {
               <div className="row" key={it.id}>
                 <div className="row__main">
                   <div className="row__title">{it.name}</div>
+                  {it.supplyPrice > 0 && (
+                    <div className="row__sub">개당 {won(it.supplyPrice)}원</div>
+                  )}
                   {it.memo && <div className="row__sub">{it.memo}</div>}
-                  <div
-                    className="row__sub"
-                    style={{ fontSize: 11.5, color: "var(--muted-2)", marginTop: 3 }}
-                  >
-                    업데이트 시간 : {formatKStamp(it.updatedAt)}
-                  </div>
                 </div>
-                {it.status && (
-                  <span className={`badge ${stockBadgeClass(it.status)}`}>
-                    {it.status}
-                  </span>
-                )}
+                <span
+                  className={`badge ${
+                    it.qty <= 0
+                      ? "badge--danger"
+                      : it.qty < 5
+                        ? "badge--wait"
+                        : "badge--ok"
+                  }`}
+                >
+                  {it.qty <= 0 ? "품절" : `${it.qty}개`}
+                </span>
               </div>
             ))}
           </div>

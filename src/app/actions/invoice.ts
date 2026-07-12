@@ -43,7 +43,12 @@ const MAX_ITEMS = 200;
 // payload(JSON) → 검증된 품목. 금액은 서버에서만 계산(클라이언트 값 신뢰 안 함).
 // 수량/단가는 '전체 문자열' 엄격 파싱 — "1/2"·"1,500.00"·"-5000" 같은 값은
 // 조용히 왜곡되지 않고 반드시 에러로 거부된다(돈 원칙).
-function cleanItems(raw: RawItem[]): CleanItem[] | { error: string } {
+// strict=false(임시저장·카테고리 확정): 형식이 안 맞는 줄은 조용히 건너뛴다(작성 중이라 허용).
+// strict=true(발행): 한 줄이라도 형식 오류면 거부(돈 원칙).
+function cleanItems(
+  raw: RawItem[],
+  strict = true,
+): CleanItem[] | { error: string } {
   const out: CleanItem[] = [];
   for (const r of raw.slice(0, MAX_ITEMS)) {
     const category = String(r.category ?? "") as Category;
@@ -52,13 +57,18 @@ function cleanItems(raw: RawItem[]): CleanItem[] | { error: string } {
     const qtyRaw = String(r.qty ?? "").trim();
     const priceRaw = String(r.unitPrice ?? "").trim();
     if (!name && !qtyRaw && !priceRaw) continue; // 빈 줄은 건너뜀
-    if (!name) return { error: "품목명이 비어 있는 줄이 있어요." };
+    if (!name) {
+      if (!strict) continue;
+      return { error: "품목명이 비어 있는 줄이 있어요." };
+    }
     const qty = parseQtyStrict(qtyRaw);
     if (qty == null) {
+      if (!strict) continue;
       return { error: `'${name}' 수량을 확인해 주세요. (숫자만, 예: 4 또는 0.5)` };
     }
     const unitPrice = parsePriceStrict(priceRaw);
     if (unitPrice == null) {
+      if (!strict) continue;
       return { error: `'${name}' 단가를 확인해 주세요. (원 단위 숫자만)` };
     }
     out.push({
@@ -82,10 +92,31 @@ export async function saveInvoiceAction(
   const invoiceId = String(formData.get("invoiceId") ?? "");
   const userId = String(formData.get("userId") ?? "");
   const date = String(formData.get("date") ?? "");
-  const mode = formData.get("mode") === "issue" ? "issue" : "draft";
+  // #11 mode: issue(발행) | confirm(카테고리 확정=DRAFT 저장) | draft(임시저장)
+  const modeRaw = String(formData.get("mode") ?? "draft");
+  const isIssue = modeRaw === "issue";
+  // 확정된 카테고리 CSV + 이 계산서의 전체 카테고리(발행 게이트 판정용)
+  const confirmedCats = String(formData.get("confirmedCats") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const allCats = String(formData.get("allCats") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return { error: "잘못된 요청이에요." };
+  }
+
+  // #11 발행 게이트 — 4개 카테고리 모두 확정돼야 발행 가능(빈 카테고리도 확정 대상).
+  if (isIssue && allCats.length > 0) {
+    const conf = new Set(confirmedCats);
+    if (allCats.some((c) => !conf.has(c))) {
+      return {
+        error: "모든 품목(과일·야채·공구·채움채)을 확정해야 발행할 수 있어요.",
+      };
+    }
   }
 
   const merchant = await prisma.user.findUnique({ where: { id: userId } });
@@ -99,9 +130,10 @@ export async function saveInvoiceAction(
   } catch {
     raw = [];
   }
-  const items = cleanItems(Array.isArray(raw) ? raw : []);
+  const items = cleanItems(Array.isArray(raw) ? raw : [], isIssue);
   if ("error" in items) return items;
-  if (items.length === 0) {
+  // 발행은 최소 1건 필요. 임시저장·확정은 0건도 허용(작성 중).
+  if (isIssue && items.length === 0) {
     return { error: "품목을 한 개 이상 입력하세요." };
   }
 
@@ -125,8 +157,9 @@ export async function saveInvoiceAction(
     userId,
     date,
     total,
-    status: mode === "issue" ? "ISSUED" : "DRAFT",
-    issuedAt: mode === "issue" ? new Date() : null,
+    status: isIssue ? "ISSUED" : "DRAFT",
+    issuedAt: isIssue ? new Date() : null,
+    confirmedCats: confirmedCats.join(","),
   };
 
   let id = invoiceId;
@@ -168,7 +201,7 @@ export async function saveInvoiceAction(
     return { error: "저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
   }
 
-  if (mode === "issue") {
+  if (isIssue) {
     await notifyMerchantInvoiceIssued(userId, date);
   }
 
@@ -176,7 +209,7 @@ export async function saveInvoiceAction(
   revalidatePath("/admin/deposits");
   revalidatePath(`/admin/combined/${userId}/${date}`);
   revalidatePath("/admin");
-  redirect(`/admin/invoices/${id}?${mode === "issue" ? "issued" : "saved"}=1`);
+  redirect(`/admin/invoices/${id}?${isIssue ? "issued" : "saved"}=1`);
 }
 
 // 발행된 계산서 취소(VOID) — 되돌릴 수 없음, 재작성은 합본 발주서에서

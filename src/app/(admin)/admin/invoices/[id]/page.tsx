@@ -98,6 +98,7 @@ export default async function AdminInvoiceDetail(props: {
             categories={categories}
             initialItems={initialItems}
             refGroups={refGroups}
+            confirmedCats={inv.confirmedCats}
           />
         </div>
       </>

@@ -178,11 +178,14 @@ export default async function AdminDeposits() {
           ))}
         </div>
 
-        {unmatched.length > 0 && (
-          <>
-            <div className="section-label">미매칭 입금</div>
-            <div className="list">
-              {unmatched.map((d) => (
+        <div className="section-label">미매칭 입금</div>
+        {unmatched.length === 0 ? (
+          <div className="empty">
+            <p>매칭할 미매칭 입금이 없어요.</p>
+          </div>
+        ) : (
+          <div className="list">
+            {unmatched.map((d) => (
                 <div className="deprow" key={d.id}>
                   <div className="deprow__head">
                     <div className="row__main">
@@ -207,8 +210,7 @@ export default async function AdminDeposits() {
                   </div>
                 </div>
               ))}
-            </div>
-          </>
+          </div>
         )}
       </div>
     </>

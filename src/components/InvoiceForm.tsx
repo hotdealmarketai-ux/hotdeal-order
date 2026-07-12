@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useRef, useState } from "react";
+import { startTransition, useActionState, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   saveInvoiceAction,
@@ -61,6 +61,7 @@ export function InvoiceForm({
   categories,
   initialItems = [],
   refGroups = [],
+  confirmedCats = "",
 }: {
   invoiceId?: string;
   userId: string;
@@ -68,6 +69,7 @@ export function InvoiceForm({
   categories: Category[];
   initialItems?: InvoiceInitialItem[];
   refGroups?: InvoiceRefGroup[];
+  confirmedCats?: string;
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({
@@ -146,6 +148,56 @@ export function InvoiceForm({
     0,
   );
 
+  // #11 카테고리별 확정 상태(과일/야채/공구/채움채). 4개 모두 확정돼야 발행 가능.
+  const [confirmed, setConfirmed] = useState<Set<string>>(
+    () => new Set(confirmedCats.split(",").map((s) => s.trim()).filter(Boolean)),
+  );
+  const allConfirmed = categories.every((c) => confirmed.has(c));
+
+  // 한 카테고리의 채워진 줄들이 유효한지(빈 카테고리는 유효 — 없는 품목도 확정 가능)
+  function validateCat(c: Category): boolean {
+    for (const r of (rowsByCat[c] ?? []).filter(isFilled)) {
+      if (!r.name.trim()) {
+        setLocalError(`${CATEGORIES[c].label}: 품목명이 비어 있는 줄이 있어요.`);
+        return false;
+      }
+      if (parseQtyStrict(r.qty) == null) {
+        setLocalError(`${CATEGORIES[c].label} '${r.name}' 수량을 확인해 주세요.`);
+        return false;
+      }
+      if (parsePriceStrict(r.unitPrice) == null) {
+        setLocalError(`${CATEGORIES[c].label} '${r.name}' 단가를 확인해 주세요.`);
+        return false;
+      }
+    }
+    setLocalError("");
+    return true;
+  }
+
+  // 확정 상태를 DB에 즉시 저장(현장이 달라 시간차 확정 — 오전 과채, 이후 공구/채움채).
+  function persistConfirmed(next: Set<string>) {
+    const fd = new FormData();
+    if (invoiceId) fd.set("invoiceId", invoiceId);
+    fd.set("userId", userId);
+    fd.set("date", date);
+    fd.set("payload", JSON.stringify(payload));
+    fd.set("confirmedCats", [...next].join(","));
+    fd.set("allCats", categories.join(","));
+    fd.set("mode", "confirm");
+    startTransition(() => formAction(fd));
+  }
+  function toggleConfirm(c: Category) {
+    const next = new Set(confirmed);
+    if (next.has(c)) {
+      next.delete(c); // 수정 — 잠금 해제
+    } else {
+      if (!validateCat(c)) return; // 확정 — 유효할 때만 잠금
+      next.add(c);
+    }
+    setConfirmed(next);
+    persistConfirmed(next);
+  }
+
   // 발행 전 검증 — 서버(cleanItems)와 동일 규칙
   function validate(): boolean {
     for (const c of categories) {
@@ -192,6 +244,8 @@ export function InvoiceForm({
         <input type="hidden" name="userId" value={userId} />
         <input type="hidden" name="date" value={date} />
         <input type="hidden" name="payload" value={JSON.stringify(payload)} />
+        <input type="hidden" name="confirmedCats" value={[...confirmed].join(",")} />
+        <input type="hidden" name="allCats" value={categories.join(",")} />
 
         {(state?.error || localError) && (
           <div className="notice notice--error" style={{ marginBottom: 12 }}>
@@ -229,6 +283,14 @@ export function InvoiceForm({
                 {sub.sum > 0 && (
                   <span className="invcat__sum">{fmt(sub.sum)}원</span>
                 )}
+                <button
+                  type="button"
+                  className={`btn btn--xs ${confirmed.has(c) ? "btn--soft" : "btn--primary"}`}
+                  style={{ marginLeft: "auto", flexShrink: 0 }}
+                  onClick={() => toggleConfirm(c)}
+                >
+                  {confirmed.has(c) ? "수정" : "확정"}
+                </button>
               </div>
               <div className="invcols">
                 <span>품목</span>
@@ -238,11 +300,13 @@ export function InvoiceForm({
               </div>
               {(rowsByCat[c] ?? []).map((r) => {
                 const amt = rowAmount(r);
+                const locked = confirmed.has(c);
                 return (
                   <div className="invrow" key={r.id}>
                     <input
                       className="input"
                       value={r.name}
+                      disabled={locked}
                       onChange={(e) => updateRow(c, r.id, "name", e.target.value)}
                       placeholder="품목"
                     />
@@ -250,6 +314,7 @@ export function InvoiceForm({
                       className="input"
                       inputMode="decimal"
                       value={r.qty}
+                      disabled={locked}
                       onChange={(e) => updateRow(c, r.id, "qty", e.target.value)}
                       placeholder="수량"
                     />
@@ -257,6 +322,7 @@ export function InvoiceForm({
                       className="input"
                       inputMode="numeric"
                       value={r.unitPrice}
+                      disabled={locked}
                       onChange={(e) =>
                         updateRow(c, r.id, "unitPrice", e.target.value)
                       }
@@ -278,18 +344,27 @@ export function InvoiceForm({
         </div>
 
         {!confirming ? (
-          <div className="confirm__actions" style={{ marginTop: 16 }}>
-            <DraftSaveButton />
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => {
-                if (validate()) setConfirming(true);
-              }}
-            >
-              발행하기
-            </button>
-          </div>
+          <>
+            <div className="confirm__actions" style={{ marginTop: 16 }}>
+              <DraftSaveButton />
+              <button
+                type="button"
+                className="btn btn--primary"
+                disabled={!allConfirmed}
+                onClick={() => {
+                  if (validate()) setConfirming(true);
+                }}
+              >
+                발행하기
+              </button>
+            </div>
+            {!allConfirmed && (
+              <p className="hint center" style={{ marginTop: 10 }}>
+                과일·야채·공구·채움채 <b>4개 모두 확정</b>해야 발행할 수 있어요.
+                없는 품목은 비운 채로 확정하면 돼요.
+              </p>
+            )}
+          </>
         ) : (
           <div className="confirm">
             <input type="hidden" name="mode" value="issue" />
