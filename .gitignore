@@ -47,3 +47,9 @@ next-env.d.ts
 # local uploads (사업자등록증 등) — 운영은 Supabase Storage
 /uploads
 /public/uploads
+
+# overnight working files (not for commit)
+_copy/
+orderya-copy.txt
+_*.mjs
+_*.cjs

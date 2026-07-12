@@ -1,11 +1,11 @@
-import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
 import { kstDayRange, labelDate, normalizeDateStr } from "@/lib/date";
 import { PrintButton } from "@/components/PrintButton";
+import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
 
 export default async function AdminCombinedReceipt(props: {
   params: Promise<{ userId: string; date: string }>;
@@ -25,9 +25,10 @@ export default async function AdminCombinedReceipt(props: {
   });
   if (orders.length === 0) notFound();
 
-  // 취소된 발주는 집계에서 빼되, 전부 취소면 '취소 완료' 화면으로(양쪽 모두 취소 완료 표시).
+  // 취소는 하드삭제라 정상 흐름엔 CANCELLED가 없지만, 잔존 행 방어적 제외.
   const active = orders.filter((o) => o.status !== "CANCELLED");
-  const allCancelled = active.length === 0;
+  // 발주취소로 전량 삭제되면 이 발주서는 사라짐 → 목록으로 되돌린다.
+  if (active.length === 0) redirect("/admin/hotdeal");
 
   // 같은 종류(과일/야채/공구/두부)는 한 섹션으로 병합 — 4종이 합쳐진 하나의 발주서
   type Item = { name: string; qty: string; note: string };
@@ -44,42 +45,20 @@ export default async function AdminCombinedReceipt(props: {
   }));
   const totalItems = sections.reduce((n, s) => n + s.items.length, 0);
 
-  // 이 점포·날짜의 계산서(취소 제외) — 있으면 보기, 없으면 작성 버튼
-  const invoice = await prisma.invoice.findFirst({
-    where: { userId, date, status: { not: "VOID" } },
-    select: { id: true, status: true, total: true },
-  });
-  const invoiceLabel =
-    invoice?.status === "DRAFT"
-      ? "계산서 이어서 작성 (작성중)"
-      : invoice?.status === "PAID"
-        ? "계산서 보기 · 입금 완료"
-        : invoice
-          ? "계산서 보기 · 발행됨"
-          : "계산서 작성";
-
   return (
     <>
       <Topbar backHref="/admin/hotdeal" title="발주서" />
       <div className="page">
-        {allCancelled ? (
-          <div className="notice notice--error" style={{ marginBottom: 16 }}>
-            <b>취소 완료</b> · 이 발주는 취소되었습니다.
-          </div>
-        ) : (
-          <div style={{ marginBottom: 16 }}>
-            <Link
-              href={
-                invoice
-                  ? `/admin/invoices/${invoice.id}`
-                  : `/admin/invoices/new?user=${userId}&date=${date}`
-              }
-              className="btn btn--primary"
-            >
-              {invoiceLabel}
-            </Link>
-          </div>
-        )}
+        {/* #3 발주취소를 발주서 안 상단으로(계산서 발행은 목록으로 이동). 검토 후 이 발주서 단위로 취소. */}
+        <div
+          style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}
+        >
+          <CancelStoreOrdersButton
+            userId={userId}
+            date={date}
+            store={merchant.storeName}
+          />
+        </div>
 
         <div className="receipt" id="receipt-print">
           <div className="receipt__head">
@@ -89,13 +68,9 @@ export default async function AdminCombinedReceipt(props: {
               style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}
             >
               <span className="badge badge--mute">{labelDate(date)}</span>
-              {allCancelled ? (
-                <span className="badge badge--danger">취소 완료</span>
-              ) : (
-                <span className="badge badge--mute">
-                  {sections.length}종 · {totalItems}건
-                </span>
-              )}
+              <span className="badge badge--mute">
+                {sections.length}종 · {totalItems}건
+              </span>
             </div>
           </div>
 
@@ -120,11 +95,9 @@ export default async function AdminCombinedReceipt(props: {
           })}
         </div>
 
-        {!allCancelled && (
-          <div style={{ marginTop: 14 }}>
-            <PrintButton />
-          </div>
-        )}
+        <div style={{ marginTop: 14 }}>
+          <PrintButton />
+        </div>
       </div>
     </>
   );

@@ -71,9 +71,10 @@ export async function approveCancelRequestAction(formData: FormData) {
   const dates = [...new Set(orders.map((o) => kstDateOf(o.createdAt)))];
   if (await hasIssuedInvoice(userId, dates)) redirect("/admin/hotdeal?cancelErr=invoiced");
 
-  await prisma.order.updateMany({
+  // #2 하드삭제 — 취소 승인 시 CANCELLED로 남기지 않고 완전 삭제(모든 목록·내역에서 사라짐).
+  // 삭제 요약은 감사로그 snapshot에 남겨 사후 확인 가능.
+  await prisma.order.deleteMany({
     where: { id: { in: orders.map((o) => o.id) } },
-    data: { status: "CANCELLED", cancelledAt: new Date(), cancelRequested: false },
   });
   const store = await prisma.user.findUnique({
     where: { id: userId },
@@ -85,7 +86,8 @@ export async function approveCancelRequestAction(formData: FormData) {
     actorName: admin.storeName,
     targetType: "store",
     targetId: userId,
-    summary: `${store?.storeName ?? ""} 발주 취소요청 승인 · ${orders.length}건`,
+    summary: `${store?.storeName ?? ""} 발주 취소요청 승인(삭제) · ${orders.length}건`,
+    snapshot: JSON.stringify({ orderIds: orders.map((o) => o.id), dates }),
   });
   await notifyMerchantCancelApproved(userId).catch(() => {});
   redirect("/admin/hotdeal");

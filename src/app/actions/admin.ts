@@ -259,10 +259,9 @@ export async function cancelStoreOrdersAction(
       return { error: "계산서가 발행되어 취소할 수 없어요. 먼저 계산서를 취소하세요." };
     }
   }
-  // 하드삭제 대신 CANCELLED 로 남겨 양쪽에 '취소 완료'로 보이게
-  const res = await prisma.order.updateMany({
+  // #2 하드삭제 — 취소한 발주는 완전 삭제(취소 완료로 남기지 않고 모든 목록·내역에서 제거).
+  const res = await prisma.order.deleteMany({
     where: { id: { in: targets.map((o) => o.id) } },
-    data: { status: "CANCELLED", cancelledAt: new Date(), cancelRequested: false },
   });
   if (res.count > 0) {
     await writeAudit({
@@ -271,7 +270,8 @@ export async function cancelStoreOrdersAction(
       actorName: admin.storeName,
       targetType: "store",
       targetId: userId,
-      summary: `지점 발주 취소 · ${date} · ${res.count}건`,
+      summary: `지점 발주 삭제(취소) · ${date} · ${res.count}건`,
+      snapshot: JSON.stringify({ orderIds: targets.map((o) => o.id), date }),
     });
     await notifyMerchantOrdersCancelled(userId);
   }

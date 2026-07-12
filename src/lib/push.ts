@@ -6,7 +6,12 @@ import type { Role } from "@/lib/constants";
 
 const VAPID_SUBJECT = "mailto:hotdealmarketai@gmail.com";
 
-export type PushPayload = { title: string; body: string; url?: string };
+export type PushPayload = {
+  title: string;
+  body: string;
+  url?: string;
+  type?: string; // order | invoice | deposit | weekly | chat | system (인앱 알림 분류)
+};
 
 // web-push는 서버에서만 동적 import (클라이언트 번들 제외)
 async function getWebPush() {
@@ -20,6 +25,22 @@ async function getWebPush() {
 }
 
 export async function sendPushToUser(userId: string, payload: PushPayload) {
+  // 인앱 알림 적재 — 유저당 1행(기기 수·푸시 성공 여부와 무관). 알림목록(#10)·미읽음 배지(#8)의 소스.
+  // web-push 미설정이거나 구독이 없어도 인앱 알림은 항상 남긴다.
+  try {
+    await prisma.notification.create({
+      data: {
+        userId,
+        title: payload.title,
+        body: payload.body ?? "",
+        url: payload.url ?? null,
+        type: payload.type ?? "",
+      },
+    });
+  } catch (err) {
+    logError("push.logNotification", err, { userId });
+  }
+
   const webpush = await getWebPush();
   if (!webpush) return;
   const subs = await prisma.pushSubscription.findMany({ where: { userId } });

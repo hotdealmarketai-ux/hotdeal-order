@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { NotificationBell } from "./NotificationBell";
 
 export function Topbar({
   title,
@@ -46,6 +47,8 @@ export function Topbar({
         {title ? <span className="tbar__title">{title}</span> : null}
         <span className="tbar__spacer" />
         {right}
+        {/* 알림 종 — 전역(모든 역할). 미읽음 배지 + /notifications 진입. #8/#10 */}
+        <NotificationBell />
       </div>
       {children ? <div className="tbar__hero">{children}</div> : null}
     </header>

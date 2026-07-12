@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatKDateTime, formatKDate } from "@/lib/format";
-import { labelDate } from "@/lib/date";
+import { labelDate, kstDateOf } from "@/lib/date";
 import {
   receivableOf,
   orderLockOf,
@@ -37,9 +37,12 @@ type LedgerRow =
 // 점포 입출금 내역 — 통장 거래내역처럼 날짜순으로 '입금 요청(청구)'와 '입금'을 나열.
 export default async function AdminDepositStore(props: {
   params: Promise<{ userId: string }>;
+  searchParams: Promise<{ q?: string }>;
 }) {
   await requireAdmin();
   const { userId } = await props.params;
+  const { q = "" } = await props.searchParams;
+  const query = q.trim();
 
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || user.role !== "MERCHANT_HOTDEAL") notFound();
@@ -105,6 +108,23 @@ export default async function AdminDepositStore(props: {
     ),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
 
+  // #5 날짜/금액 검색 + 날짜별 그룹핑
+  const digits = query.replace(/[^0-9]/g, "");
+  const filtered = query
+    ? rows.filter((r) => {
+        const d = kstDateOf(r.at);
+        return d.includes(query) || (digits !== "" && String(r.amount).includes(digits));
+      })
+    : rows;
+  const byDate = new Map<string, LedgerRow[]>();
+  for (const r of filtered) {
+    const d = kstDateOf(r.at);
+    const arr = byDate.get(d);
+    if (arr) arr.push(r);
+    else byDate.set(d, [r]);
+  }
+  const dateKeys = [...byDate.keys()].sort((a, b) => (a < b ? 1 : -1));
+
   return (
     <>
       <Topbar backHref="/admin/deposits" title={user.storeName} />
@@ -168,60 +188,76 @@ export default async function AdminDepositStore(props: {
         </div>
 
         <div className="section-label">입출금 내역</div>
-        {rows.length === 0 ? (
+        <form method="get" style={{ marginBottom: 12 }}>
+          <input
+            type="search"
+            name="q"
+            defaultValue={query}
+            placeholder="날짜(예: 2026-07) 또는 금액 검색"
+            className="input"
+            style={{ width: "100%" }}
+          />
+        </form>
+        {filtered.length === 0 ? (
           <div className="empty">
-            <p>아직 청구·입금 내역이 없어요.</p>
+            <p>{query ? "검색 결과가 없어요." : "아직 청구·입금 내역이 없어요."}</p>
           </div>
         ) : (
-          <div className="list">
-            {rows.map((r, i) =>
-              r.kind === "invoice" ? (
-                <div className="row" key={`inv-${r.id}`}>
-                  <div className="row__main">
-                    <Link
-                      href={`/admin/invoices/${r.id}`}
-                      className="row__title"
-                      style={{ textDecoration: "none" }}
-                    >
-                      입금 요청 · {labelDate(r.date)}
-                      {r.splitRequested && (
-                        <span
-                          className="badge badge--wait"
-                          style={{ marginLeft: 8 }}
+          dateKeys.map((dk) => (
+            <div key={dk} style={{ marginBottom: 16 }}>
+              <div
+                className="row__sub"
+                style={{ fontWeight: 800, color: "var(--fg)", margin: "0 2px 6px" }}
+              >
+                {labelDate(dk)}
+              </div>
+              <div className="list">
+                {byDate.get(dk)!.map((r, i) =>
+                  r.kind === "invoice" ? (
+                    <div className="row" key={`inv-${r.id}`}>
+                      <div className="row__main">
+                        <Link
+                          href={`/admin/invoices/${r.id}`}
+                          className="row__title"
+                          style={{ textDecoration: "none" }}
                         >
-                          분할요청
-                        </span>
-                      )}
-                    </Link>
-                    <div className="row__sub">
-                      {r.status === "PAID" ? "입금 완료" : "입금 대기"}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div className="ledger__req">+{fmt(r.amount)}원</div>
-                    {r.status === "ISSUED" && (
-                      <div style={{ marginTop: 6 }}>
-                        <ManualPayButton invoiceId={r.id} />
+                          입금 요청
+                          {r.splitRequested && (
+                            <span className="badge badge--wait" style={{ marginLeft: 8 }}>
+                              분할요청
+                            </span>
+                          )}
+                        </Link>
+                        <div className="row__sub">
+                          {r.status === "PAID" ? "입금 완료" : "입금 대기"}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="row" key={`dep-${i}`}>
-                  <div className="row__main">
-                    <div className="row__title">
-                      {r.manual ? "수동입금확인" : `입금 · ${r.payer}`}
+                      <div style={{ textAlign: "right" }}>
+                        <div className="ledger__req">+{fmt(r.amount)}원</div>
+                        {r.status === "ISSUED" && (
+                          <div style={{ marginTop: 6 }}>
+                            <ManualPayButton invoiceId={r.id} />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="row__sub">
-                      {formatKDate(r.at)} ·{" "}
-                      {r.manual ? "관리자 확인" : `${r.via} 매칭`}
+                  ) : (
+                    <div className="row" key={`dep-${i}`}>
+                      <div className="row__main">
+                        <div className="row__title">
+                          {r.manual ? "수동입금확인" : `입금 · ${r.payer}`}
+                        </div>
+                        <div className="row__sub">
+                          {r.manual ? "관리자 확인" : `${r.via} 매칭`}
+                        </div>
+                      </div>
+                      <div className="ledger__pay">−{fmt(r.amount)}원</div>
                     </div>
-                  </div>
-                  <div className="ledger__pay">−{fmt(r.amount)}원</div>
-                </div>
-              ),
-            )}
-          </div>
+                  ),
+                )}
+              </div>
+            </div>
+          ))
         )}
       </div>
     </>

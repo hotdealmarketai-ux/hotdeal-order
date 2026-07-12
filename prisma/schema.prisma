@@ -43,8 +43,25 @@ model User {
   pushSubs        PushSubscription[]
   matchedDeposits Deposit[]
   invoices        Invoice[]
+  notifications   Notification[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// 인앱 알림 — 푸시 발송과 동시에 유저당 1행 적재(기기 수와 무관). 알림목록(#10)·미읽음 배지(#8)의 소스.
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String    @default("")
+  url       String? // 클릭 시 이동 경로
+  type      String    @default("") // order | invoice | deposit | weekly | chat | system
+  readAt    DateTime? // null = 안읽음
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }
 
 // 웹 푸시 구독 — 사용자 기기별 1개 (알림 발송 대상)
@@ -164,13 +181,17 @@ model AppMeta {
   syncedAt DateTime @default(now())
 }
 
-// 재고현황 — 새롭(본사)이 작성, 핫딜마켓 가맹점만 열람
+// 재고현황 — 새롭(본사)이 작성/구글시트 동기화, 핫딜마켓 가맹점만 열람
 model InventoryItem {
   id        String   @id @default(cuid())
   name      String
-  status    String   @default("") // 상태/수량 텍스트
+  status    String   @default("") // (레거시) 상태/수량 텍스트 — 점진적으로 qty로 대체
+  qty       Int      @default(0) // #6/#12 남은수량(시트 B열)
+  supplyPrice Int    @default(0) // #6/#12 개당 공급가(시트 C열)
   memo      String   @default("")
   sortOrder Int      @default(0)
+  // #12 시트 삭제 전파용 소프트삭제 마커(선택) — 현재는 미사용, 향후 tombstone
+  deletedAt DateTime?
   updatedAt DateTime @updatedAt
 }
 
@@ -196,6 +217,9 @@ model Invoice {
   splitApprovedAt  DateTime? // 관리자가 분할 입금을 승인한 시각(null=미처리 요청)
   // 수동 입금확인 — true면 자동매칭이 되돌리지 않음(관리자 판단 우선)
   manualPaid       Boolean   @default(false)
+
+  // #11 카테고리별 확정(부분 저장) — 확정된 카테고리 CSV(예: "FRUIT,VEG"). 4종 모두 확정돼야 발행 가능.
+  confirmedCats    String    @default("")
 
   issuedAt DateTime?
   paidAt   DateTime?

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { canOrderWeekly, SAEROP_BANK_ACCOUNT, SAEROP_ACCOUNT_HOLDER } from "@/lib/constants";
 import { labelDateLong } from "@/lib/date";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
+import { PrintButton } from "@/components/PrintButton";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -61,7 +62,10 @@ export default async function WeeklyInvoiceDetailPage({
           </div>
         )}
 
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginTop: 16 }}>
+          <PrintButton label="계산서 인쇄" />
+        </div>
+        <div style={{ marginTop: 12 }}>
           <Link href="/weekly/invoices" className="btn btn--ghost btn--block">
             목록으로
           </Link>

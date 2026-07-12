@@ -13,7 +13,6 @@ import {
   normalizeDateStr,
 } from "@/lib/date";
 import { DateBar } from "@/components/DateBar";
-import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
 import { CancelRequestActions } from "@/components/CancelRequestActions";
 
 // 핫딜마켓 가맹점 발주를 '카테고리(보내는 곳)'별로.
@@ -89,6 +88,22 @@ export default async function AdminHotdeal(props: {
       g.cats.sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
   }
 
+  // #3 그룹별 계산서 상태 — 목록의 '계산서 작성/발행' 버튼 라벨·링크에 사용(발주취소는 발주서 안으로 이동).
+  const invByKey = new Map<string, { id: string; status: string }>();
+  if (combined && groups.length > 0) {
+    const invs = await prisma.invoice.findMany({
+      where: {
+        userId: { in: [...new Set(groups.map((g) => g.userId))] },
+        kind: "DAILY",
+        date: { in: [...new Set(groups.map((g) => g.date))] },
+        status: { not: "VOID" },
+      },
+      select: { id: true, userId: true, date: true, status: true },
+    });
+    for (const iv of invs)
+      invByKey.set(`${iv.userId}__${iv.date}`, { id: iv.id, status: iv.status });
+  }
+
   return (
     <>
       <Topbar backHref="/admin" title="핫딜마켓 발주" />
@@ -155,14 +170,29 @@ export default async function AdminHotdeal(props: {
                       {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
                     </div>
                   </Link>
-                  {cancelled ? null : g.cancelReq ? (
+                  {g.cancelReq ? (
                     <CancelRequestActions userId={g.userId} store={g.store} />
                   ) : (
-                    <CancelStoreOrdersButton
-                      userId={g.userId}
-                      date={g.date}
-                      store={g.store}
-                    />
+                    <Link
+                      href={
+                        invByKey.get(`${g.userId}__${g.date}`)
+                          ? `/admin/invoices/${invByKey.get(`${g.userId}__${g.date}`)!.id}`
+                          : `/admin/invoices/new?user=${g.userId}&date=${g.date}`
+                      }
+                      className="btn btn--xs btn--primary"
+                      style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+                    >
+                      {(() => {
+                        const s = invByKey.get(`${g.userId}__${g.date}`)?.status;
+                        return !s
+                          ? "계산서 작성"
+                          : s === "PAID"
+                            ? "완납"
+                            : s === "ISSUED"
+                              ? "발행됨"
+                              : "작성중";
+                      })()}
+                    </Link>
                   )}
                 </div>
               );
