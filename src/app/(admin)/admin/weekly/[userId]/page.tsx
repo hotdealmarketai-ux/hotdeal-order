@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";

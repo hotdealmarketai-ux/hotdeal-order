@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { getWeeklyProducts } from "@/lib/weekly";

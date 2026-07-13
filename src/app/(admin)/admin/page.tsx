@@ -35,13 +35,13 @@ export default async function AdminHome() {
         select: { userId: true },
         distinct: ["userId"],
       }),
-      // 핫딜마켓 발주: 본 시각 이후 새로 발주한 점포 수(배지)
+      // 핫딜마켓 발주: 오늘(today) 발주 중 '본 시각 이후' 새로 발주한 점포 수(배지).
+      // today 범위와 seen 하한을 함께 AND — gt를 spread하면 createdAt 키가 덮여 today가 사라지므로 명시적으로 합친다.
       prisma.order.findMany({
         where: {
           user: { role: "MERCHANT_HOTDEAL" },
-          createdAt: today,
           status: { not: "CANCELLED" },
-          ...gt(seenHotdeal),
+          createdAt: seenHotdeal ? { ...today, gt: seenHotdeal } : today,
         },
         select: { userId: true },
         distinct: ["userId"],

@@ -329,7 +329,7 @@ export async function notifyMerchantCancelApproved(userId: string) {
 export async function notifyAdminNewOrder(fromStoreName: string) {
   try {
     await sendPushToRole("ADMIN_SAEROP", {
-      title: `${fromStoreName} 님이 발주를 요청했습니다.`,
+      title: `${fromStoreName}님이 발주를 요청했습니다.`,
       body: "",
       url: "/admin/hotdeal",
       type: "order",
