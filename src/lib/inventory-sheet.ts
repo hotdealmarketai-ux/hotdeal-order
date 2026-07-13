@@ -140,9 +140,21 @@ export async function syncInventoryFromSheet(): Promise<{
   count?: number;
   error?: string;
 }> {
-  // push가 밀려 있으면(앱 편집이 아직 시트에 반영 안 됨) 먼저 flush를 시도.
-  // flush가 실패하면 이번 pull은 DB를 건드리지 않는다 → 미반영 앱 편집을 시트값으로 덮거나 삭제하지 않도록 보호.
   if (hasGoogleCreds()) {
+    // 최초 활성화 seed: 앱이 이 시트에 한 번도 push한 적 없으면(=inventory_push 기록 없음),
+    // 파괴적 pull(시트에 없는 품목 삭제) 대신 먼저 '앱 재고 → 시트'로 seed한다.
+    // → 시트 기준으로 바꾸기 전에 현재 앱 재고를 시트에 보존('앱 재고 먼저 올린 뒤 켜기').
+    const everPushed = await prisma.appMeta
+      .findUnique({ where: { key: "inventory_push" } })
+      .catch(() => null);
+    if (!everPushed) {
+      const seeded = await safePushInventory();
+      if (seeded.ok) return { ok: true, count: undefined, error: undefined };
+      return { ok: false, error: "최초 시트 seed 대기 중(다음 회차 재시도)" };
+    }
+
+    // push가 밀려 있으면(앱 편집이 아직 시트에 반영 안 됨) 먼저 flush를 시도.
+    // flush가 실패하면 이번 pull은 DB를 건드리지 않는다 → 미반영 앱 편집을 시트값으로 덮거나 삭제하지 않도록 보호.
     const pending = await prisma.appMeta
       .findUnique({ where: { key: PENDING_KEY } })
       .catch(() => null);
