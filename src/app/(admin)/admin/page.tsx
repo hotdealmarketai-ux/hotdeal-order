@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { kstToday, kstDayRange } from "@/lib/date";
 import { weeklyKeyAt } from "@/lib/weekly";
 import { LogoutButton } from "@/components/LogoutButton";
+import { getAdminSeen } from "@/lib/admin-seen";
 
 export default async function AdminHome() {
   const user = await requireAdmin();
@@ -12,23 +13,47 @@ export default async function AdminHome() {
   // 발주 건수는 '오늘(KST)' 들어온 것만 집계
   const { start, end } = kstDayRange(kstToday());
   const today = { gte: start, lt: end };
-  // 건수 = '오늘 주문한 점포 수'(중복 제거). 한 점포가 여러 종류를 넣어도 1로 계산.
-  const [pending, allStores, hotdealStores, weeklyCount] = await Promise.all([
-    prisma.user.count({ where: { status: "PENDING" } }),
-    prisma.order.findMany({
-      where: { createdAt: today, status: { not: "CANCELLED" } },
-      select: { userId: true },
-      distinct: ["userId"],
-    }),
-    prisma.order.findMany({
-      where: { user: { role: "MERCHANT_HOTDEAL" }, createdAt: today, status: { not: "CANCELLED" } },
-      select: { userId: true },
-      distinct: ["userId"],
-    }),
-    prisma.weeklyOrder.count({ where: { weekKey: weeklyKeyAt() } }),
+  // #25 배지는 '마지막으로 본 시각 이후' 새로 들어온 것만 카운트(보면 사라짐).
+  const [seenSignup, seenWeekly, seenHotdeal] = await Promise.all([
+    getAdminSeen("signup"),
+    getAdminSeen("weekly"),
+    getAdminSeen("hotdeal"),
   ]);
+  const gt = (d: Date | null) => (d ? { createdAt: { gt: d } } : {});
+  // 건수 = '오늘 주문한 점포 수'(중복 제거). 한 점포가 여러 종류를 넣어도 1로 계산.
+  const [pending, allStores, hotdealStores, hotdealNew, weeklyCount] =
+    await Promise.all([
+      // 가입대기: 본 시각 이후 새로 신청한 대기 회원 수
+      prisma.user.count({ where: { status: "PENDING", ...gt(seenSignup) } }),
+      prisma.order.findMany({
+        where: { createdAt: today, status: { not: "CANCELLED" } },
+        select: { userId: true },
+        distinct: ["userId"],
+      }),
+      prisma.order.findMany({
+        where: { user: { role: "MERCHANT_HOTDEAL" }, createdAt: today, status: { not: "CANCELLED" } },
+        select: { userId: true },
+        distinct: ["userId"],
+      }),
+      // 핫딜마켓 발주: 본 시각 이후 새로 발주한 점포 수(배지)
+      prisma.order.findMany({
+        where: {
+          user: { role: "MERCHANT_HOTDEAL" },
+          createdAt: today,
+          status: { not: "CANCELLED" },
+          ...gt(seenHotdeal),
+        },
+        select: { userId: true },
+        distinct: ["userId"],
+      }),
+      // 주간발주: 이번 주 발주 중 본 시각 이후 새로 들어온 것
+      prisma.weeklyOrder.count({
+        where: { weekKey: weeklyKeyAt(), ...gt(seenWeekly) },
+      }),
+    ]);
   const totalOrders = allStores.length;
   const hotdealOrders = hotdealStores.length;
+  const hotdealNewCount = hotdealNew.length;
 
   const menu = [
     {
@@ -38,7 +63,12 @@ export default async function AdminHome() {
     },
     { href: "/admin/members", title: "회원 관리" },
     { href: "/admin/orders", title: "전체 발주 목록", sub: `${totalOrders}건` },
-    { href: "/admin/hotdeal", title: "핫딜마켓 발주", sub: `${hotdealOrders}건` },
+    {
+      href: "/admin/hotdeal",
+      title: "핫딜마켓 발주",
+      sub: `${hotdealOrders}건`,
+      badge: hotdealNewCount > 0 ? hotdealNewCount : undefined,
+    },
     {
       href: "/admin/weekly",
       title: "주간발주",

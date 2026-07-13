@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { PushForegroundListener } from "@/components/PushForegroundListener";
 
 const TITLE = "핫딜오더";
 const DESCRIPTION = "주문은 더 간편하게, 운영은 더 스마트하게.";
@@ -24,7 +25,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // 어르신 확대 가능하도록 maximumScale 제한하지 않음
+  // #1 손가락 확대/축소(핀치줌) 완전 차단 — 화면이 늘거나 줄지 않게 고정
+  maximumScale: 1,
+  minimumScale: 1,
+  userScalable: false,
   themeColor: "#1C4A2F", // 핫딜오더 브랜드 그린(헤더 메인)
 };
 
@@ -39,7 +43,10 @@ export default function RootLayout({
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <PushForegroundListener />
+        {children}
+      </body>
     </html>
   );
 }

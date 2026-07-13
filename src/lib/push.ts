@@ -325,6 +325,20 @@ export async function notifyMerchantCancelApproved(userId: string) {
   }
 }
 
+// 가맹점 발주 시 관리자(새롭)에게도 알림(업체 발주와 별개로 항상). #10
+export async function notifyAdminNewOrder(fromStoreName: string) {
+  try {
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: `${fromStoreName} 님이 발주를 요청했습니다.`,
+      body: "",
+      url: "/admin/hotdeal",
+      type: "order",
+    });
+  } catch (err) {
+    logError("push.notifyAdminNewOrder", err, {});
+  }
+}
+
 // #10 회원 가입신청 시 관리자(새롭)에게 알림 → 클릭 시 가입대기 목록
 export async function notifyAdminSignupRequest(storeName: string) {
   try {

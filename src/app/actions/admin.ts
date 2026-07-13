@@ -179,11 +179,12 @@ export async function updateInventoryAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
+  const name = String(formData.get("name") ?? "").trim(); // #20 품목명도 수정
   const qty = toInt(formData.get("qty"));
   const supplyPrice = toInt(formData.get("supplyPrice"));
   await prisma.inventoryItem.update({
     where: { id },
-    data: { qty, supplyPrice },
+    data: { ...(name ? { name } : {}), qty, supplyPrice },
   });
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");

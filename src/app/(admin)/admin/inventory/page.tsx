@@ -57,37 +57,50 @@ export default async function AdminInventory() {
           <div className="stack">
             {items.map((it) => (
               <div className="card" key={it.id}>
-                <div className="spread" style={{ marginBottom: 4 }}>
-                  <div className="row__title">{it.name}</div>
+                <div className="spread" style={{ marginBottom: 8 }}>
+                  <span
+                    className="row__sub"
+                    style={{ fontSize: 11.5, color: "var(--muted-2)" }}
+                  >
+                    업데이트 : {formatKStamp(it.updatedAt)}
+                  </span>
                   <form action={deleteInventoryAction}>
                     <input type="hidden" name="id" value={it.id} />
                     <button className="linkbtn linkbtn--danger">삭제</button>
                   </form>
                 </div>
-                <div
-                  className="row__sub"
-                  style={{ fontSize: 11.5, color: "var(--muted-2)", marginBottom: 10 }}
-                >
-                  업데이트 시간 : {formatKStamp(it.updatedAt)}
-                </div>
-                <form action={updateInventoryAction} style={{ display: "flex", gap: 8 }}>
+                <form action={updateInventoryAction} className="stack" style={{ gap: 8 }}>
                   <input type="hidden" name="id" value={it.id} />
                   <input
-                    name="qty"
+                    name="name"
                     className="input"
-                    inputMode="numeric"
-                    defaultValue={it.qty || ""}
-                    placeholder="남은수량"
-                    style={{ flex: 1 }}
+                    defaultValue={it.name}
+                    placeholder="품목명"
                   />
-                  <input
-                    name="supplyPrice"
-                    className="input"
-                    inputMode="numeric"
-                    defaultValue={it.supplyPrice || ""}
-                    placeholder="공급가"
-                    style={{ flex: 1 }}
-                  />
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontSize: 13, color: "var(--muted)", whiteSpace: "nowrap" }}>
+                      남은 수량
+                    </span>
+                    <input
+                      name="qty"
+                      className="input"
+                      inputMode="numeric"
+                      defaultValue={it.qty || ""}
+                      placeholder="수량"
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ fontSize: 13, color: "var(--muted)", whiteSpace: "nowrap" }}>
+                      공급가
+                    </span>
+                    <input
+                      name="supplyPrice"
+                      className="input"
+                      inputMode="numeric"
+                      defaultValue={it.supplyPrice || ""}
+                      placeholder="원"
+                      style={{ flex: 1 }}
+                    />
+                  </div>
                   <button className="btn btn--soft btn--sm">저장</button>
                 </form>
               </div>

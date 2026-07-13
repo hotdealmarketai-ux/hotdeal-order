@@ -204,6 +204,7 @@ export default async function AdminDeposits() {
                     <DepositMatchControl
                       depositId={d.id}
                       payerName={d.payerName}
+                      amount={d.amount}
                       stores={storeOpts}
                       suggestion={suggestions.get(d.id)}
                     />

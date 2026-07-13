@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Topbar, TopbarChip } from "@/components/Topbar";
+import { MarkAdminSeen } from "@/components/MarkAdminSeen";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -66,6 +67,7 @@ export default async function AdminWeeklyPage({
 
   return (
     <>
+      <MarkAdminSeen surface="weekly" />
       <Topbar
         title="주간발주"
         right={

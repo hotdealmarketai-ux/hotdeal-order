@@ -63,11 +63,6 @@ export default async function WeeklyInvoicesPage() {
           </div>
         )}
 
-        <div style={{ marginTop: 20 }}>
-          <Link href="/weekly" className="btn btn--ghost btn--block">
-            주간발주로 돌아가기
-          </Link>
-        </div>
       </div>
     </>
   );

@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { isMerchant, type Role } from "@/lib/constants";
-import { collectDeposits, type CollectResult } from "@/lib/bank";
+import {
+  collectDeposits,
+  tryAutoPayInvoice,
+  replaceManualPlaceholderWithReal,
+  type CollectResult,
+} from "@/lib/bank";
 
 export type CollectState = { result?: CollectResult; error?: string };
 
@@ -60,8 +65,18 @@ export async function matchDepositManuallyAction(formData: FormData) {
     });
   }
 
-  // 수동 매칭은 '이 입금은 이 점포 것'이라는 귀속만 한다.
-  // 계산서 완납 확정은 관리자가 '수동 입금확인'으로 명시적으로 하도록 분리(오확정 방지).
+  // 매칭하면 미수도 줄어들도록 — 금액이 딱 맞는 미수 계산서(ISSUED) 1장이 있으면 자동 입금확인.
+  // (자동매칭과 동일한 게이트: 입금시점 이전 발행 + 분할요청 아님, 애매하면 귀속만.)
+  const paidId = await tryAutoPayInvoice(userId, dep.amount, dep.txAt);
+  if (paidId) {
+    await prisma.deposit.update({
+      where: { id: depositId },
+      data: { appliedInvoiceId: paidId },
+    });
+  } else {
+    // 관리자가 미리 '수동 입금확인'해 둔 계산서가 있으면 합성입금을 이 실입금으로 대체(이중계상 방지).
+    await replaceManualPlaceholderWithReal(userId, depositId);
+  }
   revalidateDeposit();
 }
 

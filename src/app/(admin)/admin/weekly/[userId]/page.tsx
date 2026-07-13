@@ -126,16 +126,6 @@ export default async function AdminWeeklyStorePage({
               <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
                 <ManualPayButton invoiceId={invoice.id} block />
                 <VoidWeeklyButton invoiceId={invoice.id} />
-                <Link href={`/admin/weekly?week=${weekKey}`} className="btn btn--ghost btn--block">
-                  목록으로
-                </Link>
-              </div>
-            )}
-            {invoice.status !== "ISSUED" && (
-              <div style={{ marginTop: 14 }}>
-                <Link href={`/admin/weekly?week=${weekKey}`} className="btn btn--ghost btn--block">
-                  목록으로
-                </Link>
               </div>
             )}
           </>
@@ -147,9 +137,6 @@ export default async function AdminWeeklyStorePage({
                 <input type="hidden" name="orderId" value={order.id} />
                 <button className="btn btn--primary btn--block">발주 확인</button>
               </form>
-              <Link href={`/admin/weekly?week=${weekKey}`} className="btn btn--ghost btn--block">
-                목록으로
-              </Link>
             </div>
           </>
         ) : (
@@ -160,11 +147,6 @@ export default async function AdminWeeklyStorePage({
               initialItems={initialItems}
               products={products}
             />
-            <div style={{ marginTop: 14 }}>
-              <Link href={`/admin/weekly?week=${weekKey}`} className="btn btn--ghost btn--block">
-                목록으로
-              </Link>
-            </div>
           </>
         )}
         {order && (

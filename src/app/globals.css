@@ -2453,21 +2453,27 @@ a {
 }
 
 /* ── 알림(#8/#10) — 상단 종 배지 + 알림목록 스와이프 ── */
+/* #2 알림 하트 — 버튼 박스 없이 아이콘만(배경 투명), 설정 종과 간격 좁게 */
 .tbar__bell {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
+  width: 30px;
   height: 40px;
-  border-radius: 12px;
   color: #fff;
-  background: rgba(255, 255, 255, 0.12);
+  background: transparent;
   flex-shrink: 0;
-  margin-left: 8px;
+  margin-left: 2px;
   text-decoration: none;
 }
-.tbar__bell:active { transform: scale(0.94); }
+.tbar__bell:active { transform: scale(0.9); }
+/* #6 계산서 '작성중' — 편안한 노란(골드) 버튼(흰 글씨 안 묻힘) */
+.btn--warn {
+  background: #c99700 !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
 /* 전역 알림 카운트 배지 — 빨간 원, 외곽선 없음, 가운데정렬, +99, 글자수 비율 대응 */
 .badge-count {
   position: absolute;
@@ -2573,4 +2579,56 @@ body {
 }
 .h1 {
   font-size: 26px;
+}
+
+/* #10a 앱이 열려 있을 때 뜨는 인앱 푸시 배너 — 화면 최상단, 눌러서 이동 */
+.pushtoast {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  width: calc(100% - 24px);
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  text-align: left;
+  background: var(--green-700);
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  animation: pushtoast-in 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes pushtoast-in {
+  from { opacity: 0; transform: translate(-50%, -18px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+.pushtoast__ico {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.pushtoast__txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pushtoast__title {
+  font-size: 14.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pushtoast__body {
+  font-size: 12.5px;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

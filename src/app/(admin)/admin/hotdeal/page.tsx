@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
+import { MarkAdminSeen } from "@/components/MarkAdminSeen";
 import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -106,6 +107,7 @@ export default async function AdminHotdeal(props: {
 
   return (
     <>
+      <MarkAdminSeen surface="hotdeal" />
       <Topbar backHref="/admin" title="핫딜마켓 발주" />
       <div className="page page--tight">
         <div className="cattabs">
@@ -173,26 +175,36 @@ export default async function AdminHotdeal(props: {
                   {g.cancelReq ? (
                     <CancelRequestActions userId={g.userId} store={g.store} />
                   ) : (
-                    <Link
-                      href={
-                        invByKey.get(`${g.userId}__${g.date}`)
-                          ? `/admin/invoices/${invByKey.get(`${g.userId}__${g.date}`)!.id}`
-                          : `/admin/invoices/new?user=${g.userId}&date=${g.date}`
-                      }
-                      className="btn btn--xs btn--primary"
-                      style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                    >
-                      {(() => {
-                        const s = invByKey.get(`${g.userId}__${g.date}`)?.status;
-                        return !s
-                          ? "계산서 작성"
-                          : s === "PAID"
-                            ? "완납"
-                            : s === "ISSUED"
-                              ? "발행됨"
-                              : "계산서 작성중";
-                      })()}
-                    </Link>
+                    (() => {
+                      const inv = invByKey.get(`${g.userId}__${g.date}`);
+                      const s = inv?.status;
+                      const label = !s
+                        ? "계산서 작성"
+                        : s === "PAID"
+                          ? "완납"
+                          : s === "ISSUED"
+                            ? "발행됨"
+                            : "계산서 작성중";
+                      const cls =
+                        s === "DRAFT"
+                          ? "btn btn--xs btn--warn" // 작성중 = 노랑
+                          : s === "PAID" || s === "ISSUED"
+                            ? "btn btn--xs btn--soft"
+                            : "btn btn--xs btn--primary"; // 작성 = 초록
+                      return (
+                        <Link
+                          href={
+                            inv
+                              ? `/admin/invoices/${inv.id}`
+                              : `/admin/invoices/new?user=${g.userId}&date=${g.date}`
+                          }
+                          className={cls}
+                          style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+                        >
+                          {label}
+                        </Link>
+                      );
+                    })()
                   )}
                 </div>
               );

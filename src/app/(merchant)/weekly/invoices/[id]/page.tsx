@@ -65,11 +65,6 @@ export default async function WeeklyInvoiceDetailPage({
         <div style={{ marginTop: 16 }}>
           <PrintButton label="계산서 인쇄" />
         </div>
-        <div style={{ marginTop: 12 }}>
-          <Link href="/weekly/invoices" className="btn btn--ghost btn--block">
-            목록으로
-          </Link>
-        </div>
       </div>
     </>
   );

@@ -77,7 +77,13 @@ export default async function InventoryPage() {
                     {it.supplyPrice > 0 && <span>공급가 {won(it.supplyPrice)}원</span>}
                   </div>
                 </div>
-                <StockCartButton name={it.name} date={today} disabled={!canAdd} />
+                <StockCartButton
+                  name={it.name}
+                  date={today}
+                  disabled={!canAdd}
+                  qty={it.qty}
+                  supplyPrice={it.supplyPrice}
+                />
               </div>
             ))}
           </div>

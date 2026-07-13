@@ -24,6 +24,7 @@ import { orderLockOf } from "@/lib/receivable";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
 import {
   notifyVendorNewOrder,
+  notifyAdminNewOrder,
   notifyMerchantOrderPlaced,
   notifyVendorOrderEdited,
   notifyAdminOrderEdited,
@@ -180,15 +181,25 @@ function cleanItems(rows: RawRow[]) {
 // #5 베니지민 고구마: 야채여도 '과일'로 취급(과일 파트/서부일광 출고). 품목명은 '고구마',
 // 설명(note)에 '베니지민' 태그. 오직 '베니지민'이 들어간 고구마만 — 다른 고구마는 야채 그대로.
 // groups 를 제자리에서 변형(빈 그룹 제거). 이름 정규화 + 카테고리 라우팅을 결정론적으로 처리.
+// 베니지민 오타 변형까지 잡는다: 배니지민·베나지민·베지니민·베니지믄·베니진민 등. #5
+const BENI_PAT = "베[니나]지[민믄]|배니지민|베지니민|베니진민";
+const hasBeni = (s: string) => {
+  const t = (s || "").replace(/\s+/g, "");
+  return t.includes("베니지민") || new RegExp(BENI_PAT).test(t);
+};
+const isGoguma = (s: string) => (s || "").replace(/\s+/g, "").includes("고구마");
 function remapBenijimin(groups: Group[]): void {
-  const isBeni = (name: string) => name.replace(/\s+/g, "").includes("베니지민");
+  // '베니지민'이 name에 있거나, 품목이 '고구마'인데 설명(note)에 베니지민(오타 포함)이 있으면 대상
+  const isBeni = (it: { name: string; note: string }) =>
+    hasBeni(it.name) || (isGoguma(it.name) && hasBeni(it.note));
   const moved: Group["items"] = [];
   for (const g of groups) {
     const keep: Group["items"] = [];
     for (const it of g.items) {
-      if (isBeni(it.name)) {
-        const note = it.note.includes("베니지민")
-          ? it.note
+      if (isBeni(it)) {
+        // note에 베니지민 오타가 있으면 표준어로 교정, 없으면 태그 추가
+        const note = hasBeni(it.note)
+          ? it.note.replace(new RegExp(BENI_PAT, "g"), "베니지민")
           : [it.note, "베니지민"].filter(Boolean).join(" · ");
         const item = { name: "고구마", qty: it.qty, note };
         if (g.category === "FRUIT") keep.push(item);
@@ -360,6 +371,8 @@ export async function createOrderAction(
   await Promise.all(
     vendorRoles.map((r) => notifyVendorNewOrder(r, user.storeName)),
   );
+  // 관리자(새롭)에게도 발주 접수 알림 — 목적지 업자와 별개로 항상. #10
+  await notifyAdminNewOrder(user.storeName);
   // 발주 넣은 점주 본인에게 '주문 완료' 알림
   const placedCount = groups.reduce((n, g) => n + g.items.length, 0);
   await notifyMerchantOrderPlaced(user.id, placedCount);

@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { approveUserAction, rejectUserAction } from "@/app/actions/admin";
 import { formatKDate } from "@/lib/format";
+import { MarkAdminSeen } from "@/components/MarkAdminSeen";
 
 export default async function ApprovalsPage() {
   await requireAdmin();
@@ -13,6 +14,7 @@ export default async function ApprovalsPage() {
 
   return (
     <>
+      <MarkAdminSeen surface="signup" />
       <Topbar backHref="/admin" title="가입 승인" />
       <div className="page">
         <p className="lead">신청자를 승인하면서 발주 유형을 정해주세요.</p>

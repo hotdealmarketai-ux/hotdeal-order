@@ -264,7 +264,7 @@ export async function tryAutoPayInvoice(
 // 관리자가 실입금 도착 전에 '수동 입금확인'하면 합성입금(bankTid=manual-<invId>)이 생긴다.
 // 뒤늦게 진짜 입금이 수집되면, 금액이 딱 맞는 그 합성입금을 실입금으로 '대체'(합성 삭제 + 실입금 귀속)해
 // 통장 이중계상(합성+실입금 동시 존재)을 막는다. 정확일치일 때만 동작(보수적 — 버그#10).
-async function replaceManualPlaceholderWithReal(
+export async function replaceManualPlaceholderWithReal(
   userId: string,
   depositId: string,
 ): Promise<boolean> {

@@ -13,11 +13,6 @@ export default async function AdminWeeklyProductsPage() {
       <Topbar backHref="/admin/weekly" title="상품 관리" />
       <div className="page">
         <WeeklyProductForm initial={products} />
-        <div style={{ marginTop: 20 }}>
-          <Link href="/admin/weekly" className="btn btn--ghost btn--block">
-            주간발주로 돌아가기
-          </Link>
-        </div>
       </div>
     </>
   );
