@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { kstDayRange, kstDateOf } from "@/lib/date";
+import { safePushInventory } from "@/lib/inventory-sheet";
 import {
   currentWindowStartUtc,
   currentDeadlineUtc,
@@ -167,10 +168,24 @@ export async function addInventoryAction(formData: FormData) {
   const qty = toInt(formData.get("qty"));
   const supplyPrice = toInt(formData.get("supplyPrice"));
   const memo = String(formData.get("memo") ?? "").trim();
-  const max = await prisma.inventoryItem.aggregate({ _max: { sortOrder: true } });
-  await prisma.inventoryItem.create({
-    data: { name, qty, supplyPrice, memo, sortOrder: (max._max.sortOrder ?? 0) + 1 },
+  // 시트 동기화는 '품목명'을 키로 쓰므로 이름이 유일해야 한다. 같은 이름이 이미 있으면
+  // 중복 생성 대신 그 품목을 갱신(재추가 = 수정). #22 리뷰(중복명 데이터 손실 방지)
+  const dup = await prisma.inventoryItem.findFirst({
+    where: { name, deletedAt: null },
+    select: { id: true },
   });
+  if (dup) {
+    await prisma.inventoryItem.update({
+      where: { id: dup.id },
+      data: { qty, supplyPrice, ...(memo ? { memo } : {}) },
+    });
+  } else {
+    const max = await prisma.inventoryItem.aggregate({ _max: { sortOrder: true } });
+    await prisma.inventoryItem.create({
+      data: { name, qty, supplyPrice, memo, sortOrder: (max._max.sortOrder ?? 0) + 1 },
+    });
+  }
+  await safePushInventory(1); // #22 DB→시트 반영(1회 시도 — 실패 시 pending, 다음 pull이 재시도)
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }
@@ -186,6 +201,7 @@ export async function updateInventoryAction(formData: FormData) {
     where: { id },
     data: { ...(name ? { name } : {}), qty, supplyPrice },
   });
+  await safePushInventory(1); // #22 DB→시트 반영(1회 시도 — 실패 시 pending, 다음 pull이 재시도)
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }
@@ -195,8 +211,24 @@ export async function deleteInventoryAction(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await prisma.inventoryItem.delete({ where: { id } });
+  await safePushInventory(1); // #22 DB→시트 반영(삭제 전파, 1회 시도)
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
+}
+
+// #22 관리자 수동 '지금 시트로 내보내기' — DB 전체를 시트에 다시 쓴다(정합 복구용). 성공/실패 반환.
+export type PushInvState = { ok?: boolean; error?: string; at?: number };
+export async function pushInventoryToSheetAction(
+  _prev: PushInvState,
+  _formData: FormData,
+): Promise<PushInvState> {
+  await requireAdmin();
+  const r = await safePushInventory();
+  revalidatePath("/admin/inventory");
+  if (r.ok) return { ok: true, at: Date.now() };
+  if (r.error === "no-credentials")
+    return { ok: false, error: "구글 서비스계정이 설정되지 않았어요(관리자 환경변수 필요)." };
+  return { ok: false, error: "시트 반영에 실패했어요. 잠시 후 다시 시도해 주세요." };
 }
 
 // 전체 발주 초기화 — 관리자 전용. 모든 Order 삭제(OrderItem은 Cascade).
