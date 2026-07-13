@@ -147,6 +147,10 @@ export async function previewGridOrderAction(
     // TOFU는 시트가 tofuQty로 직접 그리므로 미리보기 응답에선 제외(비-TOFU만 rowsByCat 갱신용)
     .filter((g) => g.category !== "TOFU");
 
+  // Q1: 정규화(AI) 이후 최종적으로 한 번 더 remap — AI가 '베니지민 고구마'로 합쳤어도 여기서
+  // name="고구마"/note="베니지민"으로 다시 분리하고, 카테고리도 과일로 확정(미리보기가 최종과 일치).
+  remapBenijimin(outGroups);
+
   return { ok: true, groups: outGroups };
 }
 

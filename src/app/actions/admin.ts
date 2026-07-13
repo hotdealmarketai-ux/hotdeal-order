@@ -6,13 +6,17 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { kstDayRange, kstDateOf } from "@/lib/date";
-import { safePushInventory } from "@/lib/inventory-sheet";
+import { safePushInventory, setInventoryPushPending } from "@/lib/inventory-sheet";
 import {
   currentWindowStartUtc,
   currentDeadlineUtc,
 } from "@/lib/schedule";
 import { hasOrderWindow } from "@/lib/deadline";
-import { notifyMerchantOrdersCancelled } from "@/lib/push";
+import {
+  notifyMerchantOrdersCancelled,
+  notifyMerchantSignupApproved,
+  notifyMerchantSignupRejected,
+} from "@/lib/push";
 import { writeAudit } from "@/lib/audit";
 import {
   ALL_ROLES,
@@ -141,6 +145,7 @@ export async function approveUserAction(formData: FormData) {
     where: { id: userId },
     data: { role, status: "APPROVED" },
   });
+  await notifyMerchantSignupApproved(userId).catch(() => {}); // Q7
   revalidatePath("/admin/approvals");
   revalidatePath("/admin");
 }
@@ -153,6 +158,7 @@ export async function rejectUserAction(formData: FormData) {
     where: { id: userId },
     data: { status: "REJECTED" },
   });
+  await notifyMerchantSignupRejected(userId).catch(() => {}); // Q7
   revalidatePath("/admin/approvals");
   revalidatePath("/admin");
 }
@@ -164,6 +170,7 @@ export async function addInventoryAction(formData: FormData) {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
+  await setInventoryPushPending(); // Q6 변경 직전 마킹 → 1분 pull이 되돌리지 않도록
   // #20 품목명 / 남은수량 / 공급가
   const qty = toInt(formData.get("qty"));
   const supplyPrice = toInt(formData.get("supplyPrice"));
@@ -194,6 +201,7 @@ export async function updateInventoryAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
+  await setInventoryPushPending(); // Q6
   const name = String(formData.get("name") ?? "").trim(); // #20 품목명도 수정
   const qty = toInt(formData.get("qty"));
   const supplyPrice = toInt(formData.get("supplyPrice"));
@@ -210,8 +218,47 @@ export async function deleteInventoryAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
+  await setInventoryPushPending(); // Q6
   await prisma.inventoryItem.delete({ where: { id } });
   await safePushInventory(1); // #22 DB→시트 반영(삭제 전파, 1회 시도)
+  revalidatePath("/admin/inventory");
+  revalidatePath("/inventory");
+}
+
+// Q5 재고 '전체 저장' — 편집기의 현재 목록으로 DB를 맞춘다(이름/수량/공급가 갱신 + 목록에서 빠진 항목 삭제).
+// 품목별 저장 대신 한 번에 저장 → push도 한 번(시트 재작성). 목록에 없는(=편집기에서 제거한) 항목은 삭제.
+export async function saveAllInventoryAction(payloadJson: string) {
+  await requireAdmin();
+  let rows: { id?: string; name?: string; qty?: unknown; supplyPrice?: unknown }[];
+  try {
+    rows = JSON.parse(String(payloadJson ?? "[]"));
+  } catch {
+    return; // 파싱 실패 시 아무것도 지우지 않음(전량 삭제 사고 방지)
+  }
+  if (!Array.isArray(rows)) return;
+
+  await setInventoryPushPending(); // Q6 변경 직전 마킹
+  const keepIds = rows.map((r) => String(r.id ?? "")).filter(Boolean);
+  await prisma.$transaction(async (tx) => {
+    // 편집기에서 제거된(목록에 없는) 항목 삭제
+    await tx.inventoryItem.deleteMany({
+      where: { id: { notIn: keepIds.length ? keepIds : ["__none__"] } },
+    });
+    for (const r of rows) {
+      const id = String(r.id ?? "");
+      if (!id) continue;
+      const name = String(r.name ?? "").trim();
+      await tx.inventoryItem.update({
+        where: { id },
+        data: {
+          ...(name ? { name } : {}),
+          qty: toInt(String(r.qty ?? "")),
+          supplyPrice: toInt(String(r.supplyPrice ?? "")),
+        },
+      });
+    }
+  });
+  await safePushInventory(1);
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }

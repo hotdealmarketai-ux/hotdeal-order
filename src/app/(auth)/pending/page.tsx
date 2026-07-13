@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { homePathFor } from "@/lib/constants";
 import { LogoutButton } from "@/components/LogoutButton";
+import { PushToggle } from "@/components/PushToggle";
 
 export default async function PendingPage() {
   const user = await getCurrentUser();
@@ -64,6 +65,13 @@ export default async function PendingPage() {
             </span>
           </div>
         </div>
+
+        {!stopped && (
+          <div style={{ marginTop: 14 }}>
+            {/* Q7 승인 결과를 푸시로 받도록 대기 중에도 알림 켜기 제공 */}
+            <PushToggle />
+          </div>
+        )}
 
         <p className="hint center" style={{ marginTop: 18 }}>
           승인 후 이 화면을 새로고침하면 발주 화면으로 이동해요.

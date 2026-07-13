@@ -313,6 +313,30 @@ export async function notifyAdminOrderCancelRequest(fromStoreName: string) {
 }
 
 // 취소 요청을 관리자가 승인(취소 완료)했을 때 점주에게 알림
+// Q7 가입 신청 결과 — 관리자 승인/반려 시 신청자에게 푸시.
+export async function notifyMerchantSignupApproved(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "관리자님이 가입을 승인했습니다.",
+      body: "이제 로그인해서 발주를 시작할 수 있어요.",
+      url: "/order",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantSignupApproved", err, { userId });
+  }
+}
+export async function notifyMerchantSignupRejected(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "가입 신청이 반려되었습니다.",
+      body: "",
+      url: "/pending",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantSignupRejected", err, { userId });
+  }
+}
+
 export async function notifyMerchantCancelApproved(userId: string) {
   try {
     await sendPushToUser(userId, {

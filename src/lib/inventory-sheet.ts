@@ -354,6 +354,21 @@ export async function lastInventoryPushAt(): Promise<Date | null> {
   return m?.syncedAt ?? null;
 }
 
+// Q6 재고 변경 '직전'에 pending 마킹 → 변경과 push 사이에 pull이 끼어들어도, pull이 먼저 flush(재-push)를
+// 시도하므로 방금 바뀐 DB값(예: 이름 수정)이 옛 시트값으로 되돌려지지 않는다. push 성공 시 safePush가 해제.
+export async function setInventoryPushPending(): Promise<void> {
+  if (!hasGoogleCreds()) return;
+  try {
+    await prisma.appMeta.upsert({
+      where: { key: PENDING_KEY },
+      create: { key: PENDING_KEY },
+      update: { syncedAt: new Date() },
+    });
+  } catch (err) {
+    logError("inventory.push.markPending", err, {});
+  }
+}
+
 // 마지막 push가 실패해 시트 반영이 밀려 있는지(관리자 화면 경고 배너용).
 export async function inventoryPushPending(): Promise<boolean> {
   const m = await prisma.appMeta

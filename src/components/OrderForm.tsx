@@ -171,18 +171,30 @@ export function OrderForm({
         setLocalError(res.error ?? "정리에 실패했어요. 다시 시도해 주세요.");
         return;
       }
-      // AI 정리 결과로 비-TOFU 칸을 갱신(TOFU는 tofuQty 그대로) → 시트가 '정리된 값'을 보여줌
+      // AI 정리 결과로 비-TOFU 칸을 갱신(TOFU는 tofuQty 그대로) → 시트가 '정리된 값'을 보여줌.
+      // Q1: 이번에 제출한 비-TOFU 카테고리는 preview 결과로 '완전히 교체'한다. 베니지민 고구마처럼
+      // 다른 카테고리(과일)로 옮겨가 비워진 칸은 빈칸으로 리셋 → 원래 칸에 잔존·중복되는 문제 해결.
       setRowsByCat((prev) => {
         const next = { ...prev };
+        const toRow = (it: { name: string; qty: string; note: string }) => ({
+          id: ++uid.current,
+          name: it.name,
+          qty: it.qty,
+          note: it.note,
+        });
+        const byCat = new Map(
+          (res.groups ?? []).map((g) => [g.category as Category, g.items]),
+        );
+        // 제출한 카테고리는 응답값으로 교체(응답에 없으면 = 옮겨감 → 빈칸)
+        for (const g of payload) {
+          if (g.category === "TOFU") continue;
+          next[g.category] = withTrailingEmpty((byCat.get(g.category) ?? []).map(toRow));
+        }
+        // 응답에만 있는 카테고리(remap 목적지, 예: 과일)도 반영
         for (const g of res.groups ?? []) {
-          next[g.category] = withTrailingEmpty(
-            g.items.map((it) => ({
-              id: ++uid.current,
-              name: it.name,
-              qty: it.qty,
-              note: it.note,
-            })),
-          );
+          if (!payload.some((p) => p.category === g.category)) {
+            next[g.category] = withTrailingEmpty(g.items.map(toRow));
+          }
         }
         return next;
       });
