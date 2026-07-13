@@ -13,31 +13,24 @@ export type NotifItem = {
   when: string;
 };
 
-// 알림 목록 — 왼쪽 스와이프로 삭제, 오른쪽 스와이프로 뒤로(홈), 탭하면 해당 화면 이동. #10
-export function NotificationList({
-  items,
-  homeHref,
-}: {
-  items: NotifItem[];
-  homeHref: string;
-}) {
+// 알림 목록 — 행 왼쪽 스와이프=삭제(오른쪽으로 되돌리면 그대로 유지), 탭=해당 화면 이동,
+// 화면 왼쪽 가장자리에서 오른쪽 스와이프=이전 페이지로(iOS식). #11/#14
+export function NotificationList({ items }: { items: NotifItem[] }) {
   const router = useRouter();
-  const [list, setList] = useState(items);
+  const [list, setList] = useState(items); // 마운트 시 고정 → 읽음처리돼도 이번 화면 색 유지(#17)
 
-  // 페이지 오른쪽 스와이프 → 뒤로(메인)
-  const pageStart = useRef<{ x: number; y: number } | null>(null);
-  function onPageTouchStart(e: React.TouchEvent) {
+  // 왼쪽 가장자리 시작 스와이프만 '뒤로'로 처리(행 스와이프와 충돌 방지).
+  const edge = useRef<{ x: number; y: number } | null>(null);
+  function onTouchStart(e: React.TouchEvent) {
     const t = e.touches[0];
-    pageStart.current = { x: t.clientX, y: t.clientY };
+    edge.current = t.clientX < 28 ? { x: t.clientX, y: t.clientY } : null;
   }
-  function onPageTouchEnd(e: React.TouchEvent) {
-    const s = pageStart.current;
+  function onTouchEnd(e: React.TouchEvent) {
+    const s = edge.current;
+    edge.current = null;
     if (!s) return;
     const t = e.changedTouches[0];
-    const dx = t.clientX - s.x;
-    const dy = t.clientY - s.y;
-    if (dx > 90 && Math.abs(dy) < 60) router.push(homeHref);
-    pageStart.current = null;
+    if (t.clientX - s.x > 60 && Math.abs(t.clientY - s.y) < 60) router.back();
   }
 
   if (list.length === 0) {
@@ -49,7 +42,7 @@ export function NotificationList({
   }
 
   return (
-    <div onTouchStart={onPageTouchStart} onTouchEnd={onPageTouchEnd}>
+    <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {list.map((n) => (
         <NotifRow
           key={n.id}
@@ -77,7 +70,7 @@ function NotifRow({
   onDelete: () => void;
 }) {
   const [dx, setDx] = useState(0);
-  const start = useRef<{ x: number; y: number } | null>(null);
+  const start = useRef<{ x: number; y: number; dx: number } | null>(null);
   const moved = useRef(false);
 
   return (
@@ -89,7 +82,7 @@ function NotifRow({
         className={`notif__body ${n.unread ? "is-unread" : ""}`}
         style={{ transform: `translateX(${dx}px)` }}
         onTouchStart={(e) => {
-          start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+          start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, dx };
           moved.current = false;
         }}
         onTouchMove={(e) => {
@@ -99,15 +92,20 @@ function NotifRow({
           const my = e.touches[0].clientY - s.y;
           if (Math.abs(mx) > 8 && Math.abs(mx) > Math.abs(my)) {
             moved.current = true;
-            setDx(Math.min(0, Math.max(-84, mx)));
+            setDx(Math.min(0, Math.max(-84, s.dx + mx)));
           }
         }}
         onTouchEnd={() => {
-          setDx((d) => (d < -42 ? -76 : 0));
+          setDx((d) => (d < -42 ? -76 : 0)); // 절반 넘으면 삭제버튼 노출, 아니면 원위치(되돌림)
           start.current = null;
         }}
         onClick={() => {
-          if (!moved.current) onOpen();
+          if (moved.current) return; // 스와이프는 탭으로 취급 안 함
+          if (dx < -4) {
+            setDx(0); // 열려 있으면 탭=닫기
+            return;
+          }
+          onOpen(); // 관련 화면으로 이동
         }}
       >
         <div className="notif__title">{n.title}</div>

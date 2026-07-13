@@ -193,7 +193,7 @@ export default async function AdminDepositStore(props: {
             type="search"
             name="q"
             defaultValue={query}
-            placeholder="날짜(예: 2026-07) 또는 금액 검색"
+            placeholder="날짜(예: 07-01) 또는 금액 검색"
             className="input"
             style={{ width: "100%" }}
           />

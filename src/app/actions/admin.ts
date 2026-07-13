@@ -156,15 +156,20 @@ export async function rejectUserAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
+const toInt = (v: FormDataEntryValue | null) =>
+  parseInt(String(v ?? "").replace(/[^0-9-]/g, ""), 10) || 0;
+
 export async function addInventoryAction(formData: FormData) {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
-  const status = String(formData.get("status") ?? "").trim();
+  // #20 품목명 / 남은수량 / 공급가
+  const qty = toInt(formData.get("qty"));
+  const supplyPrice = toInt(formData.get("supplyPrice"));
   const memo = String(formData.get("memo") ?? "").trim();
   const max = await prisma.inventoryItem.aggregate({ _max: { sortOrder: true } });
   await prisma.inventoryItem.create({
-    data: { name, status, memo, sortOrder: (max._max.sortOrder ?? 0) + 1 },
+    data: { name, qty, supplyPrice, memo, sortOrder: (max._max.sortOrder ?? 0) + 1 },
   });
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
@@ -174,9 +179,12 @@ export async function updateInventoryAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  const status = String(formData.get("status") ?? "").trim();
-  const memo = String(formData.get("memo") ?? "").trim();
-  await prisma.inventoryItem.update({ where: { id }, data: { status, memo } });
+  const qty = toInt(formData.get("qty"));
+  const supplyPrice = toInt(formData.get("supplyPrice"));
+  await prisma.inventoryItem.update({
+    where: { id },
+    data: { qty, supplyPrice },
+  });
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }

@@ -6,7 +6,12 @@ import {
   type WeeklyProductState,
 } from "@/app/actions/weekly-invoice";
 import { SubmitButton } from "./SubmitButton";
-import { WEEKLY_CATEGORIES, type WeeklyCategory } from "@/lib/weekly-catalog";
+import {
+  WEEKLY_CATEGORIES,
+  boxWord,
+  pieceWord,
+  type WeeklyCategory,
+} from "@/lib/weekly-catalog";
 import type { WeeklyProductRow } from "@/lib/weekly";
 
 type Row = {
@@ -125,14 +130,14 @@ export function WeeklyProductForm({ initial }: { initial: WeeklyProductRow[] }) 
           />
           <div className="wprow__nums">
             <span className="wprow__field">
-              1박스{" "}
+              1{boxWord(r.category)}{" "}
               <input
                 className="input"
                 inputMode="numeric"
                 value={r.perBox}
                 onChange={(e) => update(r.key, "perBox", e.target.value)}
               />{" "}
-              개
+              {pieceWord(r.category)}
             </span>
             <span className="wprow__field">
               공급가{" "}

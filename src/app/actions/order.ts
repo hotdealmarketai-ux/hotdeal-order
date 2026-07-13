@@ -72,6 +72,8 @@ export async function parseChatOrderAction(text: string): Promise<ChatParseState
     }))
     .filter((g) => g.items.length > 0);
 
+  remapBenijimin(groups); // #5 베니지민 고구마 → 과일(이름 '고구마', 설명 '베니지민')
+
   if (groups.length === 0) {
     return {
       ok: false,
@@ -111,6 +113,9 @@ export async function previewGridOrderAction(
     if (items.length === 0) continue;
     groups.push({ category, items });
   }
+
+  remapBenijimin(groups); // #5 베니지민 고구마 → 과일
+
   if (groups.length === 0) {
     return { ok: false, error: "발주할 품목을 한 개 이상 입력하세요." };
   }
@@ -172,6 +177,38 @@ function cleanItems(rows: RawRow[]) {
     .slice(0, MAX_ITEMS);
 }
 
+// #5 베니지민 고구마: 야채여도 '과일'로 취급(과일 파트/서부일광 출고). 품목명은 '고구마',
+// 설명(note)에 '베니지민' 태그. 오직 '베니지민'이 들어간 고구마만 — 다른 고구마는 야채 그대로.
+// groups 를 제자리에서 변형(빈 그룹 제거). 이름 정규화 + 카테고리 라우팅을 결정론적으로 처리.
+function remapBenijimin(groups: Group[]): void {
+  const isBeni = (name: string) => name.replace(/\s+/g, "").includes("베니지민");
+  const moved: Group["items"] = [];
+  for (const g of groups) {
+    const keep: Group["items"] = [];
+    for (const it of g.items) {
+      if (isBeni(it.name)) {
+        const note = it.note.includes("베니지민")
+          ? it.note
+          : [it.note, "베니지민"].filter(Boolean).join(" · ");
+        const item = { name: "고구마", qty: it.qty, note };
+        if (g.category === "FRUIT") keep.push(item);
+        else moved.push(item); // 야채 등 → 과일로 이동
+      } else {
+        keep.push(it);
+      }
+    }
+    g.items = keep;
+  }
+  if (moved.length) {
+    const fruit = groups.find((g) => g.category === "FRUIT");
+    if (fruit) fruit.items.push(...moved);
+    else groups.push({ category: "FRUIT", items: moved });
+  }
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i].items.length === 0) groups.splice(i, 1);
+  }
+}
+
 export async function createOrderAction(
   _prev: OrderFormState,
   formData: FormData,
@@ -229,6 +266,8 @@ export async function createOrderAction(
     }
     groups.push({ category, items });
   }
+
+  remapBenijimin(groups); // #5 베니지민 고구마 → 과일
 
   if (groups.length === 0) {
     return { error: "발주할 품목을 한 개 이상 입력하세요." };

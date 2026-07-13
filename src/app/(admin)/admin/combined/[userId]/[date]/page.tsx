@@ -23,11 +23,8 @@ export default async function AdminCombinedReceipt(props: {
     include: { items: { orderBy: { sortOrder: "asc" } } },
     orderBy: { createdAt: "asc" },
   });
-  if (orders.length === 0) notFound();
-
-  // 취소는 하드삭제라 정상 흐름엔 CANCELLED가 없지만, 잔존 행 방어적 제외.
+  // #9 발주취소로 전량 삭제되면(orders 0) 또는 잔존 CANCELLED만 남으면 → 404 대신 발주 목록으로.
   const active = orders.filter((o) => o.status !== "CANCELLED");
-  // 발주취소로 전량 삭제되면 이 발주서는 사라짐 → 목록으로 되돌린다.
   if (active.length === 0) redirect("/admin/hotdeal");
 
   // 같은 종류(과일/야채/공구/두부)는 한 섹션으로 병합 — 4종이 합쳐진 하나의 발주서
@@ -49,14 +46,13 @@ export default async function AdminCombinedReceipt(props: {
     <>
       <Topbar backHref="/admin/hotdeal" title="발주서" />
       <div className="page">
-        {/* #3 발주취소를 발주서 안 상단으로(계산서 발행은 목록으로 이동). 검토 후 이 발주서 단위로 취소. */}
-        <div
-          style={{ marginBottom: 16, display: "flex", justifyContent: "flex-end" }}
-        >
+        {/* #3 발주서 안 상단 발주취소(계산서는 목록으로) · #8 크게·전체폭 */}
+        <div style={{ marginBottom: 16 }}>
           <CancelStoreOrdersButton
             userId={userId}
             date={date}
             store={merchant.storeName}
+            big
           />
         </div>
 

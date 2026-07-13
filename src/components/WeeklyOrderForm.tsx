@@ -6,7 +6,12 @@ import {
   type WeeklyOrderState,
 } from "@/app/actions/weekly-order";
 import { SubmitButton } from "./SubmitButton";
-import { WEEKLY_CATEGORIES, type WeeklyCategory } from "@/lib/weekly-catalog";
+import {
+  WEEKLY_CATEGORIES,
+  boxWord,
+  pieceWord,
+  type WeeklyCategory,
+} from "@/lib/weekly-catalog";
 import type { WeeklyProductRow } from "@/lib/weekly";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -106,7 +111,8 @@ export function WeeklyOrderForm({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="tofuitem__name">{p.name}</div>
                 <div className="tofuitem__sub">
-                  1박스 {p.perBox}개 · 공급가 {won(p.supplyPrice)}원
+                  1{boxWord(p.category)} {p.perBox}
+                  {pieceWord(p.category)} · 공급가 {won(p.supplyPrice)}원
                 </div>
               </div>
               <input
@@ -114,7 +120,7 @@ export function WeeklyOrderForm({
                 inputMode="numeric"
                 value={q}
                 onChange={(e) => setQty(p.code, e.target.value)}
-                placeholder="박스"
+                placeholder={boxWord(p.category)}
               />
             </div>
           );
@@ -175,7 +181,8 @@ export function WeeklyOrderForm({
                       <div className="confitem" key={r.p.code}>
                         <span className="confitem__name">{r.p.name}</span>
                         <span className="confitem__qtytext">
-                          {r.qty}박스 · {won(r.qty * r.p.supplyPrice)}원
+                          {r.qty}
+                          {boxWord(r.p.category)} · {won(r.qty * r.p.supplyPrice)}원
                         </span>
                       </div>
                     ))}

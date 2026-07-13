@@ -30,7 +30,7 @@ export default async function NotificationsPage() {
       <Topbar backHref={home} title="알림" />
       <MarkAllRead />
       <div className="page">
-        <NotificationList items={data} homeHref={home} />
+        <NotificationList items={data} />
       </div>
     </>
   );

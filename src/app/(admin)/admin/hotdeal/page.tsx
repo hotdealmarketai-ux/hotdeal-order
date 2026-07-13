@@ -190,7 +190,7 @@ export default async function AdminHotdeal(props: {
                             ? "완납"
                             : s === "ISSUED"
                               ? "발행됨"
-                              : "작성중";
+                              : "계산서 작성중";
                       })()}
                     </Link>
                   )}

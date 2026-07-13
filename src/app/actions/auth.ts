@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { signIn, signOut } from "@/auth";
 import { saveBusinessCert } from "@/lib/storage";
+import { notifyAdminSignupRequest } from "@/lib/push";
 
 export type FormState = { error?: string };
 
@@ -86,6 +87,9 @@ export async function signupAction(
     console.error("[signup] create failed:", err);
     return { error: "가입에 실패했어요. 잠시 후 다시 시도해 주세요." };
   }
+
+  // #10 관리자에게 가입요청 푸시(+인앱 알림). 실패해도 가입 흐름엔 영향 없음.
+  await notifyAdminSignupRequest(storeName).catch(() => {});
 
   try {
     await signIn("credentials", {

@@ -78,7 +78,7 @@ export function BottomNav({
               {it.icon}
               {it.badge > 0 && (
                 <span className="bottomnav__badge">
-                  {it.badge > 99 ? "99+" : it.badge}
+                  {it.badge > 99 ? "+99" : it.badge}
                 </span>
               )}
             </span>

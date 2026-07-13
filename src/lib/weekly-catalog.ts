@@ -4,6 +4,10 @@
 
 export type WeeklyCategory = "SNACK" | "DAIRY" | "DRIED" | "EGG";
 
+// #13 계란(EGG)은 박스/개가 아니라 판/구 단위.
+export const boxWord = (cat: string) => (cat === "EGG" ? "판" : "박스");
+export const pieceWord = (cat: string) => (cat === "EGG" ? "구" : "개");
+
 export interface WeeklyItem {
   seq: string;
   category: WeeklyCategory;

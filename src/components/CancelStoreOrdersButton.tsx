@@ -16,10 +16,12 @@ export function CancelStoreOrdersButton({
   userId,
   date,
   store,
+  big = false,
 }: {
   userId: string;
   date: string;
   store: string;
+  big?: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [state, formAction] = useActionState<CancelOrdersState, FormData>(
@@ -35,8 +37,8 @@ export function CancelStoreOrdersButton({
     <>
       <button
         type="button"
-        className="linkbtn linkbtn--danger"
-        style={{ fontSize: 12.5, fontWeight: 700 }}
+        className={big ? "btn btn--danger btn--block" : "linkbtn linkbtn--danger"}
+        style={big ? undefined : { fontSize: 12.5, fontWeight: 700 }}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();

@@ -2468,10 +2468,14 @@ a {
   text-decoration: none;
 }
 .tbar__bell:active { transform: scale(0.94); }
-.tbar__bell-badge {
+/* 전역 알림 카운트 배지 — 빨간 원, 외곽선 없음, 가운데정렬, +99, 글자수 비율 대응 */
+.badge-count {
   position: absolute;
-  top: -4px;
-  right: -4px;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
@@ -2480,9 +2484,10 @@ a {
   color: #fff;
   font-size: 11px;
   font-weight: 800;
-  line-height: 18px;
-  text-align: center;
-  border: 2px solid var(--header);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  pointer-events: none;
 }
 .notif {
   position: relative;
@@ -2534,4 +2539,38 @@ a {
   height: 8px;
   border-radius: 999px;
   background: var(--danger);
+}
+
+/* #7 확정(잠금)된 계산서 카테고리 — 색으로 잠김 표시 */
+.invcat.is-locked {
+  background: var(--green-100);
+  border: 1px solid var(--green-150);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+.invcat.is-locked .input:disabled {
+  background: #e5ede6;
+  color: var(--green-700);
+  -webkit-text-fill-color: var(--green-700);
+  opacity: 1;
+  border-color: var(--green-150);
+}
+
+/* ── #1 상·하단 고정 + 오버스크롤 방지 + 어르신용 확대감 소폭 축소 ── */
+/* 위/아래로 고무줄 스크롤이 생겨 헤더·네비가 흔들리는 것 방지(딱 고정된 느낌) */
+html,
+body {
+  overscroll-behavior: none;
+}
+/* 하단 네비/헤더는 이미 fixed/sticky. 콘텐츠만 스크롤되도록 스크롤 체이닝 차단 */
+.app {
+  overscroll-behavior: contain;
+}
+/* 너무 꽉 차던 화면 소폭 완화(좌우 여백·큰 제목만 살짝 축소, 비율 유지) */
+.page {
+  padding-left: 15px;
+  padding-right: 15px;
+}
+.h1 {
+  font-size: 26px;
 }

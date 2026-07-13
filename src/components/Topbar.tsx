@@ -10,6 +10,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { NotificationBell } from "./NotificationBell";
+import { BackButton } from "./BackButton";
 
 export function Topbar({
   title,
@@ -32,17 +33,15 @@ export function Topbar({
   return (
     <header className="tbar">
       <div className="tbar__row">
-        {backHref ? (
-          <Link href={backHref} className="tbar__back" aria-label="뒤로">
-            ‹
-          </Link>
-        ) : null}
+        {/* #4 전역 뒤로가기(이전 페이지). 홈/루트에선 자동 숨김. backHref는 무시하고 router.back() 사용. */}
+        <BackButton />
         {brand ? (
-          <span className="tbar__brand">
+          // #3 로고/브랜드 클릭 → 메인(/ → 역할별 홈으로 리다이렉트)
+          <Link href="/" className="tbar__brand" style={{ textDecoration: "none" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo-white.png" alt="" width={34} height={34} />
             {brand}
-          </span>
+          </Link>
         ) : null}
         {title ? <span className="tbar__title">{title}</span> : null}
         <span className="tbar__spacer" />

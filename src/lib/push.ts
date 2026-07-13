@@ -325,6 +325,20 @@ export async function notifyMerchantCancelApproved(userId: string) {
   }
 }
 
+// #10 회원 가입신청 시 관리자(새롭)에게 알림 → 클릭 시 가입대기 목록
+export async function notifyAdminSignupRequest(storeName: string) {
+  try {
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: `${storeName} 님이 가입을 요청했습니다.`,
+      body: "",
+      url: "/admin/approvals",
+      type: "signup",
+    });
+  } catch (err) {
+    logError("push.notifyAdminSignupRequest", err, {});
+  }
+}
+
 // 취소 요청을 관리자가 반려했을 때 점주에게 알림
 export async function notifyMerchantCancelRejected(userId: string) {
   try {

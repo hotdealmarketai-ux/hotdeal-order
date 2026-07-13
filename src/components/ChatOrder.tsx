@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   createOrderAction,
   parseChatOrderAction,
@@ -10,6 +10,8 @@ import {
 import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
+import { getStockCart } from "@/lib/stock-cart";
+import { kstToday } from "@/lib/date";
 
 type Phase = "compose" | "loading" | "preview";
 type EditItem = {
@@ -50,20 +52,35 @@ export function ChatOrder({
     createOrderAction,
     {},
   );
+  // #6 재고현황에서 담아둔 공구 품목(있으면 발주에 함께 포함 + 화면에 노출)
+  const [cartItems, setCartItems] = useState<{ name: string; qty: string }[]>([]);
+  useEffect(() => {
+    if (categories.includes("TOOL")) setCartItems(getStockCart(kstToday()));
+  }, [categories]);
 
   const tofuChecked = () =>
     tofuOpen && CHAEUMCHAE_CATALOG.some((p) => (tofuQty[p.seq] ?? "").trim());
 
   async function handleParse() {
     setError("");
-    if (!text.trim() && !tofuChecked()) {
+    const cart = categories.includes("TOOL") ? getStockCart(kstToday()) : [];
+    const cartAsItems = (): EditItem[] =>
+      cart.map((c) => ({
+        id: ++uid.current,
+        category: "TOOL" as Category,
+        name: c.name,
+        qty: c.qty,
+        note: "",
+      }));
+    if (!text.trim() && !tofuChecked() && cart.length === 0) {
       setError("발주 내용을 적거나 채움채 품목을 선택해 주세요.");
       return;
     }
     if (!text.trim()) {
-      // 채움채만 발주
-      setItems([]);
-      if (hasTofu) setPreviewTab("TOFU");
+      // 채움채/담아둔 재고만 발주
+      setItems(cartAsItems());
+      if (cart.length) setPreviewTab("TOOL");
+      else if (hasTofu) setPreviewTab("TOFU");
       setPhase("preview");
       return;
     }
@@ -84,6 +101,7 @@ export function ChatOrder({
           flat.push({ id: ++uid.current, category: g.category, ...it });
         }
       }
+      flat.push(...cartAsItems()); // #6 담아둔 재고(공구) 포함
       setItems(flat);
       // 미리보기를 '품목이 있는 첫 종류' 탭으로 연다(빈 탭에서 시작하지 않게)
       if (flat.length) setPreviewTab(flat[0].category);
@@ -235,6 +253,18 @@ export function ChatOrder({
               disabled={locked || phase === "loading"}
             />
           </div>
+
+          {cartItems.length > 0 && (
+            <div className="notice notice--ai" style={{ marginTop: 12 }}>
+              <b>담아둔 재고 · 공구 {cartItems.length}건</b>
+              <div style={{ marginTop: 4 }}>
+                {cartItems.map((c) => `${c.name} ${c.qty}`).join(" · ")}
+              </div>
+              <div style={{ fontSize: 12, marginTop: 4, color: "var(--muted)" }}>
+                &lsquo;발주&rsquo;를 누르면 함께 발주에 담겨요.
+              </div>
+            </div>
+          )}
 
           {tofuList}
 

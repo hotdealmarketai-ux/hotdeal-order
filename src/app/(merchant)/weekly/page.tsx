@@ -4,24 +4,32 @@ import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { canOrderWeekly } from "@/lib/constants";
-import { WEEKLY_OPEN_LABEL, WEEKLY_CLOSE_LABEL } from "@/lib/schedule";
+import { WEEKLY_CLOSE_LABEL } from "@/lib/schedule";
 import { labelDateLong } from "@/lib/date";
 import {
   weeklyKeyAt,
   weeklyLockOf,
   weeklyReceivableOf,
   weeklyOpenNow,
+  weeklyForceOpen,
   getWeeklyProducts,
   weeklyStatusOf,
 } from "@/lib/weekly";
 import { WeeklyOrderForm } from "@/components/WeeklyOrderForm";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { PushToggle } from "@/components/PushToggle";
+import { WeeklyDeadlineCountdown } from "@/components/WeeklyDeadlineCountdown";
 import { CancelWeeklyOrderButton } from "@/components/CancelWeeklyOrderButton";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
-function Header({ storeName }: { storeName: string }) {
+function Header({
+  storeName,
+  forceOpen,
+}: {
+  storeName: string;
+  forceOpen: boolean;
+}) {
   return (
     <Topbar
       brand="핫딜오더"
@@ -31,7 +39,9 @@ function Header({ storeName }: { storeName: string }) {
           <PushToggle variant="header" />
         </>
       }
-    />
+    >
+      <WeeklyDeadlineCountdown closeLabel={WEEKLY_CLOSE_LABEL} forceOpen={forceOpen} />
+    </Topbar>
   );
 }
 
@@ -45,6 +55,7 @@ export default async function WeeklyOrderPage({
 
   const sp = await searchParams;
   const open = await weeklyOpenNow();
+  const forceOpen = await weeklyForceOpen();
   const currentWeek = weeklyKeyAt();
   const selWeek = /^\d{4}-\d{2}-\d{2}$/.test(sp.date ?? "") ? sp.date! : currentWeek;
   const isCurrent = selWeek === currentWeek;
@@ -58,7 +69,7 @@ export default async function WeeklyOrderPage({
   if (!open && isCurrent && !order) {
     return (
       <>
-        <Header storeName={user.storeName} />
+        <Header storeName={user.storeName} forceOpen={forceOpen} />
         <div
           className="page"
           style={{
@@ -75,7 +86,7 @@ export default async function WeeklyOrderPage({
           </div>
           <div style={{ height: 18 }} />
           <div style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-            주간발주 가능시간 - {WEEKLY_OPEN_LABEL} 부터 {WEEKLY_CLOSE_LABEL} 까지
+            매주 토요일 12:00 ~ 20:00
           </div>
         </div>
       </>
@@ -114,7 +125,7 @@ export default async function WeeklyOrderPage({
 
   return (
     <>
-      <Header storeName={user.storeName} />
+      <Header storeName={user.storeName} forceOpen={forceOpen} />
       <div className="page">
         <h1 className="h1" style={{ marginBottom: 20 }}>주간발주</h1>
 

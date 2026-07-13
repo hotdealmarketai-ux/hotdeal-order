@@ -1,12 +1,14 @@
 "use client";
 
-import { startTransition, useActionState, useMemo, useRef, useState } from "react";
-import { useFormStatus } from "react-dom";
 import {
-  saveInvoiceAction,
-  deleteInvoiceDraftAction,
-  type InvoiceFormState,
-} from "@/app/actions/invoice";
+  startTransition,
+  useActionState,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { saveInvoiceAction, type InvoiceFormState } from "@/app/actions/invoice";
 import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
@@ -38,21 +40,6 @@ function rowAmount(r: Row): number {
 }
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
-
-function DraftSaveButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      name="mode"
-      value="draft"
-      className="btn btn--ghost"
-      disabled={pending}
-    >
-      {pending ? "저장 중…" : "임시저장"}
-    </button>
-  );
-}
 
 export function InvoiceForm({
   invoiceId,
@@ -95,7 +82,6 @@ export function InvoiceForm({
     return init;
   });
   const [confirming, setConfirming] = useState(false);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [localError, setLocalError] = useState("");
   const [state, formAction] = useActionState<InvoiceFormState, FormData>(
     saveInvoiceAction,
@@ -147,6 +133,37 @@ export function InvoiceForm({
     (n, c) => n + (subtotals[c]?.count ?? 0),
     0,
   );
+
+  // #8 자동 임시저장 — 입력을 localStorage에 저장/복원(다른 페이지 갔다와도 유지). 임시저장 버튼 불필요.
+  const draftKey = `invdraft:${userId}:${date}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Record<string, Row[]>;
+      if (!saved || typeof saved !== "object") return;
+      const hasContent = categories.some((c) =>
+        (saved[c] ?? []).some((r) => r && (r.name || r.qty || r.unitPrice)),
+      );
+      if (!hasContent) return;
+      setRowsByCat(() => {
+        const next: Record<string, Row[]> = {};
+        for (const c of categories) {
+          const rows = (saved[c] ?? []).filter(
+            (r) => r && (r.name || r.qty || r.unitPrice),
+          );
+          next[c] = [...rows.map((r) => ({ ...r, id: ++uid.current })), newRow()];
+        }
+        return next;
+      });
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(draftKey, JSON.stringify(rowsByCat));
+    } catch {}
+  }, [rowsByCat, draftKey]);
 
   // #11 카테고리별 확정 상태(과일/야채/공구/채움채). 4개 모두 확정돼야 발행 가능.
   const [confirmed, setConfirmed] = useState<Set<string>>(
@@ -277,7 +294,10 @@ export function InvoiceForm({
         {categories.map((c) => {
           const sub = subtotals[c] ?? { count: 0, sum: 0 };
           return (
-            <div className="invcat" key={c}>
+            <div
+              className={`invcat ${confirmed.has(c) ? "is-locked" : ""}`}
+              key={c}
+            >
               <div className="invcat__head">
                 <span className="chip">{CATEGORIES[c].label}</span>
                 {sub.sum > 0 && (
@@ -345,11 +365,10 @@ export function InvoiceForm({
 
         {!confirming ? (
           <>
-            <div className="confirm__actions" style={{ marginTop: 16 }}>
-              <DraftSaveButton />
+            <div style={{ marginTop: 16 }}>
               <button
                 type="button"
-                className="btn btn--primary"
+                className="btn btn--primary btn--block"
                 disabled={!allConfirmed}
                 onClick={() => {
                   if (validate()) setConfirming(true);
@@ -418,35 +437,6 @@ export function InvoiceForm({
           </div>
         )}
       </form>
-
-      {invoiceId && (
-        <div style={{ marginTop: 20 }}>
-          {!confirmingDelete ? (
-            <button
-              type="button"
-              className="linkbtn linkbtn--danger"
-              onClick={() => setConfirmingDelete(true)}
-            >
-              임시 계산서 삭제
-            </button>
-          ) : (
-            <form action={deleteInvoiceDraftAction} className="confirm">
-              <input type="hidden" name="invoiceId" value={invoiceId} />
-              <div className="confirm__title">정말 삭제할까요?</div>
-              <div className="confirm__actions">
-                <button
-                  type="button"
-                  className="btn btn--ghost"
-                  onClick={() => setConfirmingDelete(false)}
-                >
-                  취소
-                </button>
-                <button className="btn btn--danger">네, 삭제합니다</button>
-              </div>
-            </form>
-          )}
-        </div>
-      )}
     </>
   );
 }

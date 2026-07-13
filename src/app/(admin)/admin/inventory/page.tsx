@@ -23,10 +23,29 @@ export default async function AdminInventory() {
             새 품목 추가
           </div>
           <form action={addInventoryAction} className="stack">
-            <input name="name" className="input" placeholder="품목" required />
-            <input name="status" className="input" placeholder="상태/수량" />
+            <input name="name" className="input" placeholder="품목명" required />
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                name="qty"
+                className="input"
+                inputMode="numeric"
+                placeholder="남은수량"
+                style={{ flex: 1 }}
+              />
+              <input
+                name="supplyPrice"
+                className="input"
+                inputMode="numeric"
+                placeholder="공급가(원)"
+                style={{ flex: 1 }}
+              />
+            </div>
             <button className="btn btn--primary">추가하기</button>
           </form>
+          <p className="hint" style={{ marginTop: 8 }}>
+            구글시트 연동 시 시트가 기준이에요. 시트를 쓰면 이 화면 대신 시트에서
+            수정해 주세요.
+          </p>
         </div>
 
         <div className="section-label">등록된 재고</div>
@@ -54,10 +73,19 @@ export default async function AdminInventory() {
                 <form action={updateInventoryAction} style={{ display: "flex", gap: 8 }}>
                   <input type="hidden" name="id" value={it.id} />
                   <input
-                    name="status"
+                    name="qty"
                     className="input"
-                    defaultValue={it.status}
-                    placeholder="상태/수량"
+                    inputMode="numeric"
+                    defaultValue={it.qty || ""}
+                    placeholder="남은수량"
+                    style={{ flex: 1 }}
+                  />
+                  <input
+                    name="supplyPrice"
+                    className="input"
+                    inputMode="numeric"
+                    defaultValue={it.supplyPrice || ""}
+                    placeholder="공급가"
                     style={{ flex: 1 }}
                   />
                   <button className="btn btn--soft btn--sm">저장</button>

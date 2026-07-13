@@ -17,7 +17,7 @@
 
 "use client";
 
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   createOrderAction,
   previewGridOrderAction,
@@ -32,6 +32,8 @@ import {
   type Role,
 } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
+import { getStockCart } from "@/lib/stock-cart";
+import { kstToday } from "@/lib/date";
 
 type Row = { id: number; name: string; qty: string; note: string };
 
@@ -78,6 +80,20 @@ export function OrderForm({
     if (!last || last.name || last.qty || last.note) return [...list, newRow()];
     return list;
   }
+
+  // #6 재고현황에서 '담기'한 공구 품목을 발주창(공구)에 자동 반영(임시저장). 발주창 열림일 때만.
+  useEffect(() => {
+    if (locked || !categories.includes("TOOL")) return;
+    const cart = getStockCart(kstToday());
+    if (cart.length === 0) return;
+    setRowsByCat((prev) => ({
+      ...prev,
+      TOOL: withTrailingEmpty(
+        cart.map((c) => ({ id: ++uid.current, name: c.name, qty: c.qty, note: "" })),
+      ),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function updateRow(id: number, field: keyof Row, value: string) {
     setConfirming(false);
