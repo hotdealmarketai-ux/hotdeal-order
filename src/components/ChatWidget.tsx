@@ -33,6 +33,7 @@ export function ChatWidget() {
   const [threads, setThreads] = useState<ChatThreadItem[]>([]);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
+  const [err, setErr] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingChatParam = useRef<string | null>(null);
@@ -73,7 +74,16 @@ export function ChatWidget() {
   const loadThreadMessages = useCallback(
     async (tid: string, isAdmin: boolean) => {
       const res = isAdmin ? await adminLoadThread(tid) : await merchantLoadChat();
-      if (!res) return;
+      if (!res) {
+        // 잘못된/사라진 스레드(예: 유효하지 않은 ?chat=) → 관리자는 목록으로 복귀
+        if (isAdmin) {
+          setView("list");
+          setThreadId(null);
+          const l = await adminLoadThreads();
+          if (l) setThreads(l);
+        }
+        return;
+      }
       const sn = (res as { storeName?: string }).storeName;
       if (sn) setStoreName(sn);
       setThreadId(res.threadId);
@@ -114,6 +124,12 @@ export function ChatWidget() {
     if (!role || open || !pendingChatParam.current) return;
     const p = pendingChatParam.current;
     pendingChatParam.current = null;
+    try {
+      // URL에서 ?chat= 제거(뒤로가기/새로고침 시 재오픈 방지)
+      window.history.replaceState({}, "", window.location.pathname);
+    } catch {
+      /* noop */
+    }
     (async () => {
       setOpen(true);
       if (role === "merchant") {
@@ -144,16 +160,24 @@ export function ChatWidget() {
   const send = async () => {
     const text = input.trim();
     if (!text) return;
+    if (role === "admin" && !threadId) return; // 대화 미선택 시 전송 금지
     setInput("");
-    // 낙관적 표시
+    setErr("");
+    const tmpId = `tmp-${Date.now()}`;
     setMessages((m) => [
       ...m,
-      { id: `tmp-${Date.now()}`, mine: true, body: text, at: new Date().toISOString(), readAt: null },
+      { id: tmpId, mine: true, body: text, at: new Date().toISOString(), readAt: null },
     ]);
     scrollDown();
-    await sendChat(text, role === "admin" ? threadId ?? undefined : undefined);
-    if (role === "merchant") await openMerchantChat();
-    else if (threadId) await loadThreadMessages(threadId, true);
+    const res = await sendChat(text, role === "admin" ? threadId ?? undefined : undefined);
+    if (!res?.ok) {
+      // 실패 → 낙관적 버블 제거 + 입력 복원(문구 유실 방지)
+      setMessages((m) => m.filter((x) => x.id !== tmpId));
+      setInput(text);
+      if (res?.error) setErr(res.error);
+      return;
+    }
+    // 성공: 낙관적 버블 유지 → 다음 폴링(≤3.5s)이 서버 메시지로 조용히 정합(깜빡임 방지)
   };
 
   const doClear = async () => {
@@ -275,6 +299,7 @@ export function ChatWidget() {
                 )}
               </div>
 
+              {err && <div className="chaterr">{err}</div>}
               <form
                 className="chatinput"
                 onSubmit={(e) => {
@@ -285,7 +310,10 @@ export function ChatWidget() {
                 <input
                   className="chatinput__field"
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    if (err) setErr("");
+                  }}
                   placeholder="메시지 입력…"
                   maxLength={2000}
                   autoComplete="off"

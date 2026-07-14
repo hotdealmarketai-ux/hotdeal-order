@@ -3010,3 +3010,7 @@ body {
   background: var(--green-700); color: #fff; display: flex; align-items: center; justify-content: center;
 }
 .chatinput__send:disabled { opacity: .4; cursor: default; }
+.chaterr {
+  padding: 8px 14px; margin: 0; font-size: 13px; color: var(--danger);
+  background: var(--danger-soft, #f6e2df); text-align: center;
+}

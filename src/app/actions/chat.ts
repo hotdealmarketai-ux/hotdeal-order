@@ -38,8 +38,12 @@ async function getViewer(): Promise<Viewer | null> {
 }
 
 async function getOrCreateThread(merchantId: string) {
-  const t = await prisma.chatThread.findUnique({ where: { merchantId } });
-  return t ?? prisma.chatThread.create({ data: { merchantId } });
+  // upsert로 동시 생성 경합(P2002) 방지. #9 리뷰
+  return prisma.chatThread.upsert({
+    where: { merchantId },
+    update: {},
+    create: { merchantId },
+  });
 }
 
 type Row = {
@@ -120,7 +124,12 @@ export async function merchantLoadChat(): Promise<{
   if (!v || v.kind !== "merchant") return null;
   const t = await getOrCreateThread(v.id);
   await prisma.chatMessage.updateMany({
-    where: { threadId: t.id, fromAdmin: true, readAt: null },
+    where: {
+      threadId: t.id,
+      fromAdmin: true,
+      readAt: null,
+      ...(t.merchantClearedAt ? { createdAt: { gt: t.merchantClearedAt } } : {}),
+    },
     data: { readAt: new Date() },
   });
   const rows = await prisma.chatMessage.findMany({
@@ -141,15 +150,20 @@ export async function adminLoadThreads(): Promise<ChatThreadItem[] | null> {
   if (!v || v.kind !== "admin") return null;
   const threads = await prisma.chatThread.findMany({
     orderBy: { lastMessageAt: "desc" },
-    include: {
-      merchant: { select: { storeName: true } },
-      messages: { orderBy: { createdAt: "desc" }, take: 1, select: { body: true, createdAt: true, fromAdmin: true } },
-    },
+    include: { merchant: { select: { storeName: true } } },
   });
   const out: ChatThreadItem[] = [];
   for (const t of threads) {
-    const last = t.messages[0];
-    if (!last) continue; // 메시지 없는 스레드는 목록에 안 보임
+    // 관리자가 비운 이후 메시지만 목록의 last/미리보기로 — 대화창(adminLoadThread)과 일치.
+    const last = await prisma.chatMessage.findFirst({
+      where: {
+        threadId: t.id,
+        ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      select: { body: true, createdAt: true, fromAdmin: true },
+    });
+    if (!last) continue; // 비운 뒤 남은 메시지 없으면 목록에서 제외
     const unread = await prisma.chatMessage.count({
       where: {
         threadId: t.id,
@@ -183,7 +197,12 @@ export async function adminLoadThread(threadId: string): Promise<{
   });
   if (!t) return null;
   await prisma.chatMessage.updateMany({
-    where: { threadId: t.id, fromAdmin: false, readAt: null },
+    where: {
+      threadId: t.id,
+      fromAdmin: false,
+      readAt: null,
+      ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
+    },
     data: { readAt: new Date() },
   });
   const rows = await prisma.chatMessage.findMany({
@@ -207,6 +226,16 @@ export async function sendChat(
   if (!v) return { ok: false, error: "로그인이 필요해요." };
   const text = String(body ?? "").trim().slice(0, 2000);
   if (!text) return { ok: false, error: "" };
+
+  // 남용 방지 — 같은 발신자가 0.4초 내 연속 전송하면 무시(스크립트 폭주 차단). #9 리뷰
+  const recent = await prisma.chatMessage.findFirst({
+    where: { senderId: v.id },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  if (recent && Date.now() - recent.createdAt.getTime() < 400) {
+    return { ok: false, error: "" };
+  }
 
   try {
     if (v.kind === "merchant") {
