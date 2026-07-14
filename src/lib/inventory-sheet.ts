@@ -135,6 +135,9 @@ async function readRowsViaCsv(): Promise<Row[] | { error: string }> {
   return rowsFromMatrix(parseCsv(text));
 }
 
+// ⚠️ 사용 안 함(단방향 전환 R3). 절대 크론/액션에서 호출하지 말 것 —
+// 시트를 기준으로 DB를 덮어써 '시트에 없는 품목을 삭제'한다(과거 데이터 손실 사고의 원인).
+// 시트→앱 가져오기가 정말 필요하면 별도 명시적 관리자 액션으로만, 삭제 없이 재설계할 것.
 export async function syncInventoryFromSheet(): Promise<{
   ok: boolean;
   count?: number;
