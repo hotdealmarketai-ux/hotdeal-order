@@ -35,8 +35,22 @@ export function ChatWidget() {
   const [input, setInput] = useState("");
   const [err, setErr] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingChatParam = useRef<string | null>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 플로팅 버튼으로 모이는 닫힘 애니메이션 후 실제 언마운트
+  const closePanel = useCallback(() => {
+    setMenuOpen(false);
+    setClosing(true);
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+    }, 230);
+  }, []);
+  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
   // 부트스트랩 + 푸시로 들어온 ?chat= 파라미터 감지
   useEffect(() => {
@@ -190,6 +204,8 @@ export function ChatWidget() {
   if (!role) return null;
 
   const lastMine = [...messages].reverse().find((m) => m.mine);
+  // 상대방 이름/아바타 — 가맹점 화면에선 '관리자', 관리자 화면에선 지점명
+  const otherName = role === "admin" ? storeName || "가맹점" : "관리자";
 
   return (
     <>
@@ -206,21 +222,23 @@ export function ChatWidget() {
       )}
 
       {open && (
-        <div className="chatpop" role="dialog" aria-modal="true">
+        <div
+          className={`chatpop${closing ? " chatpop--closing" : ""}`}
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="chatpop__head">
-            {role === "admin" && view === "thread" ? (
+            {role === "admin" && view === "thread" && (
               <button className="chatpop__back" onClick={openAdminList} aria-label="목록으로">
                 ‹
               </button>
-            ) : (
-              <span className="chatpop__ico" aria-hidden="true">💬</span>
             )}
             <div className="chatpop__title">
               {role === "admin"
                 ? view === "list"
-                  ? "문의 채팅"
+                  ? "메세지"
                   : storeName
-                : "새롭 관리자 문의"}
+                : "관리자와 1:1 채팅하기"}
             </div>
             <div className="chatpop__actions">
               {view === "thread" && (
@@ -232,7 +250,7 @@ export function ChatWidget() {
                   ⋯
                 </button>
               )}
-              <button className="chatpop__close" onClick={() => setOpen(false)} aria-label="닫기">
+              <button className="chatpop__close" onClick={closePanel} aria-label="닫기">
                 ✕
               </button>
               {menuOpen && (
@@ -283,19 +301,38 @@ export function ChatWidget() {
                       : "메시지를 보내 대화를 시작하세요."}
                   </div>
                 ) : (
-                  messages.map((m) => (
-                    <div key={m.id} className={`msg ${m.mine ? "msg--mine" : "msg--other"}`}>
-                      <div className="msg__bubble">{m.body}</div>
-                      <div className="msg__meta">
-                        {fmtTime(m.at)}
-                        {m.mine && m === lastMine && (
-                          <span className="msg__read">
-                            {m.readAt ? ` · 읽음 ${fmtTime(m.readAt)}` : " · 안읽음"}
-                          </span>
+                  messages.map((m, i) => {
+                    const prev = messages[i - 1];
+                    const startGroup = !prev || prev.mine !== m.mine;
+                    return (
+                      <div
+                        key={m.id}
+                        className={`msg ${m.mine ? "msg--mine" : "msg--other"}${
+                          startGroup ? " msg--start" : ""
+                        }`}
+                      >
+                        {!m.mine && (
+                          <div className="msg__av" aria-hidden="true">
+                            {startGroup ? otherName.slice(0, 1) : ""}
+                          </div>
                         )}
+                        <div className="msg__col">
+                          {!m.mine && startGroup && (
+                            <div className="msg__name">{otherName}</div>
+                          )}
+                          <div className="msg__bubble">{m.body}</div>
+                          <div className="msg__meta">
+                            {fmtTime(m.at)}
+                            {m.mine && m === lastMine && (
+                              <span className="msg__read">
+                                {m.readAt ? ` · 읽음 ${fmtTime(m.readAt)}` : " · 안읽음"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
