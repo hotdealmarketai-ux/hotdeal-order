@@ -13,6 +13,7 @@ import {
   type ChatMsg,
   type ChatThreadItem,
 } from "@/app/actions/chat";
+import { AiAssistant } from "@/components/AiAssistant";
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("ko-KR", {
@@ -28,6 +29,8 @@ export function ChatWidget() {
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"list" | "thread">("thread");
+  // 가맹점 전용: AI 도우미 / 관리자 문의 모드
+  const [mMode, setMMode] = useState<"ai" | "admin">("ai");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [storeName, setStoreName] = useState("");
   const [threads, setThreads] = useState<ChatThreadItem[]>([]);
@@ -154,9 +157,24 @@ export function ChatWidget() {
   const openPanel = useCallback(async () => {
     setOpen(true);
     setMenuOpen(false);
-    if (role === "merchant") await openMerchantChat();
-    else await openAdminList();
-  }, [role, openMerchantChat, openAdminList]);
+    // 가맹점: 기본 'AI 도우미'(클라이언트). 관리자 문의 탭일 때만 사람 채팅 로드.
+    if (role === "merchant") {
+      if (mMode === "admin") await openMerchantChat();
+    } else {
+      await openAdminList();
+    }
+  }, [role, mMode, openMerchantChat, openAdminList]);
+
+  // 가맹점 탭 전환(AI ↔ 관리자 문의)
+  const switchMMode = useCallback(
+    async (mode: "ai" | "admin") => {
+      setMMode(mode);
+      setMenuOpen(false);
+      setErr("");
+      if (mode === "admin") await openMerchantChat();
+    },
+    [openMerchantChat],
+  );
 
   // 푸시 ?chat= 로 자동 열기
   useEffect(() => {
@@ -172,6 +190,8 @@ export function ChatWidget() {
     (async () => {
       setOpen(true);
       if (role === "merchant") {
+        // 푸시로 들어온 관리자 채팅 → '관리자 문의' 탭으로 전환
+        setMMode("admin");
         await openMerchantChat();
       } else {
         setView("thread");
@@ -180,12 +200,13 @@ export function ChatWidget() {
     })();
   }, [role, open, openMerchantChat, loadThreadMessages]);
 
-  // 대화 열려있는 동안 메시지 폴링
+  // 대화 열려있는 동안 메시지 폴링 (AI 도우미 탭은 폴링 없음)
   useEffect(() => {
     if (!open) return;
-    if (role === "merchant" || (role === "admin" && view === "thread" && threadId)) {
+    const merchantAdmin = role === "merchant" && mMode === "admin";
+    if (merchantAdmin || (role === "admin" && view === "thread" && threadId)) {
       const id = setInterval(() => {
-        if (role === "merchant") openMerchantChat();
+        if (merchantAdmin) openMerchantChat();
         else if (threadId) loadThreadMessages(threadId, true);
       }, 3500);
       return () => clearInterval(id);
@@ -194,7 +215,7 @@ export function ChatWidget() {
       const id = setInterval(() => openAdminList(), 5000);
       return () => clearInterval(id);
     }
-  }, [open, role, view, threadId, openMerchantChat, loadThreadMessages, openAdminList]);
+  }, [open, role, mMode, view, threadId, openMerchantChat, loadThreadMessages, openAdminList]);
 
   const send = async () => {
     const text = input.trim();
@@ -334,10 +355,12 @@ export function ChatWidget() {
                 ? view === "list"
                   ? "메세지"
                   : storeName
-                : "관리자와 1:1 채팅하기"}
+                : mMode === "ai"
+                  ? "AI 도우미"
+                  : "관리자와 1:1 채팅하기"}
             </div>
             <div className="chatpop__actions">
-              {view === "thread" && (
+              {view === "thread" && !(role === "merchant" && mMode === "ai") && (
                 <button
                   className="chatpop__more"
                   onClick={() => setMenuOpen((o) => !o)}
@@ -356,6 +379,28 @@ export function ChatWidget() {
               )}
             </div>
           </div>
+
+          {/* 가맹점: AI 도우미 ↔ 관리자 문의 탭 */}
+          {role === "merchant" && (
+            <div className="chattabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={mMode === "ai"}
+                className={mMode === "ai" ? "is-active" : ""}
+                onClick={() => switchMMode("ai")}
+              >
+                AI 도우미
+              </button>
+              <button
+                role="tab"
+                aria-selected={mMode === "admin"}
+                className={mMode === "admin" ? "is-active" : ""}
+                onClick={() => switchMMode("admin")}
+              >
+                관리자 문의
+              </button>
+            </div>
+          )}
 
           {/* 관리자 목록 */}
           {role === "admin" && view === "list" ? (
@@ -387,6 +432,8 @@ export function ChatWidget() {
                 ))
               )}
             </div>
+          ) : role === "merchant" && mMode === "ai" ? (
+            <AiAssistant />
           ) : (
             <>
               <div className="chatbody" ref={scrollRef}>

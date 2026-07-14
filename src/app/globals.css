@@ -3053,3 +3053,47 @@ body {
   padding: 8px 14px; margin: 0; font-size: 13px; color: var(--danger);
   background: var(--danger-soft, #f6e2df); text-align: center;
 }
+
+/* 가맹점 탭: AI 도우미 ↔ 관리자 문의 (세그먼트 컨트롤) */
+.chattabs {
+  display: flex; gap: 4px; flex-shrink: 0;
+  padding: 8px 10px; background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.chattabs button {
+  flex: 1; border: 1px solid var(--line-strong); background: var(--bg);
+  color: var(--muted); font-family: inherit; font-size: 14px; font-weight: 700;
+  padding: 9px 8px; border-radius: 999px; cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+}
+.chattabs button.is-active {
+  background: var(--green-700); color: #fff; border-color: var(--green-700);
+}
+
+/* AI 도우미 아바타 */
+.msg__av--bot {
+  background: var(--green-700); color: #fff; font-size: 12px; letter-spacing: .3px;
+}
+
+/* AI 추천 질문 칩 */
+.aichips { display: flex; flex-direction: column; gap: 8px; margin: 4px 2px 2px; }
+.aichips button {
+  text-align: left; border: 1px solid var(--line-strong); background: var(--bg);
+  color: var(--green-700); font-family: inherit; font-size: 14px; font-weight: 600;
+  padding: 11px 14px; border-radius: 14px; cursor: pointer;
+}
+.aichips button:active { background: var(--green-100); }
+
+/* AI 입력 중 … 점 애니메이션 */
+.msg__typing { display: inline-flex; gap: 4px; align-items: center; min-height: 20px; }
+.msg__typing span {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--green-700); opacity: .5;
+  animation: chat-typing 1s infinite ease-in-out;
+}
+.msg__typing span:nth-child(2) { animation-delay: .15s; }
+.msg__typing span:nth-child(3) { animation-delay: .3s; }
+@keyframes chat-typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: .35; }
+  30% { transform: translateY(-4px); opacity: .9; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg__typing span { animation: none; }
+}
