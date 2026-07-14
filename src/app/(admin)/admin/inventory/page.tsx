@@ -2,22 +2,18 @@ import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { addInventoryAction } from "@/app/actions/admin";
-import {
-  inventoryPushPending,
-  inventorySyncConfigured,
-} from "@/lib/inventory-sheet";
+import { inventorySyncConfigured } from "@/lib/inventory-sheet";
 import { InventoryPushButton } from "@/components/InventoryPushButton";
 import { InventoryEditor } from "@/components/InventoryEditor";
 
 export default async function AdminInventory() {
   await requireAdmin();
-  const [items, pushPending] = await Promise.all([
-    prisma.inventoryItem.findMany({
-      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    }),
-    inventoryPushPending(),
-  ]);
+  const items = await prisma.inventoryItem.findMany({
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
   const configured = inventorySyncConfigured();
+  // 품목 추가/삭제로 목록 구성이 바뀌면 편집기를 새로 그린다(입력 중에는 유지).
+  const idsKey = items.map((i) => i.id).join(",");
 
   return (
     <>
@@ -54,25 +50,9 @@ export default async function AdminInventory() {
           </form>
         </div>
 
-        {/* 시트 반영이 밀렸을 때만(실패) 경고 + 재시도 */}
-        {configured && pushPending && (
-          <div className="card" style={{ borderColor: "var(--danger)" }}>
-            <p
-              style={{
-                color: "var(--danger)",
-                fontWeight: 700,
-                fontSize: 13.5,
-                margin: "0 0 8px",
-              }}
-            >
-              ⚠ 최근 변경이 아직 시트에 반영되지 않았어요. 아래 버튼으로 다시 시도해 주세요.
-            </p>
-            <InventoryPushButton />
-          </div>
-        )}
-
         <div className="section-label">등록된 재고</div>
         <InventoryEditor
+          key={idsKey}
           initial={items.map((it) => ({
             id: it.id,
             name: it.name,
@@ -80,6 +60,12 @@ export default async function AdminInventory() {
             supplyPrice: it.supplyPrice ? String(it.supplyPrice) : "",
           }))}
         />
+
+        {configured && (
+          <div style={{ marginTop: 22 }}>
+            <InventoryPushButton />
+          </div>
+        )}
       </div>
     </>
   );

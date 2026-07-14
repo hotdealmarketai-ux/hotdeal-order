@@ -2475,12 +2475,11 @@ a {
   text-decoration: none;
 }
 .tbar__bell:active { transform: scale(0.9); }
-/* #6/Q3 계산서 '작성중' — 밝고 깨끗한 앰버(머스타드 X). 흰 글씨는 옅은 그림자로 또렷하게. */
+/* #6/Q3/R2 계산서 '작성중' — 밝고 깨끗한 앰버 + 검은 글씨(그림자 없음). */
 .btn--warn {
   background: #f5a623 !important;
-  color: #fff !important;
+  color: #1a1400 !important;
   border-color: transparent !important;
-  text-shadow: 0 1px 1.5px rgba(120, 62, 0, 0.35);
 }
 /* 전역 알림 카운트 배지 — 빨간 원, 외곽선 없음, 가운데정렬, +99, 글자수 비율 대응 */
 .badge-count {
@@ -2743,4 +2742,105 @@ body {
   font-size: 18px;
   font-weight: 800;
   margin-top: 2px;
+}
+
+/* R4 관리자 재고 자동저장 편집기 — 한 줄 행 + 자동저장 상태 */
+.invedit__status {
+  text-align: right;
+  font-size: 12px;
+  color: var(--green-700);
+  min-height: 16px;
+  margin-bottom: 6px;
+}
+.invrow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.invrow--head {
+  padding: 0 2px 2px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+.invrow--head span {
+  display: inline-block;
+}
+.invrow__del {
+  width: 32px;
+  height: 44px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  font-size: 15px;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.75;
+}
+.invrow__del:active {
+  transform: scale(0.9);
+}
+
+/* R5 재고현황 정렬 '보기' 드롭다운 */
+.invsort {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+.invsort__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.invsort__btn:active { transform: scale(0.97); }
+.invsort__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.invsort__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 31;
+  min-width: 168px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  padding: 6px;
+  animation: invsort-in 0.14s ease;
+}
+@keyframes invsort-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.invsort__opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  font-size: 15px;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+}
+.invsort__opt:active { background: var(--chip-mute-bg); }
+.invsort__opt.is-on {
+  color: var(--green-700);
+  font-weight: 800;
+  background: var(--green-100);
 }

@@ -22,6 +22,7 @@ import { currentWindowStartUtc } from "@/lib/schedule";
 import { displayQty } from "@/lib/qty";
 import { orderLockOf } from "@/lib/receivable";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
+import { DS_VEG, DS_FRUIT } from "@/lib/ds-catalog";
 import {
   notifyVendorNewOrder,
   notifyAdminNewOrder,
@@ -147,9 +148,12 @@ export async function previewGridOrderAction(
     // TOFU는 시트가 tofuQty로 직접 그리므로 미리보기 응답에선 제외(비-TOFU만 rowsByCat 갱신용)
     .filter((g) => g.category !== "TOFU");
 
+  // R6: 매장 취급 목록 기준으로 과일↔야채 교차 재분류(AI가 이름을 매장 이름으로 맞춘 뒤).
+  reclassifyByCatalog(outGroups, allowed as Category[]);
   // Q1: 정규화(AI) 이후 최종적으로 한 번 더 remap — AI가 '베니지민 고구마'로 합쳤어도 여기서
   // name="고구마"/note="베니지민"으로 다시 분리하고, 카테고리도 과일로 확정(미리보기가 최종과 일치).
   remapBenijimin(outGroups);
+  mergeSameItems(outGroups); // R1 같은 품목+설명 합산
 
   return { ok: true, groups: outGroups };
 }
@@ -224,6 +228,69 @@ function remapBenijimin(groups: Group[]): void {
   }
 }
 
+// R1: 같은 카테고리 안에서 품목명+설명(note)이 완전히 같은 항목은 하나로 합치고 수량을 더한다.
+// (예: 베니지민 고구마를 두 번 넣으면 한 줄로 합쳐 수량 합산. 일반 품목도 동일.)
+const qNum = (v: string) => {
+  const n = parseInt(String(v ?? "").replace(/[^0-9-]/g, ""), 10);
+  return isNaN(n) ? null : n;
+};
+function mergeSameItems(groups: Group[]): void {
+  for (const g of groups) {
+    const map = new Map<string, Group["items"][number]>();
+    const order: string[] = [];
+    for (const it of g.items) {
+      const key = `${it.name.trim()} ${it.note.trim()}`;
+      const existing = map.get(key);
+      if (existing) {
+        const a = qNum(existing.qty);
+        const b = qNum(it.qty);
+        if (a !== null && b !== null) existing.qty = String(a + b);
+        else if (a === null && b !== null) existing.qty = it.qty; // 빈 수량은 채움
+      } else {
+        const copy = { ...it };
+        map.set(key, copy);
+        order.push(key);
+      }
+    }
+    g.items = order.map((k) => map.get(k)!);
+  }
+}
+
+// R6: 칸 발주 교차 재분류 — 매장 취급 목록(엑셀 학습) 기준으로 과일↔야채를 잘못 넣었으면 옮긴다
+// (예: 과일을 야채칸에 → 과일). 공구/두부류는 임의 상품명이라 건드리지 않음. 확인 단계서 수정 가능.
+const catNorm = (s: string) => (s || "").replace(/\s+/g, "").replace(/\(.*?\)/g, "");
+const VEG_SET = new Set(DS_VEG.map(catNorm));
+const FRUIT_SET = new Set(DS_FRUIT.map(catNorm));
+function reclassifyByCatalog(groups: Group[], allowed: Category[]): void {
+  if (!allowed.includes("FRUIT") || !allowed.includes("VEG")) return;
+  const moved: Record<"FRUIT" | "VEG", Group["items"]> = { FRUIT: [], VEG: [] };
+  for (const g of groups) {
+    if (g.category !== "FRUIT" && g.category !== "VEG") continue;
+    const keep: Group["items"] = [];
+    const cur: "FRUIT" | "VEG" = g.category;
+    for (const it of g.items) {
+      const n = catNorm(it.name);
+      const correct: "FRUIT" | "VEG" = FRUIT_SET.has(n)
+        ? "FRUIT"
+        : VEG_SET.has(n)
+          ? "VEG"
+          : cur;
+      if (correct !== cur) moved[correct].push(it);
+      else keep.push(it);
+    }
+    g.items = keep;
+  }
+  for (const cat of ["FRUIT", "VEG"] as const) {
+    if (!moved[cat].length) continue;
+    const target = groups.find((g) => g.category === cat);
+    if (target) target.items.push(...moved[cat]);
+    else groups.push({ category: cat, items: moved[cat] });
+  }
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i].items.length === 0) groups.splice(i, 1);
+  }
+}
+
 export async function createOrderAction(
   _prev: OrderFormState,
   formData: FormData,
@@ -283,6 +350,7 @@ export async function createOrderAction(
   }
 
   remapBenijimin(groups); // #5 베니지민 고구마 → 과일
+  mergeSameItems(groups); // R1 같은 품목+설명 합산
 
   if (groups.length === 0) {
     return { error: "발주할 품목을 한 개 이상 입력하세요." };

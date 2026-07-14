@@ -170,7 +170,6 @@ export async function addInventoryAction(formData: FormData) {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
-  await setInventoryPushPending(); // Q6 변경 직전 마킹 → 1분 pull이 되돌리지 않도록
   // #20 품목명 / 남은수량 / 공급가
   const qty = toInt(formData.get("qty"));
   const supplyPrice = toInt(formData.get("supplyPrice"));
@@ -192,7 +191,7 @@ export async function addInventoryAction(formData: FormData) {
       data: { name, qty, supplyPrice, memo, sortOrder: (max._max.sortOrder ?? 0) + 1 },
     });
   }
-  await safePushInventory(1); // #22 DB→시트 반영(1회 시도 — 실패 시 pending, 다음 pull이 재시도)
+  await setInventoryPushPending(); // R3 변경 표시 → 다음 크론이 시트로 push(단방향)
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }
@@ -201,7 +200,6 @@ export async function updateInventoryAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  await setInventoryPushPending(); // Q6
   const name = String(formData.get("name") ?? "").trim(); // #20 품목명도 수정
   const qty = toInt(formData.get("qty"));
   const supplyPrice = toInt(formData.get("supplyPrice"));
@@ -209,7 +207,7 @@ export async function updateInventoryAction(formData: FormData) {
     where: { id },
     data: { ...(name ? { name } : {}), qty, supplyPrice },
   });
-  await safePushInventory(1); // #22 DB→시트 반영(1회 시도 — 실패 시 pending, 다음 pull이 재시도)
+  await setInventoryPushPending(); // R3
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }
@@ -218,16 +216,15 @@ export async function deleteInventoryAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  await setInventoryPushPending(); // Q6
   await prisma.inventoryItem.delete({ where: { id } });
-  await safePushInventory(1); // #22 DB→시트 반영(삭제 전파, 1회 시도)
+  await setInventoryPushPending(); // R3
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }
 
-// Q5 재고 '전체 저장' — 편집기의 현재 목록으로 DB를 맞춘다(이름/수량/공급가 갱신 + 목록에서 빠진 항목 삭제).
-// 품목별 저장 대신 한 번에 저장 → push도 한 번(시트 재작성). 목록에 없는(=편집기에서 제거한) 항목은 삭제.
-export async function saveAllInventoryAction(payloadJson: string) {
+// R4 재고 자동저장 — 편집기 입력을 디바운스로 계속 저장. 현재 목록으로 DB를 맞춘다(이름/수량/공급가
+// 갱신 + 목록에서 빠진 항목 삭제). 시트 반영은 push하지 않고 'pending' 표시만 → 다음 크론이 반영(단방향).
+export async function autosaveInventoryAction(payloadJson: string) {
   await requireAdmin();
   let rows: { id?: string; name?: string; qty?: unknown; supplyPrice?: unknown }[];
   try {
@@ -237,7 +234,6 @@ export async function saveAllInventoryAction(payloadJson: string) {
   }
   if (!Array.isArray(rows)) return;
 
-  await setInventoryPushPending(); // Q6 변경 직전 마킹
   const keepIds = rows.map((r) => String(r.id ?? "")).filter(Boolean);
   await prisma.$transaction(async (tx) => {
     // 편집기에서 제거된(목록에 없는) 항목 삭제
@@ -258,8 +254,8 @@ export async function saveAllInventoryAction(payloadJson: string) {
       });
     }
   });
-  await safePushInventory(1);
-  revalidatePath("/admin/inventory");
+  await setInventoryPushPending(); // R3 변경 표시 → 다음 크론이 시트로 push
+  // 자동저장은 편집기 상태가 이미 정확하므로 /admin/inventory 재검증 생략(편집 중 리셋 방지).
   revalidatePath("/inventory");
 }
 
