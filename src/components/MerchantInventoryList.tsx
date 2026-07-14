@@ -21,10 +21,12 @@ export function MerchantInventoryList({
   items,
   today,
   canAdd,
+  hint,
 }: {
   items: Item[];
   today: string;
   canAdd: boolean;
+  hint: string;
 }) {
   const [sort, setSort] = useState<SortKey>("name");
   const [open, setOpen] = useState(false);
@@ -47,6 +49,7 @@ export function MerchantInventoryList({
   return (
     <>
       <div className="invsort">
+        <span className="invsort__hint">{hint}</span>
         <button
           type="button"
           className="invsort__btn"

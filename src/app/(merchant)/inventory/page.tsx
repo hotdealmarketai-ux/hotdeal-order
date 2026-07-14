@@ -33,12 +33,6 @@ export default async function InventoryPage() {
     <>
       <Topbar title="재고현황" />
       <div className="page">
-        <p className="hint" style={{ marginTop: 6, marginBottom: 14 }}>
-          {canAdd
-            ? "담기를 누르면 오늘 발주(공구)에 자동으로 담겨요."
-            : "발주 시간에 발주창이 열려 있을 때 담을 수 있어요."}
-        </p>
-
         {items.length === 0 ? (
           <div className="empty">
             <p>아직 등록된 재고가 없어요.</p>
@@ -53,6 +47,11 @@ export default async function InventoryPage() {
             }))}
             today={today}
             canAdd={canAdd}
+            hint={
+              canAdd
+                ? "담기를 누르면 오늘 발주에 담겨요."
+                : "발주 시간에만 담을 수 있어요."
+            }
           />
         )}
       </div>

@@ -2,8 +2,6 @@ import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { addInventoryAction } from "@/app/actions/admin";
-import { inventorySyncConfigured } from "@/lib/inventory-sheet";
-import { InventoryPushButton } from "@/components/InventoryPushButton";
 import { InventoryEditor } from "@/components/InventoryEditor";
 
 export default async function AdminInventory() {
@@ -11,7 +9,6 @@ export default async function AdminInventory() {
   const items = await prisma.inventoryItem.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  const configured = inventorySyncConfigured();
   // 품목 추가/삭제로 목록 구성이 바뀌면 편집기를 새로 그린다(입력 중에는 유지).
   const idsKey = items.map((i) => i.id).join(",");
 
@@ -60,12 +57,6 @@ export default async function AdminInventory() {
             supplyPrice: it.supplyPrice ? String(it.supplyPrice) : "",
           }))}
         />
-
-        {configured && (
-          <div style={{ marginTop: 22 }}>
-            <InventoryPushButton />
-          </div>
-        )}
       </div>
     </>
   );

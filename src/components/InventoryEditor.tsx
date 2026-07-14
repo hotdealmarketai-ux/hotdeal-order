@@ -48,41 +48,38 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
           <p>등록된 재고가 없어요.</p>
         </div>
       ) : (
-        <div className="stack" style={{ gap: 6 }}>
+        <div className="invtable">
           <div className="invrow invrow--head">
-            <span style={{ flex: 2 }}>품목명</span>
-            <span style={{ width: 64, textAlign: "center", flexShrink: 0 }}>남은 수량</span>
-            <span style={{ width: 78, textAlign: "center", flexShrink: 0 }}>공급가</span>
-            <span style={{ width: 32, flexShrink: 0 }} />
+            <span className="invcol invcol--name">품목명</span>
+            <span className="invcol invcol--qty">남은 수량</span>
+            <span className="invcol invcol--price">공급가</span>
+            <span className="invcol invcol--del" />
           </div>
           {items.map((it) => (
             <div className="invrow" key={it.id}>
               <input
-                className="input input--compact"
+                className="invin invcol--name"
                 value={it.name}
                 placeholder="품목명"
                 onChange={(e) => setField(it.id, "name", e.target.value)}
-                style={{ flex: 2, minWidth: 0 }}
               />
               <input
-                className="input input--compact"
+                className="invin invcol--qty"
                 inputMode="numeric"
                 value={it.qty}
-                placeholder="수량"
+                placeholder="0"
                 onChange={(e) => setField(it.id, "qty", e.target.value)}
-                style={{ width: 64, flexShrink: 0, textAlign: "center", padding: "9px 6px" }}
               />
               <input
-                className="input input--compact"
+                className="invin invcol--price"
                 inputMode="numeric"
                 value={it.supplyPrice}
-                placeholder="공급가"
+                placeholder="0"
                 onChange={(e) => setField(it.id, "supplyPrice", e.target.value)}
-                style={{ width: 78, flexShrink: 0, textAlign: "center", padding: "9px 6px" }}
               />
               <button
                 type="button"
-                className="invrow__del"
+                className="invrow__del invcol--del"
                 onClick={() => remove(it.id)}
                 aria-label="삭제"
               >

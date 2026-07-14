@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { PushForegroundListener } from "@/components/PushForegroundListener";
+import { PushSubscriptionSync } from "@/components/PushSubscriptionSync";
+import { ChatWidget } from "@/components/ChatWidget";
 
 const TITLE = "핫딜오더";
 const DESCRIPTION = "주문은 더 간편하게, 운영은 더 스마트하게.";
@@ -44,8 +46,10 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <PushSubscriptionSync />
         <PushForegroundListener />
         {children}
+        <ChatWidget />
       </body>
     </html>
   );

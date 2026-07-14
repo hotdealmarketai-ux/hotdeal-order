@@ -2744,49 +2744,90 @@ body {
   margin-top: 2px;
 }
 
-/* R4 관리자 재고 자동저장 편집기 — 한 줄 행 + 자동저장 상태 */
+/* R4/S2 관리자 재고 자동저장 편집기 — 깔끔한 표(카드 + 하이라인) */
 .invedit__status {
   text-align: right;
   font-size: 12px;
   color: var(--green-700);
   min-height: 16px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+}
+.invtable {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(40, 34, 24, 0.03);
 }
 .invrow {
   display: flex;
-  gap: 6px;
   align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+}
+.invtable > .invrow:not(.invrow--head) + .invrow {
+  border-top: 1px solid var(--line);
 }
 .invrow--head {
-  padding: 0 2px 2px;
+  height: 36px;
+  background: var(--green-100);
   font-size: 11.5px;
-  color: var(--muted-2);
+  font-weight: 700;
+  color: var(--green-700);
+  border-bottom: 1px solid var(--line);
 }
-.invrow--head span {
-  display: inline-block;
+.invcol--name { flex: 1 1 auto; min-width: 0; text-align: left; }
+.invcol--qty { flex: 0 0 66px; text-align: center; }
+.invcol--price { flex: 0 0 84px; text-align: center; }
+.invcol--del { flex: 0 0 32px; }
+.invin {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--fg);
+  padding: 13px 8px;
+  min-width: 0;
 }
+.invin.invcol--name { font-weight: 600; }
+.invin.invcol--qty,
+.invin.invcol--price {
+  font-variant-numeric: tabular-nums;
+}
+.invin:focus {
+  background: var(--green-100);
+  border-radius: 8px;
+}
+.invin::placeholder { color: var(--muted-2); font-weight: 400; }
 .invrow__del {
-  width: 32px;
-  height: 44px;
-  flex-shrink: 0;
+  height: 48px;
   border: none;
   background: transparent;
   color: var(--danger);
-  font-size: 15px;
+  font-size: 13px;
   cursor: pointer;
   padding: 0;
-  opacity: 0.75;
+  opacity: 0.6;
 }
-.invrow__del:active {
-  transform: scale(0.9);
-}
+.invrow__del:active { transform: scale(0.9); }
 
-/* R5 재고현황 정렬 '보기' 드롭다운 */
+/* R5/S4 재고현황 정렬 '보기' 드롭다운 (설명글과 같은 줄) */
 .invsort {
   position: relative;
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+.invsort__hint {
+  font-size: 13px;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .invsort__btn {
   display: inline-flex;
@@ -2844,3 +2885,128 @@ body {
   font-weight: 800;
   background: var(--green-100);
 }
+
+/* ── #9 1:1 문의 채팅 위젯 ── */
+.chatfab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(74px + env(safe-area-inset-bottom));
+  z-index: 45;
+  width: 56px; height: 56px; border-radius: 50%;
+  border: none; cursor: pointer;
+  background: var(--green-700); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 6px 20px rgba(18, 60, 38, .32);
+  transition: transform .12s ease;
+}
+.chatfab:active { transform: scale(.92); }
+.chatfab__badge {
+  position: absolute; top: -3px; right: -3px; min-width: 21px; height: 21px;
+  padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: 12px; font-weight: 800; line-height: 21px; text-align: center;
+  border: 2px solid var(--bg);
+}
+.chatpop {
+  position: fixed; z-index: 90;
+  right: 0; bottom: 0; left: 0;
+  width: 100%; max-width: 440px; margin: 0 auto;
+  height: min(86vh, 660px);
+  background: var(--bg);
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -12px 44px rgba(0, 0, 0, .26);
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: chatpop-up .24s cubic-bezier(.16,1,.3,1);
+}
+@media (min-width: 480px) { .chatpop { right: 16px; left: auto; bottom: 16px; border-radius: 18px; } }
+@keyframes chatpop-up { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.chatpop__head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 12px; border-bottom: 1px solid var(--line);
+  background: var(--green-700); color: #fff; flex-shrink: 0;
+}
+.chatpop__ico { font-size: 18px; }
+.chatpop__back, .chatpop__more, .chatpop__close {
+  border: none; background: transparent; color: #fff; cursor: pointer;
+  width: 32px; height: 32px; border-radius: 8px; font-size: 20px;
+  display: flex; align-items: center; justify-content: center; padding: 0;
+}
+.chatpop__back { font-size: 26px; }
+.chatpop__title { flex: 1; font-weight: 800; font-size: 16px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chatpop__actions { position: relative; display: flex; align-items: center; gap: 2px; }
+.chatmenu {
+  position: absolute; top: 38px; right: 0; z-index: 5;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.18); overflow: hidden; min-width: 190px;
+}
+.chatmenu button {
+  display: block; width: 100%; text-align: left; border: none; background: transparent;
+  padding: 13px 15px; font-size: 14.5px; color: var(--danger); cursor: pointer;
+}
+.chatmenu button:active { background: var(--chip-mute-bg); }
+
+/* 관리자 목록 */
+.chatlist { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.chatlist__item {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 13px 15px; border: none; background: transparent; cursor: pointer;
+  border-bottom: 1px solid var(--line); text-align: left;
+}
+.chatlist__item:active { background: var(--chip-mute-bg); }
+.chatlist__av {
+  width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+  background: var(--green-100); color: var(--green-700);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 18px;
+}
+.chatlist__main { flex: 1; min-width: 0; }
+.chatlist__top { display: flex; justify-content: space-between; gap: 8px; }
+.chatlist__name { font-weight: 700; font-size: 15px; color: var(--fg); }
+.chatlist__time { font-size: 12px; color: var(--muted-2); flex-shrink: 0; }
+.chatlist__last {
+  font-size: 13.5px; color: var(--muted); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chatlist__badge {
+  flex-shrink: 0; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  background: var(--danger); color: #fff; font-size: 11.5px; font-weight: 800;
+  line-height: 20px; text-align: center;
+}
+
+/* 메시지 */
+.chatbody {
+  flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 16px 14px; display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg);
+}
+.chatempty { margin: auto; color: var(--muted); font-size: 14px; text-align: center; padding: 24px; }
+.msg { display: flex; flex-direction: column; max-width: 78%; }
+.msg--mine { align-self: flex-end; align-items: flex-end; }
+.msg--other { align-self: flex-start; align-items: flex-start; }
+.msg__bubble {
+  padding: 9px 13px; border-radius: 16px; font-size: 15px; line-height: 1.45;
+  word-break: break-word; white-space: pre-wrap;
+}
+.msg--mine .msg__bubble { background: var(--green-700); color: #fff; border-bottom-right-radius: 5px; }
+.msg--other .msg__bubble { background: var(--green-100); color: var(--fg); border-bottom-left-radius: 5px; }
+.msg__meta { font-size: 11px; color: var(--muted-2); margin-top: 3px; padding: 0 3px; }
+.msg__read { color: var(--green-700); font-weight: 600; }
+
+/* 입력 */
+.chatinput {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); background: var(--bg);
+}
+.chatinput__field {
+  flex: 1; min-width: 0; border: 1px solid var(--line-strong); border-radius: 999px;
+  padding: 11px 16px; font-size: 15px; color: var(--fg); background: var(--bg); outline: none;
+  font-family: inherit;
+}
+.chatinput__field:focus { border-color: var(--green-700); }
+.chatinput__send {
+  flex-shrink: 0; width: 42px; height: 42px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--green-700); color: #fff; display: flex; align-items: center; justify-content: center;
+}
+.chatinput__send:disabled { opacity: .4; cursor: default; }

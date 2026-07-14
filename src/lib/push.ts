@@ -349,6 +349,41 @@ export async function notifyMerchantCancelApproved(userId: string) {
   }
 }
 
+// #9 채팅 — 가맹점주가 보내면 관리자(전체)에게, 관리자가 보내면 해당 가맹점주에게.
+// 제목=보낸사람, 본문=메시지. 누르면 해당 대화로 이동(?chat=threadId).
+export async function notifyChatToAdmin(
+  storeName: string,
+  body: string,
+  threadId: string,
+) {
+  try {
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: storeName,
+      body: body.slice(0, 120),
+      url: `/admin?chat=${threadId}`,
+      type: "chat",
+    });
+  } catch (err) {
+    logError("push.notifyChatToAdmin", err, {});
+  }
+}
+export async function notifyChatToMerchant(
+  merchantId: string,
+  body: string,
+  threadId: string,
+) {
+  try {
+    await sendPushToUser(merchantId, {
+      title: "새롭 관리자",
+      body: body.slice(0, 120),
+      url: `/order?chat=${threadId}`,
+      type: "chat",
+    });
+  } catch (err) {
+    logError("push.notifyChatToMerchant", err, { userId: merchantId });
+  }
+}
+
 // 가맹점 발주 시 관리자(새롭)에게도 알림(업체 발주와 별개로 항상). #10
 export async function notifyAdminNewOrder(fromStoreName: string) {
   try {

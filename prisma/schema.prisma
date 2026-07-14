@@ -44,8 +44,37 @@ model User {
   matchedDeposits Deposit[]
   invoices        Invoice[]
   notifications   Notification[]
+  chatThread      ChatThread?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// 1:1 문의 채팅 — 가맹점주 1명당 스레드 1개(관리자 조직과 대화). #9
+model ChatThread {
+  id                String   @id @default(cuid())
+  merchantId        String   @unique
+  merchant          User     @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  lastMessageAt     DateTime @default(now())
+  // 자기 화면에서만 비우기(soft) — 이 시각 이전 메시지는 해당 측 화면에서 숨김
+  merchantClearedAt DateTime?
+  adminClearedAt    DateTime?
+  createdAt         DateTime @default(now())
+  messages          ChatMessage[]
+
+  @@index([lastMessageAt])
+}
+
+model ChatMessage {
+  id        String     @id @default(cuid())
+  threadId  String
+  thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String
+  fromAdmin Boolean // true=관리자 발신, false=가맹점주 발신
+  body      String
+  readAt    DateTime? // 수신자가 읽은 시각
+  createdAt DateTime   @default(now())
+
+  @@index([threadId, createdAt])
 }
 
 // 인앱 알림 — 푸시 발송과 동시에 유저당 1행 적재(기기 수와 무관). 알림목록(#10)·미읽음 배지(#8)의 소스.
