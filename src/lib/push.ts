@@ -27,16 +27,19 @@ async function getWebPush() {
 export async function sendPushToUser(userId: string, payload: PushPayload) {
   // 인앱 알림 적재 — 유저당 1행(기기 수·푸시 성공 여부와 무관). 알림목록(#10)·미읽음 배지(#8)의 소스.
   // web-push 미설정이거나 구독이 없어도 인앱 알림은 항상 남긴다.
+  // 단, 채팅(type:"chat")은 알림 목록에 남기지 않는다 — 채팅은 플로팅 채팅창에서만 관리(미읽음도 별도). #9
   try {
-    await prisma.notification.create({
-      data: {
-        userId,
-        title: payload.title,
-        body: payload.body ?? "",
-        url: payload.url ?? null,
-        type: payload.type ?? "",
-      },
-    });
+    if (payload.type !== "chat") {
+      await prisma.notification.create({
+        data: {
+          userId,
+          title: payload.title,
+          body: payload.body ?? "",
+          url: payload.url ?? null,
+          type: payload.type ?? "",
+        },
+      });
+    }
   } catch (err) {
     logError("push.logNotification", err, { userId });
   }

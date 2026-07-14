@@ -12,7 +12,7 @@ export default async function NotificationsPage() {
   const home = homePathFor(user.role, user.status);
 
   const items = await prisma.notification.findMany({
-    where: { userId: user.id },
+    where: { userId: user.id, type: { not: "chat" } },
     orderBy: { createdAt: "desc" },
     take: 200,
   });

@@ -2900,9 +2900,17 @@ body {
   background: var(--green-700); color: #fff;
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 6px 20px rgba(18, 60, 38, .32);
-  transition: transform .12s ease;
+  transition: transform .12s ease, box-shadow .12s ease;
+  touch-action: none; /* 드래그 중 스크롤 방지 */
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 .chatfab:active { transform: scale(.92); }
+.chatfab--drag {
+  transform: scale(1.12);
+  box-shadow: 0 10px 28px rgba(18, 60, 38, .42);
+  cursor: grabbing;
+}
+.chatfab--drag:active { transform: scale(1.12); }
 .chatfab__badge {
   position: absolute; top: -4px; right: -4px;
   min-width: 20px; height: 20px; padding: 0 5px;

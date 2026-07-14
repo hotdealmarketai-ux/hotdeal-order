@@ -40,6 +40,31 @@ export function ChatWidget() {
   const pendingChatParam = useRef<string | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 플로팅 버튼 위치(꾹 눌러 드래그) + 스침 방지
+  const [fabPos, setFabPos] = useState<{ x: number; y: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef({ active: false, moved: false, longPressed: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  const livePos = useRef<{ x: number; y: number } | null>(null);
+  const suppressClick = useRef(false);
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("chatFabPos");
+      if (!raw) return;
+      const p = JSON.parse(raw);
+      if (typeof p?.x === "number" && typeof p?.y === "number") {
+        const s = 56, mg = 6;
+        setFabPos({
+          x: Math.max(mg, Math.min(p.x, window.innerWidth - s - mg)),
+          y: Math.max(mg, Math.min(p.y, window.innerHeight - s - mg)),
+        });
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
+
   // 플로팅 버튼으로 모이는 닫힘 애니메이션 후 실제 언마운트
   const closePanel = useCallback(() => {
     setMenuOpen(false);
@@ -201,6 +226,64 @@ export function ChatWidget() {
     setMessages([]);
   };
 
+  const clampPos = (x: number, y: number) => {
+    const s = 56, mg = 6;
+    return {
+      x: Math.max(mg, Math.min(x, window.innerWidth - s - mg)),
+      y: Math.max(mg, Math.min(y, window.innerHeight - s - mg)),
+    };
+  };
+  const onFabDown = (e: React.PointerEvent) => {
+    suppressClick.current = false;
+    const el = e.currentTarget as HTMLElement;
+    try { el.setPointerCapture(e.pointerId); } catch { /* noop */ }
+    const r = el.getBoundingClientRect();
+    drag.current = { active: true, moved: false, longPressed: false, sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top };
+    livePos.current = { x: r.left, y: r.top };
+    if (lpTimer.current) clearTimeout(lpTimer.current);
+    lpTimer.current = setTimeout(() => {
+      // 꾹 누름 → 드래그 모드(이후 클릭은 열지 않음)
+      drag.current.longPressed = true;
+      suppressClick.current = true;
+      setDragging(true);
+      setFabPos(clampPos(drag.current.ox, drag.current.oy));
+      try { navigator.vibrate?.(15); } catch { /* noop */ }
+    }, 320);
+  };
+  const onFabMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d.active) return;
+    const dx = e.clientX - d.sx, dy = e.clientY - d.sy;
+    if (!d.moved && Math.hypot(dx, dy) > 9) {
+      d.moved = true;
+      suppressClick.current = true; // 스침/스크롤은 열지 않음
+    }
+    if (d.longPressed) {
+      const p = clampPos(d.ox + dx, d.oy + dy);
+      livePos.current = p;
+      setFabPos(p);
+    } else if (d.moved && lpTimer.current) {
+      // 길게 누르기 전에 움직였으면 = 스크롤/스침 → 드래그도 취소
+      clearTimeout(lpTimer.current);
+      lpTimer.current = null;
+    }
+  };
+  const onFabUp = () => {
+    const d = drag.current;
+    d.active = false;
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
+    if (d.longPressed) {
+      setDragging(false);
+      if (livePos.current) {
+        try { localStorage.setItem("chatFabPos", JSON.stringify(livePos.current)); } catch { /* noop */ }
+      }
+    }
+  };
+  const onFabClick = () => {
+    if (suppressClick.current) { suppressClick.current = false; return; }
+    openPanel();
+  };
+
   if (!role) return null;
 
   const lastMine = [...messages].reverse().find((m) => m.mine);
@@ -210,7 +293,20 @@ export function ChatWidget() {
   return (
     <>
       {!open && (
-        <button className="chatfab" onClick={openPanel} aria-label="문의 채팅 열기">
+        <button
+          className={`chatfab${dragging ? " chatfab--drag" : ""}`}
+          style={
+            fabPos
+              ? { left: fabPos.x, top: fabPos.y, right: "auto", bottom: "auto" }
+              : undefined
+          }
+          onPointerDown={onFabDown}
+          onPointerMove={onFabMove}
+          onPointerUp={onFabUp}
+          onPointerCancel={onFabUp}
+          onClick={onFabClick}
+          aria-label="문의 채팅 열기 (길게 눌러 위치 이동)"
+        >
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path
               d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v7A2.5 2.5 0 0 1 17.5 15H9l-4 3.5V15H6.5A2.5 2.5 0 0 1 4 12.5z"

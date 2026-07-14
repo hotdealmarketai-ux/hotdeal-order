@@ -7,7 +7,7 @@ export async function NotificationBell() {
   const user = await getCurrentUser().catch(() => null);
   if (!user) return null;
   const count = await prisma.notification
-    .count({ where: { userId: user.id, readAt: null } })
+    .count({ where: { userId: user.id, readAt: null, type: { not: "chat" } } })
     .catch(() => 0);
   return (
     <Link href="/notifications" className="tbar__bell" aria-label="알림">
