@@ -155,18 +155,14 @@ export async function getMerchantReservation(
   };
 }
 
-// 관리자: 이 배치에서 확정한 점주별 요약(수량·금액·계산서 발행여부) — 예약 계산서 발행용.
+// 관리자: 이 배치에서 확정한 점주별 요약(수량·금액) — 배치 페이지 정보 표시용.
 export type BatchConfirmation = {
   userId: string;
   storeName: string;
   qty: number;
   total: number;
-  invoiced: boolean;
 };
-export async function getBatchConfirmations(
-  batchId: string,
-  pickupDate: string,
-): Promise<BatchConfirmation[]> {
+export async function getBatchConfirmations(batchId: string): Promise<BatchConfirmation[]> {
   const orders = await prisma.reservationOrder.findMany({
     where: { batchId, confirmed: true },
     select: {
@@ -175,30 +171,39 @@ export async function getBatchConfirmations(
       items: { select: { qty: true, supplyPrice: true } },
     },
   });
-  const userIds = orders.map((o) => o.userId);
-  const invoiced = new Set(
-    (
-      await prisma.invoice.findMany({
-        where: {
-          userId: { in: userIds },
-          date: pickupDate,
-          kind: "RESERVATION",
-          status: { not: "VOID" },
-        },
-        select: { userId: true },
-      })
-    ).map((i) => i.userId),
-  );
   return orders
     .map((o) => ({
       userId: o.userId,
       storeName: o.user.storeName,
       qty: o.items.reduce((s, i) => s + i.qty, 0),
       total: o.items.reduce((s, i) => s + i.qty * i.supplyPrice, 0),
-      invoiced: invoiced.has(o.userId),
     }))
     .filter((o) => o.qty > 0)
     .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
+}
+
+// 계산서용 — 이 발주일(orderDay)에 로드되는 확정 예약분(이름·수량·점주공급가). 일반 계산서 공구에 자동 채움.
+export async function getReservationInvoiceItems(
+  userId: string,
+  orderDayKst: string,
+): Promise<{ name: string; qty: number; supplyPrice: number }[]> {
+  const pickupDate = shiftDate(orderDayKst, 1);
+  const batch = await prisma.reservationBatch.findFirst({
+    where: { active: true, pickupDate },
+    select: {
+      orders: {
+        where: { userId, confirmed: true },
+        select: {
+          items: {
+            select: { name: true, qty: true, supplyPrice: true },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
+      },
+    },
+  });
+  const items = batch?.orders[0]?.items ?? [];
+  return items.filter((i) => i.qty > 0);
 }
 
 // 픽업 전날(=오늘 발주창) 공구에 읽기전용으로 로드할 '확정 예약' 항목. 단일출처(주문 복제 X).

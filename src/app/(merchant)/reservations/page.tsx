@@ -15,23 +15,6 @@ export default async function ReservationsPage() {
     <>
       <Topbar brand="핫딜오더 · 예약발주" />
       <div className="page">
-        <Link
-          href="/reservations/invoices"
-          className="card"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            marginBottom: 16,
-            textDecoration: "none",
-            color: "inherit",
-          }}
-        >
-          <span style={{ fontWeight: 700 }}>예약발주 입금요청서</span>
-          <span style={{ color: "var(--muted)" }}>보기 ›</span>
-        </Link>
-
         <div className="itemshead">
           <span className="itemshead__label">예약 가능한 날짜</span>
           <span className="itemshead__count">{batches.length}개</span>

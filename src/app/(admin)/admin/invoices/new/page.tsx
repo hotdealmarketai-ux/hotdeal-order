@@ -10,7 +10,12 @@ import {
   type Role,
 } from "@/lib/constants";
 import { kstDayRange, labelDate, normalizeDateStr } from "@/lib/date";
-import { InvoiceForm, type InvoiceRefGroup } from "@/components/InvoiceForm";
+import { getReservationInvoiceItems } from "@/lib/reservation-data";
+import {
+  InvoiceForm,
+  type InvoiceRefGroup,
+  type InvoiceInitialItem,
+} from "@/components/InvoiceForm";
 
 // 계산서 새로 작성 — 합본 발주서의 '계산서 작성' 버튼에서 진입
 export default async function NewInvoicePage(props: {
@@ -55,6 +60,15 @@ export default async function NewInvoicePage(props: {
 
   const categories = allowedCategoriesFor(merchant.role as Role);
 
+  // 예약분 자동 채움 — 이 날짜(발주일)에 로드되는 확정 예약분을 공구(TOOL)에 미리 채운다(변동 없이 그대로 출고).
+  const reserved = await getReservationInvoiceItems(userId, date);
+  const initialItems: InvoiceInitialItem[] = reserved.map((r) => ({
+    category: "TOOL" as Category,
+    name: r.name,
+    qty: String(r.qty),
+    unitPrice: String(r.supplyPrice),
+  }));
+
   return (
     <>
       <Topbar backHref={`/admin/combined/${userId}/${date}`} title="계산서 작성" />
@@ -63,11 +77,17 @@ export default async function NewInvoicePage(props: {
         <p className="lead" style={{ marginTop: 4 }}>
           {labelDate(date)} 출고분 계산서
         </p>
+        {initialItems.length > 0 && (
+          <div className="notice notice--ai" style={{ marginBottom: 14 }}>
+            공구에 <b>예약분 {initialItems.length}건</b>을 자동으로 채웠어요. (확인 후 발행)
+          </div>
+        )}
 
         <InvoiceForm
           userId={userId}
           date={date}
           categories={categories.length ? categories : [...CATEGORY_ORDER]}
+          initialItems={initialItems}
           refGroups={refGroups}
         />
       </div>
