@@ -28,6 +28,12 @@ const ICONS = {
       <path d="M9 14.5h4" />
     </svg>
   ),
+  reserve: (
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6.5 3h11a1.5 1.5 0 0 1 1.5 1.5V21l-7-3.8L5 21V4.5A1.5 1.5 0 0 1 6.5 3Z" />
+      <path d="M9.2 9.2l1.8 1.8 3.8-3.8" />
+    </svg>
+  ),
   inventory: (
     <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 8.2 12 3.5 3 8.2v7.6l9 4.7 9-4.7V8.2Z" />
@@ -57,6 +63,10 @@ export function BottomNav({
     { href: "/order", label: "발주", icon: ICONS.order, badge: 0 },
     ...(canOrderWeekly(role)
       ? [{ href: "/weekly", label: "주간발주", icon: ICONS.weekly, badge: weeklyBadge }]
+      : []),
+    // 예약발주 — 핫딜마켓 가맹점만
+    ...(role === "MERCHANT_HOTDEAL"
+      ? [{ href: "/reservations", label: "예약발주", icon: ICONS.reserve, badge: 0 }]
       : []),
     ...(canViewInventory(role)
       ? [{ href: "/inventory", label: "재고현황", icon: ICONS.inventory, badge: 0 }]

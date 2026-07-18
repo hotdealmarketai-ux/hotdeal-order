@@ -40,6 +40,7 @@ model User {
 
   orders          Order[]
   weeklyOrders    WeeklyOrder[]
+  reservationOrders ReservationOrder[]
   pushSubs        PushSubscription[]
   matchedDeposits Deposit[]
   invoices        Invoice[]
@@ -202,6 +203,69 @@ model WeeklyProduct {
   updatedAt   DateTime @updatedAt
 
   @@index([active, sortOrder])
+}
+
+// 예약발주 — 관리자가 예약일자별로 상품(이름·점주공급가)을 등록하고, 점주(핫딜마켓)가 미리 수량 예약.
+// 각 배치의 '픽업일 전날' 확정 수량이 그날 공구(TOOL) 발주에 읽기전용으로 자동 표시(단일출처).
+// 일일 발주(Order)와 분리, 주간발주(WeeklyOrder) 구조를 따름.
+model ReservationBatch {
+  id          String   @id @default(cuid())
+  reserveDate String   @unique // 예약(마감 기준) 일자 KST YYYY-MM-DD. 예약 마감 = 다음날 12:00
+  pickupDate  String // 픽업 일자 KST YYYY-MM-DD. 공구 자동로드 = 픽업 전날
+  active      Boolean  @default(true) // false = 배치 소프트삭제/숨김
+  products    ReservationProduct[]
+  orders      ReservationOrder[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active, reserveDate])
+  @@index([pickupDate])
+}
+
+// 배치별 상품 카탈로그(관리자 등록) — WeeklyProduct 대응. 상품명 + 점주공급가.
+model ReservationProduct {
+  id          String           @id @default(cuid())
+  batchId     String
+  batch       ReservationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  name        String
+  supplyPrice Int              @default(0) // 점주 공급가(원) — 지금은 표시·집계용
+  sortOrder   Int              @default(0)
+  active      Boolean          @default(true) // false = 소프트삭제
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([batchId, active, sortOrder])
+}
+
+// 점주×배치 1건 — 확정/수정 잠금(confirmed). 마감(예약+1 12시) 후엔 강제 잠금(판정은 앱에서).
+model ReservationOrder {
+  id          String                 @id @default(cuid())
+  batchId     String
+  batch       ReservationBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User                   @relation(fields: [userId], references: [id])
+  confirmed   Boolean                @default(false)
+  confirmedAt DateTime?
+  items       ReservationOrderItem[]
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@unique([userId, batchId]) // 점주×배치 원자적 1건
+  @@index([batchId])
+}
+
+// 예약 수량 행 — WeeklyOrderItem 대응(상품 스냅샷, 카탈로그와는 productId 문자열 매칭).
+model ReservationOrderItem {
+  id          String           @id @default(cuid())
+  orderId     String
+  order       ReservationOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sortOrder   Int              @default(0)
+  productId   String // ReservationProduct.id (매칭용, FK 아님 — 편집/삭제돼도 스냅샷 보존)
+  name        String // 스냅샷
+  supplyPrice Int              @default(0) // 스냅샷
+  qty         Int              @default(0)
+
+  @@unique([orderId, productId]) // 주문 내 상품 1행
 }
 
 // 앱 전역 메타(키-값 타임스탬프) — 예: 팝빌 계좌 최신 동기화 시각(bank_sync)

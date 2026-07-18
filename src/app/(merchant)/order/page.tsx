@@ -16,8 +16,9 @@ import {
   currentWindowStartUtc,
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
-import { kstDateOf, labelDate } from "@/lib/date";
+import { kstDateOf, kstToday, shiftDate, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
+import { getReservationLoadForOrder } from "@/lib/reservation-data";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import { RequestCancelButton } from "@/components/RequestCancelButton";
@@ -56,6 +57,15 @@ export default async function OrderPage(props: {
     }
   }
   const lockedToEdit = !!existingOrderDate;
+
+  // 공구 자동로드 — 오늘이 '픽업 전날'인 확정 예약분(읽기전용, 단일출처). 핫딜마켓만.
+  const orderDay = kstToday();
+  const reservedTool =
+    user.role === "MERCHANT_HOTDEAL"
+      ? await getReservationLoadForOrder(user.id, orderDay)
+      : [];
+  const reservedLabel =
+    reservedTool.length > 0 ? `픽업 ${labelDate(shiftDate(orderDay, 1))} 예약분` : "";
 
   return (
     <>
@@ -149,6 +159,8 @@ export default async function OrderPage(props: {
             needsPickup={needsPickupTime(user.role)}
             locked={windowed && !open}
             role={user.role}
+            reservedTool={reservedTool}
+            reservedLabel={reservedLabel}
           />
         )}
       </div>

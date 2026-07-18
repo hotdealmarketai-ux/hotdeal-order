@@ -26,17 +26,23 @@ export function ChatOrder({
   categories,
   needsPickup,
   locked = false,
+  reservedTool = [],
+  reservedLabel = "",
 }: {
   categories: Category[];
   needsPickup: boolean;
   locked?: boolean;
+  reservedTool?: { name: string; qty: number }[];
+  reservedLabel?: string;
 }) {
-  // 채움채(TOFU)는 체크리스트, 나머지(과일·야채·공구)는 자유 입력
-  const chatCats = categories.filter((c) => c !== "TOFU");
+  // 채움채(TOFU)=체크리스트. 공구(TOOL)=자유입력 불가(담기/예약분만). 자유입력은 과일·야채만.
+  const chatCats = categories.filter((c) => c !== "TOFU" && c !== "TOOL");
   const hasTofu = categories.includes("TOFU");
+  const hasTool = categories.includes("TOOL");
   const multi = chatCats.length > 1;
-  // 카테고리가 2개 이상이면 미리보기를 '탭'으로 나눠 보여준다(발주 많아도 스크롤 짧게).
-  const showTabs = categories.length > 1;
+  // 미리보기 탭 — 공구는 탭에서 제외(자유입력 없음, 담기/예약분은 아래 고정 블록).
+  const tabCats = categories.filter((c) => c !== "TOOL");
+  const showTabs = tabCats.length > 1;
   const uid = useRef(0);
 
   const [text, setText] = useState("");
@@ -46,8 +52,10 @@ export function ChatOrder({
   // 채움채 발주 온오프(기본 오프) — 켜야 채움채 품목 선택이 열림
   const [tofuOpen, setTofuOpen] = useState(false);
   const [pickup, setPickup] = useState("");
-  const [previewTab, setPreviewTab] = useState<Category>(categories[0]);
+  const [previewTab, setPreviewTab] = useState<Category>(tabCats[0] ?? categories[0]);
   const [error, setError] = useState("");
+  // 채팅에서 공구를 자유입력한 경우 무시하고 안내
+  const [droppedTool, setDroppedTool] = useState(false);
   const [state, formAction] = useActionState<OrderFormState, FormData>(
     createOrderAction,
     {},
@@ -63,24 +71,19 @@ export function ChatOrder({
 
   async function handleParse() {
     setError("");
-    const cart = categories.includes("TOOL") ? getStockCart(kstToday()) : [];
-    const cartAsItems = (): EditItem[] =>
-      cart.map((c) => ({
-        id: ++uid.current,
-        category: "TOOL" as Category,
-        name: c.name,
-        qty: c.qty,
-        note: "",
-      }));
-    if (!text.trim() && !tofuChecked() && cart.length === 0) {
+    setDroppedTool(false);
+    const cart = hasTool ? getStockCart(kstToday()) : [];
+    setCartItems(cart);
+    const hasAny =
+      text.trim() || tofuChecked() || cart.length > 0 || reservedTool.length > 0;
+    if (!hasAny) {
       setError("발주 내용을 적거나 채움채 품목을 선택해 주세요.");
       return;
     }
     if (!text.trim()) {
-      // 채움채/담아둔 재고만 발주
-      setItems(cartAsItems());
-      if (cart.length) setPreviewTab("TOOL");
-      else if (hasTofu) setPreviewTab("TOFU");
+      // 텍스트 없이 담기/예약분/채움채만 → 바로 미리보기(공구는 아래 고정 블록으로 표시)
+      setItems([]);
+      setPreviewTab(hasTofu && tofuChecked() ? "TOFU" : tabCats[0] ?? categories[0]);
       setPhase("preview");
       return;
     }
@@ -93,19 +96,23 @@ export function ChatOrder({
         return;
       }
       const flat: EditItem[] = [];
+      let dropped = false;
       for (const g of [...res.groups].sort(
         (a, b) =>
           CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category),
       )) {
+        if (g.category === "TOOL") {
+          if (g.items.length > 0) dropped = true; // 공구 자유입력은 무시(담기로만)
+          continue;
+        }
         for (const it of g.items) {
           flat.push({ id: ++uid.current, category: g.category, ...it });
         }
       }
-      flat.push(...cartAsItems()); // #6 담아둔 재고(공구) 포함
+      setDroppedTool(dropped);
       setItems(flat);
-      // 미리보기를 '품목이 있는 첫 종류' 탭으로 연다(빈 탭에서 시작하지 않게)
       if (flat.length) setPreviewTab(flat[0].category);
-      else if (hasTofu) setPreviewTab("TOFU");
+      else setPreviewTab(hasTofu && tofuChecked() ? "TOFU" : tabCats[0] ?? categories[0]);
       if (needsPickup && res.pickupTime) setPickup(res.pickupTime);
       setPhase("preview");
     } catch {
@@ -142,11 +149,18 @@ export function ChatOrder({
       ).map((p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }));
       if (tofuItems.length) byCat.set("TOFU", tofuItems);
     }
+    // 담기(공구)는 읽기전용이지만 발주엔 포함 — payload에 직접 추가(예약분은 단일출처라 미포함)
+    if (hasTool && cartItems.length > 0) {
+      const tool = cartItems
+        .filter((c) => c.name.trim())
+        .map((c) => ({ name: c.name, qty: c.qty, note: "" }));
+      if (tool.length) byCat.set("TOOL", tool);
+    }
     return CATEGORY_ORDER.filter((c) => byCat.has(c)).map((c) => ({
       category: c,
       items: byCat.get(c)!,
     }));
-  }, [items, tofuQty, hasTofu, tofuOpen]);
+  }, [items, tofuQty, hasTofu, tofuOpen, hasTool, cartItems]);
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
 
@@ -218,6 +232,43 @@ export function ChatOrder({
     </div>
   ) : null;
 
+  // 공구(TOOL) 읽기전용 블록 — 예약분(자동) + 담은 재고. 자유입력 없음.
+  const toolBlock =
+    hasTool && (reservedTool.length > 0 || cartItems.length > 0) ? (
+      <div className="toolro" style={{ marginTop: 14 }}>
+        {reservedTool.length > 0 && (
+          <div className="toolro__group">
+            <div className="toolro__head">
+              <span className="chip chip--reserve">예약분</span>
+              <span className="toolro__hint">
+                {reservedLabel ? `${reservedLabel} · ` : ""}수정 불가
+              </span>
+            </div>
+            {reservedTool.map((it, i) => (
+              <div className="toolro__item" key={`rv${i}`}>
+                <span className="toolro__name">{it.name}</span>
+                <span className="toolro__qty">{it.qty}개</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {cartItems.length > 0 && (
+          <div className="toolro__group">
+            <div className="toolro__head">
+              <span className="chip">담은 재고 · 공구</span>
+              <span className="toolro__hint">재고현황에서 수정·삭제</span>
+            </div>
+            {cartItems.map((c, i) => (
+              <div className="toolro__item" key={`ct${i}`}>
+                <span className="toolro__name">{c.name}</span>
+                <span className="toolro__qty">{c.qty}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    ) : null;
+
   return (
     <div className="chatorder">
       {locked && (
@@ -254,17 +305,7 @@ export function ChatOrder({
             />
           </div>
 
-          {cartItems.length > 0 && (
-            <div className="notice notice--ai" style={{ marginTop: 12 }}>
-              <b>담아둔 재고 · 공구 {cartItems.length}건</b>
-              <div style={{ marginTop: 4 }}>
-                {cartItems.map((c) => `${c.name} ${c.qty}`).join(" · ")}
-              </div>
-              <div style={{ fontSize: 12, marginTop: 4, color: "var(--muted)" }}>
-                &lsquo;발주&rsquo;를 누르면 함께 발주에 담겨요.
-              </div>
-            </div>
-          )}
+          {toolBlock}
 
           {tofuList}
 
@@ -297,9 +338,15 @@ export function ChatOrder({
           </div>
 
           {/* 카테고리 탭 — 발주가 많아도 종류별로 나눠 확인/수정(세로 스크롤 짧게) */}
+          {droppedTool && (
+            <div className="notice notice--mute" style={{ marginTop: 12 }}>
+              공구 품목은 직접 적을 수 없어요. 재고현황 ‘담기’로 담아주세요. (예약분은 자동 반영)
+            </div>
+          )}
+
           {showTabs && (
             <div className="cattabs cattabs--seg" style={{ marginTop: 12 }}>
-              {categories.map((c) => {
+              {tabCats.map((c) => {
                 const n = c === "TOFU" ? tofuCount : previewCounts[c] ?? 0;
                 return (
                   <button
@@ -394,6 +441,9 @@ export function ChatOrder({
           {/* 탭이 없을 때(단일 종류)만 채움채 체크리스트를 아래에 붙인다 */}
           {!showTabs && tofuList}
 
+          {/* 공구(담기·예약분) 읽기전용 — 항상 아래 고정 */}
+          {toolBlock}
+
           {needsPickup && (
             <div className="field" style={{ marginTop: 14 }}>
               <label className="label" htmlFor="chatpickup">
@@ -428,7 +478,7 @@ export function ChatOrder({
                 >
                   다시 적기
                 </button>
-                <SubmitButton pendingText="발주 넣는 중…">
+                <SubmitButton pendingText="발주 넣는 중…" disabled={totalItems === 0}>
                   네, 발주할게요
                 </SubmitButton>
               </div>

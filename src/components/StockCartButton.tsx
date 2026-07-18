@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { addToStockCart, getStockCart } from "@/lib/stock-cart";
+import { addToStockCart, getStockCart, removeFromStockCart } from "@/lib/stock-cart";
 import { Sheet } from "./Sheet";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -24,6 +24,7 @@ export function StockCartButton({
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(1);
   const [added, setAdded] = useState(false);
+  const [inCart, setInCart] = useState(false);
 
   const soldOut = qty <= 0;
   const max = Math.max(0, qty);
@@ -37,8 +38,9 @@ export function StockCartButton({
   }
 
   const openSheet = () => {
-    const inCart = getStockCart(date).find((c) => c.name === name);
-    const start = inCart ? parseInt(inCart.qty, 10) || 1 : 1;
+    const found = getStockCart(date).find((c) => c.name === name);
+    const start = found ? parseInt(found.qty, 10) || 1 : 1;
+    setInCart(!!found);
     setCount(Math.min(Math.max(1, start), max));
     setOpen(true);
   };
@@ -49,6 +51,12 @@ export function StockCartButton({
     setOpen(false);
     setAdded(true);
     setTimeout(() => setAdded(false), 1600);
+  };
+  const remove = () => {
+    removeFromStockCart(date, name);
+    setInCart(false);
+    setOpen(false);
+    setAdded(false);
   };
 
   return (
@@ -105,8 +113,18 @@ export function StockCartButton({
               className="btn btn--primary btn--block stocksheet__add"
               onClick={submit}
             >
-              담기
+              {inCart ? "수량 변경" : "담기"}
             </button>
+            {inCart && (
+              <button
+                type="button"
+                className="linkbtn linkbtn--danger"
+                style={{ display: "block", margin: "10px auto 0" }}
+                onClick={remove}
+              >
+                담기 빼기
+              </button>
+            )}
           </div>
         </Sheet>
       )}

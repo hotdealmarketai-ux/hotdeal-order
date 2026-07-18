@@ -46,11 +46,16 @@ export function OrderForm({
   needsPickup,
   locked = false,
   role,
+  reservedTool = [],
+  reservedLabel = "",
 }: {
   categories: Category[];
   needsPickup: boolean;
   locked?: boolean;
   role: Role;
+  /** 픽업 전날 자동 반영되는 예약분(읽기전용) — 공구에 표시만, 주문엔 복제 안 함 */
+  reservedTool?: { name: string; qty: number }[];
+  reservedLabel?: string;
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -230,6 +235,8 @@ export function OrderForm({
           categories={categories}
           needsPickup={needsPickup}
           locked={locked}
+          reservedTool={reservedTool}
+          reservedLabel={reservedLabel}
         />
       </div>
     );
@@ -343,6 +350,47 @@ export function OrderForm({
                 </div>
               );
             })}
+          </div>
+        ) : active === "TOOL" ? (
+          /* 공구 = 자유입력 불가. 담기(읽기전용) + 픽업 전날 예약분(읽기전용)만. */
+          <div className="toolro">
+            {reservedTool.length > 0 && (
+              <div className="toolro__group">
+                <div className="toolro__head">
+                  <span className="chip chip--reserve">예약분</span>
+                  <span className="toolro__hint">
+                    {reservedLabel ? `${reservedLabel} · ` : ""}수정 불가
+                  </span>
+                </div>
+                {reservedTool.map((it, i) => (
+                  <div className="toolro__item" key={`rv${i}`}>
+                    <span className="toolro__name">{it.name}</span>
+                    <span className="toolro__qty">{it.qty}개</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {rows.filter(isFilled).length > 0 && (
+              <div className="toolro__group">
+                <div className="toolro__head">
+                  <span className="chip">담은 재고</span>
+                  <span className="toolro__hint">재고현황에서 수정·삭제</span>
+                </div>
+                {rows.filter(isFilled).map((r) => (
+                  <div className="toolro__item" key={r.id}>
+                    <span className="toolro__name">{r.name}</span>
+                    <span className="toolro__qty">{r.qty}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {reservedTool.length === 0 && rows.filter(isFilled).length === 0 && (
+              <div className="empty">
+                공구는 직접 적을 수 없어요.
+                <br />
+                재고현황에서 ‘담기’로 담아주세요. 예약분은 픽업 전날 자동으로 표시돼요.
+              </div>
+            )}
           </div>
         ) : (
           /* ⑥ 리스트 카드 */
@@ -488,6 +536,27 @@ export function OrderForm({
                               }}
                               placeholder="수량"
                             />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  if (c === "TOOL") {
+                    // 공구는 담기(읽기전용)만 제출 — 확인 시트에서도 수정 불가
+                    const toolRows = (rowsByCat[c] ?? []).filter(isFilled);
+                    if (toolRows.length === 0) return null;
+                    return (
+                      <div className="confsec">
+                        <div className="confsec__head">
+                          <span className="chip">{CATEGORIES[c].label}</span>
+                          <span className="confsec__dest">
+                            {receiverLabel(c, role)} · {toolRows.length}건
+                          </span>
+                        </div>
+                        {toolRows.map((r) => (
+                          <div className="confitem" key={r.id}>
+                            <span className="confitem__name">{r.name}</span>
+                            <span className="confitem__qtyro">{r.qty}개</span>
                           </div>
                         ))}
                       </div>
