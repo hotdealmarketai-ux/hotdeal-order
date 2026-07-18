@@ -20,7 +20,6 @@ import { kstDateOf, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
-import { PushToggle } from "@/components/PushToggle";
 import { RequestCancelButton } from "@/components/RequestCancelButton";
 
 export default async function OrderPage(props: {
@@ -62,12 +61,7 @@ export default async function OrderPage(props: {
     <>
       <Topbar
         brand="핫딜오더"
-        right={
-          <>
-            <TopbarChip>{user.storeName}</TopbarChip>
-            <PushToggle variant="header" />
-          </>
-        }
+        right={<TopbarChip>{user.storeName}</TopbarChip>}
       >
         {windowed && <DeadlineCountdown deadlineLabel={ORDER_DEADLINE_LABEL} />}
       </Topbar>

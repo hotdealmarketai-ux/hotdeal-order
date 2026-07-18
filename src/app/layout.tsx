@@ -3,6 +3,7 @@ import "./globals.css";
 import { PushForegroundListener } from "@/components/PushForegroundListener";
 import { PushSubscriptionSync } from "@/components/PushSubscriptionSync";
 import { ChatWidget } from "@/components/ChatWidget";
+import { InstallPrompt } from "@/components/InstallPrompt";
 
 const TITLE = "핫딜오더";
 const DESCRIPTION = "주문은 더 간편하게, 운영은 더 스마트하게.";
@@ -50,6 +51,7 @@ export default function RootLayout({
         <PushForegroundListener />
         {children}
         <ChatWidget />
+        <InstallPrompt />
       </body>
     </html>
   );

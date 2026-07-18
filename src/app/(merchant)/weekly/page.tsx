@@ -17,7 +17,6 @@ import {
 } from "@/lib/weekly";
 import { WeeklyOrderForm } from "@/components/WeeklyOrderForm";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
-import { PushToggle } from "@/components/PushToggle";
 import { WeeklyDeadlineCountdown } from "@/components/WeeklyDeadlineCountdown";
 import { CancelWeeklyOrderButton } from "@/components/CancelWeeklyOrderButton";
 
@@ -33,12 +32,7 @@ function Header({
   return (
     <Topbar
       brand="핫딜오더"
-      right={
-        <>
-          <TopbarChip>{storeName}</TopbarChip>
-          <PushToggle variant="header" />
-        </>
-      }
+      right={<TopbarChip>{storeName}</TopbarChip>}
     >
       <WeeklyDeadlineCountdown closeLabel={WEEKLY_CLOSE_LABEL} forceOpen={forceOpen} />
     </Topbar>

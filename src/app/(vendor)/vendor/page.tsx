@@ -7,7 +7,6 @@ import { formatKDateTime } from "@/lib/format";
 import { normalizeDateStr, kstDayRange, labelDate, kstToday } from "@/lib/date";
 import { LogoutButton } from "@/components/LogoutButton";
 import { VendorDateBar } from "@/components/VendorDateBar";
-import { PushToggle } from "@/components/PushToggle";
 
 export default async function VendorPage(props: {
   searchParams: Promise<{ date?: string }>;
@@ -28,12 +27,7 @@ export default async function VendorPage(props: {
     <>
       <Topbar
         title="들어온 발주"
-        right={
-          <>
-            <TopbarChip>{VENDOR_LABEL[user.role] ?? user.storeName}</TopbarChip>
-            <PushToggle variant="header" />
-          </>
-        }
+        right={<TopbarChip>{VENDOR_LABEL[user.role] ?? user.storeName}</TopbarChip>}
       />
       <div className="page">
         <h1 className="h1">발주 목록</h1>

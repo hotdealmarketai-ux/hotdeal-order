@@ -10,6 +10,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { NotificationBell } from "./NotificationBell";
+import { PushToggle } from "./PushToggle";
 import { BackButton } from "./BackButton";
 
 export function Topbar({
@@ -46,6 +47,8 @@ export function Topbar({
         {title ? <span className="tbar__title">{title}</span> : null}
         <span className="tbar__spacer" />
         {right}
+        {/* 알림설정(푸시 켜기/끄기) — 전역(모든 역할·모든 페이지). 어느 페이지에서도 항상 노출 */}
+        <PushToggle variant="header" />
         {/* 알림 종 — 전역(모든 역할). 미읽음 배지 + /notifications 진입. #8/#10 */}
         <NotificationBell />
       </div>
