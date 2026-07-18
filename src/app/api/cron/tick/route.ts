@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/log";
+import { releaseStaleHolds } from "@/lib/stock-hold";
 
 // 정시 크론 디스패처 — 외부 크론(cron-job.org 등)이 '1분마다' 이 엔드포인트를 호출하면,
 // 각 잡을 정해진 KST 시각에 정확히 1회 실행한다. 한 분을 놓쳐도 다음 호출에서 캐치업.
@@ -105,6 +106,14 @@ export async function GET(request: Request) {
 
   // #12 재고 구글시트 동기화 — 매 분(시트=기준). 실패해도 다음 분 재시도.
   if (await hit("/api/cron/inventory-sync")) ran.push("tick:inventory");
+
+  // 재고 담기(HELD) 자동 해제 — 발주창 마감 시 미발주분 복구(발주분은 확정 시 이미 차감·삭제됨).
+  try {
+    const released = await releaseStaleHolds();
+    if (released > 0) ran.push(`tick:holds(${released})`);
+  } catch (e) {
+    logError("tick.holds", e, {});
+  }
 
   return Response.json({
     ok: true,

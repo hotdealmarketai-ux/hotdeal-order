@@ -11,6 +11,7 @@ import {
   notifyMerchantCancelApproved,
   notifyMerchantCancelRejected,
 } from "@/lib/push";
+import { restoreStockForOrder } from "@/lib/stock-hold";
 
 // 발행된 계산서(미수)가 있으면 취소 불가 — 해당 날짜(들)의 DAILY ISSUED/PAID 존재 여부.
 // (계산서가 발행되면 이미 청구/출고 기준이 잡힌 것 → 관리자가 먼저 계산서를 VOID해야 취소 가능)
@@ -71,6 +72,10 @@ export async function approveCancelRequestAction(formData: FormData) {
   const dates = [...new Set(orders.map((o) => kstDateOf(o.createdAt)))];
   if (await hasIssuedInvoice(userId, dates)) redirect("/admin/hotdeal?cancelErr=invoiced");
 
+  // 삭제 전 — 공구(TOOL) 담기분 기준재고 복구(취소=출고 안 함). 재고조사가 최종 정합.
+  for (const o of orders) {
+    await restoreStockForOrder(o.id).catch(() => {});
+  }
   // #2 하드삭제 — 취소 승인 시 CANCELLED로 남기지 않고 완전 삭제(모든 목록·내역에서 사라짐).
   // 삭제 요약은 감사로그 snapshot에 남겨 사후 확인 가능.
   await prisma.order.deleteMany({

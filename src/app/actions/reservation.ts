@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireUser } from "@/lib/session";
 import { writeAudit } from "@/lib/audit";
 import { validateBatchDates, isReservationClosed } from "@/lib/reservation";
+import { notifyMerchantReservationInvoiceIssued } from "@/lib/push";
 
 export type ReservationBatchState = { ok?: boolean; error?: string };
 
@@ -227,6 +228,75 @@ export async function confirmReservationAction(formData: FormData) {
   revalidatePath("/reservations");
   revalidatePath(`/reservations/${batchId}`);
   redirect(`/reservations/${batchId}`);
+}
+
+// 관리자: 예약 계산서 발행 — 픽업일자별 점주 1건. 확정 예약분을 그대로 불러와 ISSUED 발행.
+export async function issueReservationInvoiceAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const batchId = String(formData.get("batchId") ?? "");
+  const userId = String(formData.get("userId") ?? "");
+  if (!batchId || !userId) redirect("/admin/reservations");
+
+  const batch = await prisma.reservationBatch.findFirst({
+    where: { id: batchId, active: true },
+    select: { pickupDate: true },
+  });
+  if (!batch) redirect("/admin/reservations");
+
+  const order = await prisma.reservationOrder.findUnique({
+    where: { userId_batchId: { userId, batchId } },
+    select: {
+      confirmed: true,
+      items: {
+        select: { name: true, qty: true, supplyPrice: true },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+  });
+  if (!order?.confirmed) redirect(`/admin/reservations/${batchId}`);
+  const items = order.items.filter((i) => i.qty > 0);
+  if (items.length === 0) redirect(`/admin/reservations/${batchId}`);
+
+  // 픽업일자별 점주 1건 — 중복 방지
+  const dupe = await prisma.invoice.findFirst({
+    where: { userId, date: batch.pickupDate, kind: "RESERVATION", status: { not: "VOID" } },
+    select: { id: true },
+  });
+  if (dupe) redirect(`/admin/reservations/${batchId}?inv=dup`);
+
+  const invItems = items.map((it, i) => ({
+    category: "TOOL",
+    name: it.name,
+    qty: it.qty,
+    unitPrice: it.supplyPrice,
+    amount: Math.round(it.qty * it.supplyPrice),
+    sortOrder: i,
+  }));
+  const total = invItems.reduce((n, it) => n + it.amount, 0);
+  const created = await prisma.invoice.create({
+    data: {
+      userId,
+      date: batch.pickupDate,
+      kind: "RESERVATION",
+      status: "ISSUED",
+      total,
+      issuedAt: new Date(),
+      items: { create: invItems },
+    },
+    select: { id: true },
+  });
+  await writeAudit({
+    action: "reservationInvoice.issue",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "invoice",
+    targetId: created.id,
+    summary: `예약 계산서 발행 · ${batch.pickupDate} · ${total.toLocaleString("ko-KR")}원`,
+  });
+  await notifyMerchantReservationInvoiceIssued(userId);
+  revalidatePath(`/admin/reservations/${batchId}`);
+  revalidatePath("/reservations/invoices");
+  redirect(`/admin/reservations/${batchId}?inv=1`);
 }
 
 // 수정 = 잠금 해제(수량은 유지). 마감 후엔 불가.

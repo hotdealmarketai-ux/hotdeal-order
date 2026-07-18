@@ -17,7 +17,7 @@
 
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import {
   createOrderAction,
   previewGridOrderAction,
@@ -32,8 +32,6 @@ import {
   type Role,
 } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
-import { getStockCart } from "@/lib/stock-cart";
-import { kstToday } from "@/lib/date";
 
 type Row = { id: number; name: string; qty: string; note: string };
 
@@ -48,6 +46,7 @@ export function OrderForm({
   role,
   reservedTool = [],
   reservedLabel = "",
+  toolCart = [],
 }: {
   categories: Category[];
   needsPickup: boolean;
@@ -56,6 +55,8 @@ export function OrderForm({
   /** 픽업 전날 자동 반영되는 예약분(읽기전용) — 공구에 표시만, 주문엔 복제 안 함 */
   reservedTool?: { name: string; qty: number }[];
   reservedLabel?: string;
+  /** 재고 담기(서버 담기원장) — 공구에 읽기전용으로 표시 + 발주에 포함 */
+  toolCart?: { name: string; qty: string }[];
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -65,6 +66,15 @@ export function OrderForm({
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
     const init: Record<string, Row[]> = {};
     for (const c of categories) init[c] = [newRow()];
+    // 공구(TOOL) = 담기(서버 담기원장)로 채움. 자유입력 없음.
+    if (categories.includes("TOOL") && toolCart.length) {
+      init.TOOL = toolCart.map((c) => ({
+        id: ++uid.current,
+        name: c.name,
+        qty: c.qty,
+        note: "",
+      }));
+    }
     return init;
   });
   const [pickup, setPickup] = useState("");
@@ -85,20 +95,6 @@ export function OrderForm({
     if (!last || last.name || last.qty || last.note) return [...list, newRow()];
     return list;
   }
-
-  // #6 재고현황에서 '담기'한 공구 품목을 발주창(공구)에 자동 반영(임시저장). 발주창 열림일 때만.
-  useEffect(() => {
-    if (locked || !categories.includes("TOOL")) return;
-    const cart = getStockCart(kstToday());
-    if (cart.length === 0) return;
-    setRowsByCat((prev) => ({
-      ...prev,
-      TOOL: withTrailingEmpty(
-        cart.map((c) => ({ id: ++uid.current, name: c.name, qty: c.qty, note: "" })),
-      ),
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   function updateRow(id: number, field: keyof Row, value: string) {
     setConfirming(false);
@@ -237,6 +233,7 @@ export function OrderForm({
           locked={locked}
           reservedTool={reservedTool}
           reservedLabel={reservedLabel}
+          toolCart={toolCart}
         />
       </div>
     );

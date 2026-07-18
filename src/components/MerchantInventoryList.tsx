@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { StockCartButton } from "./StockCartButton";
 
-type Item = { id: string; name: string; qty: number; supplyPrice: number };
+type Item = {
+  id: string;
+  name: string;
+  available: number; // 실시간 남은수량(기준재고 − 전체 담기)
+  mine: number; // 내가 담은 수량
+  supplyPrice: number;
+};
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
@@ -19,12 +25,10 @@ type SortKey = (typeof SORTS)[number]["key"];
 // R5 가맹점주 재고현황 — 우상단 '보기' 드롭다운으로 정렬. 깔끔한 커스텀 드롭다운(네이티브 select X).
 export function MerchantInventoryList({
   items,
-  today,
   canAdd,
   hint,
 }: {
   items: Item[];
-  today: string;
   canAdd: boolean;
   hint: string;
 }) {
@@ -34,9 +38,9 @@ export function MerchantInventoryList({
   const sorted = [...items].sort((a, b) => {
     switch (sort) {
       case "qtyDesc":
-        return b.qty - a.qty || a.name.localeCompare(b.name, "ko");
+        return b.available - a.available || a.name.localeCompare(b.name, "ko");
       case "qtyAsc":
-        return a.qty - b.qty || a.name.localeCompare(b.name, "ko");
+        return a.available - b.available || a.name.localeCompare(b.name, "ko");
       case "priceAsc":
         return a.supplyPrice - b.supplyPrice || a.name.localeCompare(b.name, "ko");
       case "priceDesc":
@@ -104,19 +108,25 @@ export function MerchantInventoryList({
               >
                 <span
                   className={`badge ${
-                    it.qty <= 0 ? "badge--danger" : it.qty < 5 ? "badge--wait" : "badge--ok"
+                    it.available <= 0
+                      ? "badge--danger"
+                      : it.available < 5
+                        ? "badge--wait"
+                        : "badge--ok"
                   }`}
                 >
-                  {it.qty <= 0 ? "품절" : `${it.qty}개`}
+                  {it.available <= 0 ? "품절" : `${it.available}개`}
                 </span>
+                {it.mine > 0 && <span className="badge badge--ai">담음 {it.mine}개</span>}
                 {it.supplyPrice > 0 && <span>공급가 {won(it.supplyPrice)}원</span>}
               </div>
             </div>
             <StockCartButton
+              itemId={it.id}
               name={it.name}
-              date={today}
               disabled={!canAdd}
-              qty={it.qty}
+              available={it.available}
+              mine={it.mine}
               supplyPrice={it.supplyPrice}
             />
           </div>

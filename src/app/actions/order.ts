@@ -20,6 +20,8 @@ import {
 import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
 import { currentWindowStartUtc } from "@/lib/schedule";
 import { displayQty } from "@/lib/qty";
+import { commitStockHolds } from "@/lib/stock-hold";
+import { logError } from "@/lib/log";
 import { orderLockOf } from "@/lib/receivable";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
 import { DS_VEG, DS_FRUIT } from "@/lib/ds-catalog";
@@ -122,10 +124,11 @@ export async function previewGridOrderAction(
     return { ok: false, error: "발주할 품목을 한 개 이상 입력하세요." };
   }
 
-  // 채움채(TOFU)는 체크리스트라 정리 안 함(정확한 이름 보존) — 미리보기에서도 제외(원본은 화면 tofuQty 그대로).
+  // 채움채(TOFU)·공구(TOOL)는 정리 안 함(정확한 이름 보존). TOOL은 재고 담기(고정명)라 AI 개명 시
+  // 재고 매칭/취소 복구가 어긋남 → 원본 그대로 통과.
   const normalized = await Promise.all(
     groups.map((g) =>
-      g.category === "TOFU"
+      g.category === "TOFU" || g.category === "TOOL"
         ? Promise.resolve({ engine: "rule" as const, items: g.items, summary: "" })
         : normalizeOrder({ categoryLabel: CATEGORIES[g.category].label, items: g.items }),
     ),
@@ -434,6 +437,15 @@ export async function createOrderAction(
   } catch (err) {
     console.error("[order] create failed:", err);
     return { error: "발주 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+
+  // 재고 담기(공구) 확정 — 담기원장(HELD)만큼 기준재고 차감 + 홀드 삭제(출고 자동 반영, 재고조사 정합).
+  if (user.role === "MERCHANT_HOTDEAL") {
+    try {
+      await commitStockHolds(user.id);
+    } catch (e) {
+      logError("stock.commit", e, { userId: user.id });
+    }
   }
 
   // 새 발주 알림(웹푸시) — 목적지 업자에게. 실패해도 발주에는 영향 없음.

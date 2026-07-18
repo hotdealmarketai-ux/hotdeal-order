@@ -168,6 +168,18 @@ export async function notifyMerchantWeeklyInvoiceIssued(userId: string) {
   }
 }
 
+export async function notifyMerchantReservationInvoiceIssued(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "예약발주 입금요청서가 도착했습니다.",
+      body: "",
+      url: "/reservations/invoices",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantReservationInvoiceIssued", err, { userId });
+  }
+}
+
 // 점주에게 '주간발주 미입금' 안내(토요일 마감 전) — 계산서당 1회(overdueRemindedAt 멱등)
 export async function notifyMerchantWeeklyInvoiceOverdue(
   userId: string,

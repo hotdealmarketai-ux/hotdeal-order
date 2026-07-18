@@ -155,6 +155,52 @@ export async function getMerchantReservation(
   };
 }
 
+// 관리자: 이 배치에서 확정한 점주별 요약(수량·금액·계산서 발행여부) — 예약 계산서 발행용.
+export type BatchConfirmation = {
+  userId: string;
+  storeName: string;
+  qty: number;
+  total: number;
+  invoiced: boolean;
+};
+export async function getBatchConfirmations(
+  batchId: string,
+  pickupDate: string,
+): Promise<BatchConfirmation[]> {
+  const orders = await prisma.reservationOrder.findMany({
+    where: { batchId, confirmed: true },
+    select: {
+      userId: true,
+      user: { select: { storeName: true } },
+      items: { select: { qty: true, supplyPrice: true } },
+    },
+  });
+  const userIds = orders.map((o) => o.userId);
+  const invoiced = new Set(
+    (
+      await prisma.invoice.findMany({
+        where: {
+          userId: { in: userIds },
+          date: pickupDate,
+          kind: "RESERVATION",
+          status: { not: "VOID" },
+        },
+        select: { userId: true },
+      })
+    ).map((i) => i.userId),
+  );
+  return orders
+    .map((o) => ({
+      userId: o.userId,
+      storeName: o.user.storeName,
+      qty: o.items.reduce((s, i) => s + i.qty, 0),
+      total: o.items.reduce((s, i) => s + i.qty * i.supplyPrice, 0),
+      invoiced: invoiced.has(o.userId),
+    }))
+    .filter((o) => o.qty > 0)
+    .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
+}
+
 // 픽업 전날(=오늘 발주창) 공구에 읽기전용으로 로드할 '확정 예약' 항목. 단일출처(주문 복제 X).
 // 반환: 오늘이 로드일인, 이 점주가 확정한 배치들의 품목·수량.
 export type ReservationLoadItem = { name: string; qty: number };

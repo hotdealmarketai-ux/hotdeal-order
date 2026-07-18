@@ -41,6 +41,7 @@ model User {
   orders          Order[]
   weeklyOrders    WeeklyOrder[]
   reservationOrders ReservationOrder[]
+  stockHolds      StockHold[]
   pushSubs        PushSubscription[]
   matchedDeposits Deposit[]
   invoices        Invoice[]
@@ -266,6 +267,25 @@ model ReservationOrderItem {
   qty         Int              @default(0)
 
   @@unique([orderId, productId]) // 주문 내 상품 1행
+}
+
+// 재고 담기원장 — 점주가 재고현황에서 '담기'한 순간의 실시간 보류(HELD).
+// 남은수량 = InventoryItem.qty(기준재고) − Σ HELD(품목, 현재 발주창). 발주확정 시 기준재고 차감 + 홀드 삭제.
+// 발주창 마감 시 미발주 홀드는 크론이 삭제(재고 자동 복구). 기준재고는 관리자 실물 입력이 진실(재고조사 정합).
+model StockHold {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  itemId     String // InventoryItem.id (FK 아님 — 품목 삭제/교체에도 원장 보존)
+  name       String // 스냅샷
+  qty        Int      @default(0)
+  windowDate String // 발주창 날짜 KST YYYY-MM-DD
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, itemId, windowDate]) // 점주×품목×발주창 1건(원자적)
+  @@index([itemId, windowDate])
+  @@index([windowDate])
 }
 
 // 앱 전역 메타(키-값 타임스탬프) — 예: 팝빌 계좌 최신 동기화 시각(bank_sync)

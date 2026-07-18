@@ -1,35 +1,39 @@
 "use client";
 
-import { useState } from "react";
-import { addToStockCart, getStockCart, removeFromStockCart } from "@/lib/stock-cart";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { holdStockAction } from "@/app/actions/stock";
 import { Sheet } from "./Sheet";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
-// 재고현황 '담기' — 누르면 하단에서 살짝 올라오는 컴팩트 시트(Q8). 좌측 이미지자리엔 남은수량,
-// 가운데 품목명·공급가, 우측 -/+ 스테퍼(남은수량까지). 아래 '담기' 버튼. 오늘 발주(공구)에 임시저장.
+// 재고현황 '담기' — 서버 담기원장(StockHold)에 실시간 반영. 담는 순간 −, 빼면 +.
+// available=실시간 남은수량(전체 담기 반영), mine=내가 담은 수량. 내가 담을 수 있는 최대=available+mine.
 export function StockCartButton({
+  itemId,
   name,
-  date,
   disabled,
-  qty,
+  available,
+  mine,
   supplyPrice,
 }: {
+  itemId: string;
   name: string;
-  date: string;
   disabled: boolean;
-  qty: number;
+  available: number;
+  mine: number;
   supplyPrice: number;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState(1);
-  const [added, setAdded] = useState(false);
-  const [inCart, setInCart] = useState(false);
+  const [err, setErr] = useState("");
+  const [pending, start] = useTransition();
 
-  const soldOut = qty <= 0;
-  const max = Math.max(0, qty);
+  const maxForMe = available + mine; // 내가 담을 수 있는 최대(남은 + 내가 이미 담은 것)
+  const soldOut = maxForMe <= 0;
 
-  if (disabled || soldOut) {
+  if (disabled || (soldOut && mine <= 0)) {
     return (
       <span className="badge badge--mute" style={{ opacity: 0.6, flexShrink: 0 }}>
         {soldOut ? "품절" : "담기"}
@@ -38,36 +42,33 @@ export function StockCartButton({
   }
 
   const openSheet = () => {
-    const found = getStockCart(date).find((c) => c.name === name);
-    const start = found ? parseInt(found.qty, 10) || 1 : 1;
-    setInCart(!!found);
-    setCount(Math.min(Math.max(1, start), max));
+    setCount(Math.min(Math.max(1, mine || 1), Math.max(1, maxForMe)));
+    setErr("");
     setOpen(true);
   };
   const dec = () => setCount((c) => Math.max(1, c - 1));
-  const inc = () => setCount((c) => Math.min(max, c + 1));
-  const submit = () => {
-    addToStockCart(date, { name, qty: String(Math.min(Math.max(1, count), max)) });
-    setOpen(false);
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1600);
-  };
-  const remove = () => {
-    removeFromStockCart(date, name);
-    setInCart(false);
-    setOpen(false);
-    setAdded(false);
-  };
+  const inc = () => setCount((c) => Math.min(maxForMe, c + 1));
+
+  const apply = (qty: number) =>
+    start(async () => {
+      const res = await holdStockAction({ itemId, qty });
+      if (!res.ok) {
+        setErr(res.error ?? "담기에 실패했어요.");
+        return;
+      }
+      setOpen(false);
+      router.refresh();
+    });
 
   return (
     <>
       <button
         type="button"
-        className={`btn btn--xs ${added ? "btn--soft" : "btn--primary"}`}
+        className={`btn btn--xs ${mine > 0 ? "btn--soft" : "btn--primary"}`}
         style={{ flexShrink: 0 }}
         onClick={openSheet}
       >
-        {added ? "담김 ✓" : "담기"}
+        {mine > 0 ? `담음 ${mine}개` : "담기"}
       </button>
 
       {open && (
@@ -77,7 +78,7 @@ export function StockCartButton({
             <div className="stockrow">
               <div className="stockrow__thumb">
                 <span className="stockrow__thumb-k">남은 수량</span>
-                <span className="stockrow__thumb-v">{max}개</span>
+                <span className="stockrow__thumb-v">{available}개</span>
               </div>
               <div className="stockrow__info">
                 <div className="stockrow__name">{name}</div>
@@ -91,7 +92,7 @@ export function StockCartButton({
                   className="stepper__btn"
                   aria-label="감소"
                   onClick={dec}
-                  disabled={count <= 1}
+                  disabled={count <= 1 || pending}
                 >
                   −
                 </button>
@@ -101,26 +102,30 @@ export function StockCartButton({
                   className="stepper__btn"
                   aria-label="증가"
                   onClick={inc}
-                  disabled={count >= max}
+                  disabled={count >= maxForMe || pending}
                 >
                   +
                 </button>
               </div>
             </div>
 
+            {err && <div className="chaterr">{err}</div>}
+
             <button
               type="button"
               className="btn btn--primary btn--block stocksheet__add"
-              onClick={submit}
+              onClick={() => apply(count)}
+              disabled={pending}
             >
-              {inCart ? "수량 변경" : "담기"}
+              {pending ? "처리 중…" : mine > 0 ? "수량 변경" : "담기"}
             </button>
-            {inCart && (
+            {mine > 0 && (
               <button
                 type="button"
                 className="linkbtn linkbtn--danger"
                 style={{ display: "block", margin: "10px auto 0" }}
-                onClick={remove}
+                onClick={() => apply(0)}
+                disabled={pending}
               >
                 담기 빼기
               </button>

@@ -19,6 +19,7 @@ import {
 import { kstDateOf, kstToday, shiftDate, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { myHolds } from "@/lib/stock-hold";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import { RequestCancelButton } from "@/components/RequestCancelButton";
@@ -66,6 +67,12 @@ export default async function OrderPage(props: {
       : [];
   const reservedLabel =
     reservedTool.length > 0 ? `픽업 ${labelDate(shiftDate(orderDay, 1))} 예약분` : "";
+
+  // 공구 담기 = 서버 담기원장(오늘 발주창). localStorage 대신 이걸 발주에 넣는다.
+  const toolCart =
+    user.role === "MERCHANT_HOTDEAL"
+      ? (await myHolds(user.id, orderDay)).map((h) => ({ name: h.name, qty: String(h.qty) }))
+      : [];
 
   return (
     <>
@@ -161,6 +168,7 @@ export default async function OrderPage(props: {
             role={user.role}
             reservedTool={reservedTool}
             reservedLabel={reservedLabel}
+            toolCart={toolCart}
           />
         )}
       </div>

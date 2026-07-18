@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import {
   createOrderAction,
   parseChatOrderAction,
@@ -10,8 +10,6 @@ import {
 import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
-import { getStockCart } from "@/lib/stock-cart";
-import { kstToday } from "@/lib/date";
 
 type Phase = "compose" | "loading" | "preview";
 type EditItem = {
@@ -28,12 +26,14 @@ export function ChatOrder({
   locked = false,
   reservedTool = [],
   reservedLabel = "",
+  toolCart = [],
 }: {
   categories: Category[];
   needsPickup: boolean;
   locked?: boolean;
   reservedTool?: { name: string; qty: number }[];
   reservedLabel?: string;
+  toolCart?: { name: string; qty: string }[];
 }) {
   // 채움채(TOFU)=체크리스트. 공구(TOOL)=자유입력 불가(담기/예약분만). 자유입력은 과일·야채만.
   const chatCats = categories.filter((c) => c !== "TOFU" && c !== "TOOL");
@@ -60,11 +60,8 @@ export function ChatOrder({
     createOrderAction,
     {},
   );
-  // #6 재고현황에서 담아둔 공구 품목(있으면 발주에 함께 포함 + 화면에 노출)
-  const [cartItems, setCartItems] = useState<{ name: string; qty: string }[]>([]);
-  useEffect(() => {
-    if (categories.includes("TOOL")) setCartItems(getStockCart(kstToday()));
-  }, [categories]);
+  // 재고 담기(서버 담기원장)로 담아둔 공구 품목 — 발주에 함께 포함 + 화면에 읽기전용 노출
+  const [cartItems] = useState<{ name: string; qty: string }[]>(() => toolCart);
 
   const tofuChecked = () =>
     tofuOpen && CHAEUMCHAE_CATALOG.some((p) => (tofuQty[p.seq] ?? "").trim());
@@ -72,8 +69,7 @@ export function ChatOrder({
   async function handleParse() {
     setError("");
     setDroppedTool(false);
-    const cart = hasTool ? getStockCart(kstToday()) : [];
-    setCartItems(cart);
+    const cart = hasTool ? cartItems : [];
     const hasAny =
       text.trim() || tofuChecked() || cart.length > 0 || reservedTool.length > 0;
     if (!hasAny) {
