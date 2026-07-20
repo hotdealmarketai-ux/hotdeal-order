@@ -221,6 +221,7 @@ export default async function DayReceiptPage(props: {
                   vendorLabel={cat.vendorLabel}
                   dateText={formatKDateTime(order.createdAt)}
                   pickupTime={order.pickupTime}
+                  fulfillment={order.fulfillment}
                   aiSummary={order.aiSummary}
                   aiEngine={order.aiEngine}
                   items={order.items.map((it) => ({

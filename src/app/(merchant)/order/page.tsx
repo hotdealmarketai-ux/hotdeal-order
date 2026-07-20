@@ -9,7 +9,11 @@ import Link from "next/link";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { allowedCategoriesFor, needsPickupTime } from "@/lib/constants";
+import {
+  allowedCategoriesFor,
+  needsFulfillment,
+  needsPickupTime,
+} from "@/lib/constants";
 import {
   hasOrderWindow,
   isOrderOpen,
@@ -160,6 +164,8 @@ export default async function OrderPage(props: {
           <OrderForm
             categories={allowedCategoriesFor(user.role)}
             needsPickup={needsPickupTime(user.role)}
+            needsFulfillment={needsFulfillment(user.role)}
+            address={user.address ?? ""}
             locked={windowed && !open}
             role={user.role}
             reservedTool={reservedTool}

@@ -3,8 +3,9 @@
 import { useActionState, useMemo, useRef, useState } from "react";
 import { updateOrderAction, type OrderFormState } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
+import { FulfillmentPicker } from "./FulfillmentPicker";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
-import type { Category } from "@/lib/constants";
+import type { Category, Fulfillment } from "@/lib/constants";
 
 type Row = { id: number; name: string; qty: string; note: string };
 
@@ -19,6 +20,9 @@ export function EditOrderForm({
   initialItems,
   needsPickup,
   initialPickup,
+  needsFulfillment = false,
+  initialFulfillment = "",
+  address = "",
 }: {
   orderId: string;
   category: Category;
@@ -26,6 +30,9 @@ export function EditOrderForm({
   initialItems: { name: string; qty: string; note: string }[];
   needsPickup: boolean;
   initialPickup?: string;
+  needsFulfillment?: boolean;
+  initialFulfillment?: "" | Fulfillment;
+  address?: string;
 }) {
   const isTofu = category === "TOFU";
   const uid = useRef(0);
@@ -50,6 +57,9 @@ export function EditOrderForm({
     return m;
   });
   const [pickup, setPickup] = useState(initialPickup ?? "");
+  const [fulfillment, setFulfillment] = useState<"" | Fulfillment>(
+    initialFulfillment,
+  );
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
@@ -116,6 +126,14 @@ export function EditOrderForm({
             placeholder="오전 7시 30분"
           />
         </div>
+      )}
+
+      {needsFulfillment && (
+        <FulfillmentPicker
+          value={fulfillment}
+          onChange={setFulfillment}
+          address={address}
+        />
       )}
 
       <div className="itemshead">
@@ -196,6 +214,10 @@ export function EditOrderForm({
             onClick={() => {
               if (items.length === 0) {
                 setLocalError("발주할 품목을 한 개 이상 입력하세요.");
+                return;
+              }
+              if (needsFulfillment && !fulfillment) {
+                setLocalError("직접 픽업 또는 배송을 선택해 주세요.");
                 return;
               }
               setLocalError("");

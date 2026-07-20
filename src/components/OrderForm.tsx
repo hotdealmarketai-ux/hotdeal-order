@@ -25,10 +25,13 @@ import {
 } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
+import { FulfillmentPicker } from "./FulfillmentPicker";
 import {
   CATEGORIES,
+  FULFILLMENT_LABEL,
   receiverLabel,
   type Category,
+  type Fulfillment,
   type Role,
 } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
@@ -42,6 +45,8 @@ function isFilled(r: Row) {
 export function OrderForm({
   categories,
   needsPickup,
+  needsFulfillment = false,
+  address = "",
   locked = false,
   role,
   reservedTool = [],
@@ -50,6 +55,10 @@ export function OrderForm({
 }: {
   categories: Category[];
   needsPickup: boolean;
+  /** 핫딜마켓 가맹점: 발주 시 직접 픽업/배송 선택 필요 */
+  needsFulfillment?: boolean;
+  /** 배송 선택 시 자동 배송지로 표시할 등록 매장 주소 */
+  address?: string;
   locked?: boolean;
   role: Role;
   /** 픽업 전날 자동 반영되는 예약분(읽기전용) — 공구에 표시만, 주문엔 복제 안 함 */
@@ -78,6 +87,7 @@ export function OrderForm({
     return init;
   });
   const [pickup, setPickup] = useState("");
+  const [fulfillment, setFulfillment] = useState<"" | Fulfillment>("");
   const [tofuQty, setTofuQty] = useState<Record<string, string>>({});
   const [confirming, setConfirming] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -164,6 +174,10 @@ export function OrderForm({
       setLocalError("발주할 품목을 한 개 이상 입력하세요.");
       return;
     }
+    if (needsFulfillment && !fulfillment) {
+      setLocalError("직접 픽업 또는 배송을 선택해 주세요.");
+      return;
+    }
     setLocalError("");
     setPreviewing(true);
     try {
@@ -229,6 +243,10 @@ export function OrderForm({
         <ChatOrder
           categories={categories}
           needsPickup={needsPickup}
+          needsFulfillment={needsFulfillment}
+          fulfillment={fulfillment}
+          onFulfillmentChange={setFulfillment}
+          address={address}
           locked={locked}
           reservedTool={reservedTool}
           reservedLabel={reservedLabel}
@@ -279,6 +297,15 @@ export function OrderForm({
         disabled={locked}
         style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}
       >
+        {/* 수령 방식(직접 픽업/배송) — 핫딜마켓 가맹점, 발주 전 필수 선택 */}
+        {needsFulfillment && (
+          <FulfillmentPicker
+            value={fulfillment}
+            onChange={setFulfillment}
+            address={address}
+          />
+        )}
+
         {/* ④ 세그먼트 탭 (발주 폼 전용 스코프) */}
         {multi && (
           <div className="cattabs cattabs--seg">
@@ -478,6 +505,17 @@ export function OrderForm({
               <p className="sheet__hint">
                 AI가 이렇게 정리했어요. 맞는지 확인하고 고칠 부분은 바로 수정해 주세요.
               </p>
+
+              {needsFulfillment && fulfillment && (
+                <div className="sheet__fulfill">
+                  <span className="sheet__fulfillk">
+                    {FULFILLMENT_LABEL[fulfillment]}
+                  </span>
+                  {fulfillment === "DELIVERY" && address && (
+                    <span className="sheet__fulfillv">{address}</span>
+                  )}
+                </div>
+              )}
 
               {(state?.error || localError) && (
                 <div className="notice notice--error" style={{ marginBottom: 10 }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { fulfillmentLabel } from "@/lib/constants";
 
 export type ReceiptItem = { name: string; qty: string; note: string };
 export type ReceiptRawItem = { rawName: string; rawQty: string; rawNote: string };
@@ -12,6 +13,7 @@ export function ReceiptCard(props: {
   vendorLabel: string;
   dateText: string;
   pickupTime?: string | null;
+  fulfillment?: string | null;
   aiSummary?: string;
   aiEngine?: string;
   items: ReceiptItem[];
@@ -67,6 +69,17 @@ export function ReceiptCard(props: {
           >
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               <span className="badge badge--mute">{props.dateText}</span>
+              {fulfillmentLabel(props.fulfillment) && (
+                <span
+                  className={`badge ${
+                    props.fulfillment === "DELIVERY"
+                      ? "badge--deliver"
+                      : "badge--pickup"
+                  }`}
+                >
+                  {fulfillmentLabel(props.fulfillment)}
+                </span>
+              )}
               {aiOn && <span className="badge badge--ai">AI 정리</span>}
               {props.pickupTime && (
                 <span className="badge badge--wait">픽업 {props.pickupTime}</span>

@@ -116,6 +116,7 @@ model Order {
   category    String // FRUIT | VEG | TOOL | TOFU
   vendorRole  String // 목적지 업자 role (조회 편의를 위한 비정규화)
   pickupTime  String? // 서부일광 타 소매업자 전용
+  fulfillment String? // PICKUP | DELIVERY — 핫딜마켓 가맹점 발주 수령 방식(그 외 role은 null)
 
   status      String      @default("RECEIVED") // RECEIVED | DONE | CANCELLED
   confirmed   Boolean     @default(false) // 업자가 '발주 확인' 눌렀는지

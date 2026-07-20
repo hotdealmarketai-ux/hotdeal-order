@@ -8,7 +8,9 @@ import {
   vendorRoleForCategory,
   CATEGORIES,
   needsPickupTime,
+  needsFulfillment,
   type Category,
+  type Fulfillment,
   type Role,
 } from "@/lib/constants";
 import {
@@ -17,7 +19,7 @@ import {
   ORDER_OPEN_LABEL,
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
-import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
+import { kstToday, kstDateOf, kstDayRange, fullKLabel } from "@/lib/date";
 import { currentWindowStartUtc } from "@/lib/schedule";
 import { displayQty } from "@/lib/qty";
 import { commitStockHolds } from "@/lib/stock-hold";
@@ -172,6 +174,18 @@ async function buildPickup(
   if (!raw) return "";
   const cleaned = await normalizePickupTime(raw);
   return cleaned ? `${fullKLabel(dateStr)} ${cleaned}` : "";
+}
+
+// 수령 방식(직접 픽업/배송) — 핫딜마켓 가맹점만. { value|null, error }.
+// 기본값 없음 → 미선택 시 저장 차단(UI 우회 방지). 그 외 role은 항상 null.
+function readFulfillment(
+  role: Role,
+  formData: FormData,
+): { value: Fulfillment | null; error?: string } {
+  if (!needsFulfillment(role)) return { value: null };
+  const raw = String(formData.get("fulfillment") ?? "").trim();
+  if (raw === "PICKUP" || raw === "DELIVERY") return { value: raw };
+  return { value: null, error: "직접 픽업 또는 배송을 선택해 주세요." };
 }
 
 type RawRow = { name?: string; qty?: string; note?: string };
@@ -363,6 +377,10 @@ export async function createOrderAction(
   // 픽업시간: '오늘 날짜 + 정갈한 시간'으로 정리 (예: 2026년 6월 27일 토요일 오전 7시 30분)
   const pickupTime = await buildPickup(user.role, formData, kstToday());
 
+  // 수령 방식(직접 픽업/배송) — 핫딜마켓 가맹점은 반드시 선택(미선택 시 저장 차단)
+  const ful = readFulfillment(user.role, formData);
+  if (ful.error) return { error: ful.error };
+
   // 채팅 발주는 미리보기에서 이미 AI가 정리하고 점주가 확인·수정을 마쳤다 → 저장 시 재정규화하면
   // 점주가 승인한 내용과 달라진다(버그 #3). preNormalized면 재정규화 없이 그대로 저장.
   const preNormalized = String(formData.get("preNormalized") ?? "") === "1";
@@ -412,6 +430,7 @@ export async function createOrderAction(
         category: g.category,
         vendorRole: vendorRoleForCategory(g.category),
         pickupTime: pickupTime || null,
+        fulfillment: ful.value,
         rawText,
         aiSummary: result.summary,
         aiProcessed: true,
@@ -516,6 +535,10 @@ export async function updateOrderAction(
   const orderDate = kstDateOf(order.createdAt);
   const pickupTime = await buildPickup(user.role, formData, orderDate);
 
+  // 수령 방식(직접 픽업/배송) — 핫딜마켓 가맹점은 반드시 선택
+  const ful = readFulfillment(user.role, formData);
+  if (ful.error) return { error: ful.error };
+
   // 채움채(TOFU)는 정규화 없이 정확한 이름 보존(자동제출 매핑용)
   const result =
     category === "TOFU"
@@ -543,6 +566,7 @@ export async function updateOrderAction(
         where: { id: orderId },
         data: {
           pickupTime: pickupTime || null,
+          fulfillment: ful.value,
           rawText,
           aiSummary: result.summary,
           aiProcessed: true,
@@ -569,6 +593,24 @@ export async function updateOrderAction(
   } catch (err) {
     console.error("[order] update failed:", err);
     return { error: "수정 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+
+  // 수령 방식은 발주 1건(그날 제출) 전체에 동일 적용 — 같은 날 다른 카테고리 발주도 함께 맞춤.
+  if (needsFulfillment(user.role)) {
+    try {
+      const { start, end } = kstDayRange(orderDate);
+      await prisma.order.updateMany({
+        where: {
+          userId: user.id,
+          id: { not: orderId },
+          createdAt: { gte: start, lt: end },
+          status: { not: "CANCELLED" },
+        },
+        data: { fulfillment: ful.value },
+      });
+    } catch (e) {
+      logError("order.fulfillmentSync", e, { userId: user.id, orderId });
+    }
   }
 
   // 받는 업체 + 관리자(새롭)에 '발주 수정' 알림

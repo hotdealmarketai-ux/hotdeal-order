@@ -2,7 +2,13 @@ import { Topbar } from "@/components/Topbar";
 import { notFound, redirect } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { receiverLabel, needsPickupTime, type Category } from "@/lib/constants";
+import {
+  receiverLabel,
+  needsPickupTime,
+  needsFulfillment,
+  type Category,
+  type Fulfillment,
+} from "@/lib/constants";
 import {
   hasOrderWindow,
   isOrderOpen,
@@ -54,6 +60,9 @@ export default async function EditOrderPage(props: {
           initialItems={initialItems}
           needsPickup={needsPickupTime(user.role)}
           initialPickup={order.pickupTime ?? ""}
+          needsFulfillment={needsFulfillment(user.role)}
+          initialFulfillment={(order.fulfillment as Fulfillment | null) ?? ""}
+          address={user.address ?? ""}
         />
       </div>
     </>

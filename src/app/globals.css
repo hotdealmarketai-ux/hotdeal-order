@@ -1723,6 +1723,34 @@ a {
   color: var(--muted);
   margin: 4px 0 12px;
 }
+.sheet__fulfill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 11px;
+  border-radius: 11px;
+  background: var(--green-100);
+  border: 1px solid var(--green-150);
+}
+.sheet__fulfillk {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--green-700);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.sheet__fulfillv {
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--green-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sheet__body {
   overflow-y: auto;
   flex: 1;
@@ -2366,6 +2394,12 @@ a {
 .badge--danger { background: var(--danger-bg); color: var(--danger); }
 .badge--req { background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1.5px var(--danger-line); }
 .badge--mute { background: var(--chip-mute-bg); color: var(--muted); }
+/* 수령 방식 — 배송은 눈에 띄게(가맹점에 갖다줘야 함), 직접 픽업은 소프트 */
+.badge--deliver { background: var(--green-700); color: #fff; }
+.badge--pickup { background: transparent; color: var(--green-700); box-shadow: inset 0 0 0 1.5px var(--green-150); }
+/* 발주서(관리자 합본) 배송지 줄 */
+.receipt__deliver { display: flex; align-items: center; gap: 8px; margin-top: 9px; font-size: 13px; font-weight: 600; color: var(--green-700); }
+.receipt__deliverk { flex: 0 0 auto; font-size: 11.5px; font-weight: 800; color: #fff; background: var(--green-700); border-radius: 999px; padding: 2px 9px; }
 
 /* 3.7 Notice — edit는 소프트 레드(옐로 금지) */
 .notice { border-radius: 12px; padding: 12px 15px; font-size: 13.5px; }
@@ -2419,6 +2453,26 @@ a {
 .entrycard__title { font-size: 14.5px; font-weight: 800; color: var(--green-700); }
 .entrycard__sub { font-size: 12px; color: #5f7a66; margin-top: 2px; }
 .entrycard__chev { color: var(--green-700); font-size: 20px; font-weight: 700; }
+
+/* 발주 수령 방식(직접 픽업 / 배송) 선택기 */
+.fulfill { margin-bottom: 16px; }
+.fulfill__label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; color: var(--fg); margin-bottom: 8px; }
+.fulfill__req { font-size: 11.5px; font-weight: 700; color: var(--green-700); background: var(--green-100); border: 1px solid var(--green-150); border-radius: 999px; padding: 2px 8px; }
+.fulfill__seg { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.fulfill__opt {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 13px 10px; border-radius: 13px;
+  border: 1.5px solid var(--line-strong); background: var(--surface);
+  color: var(--muted); font-size: 15px; font-weight: 800; cursor: pointer;
+  transition: border-color .12s, background .12s, color .12s;
+}
+.fulfill__opt svg { color: var(--muted-2); transition: color .12s; }
+.fulfill__opt.is-active { border-color: var(--green-700); background: var(--green-100); color: var(--green-700); box-shadow: 0 0 0 1px var(--green-700) inset; }
+.fulfill__opt.is-active svg { color: var(--green-700); }
+.fulfill__opt:disabled { opacity: .55; cursor: default; }
+.fulfill__addr { display: flex; align-items: center; gap: 8px; margin-top: 9px; padding: 9px 12px; border-radius: 11px; background: var(--green-100); border: 1px solid var(--green-150); }
+.fulfill__addrk { flex: 0 0 auto; font-size: 11.5px; font-weight: 800; color: #fff; background: var(--green-700); border-radius: 999px; padding: 2px 9px; }
+.fulfill__addrv { min-width: 0; font-size: 13px; font-weight: 600; color: var(--green-700); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 다크 그린 총액 밴드 */
 .grandband { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--green-800); border-radius: 14px; padding: 15px 17px; margin-top: 12px; }

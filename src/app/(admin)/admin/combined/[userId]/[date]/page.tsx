@@ -2,7 +2,12 @@ import { Topbar } from "@/components/Topbar";
 import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
+import {
+  CATEGORIES,
+  CATEGORY_ORDER,
+  fulfillmentLabel,
+  type Category,
+} from "@/lib/constants";
 import { kstDayRange, labelDate, normalizeDateStr } from "@/lib/date";
 import { PrintButton } from "@/components/PrintButton";
 import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
@@ -41,6 +46,8 @@ export default async function AdminCombinedReceipt(props: {
     items: byCat.get(c)!,
   }));
   const totalItems = sections.reduce((n, s) => n + s.items.length, 0);
+  // 수령 방식(직접 픽업/배송) — 발주 1건 전체에 동일, 배송이면 매장 주소로 갖다줘야 함.
+  const fulfillment = active.find((o) => o.fulfillment)?.fulfillment ?? null;
 
   return (
     <>
@@ -64,10 +71,25 @@ export default async function AdminCombinedReceipt(props: {
               style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}
             >
               <span className="badge badge--mute">{labelDate(date)}</span>
+              {fulfillmentLabel(fulfillment) && (
+                <span
+                  className={`badge ${
+                    fulfillment === "DELIVERY" ? "badge--deliver" : "badge--pickup"
+                  }`}
+                >
+                  {fulfillmentLabel(fulfillment)}
+                </span>
+              )}
               <span className="badge badge--mute">
                 {sections.length}종 · {totalItems}건
               </span>
             </div>
+            {fulfillment === "DELIVERY" && merchant.address && (
+              <div className="receipt__deliver">
+                <span className="receipt__deliverk">배송지</span>
+                <span>{merchant.address}</span>
+              </div>
+            )}
           </div>
 
           {sections.map((s) => {

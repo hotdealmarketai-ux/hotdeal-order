@@ -147,6 +147,22 @@ export function needsPickupTime(role: Role): boolean {
   return role === "MERCHANT_SEOBU";
 }
 
+// 핫딜마켓 가맹점만 발주 시 수령 방식(직접 픽업/배송) 선택
+export function needsFulfillment(role: Role): boolean {
+  return role === "MERCHANT_HOTDEAL";
+}
+
+// 수령 방식 라벨 (DB 저장값 PICKUP | DELIVERY)
+export type Fulfillment = "PICKUP" | "DELIVERY";
+export const FULFILLMENT_LABEL: Record<Fulfillment, string> = {
+  PICKUP: "직접 픽업",
+  DELIVERY: "배송",
+};
+export function fulfillmentLabel(v: string | null | undefined): string | null {
+  if (v === "PICKUP" || v === "DELIVERY") return FULFILLMENT_LABEL[v];
+  return null;
+}
+
 // 핫딜마켓 가맹점만 재고현황 열람 + 하단 네비
 export function canViewInventory(role: Role): boolean {
   return role === "MERCHANT_HOTDEAL";

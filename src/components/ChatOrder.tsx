@@ -8,7 +8,13 @@ import {
   type ChatParseState,
 } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
-import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
+import { FulfillmentPicker } from "./FulfillmentPicker";
+import {
+  CATEGORIES,
+  CATEGORY_ORDER,
+  type Category,
+  type Fulfillment,
+} from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 
 type Phase = "compose" | "loading" | "preview";
@@ -23,6 +29,10 @@ type EditItem = {
 export function ChatOrder({
   categories,
   needsPickup,
+  needsFulfillment = false,
+  fulfillment = "",
+  onFulfillmentChange,
+  address = "",
   locked = false,
   reservedTool = [],
   reservedLabel = "",
@@ -30,6 +40,11 @@ export function ChatOrder({
 }: {
   categories: Category[];
   needsPickup: boolean;
+  /** 핫딜마켓 가맹점: 직접 픽업/배송 선택 필요 */
+  needsFulfillment?: boolean;
+  fulfillment?: "" | Fulfillment;
+  onFulfillmentChange?: (v: Fulfillment) => void;
+  address?: string;
   locked?: boolean;
   reservedTool?: { name: string; qty: number }[];
   reservedLabel?: string;
@@ -461,11 +476,28 @@ export function ChatOrder({
                 서버가 저장 시 '재정규화'하지 않고 그대로 저장하도록 표시(승인=저장 보장, 버그 #3). */}
             <input type="hidden" name="preNormalized" value="1" />
             {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
+
+            {/* 수령 방식(직접 픽업/배송) — 핫딜마켓 가맹점, 발주 전 필수 선택 */}
+            {needsFulfillment && (
+              <div style={{ marginTop: 16 }}>
+                <FulfillmentPicker
+                  value={fulfillment}
+                  onChange={onFulfillmentChange ?? (() => {})}
+                  address={address}
+                />
+              </div>
+            )}
+
             <div className="confirm" style={{ marginTop: 16 }}>
               <div className="confirm__title">이대로 발주 넣으시겠습니까?</div>
               <p className="confirm__hint">
                 품목 {totalItems}건{multi || hasTofu ? ` · ${payload.length}개 종류` : ""}로 발주됩니다.
               </p>
+              {needsFulfillment && !fulfillment && (
+                <p className="confirm__hint" style={{ color: "var(--green-700)", fontWeight: 700 }}>
+                  직접 픽업 또는 배송을 선택해 주세요.
+                </p>
+              )}
               <div className="confirm__actions">
                 <button
                   type="button"
@@ -474,7 +506,10 @@ export function ChatOrder({
                 >
                   다시 적기
                 </button>
-                <SubmitButton pendingText="발주 넣는 중…" disabled={totalItems === 0}>
+                <SubmitButton
+                  pendingText="발주 넣는 중…"
+                  disabled={totalItems === 0 || (needsFulfillment && !fulfillment)}
+                >
                   네, 발주할게요
                 </SubmitButton>
               </div>
