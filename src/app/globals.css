@@ -1572,7 +1572,7 @@ a {
 }
 .invcols {
   display: grid;
-  grid-template-columns: 1.4fr 0.7fr 1fr 82px;
+  grid-template-columns: 1.3fr 0.62fr 1fr 74px;
   gap: 6px;
   font-size: 12px;
   color: var(--muted-2);
@@ -1580,24 +1580,27 @@ a {
 }
 .invrow {
   display: grid;
-  grid-template-columns: 1.4fr 0.7fr 1fr 82px;
+  grid-template-columns: 1.3fr 0.62fr 1fr 74px;
   gap: 6px;
   align-items: center;
   padding: 5px 0;
   border-top: 1px solid var(--line);
 }
 .invrow .input {
+  min-width: 0; /* 그리드 칸이 내용보다 안 커지게 — 없으면 행이 넘쳐 금액칸이 화면 밖으로 잘림 */
   min-height: 44px;
   padding: 9px 8px;
   font-size: 16px; /* 16px 미만이면 iOS가 포커스 시 자동 확대함 */
   box-shadow: none;
 }
 .invrow__amt {
+  min-width: 0;
   text-align: right;
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--fg);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--green-700);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -2761,7 +2764,8 @@ body {
   overflow: hidden;
   box-shadow: 0 2px 8px rgba(40, 34, 24, 0.03);
 }
-.invrow {
+/* 재고 편집 테이블 행 — .invtable 안으로 스코프(계산서 폼의 .invrow 그리드와 클래스명 충돌 방지) */
+.invtable > .invrow {
   display: flex;
   align-items: center;
   gap: 4px;
