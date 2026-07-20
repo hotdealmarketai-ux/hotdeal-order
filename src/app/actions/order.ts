@@ -21,6 +21,7 @@ import { kstToday, kstDateOf, fullKLabel } from "@/lib/date";
 import { currentWindowStartUtc } from "@/lib/schedule";
 import { displayQty } from "@/lib/qty";
 import { commitStockHolds } from "@/lib/stock-hold";
+import { orderOpenNow } from "@/lib/order-open";
 import { logError } from "@/lib/log";
 import { orderLockOf } from "@/lib/receivable";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
@@ -300,8 +301,8 @@ export async function createOrderAction(
 ): Promise<OrderFormState> {
   const user = await requireMerchant();
 
-  // 발주 운영시간 가드 — 핫딜마켓 가맹점만 (낮 12시~오후 8시)
-  if (hasOrderWindow(user.role) && !isOrderOpen()) {
+  // 발주 운영시간 가드 — 핫딜마켓 가맹점만 (낮 12시~오후 8시, 또는 관리자 임시 오픈)
+  if (!(await orderOpenNow(user.role))) {
     return {
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
     };

@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { canViewInventory } from "@/lib/constants";
-import { hasOrderWindow, isOrderOpen, currentWindowStartUtc } from "@/lib/deadline";
+import { hasOrderWindow, currentWindowStartUtc } from "@/lib/deadline";
+import { orderOpenNow } from "@/lib/order-open";
 import { prisma } from "@/lib/prisma";
 import { kstToday } from "@/lib/date";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
@@ -17,9 +18,9 @@ export default async function InventoryPage() {
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 
-  // #6 담을 수 있는 조건: 발주 시간 + 발주창 열림(이번 창에 아직 발주 없음).
+  // #6 담을 수 있는 조건: 발주 시간(또는 관리자 임시 오픈) + 이번 창에 아직 발주 없음.
   const windowed = hasOrderWindow(user.role);
-  let canAdd = !windowed || isOrderOpen();
+  let canAdd = await orderOpenNow(user.role);
   if (canAdd && windowed) {
     const since = new Date(currentWindowStartUtc());
     const existing = await prisma.order.findFirst({

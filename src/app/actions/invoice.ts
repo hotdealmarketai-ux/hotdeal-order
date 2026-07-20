@@ -137,20 +137,7 @@ export async function saveInvoiceAction(
     return { error: "품목을 한 개 이상 입력하세요." };
   }
 
-  // 같은 점포·같은 날짜에 계산서는 1장(취소된 건 제외)
-  const dupe = await prisma.invoice.findFirst({
-    where: {
-      userId,
-      date,
-      status: { not: "VOID" },
-      ...(invoiceId ? { id: { not: invoiceId } } : {}),
-    },
-    select: { id: true },
-  });
-  if (dupe) {
-    return { error: "이 날짜 계산서가 이미 있어요. 기존 계산서에서 이어서 진행해 주세요." };
-  }
-
+  // 같은 점포·같은 날짜에 여러 장 발행 허용(부분 청구·추가 청구). 중복 방지 제거.
   const total = items.reduce((n, it) => n + it.amount, 0);
   const itemRows = items.map((it, i) => ({ ...it, sortOrder: i }));
   const data = {

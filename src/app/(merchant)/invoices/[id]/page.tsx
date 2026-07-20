@@ -1,33 +1,33 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { canOrderWeekly, SAEROP_BANK_ACCOUNT, SAEROP_ACCOUNT_HOLDER } from "@/lib/constants";
+import { SAEROP_BANK_ACCOUNT, SAEROP_ACCOUNT_HOLDER } from "@/lib/constants";
 import { labelDateLong } from "@/lib/date";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { PrintButton } from "@/components/PrintButton";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
+const KIND: Record<string, string> = { DAILY: "일반발주", WEEKLY: "주간발주" };
 const STATUS: Record<string, { label: string; cls: string }> = {
   ISSUED: { label: "입금대기", cls: "badge--wait" },
   PAID: { label: "입금완료", cls: "badge--ok" },
   VOID: { label: "취소됨", cls: "badge--mute" },
 };
 
-export default async function WeeklyInvoiceDetailPage({
+export default async function MerchantInvoiceDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const user = await requireMerchant();
-  if (!canOrderWeekly(user.role)) redirect("/order");
   const { id } = await params;
 
   const inv = await prisma.invoice.findUnique({
     where: { id },
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
-  if (!inv || inv.userId !== user.id || inv.kind !== "WEEKLY") notFound();
+  if (!inv || inv.userId !== user.id || inv.status === "DRAFT") notFound();
 
   const s = STATUS[inv.status] ?? STATUS.ISSUED;
   const receipt = inv.items.map((it) => ({
@@ -39,15 +39,17 @@ export default async function WeeklyInvoiceDetailPage({
 
   return (
     <>
-      <Topbar brand="핫딜오더" right={<TopbarChip>{user.storeName}</TopbarChip>} />
+      <Topbar backHref="/invoices" title="입금요청서" right={<TopbarChip>{user.storeName}</TopbarChip>} />
       <div className="page">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <h1 className="h1" style={{ margin: 0 }}>
-            주간발주 입금요청서
+            입금요청서
           </h1>
           <span className={`badge ${s.cls}`}>{s.label}</span>
         </div>
-        <p className="lead">{labelDateLong(inv.date)} 주간발주</p>
+        <p className="lead">
+          {labelDateLong(inv.date)} · {KIND[inv.kind] ?? "계산서"}
+        </p>
 
         <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" />
 

@@ -59,9 +59,9 @@ export default async function DayReceiptPage(props: {
     !hasOrderWindow(user.role) ||
     (isOrderOpen() && createdAt.getTime() >= windowStart);
 
-  // 입금요청서가 있으면 [발주 목록 / 입금요청서] 선택 탭. 기본은 발주 목록.
-  const showInvoiceTab = !!invoice;
-  const activeView = showInvoiceTab && view === "invoice" ? "invoice" : "orders";
+  // 계산서(입금요청서) 조회는 통합 페이지(/invoices)로 일원화 — 이 화면엔 발주 목록만.
+  const showInvoiceTab = false;
+  const activeView = "orders" as "orders" | "invoice";
 
   type InvItem = NonNullable<typeof invoice>["items"][number];
   const invItemsByCat = new Map<Category, InvItem[]>();

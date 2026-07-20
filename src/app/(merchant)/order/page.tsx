@@ -18,6 +18,7 @@ import {
 } from "@/lib/deadline";
 import { kstDateOf, kstToday, shiftDate, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
+import { orderOpenNow } from "@/lib/order-open";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
 import { myHolds } from "@/lib/stock-hold";
 import { OrderForm } from "@/components/OrderForm";
@@ -30,7 +31,7 @@ export default async function OrderPage(props: {
   const { cancelReq, cancelErr } = await props.searchParams;
   const user = await requireMerchant();
   const windowed = hasOrderWindow(user.role);
-  const open = !windowed || isOrderOpen();
+  const open = await orderOpenNow(user.role); // 운영시간 또는 관리자 임시 오픈
 
   // 1일 미수 잠금 — 지난 날짜 미입금 계산서가 있으면 발주 잠금(관리자 해제 시 예외)
   const receivableLock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
@@ -85,7 +86,7 @@ export default async function OrderPage(props: {
       <div className="page">
         {receivable.balance > 0 && (
           <Link
-            href="/mypage"
+            href="/invoices"
             className="card"
             style={{
               display: "flex",
@@ -126,14 +127,9 @@ export default async function OrderPage(props: {
                 : ""}{" "}
               입금이 확인되면 발주가 다시 열려요. (급하면 새롭에 문의)
             </div>
-            {receivableLock.unpaidDate && (
-              <Link
-                href={`/order/day/${receivableLock.unpaidDate}?view=invoice`}
-                className="btn btn--primary"
-              >
-                입금요청서 보기
-              </Link>
-            )}
+            <Link href="/invoices" className="btn btn--primary">
+              입금요청서 보기
+            </Link>
           </>
         ) : lockedToEdit ? (
           <>

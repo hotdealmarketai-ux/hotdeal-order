@@ -27,7 +27,11 @@ export default async function ReservationsPage() {
             {batches.map((b) => {
               const st = reservationStatusOf({ confirmed: b.confirmed }, b.reserveDate);
               return (
-                <Link key={b.id} href={`/reservations/${b.id}`} className="card resv-card">
+                <Link
+                  key={b.id}
+                  href={`/reservations/${b.id}`}
+                  className={`card resv-card${b.reservedQty > 0 ? " resv-card--mine" : ""}`}
+                >
                   <div className="resv-card__main">
                     <div className="resv-card__title">픽업 {labelDate(b.pickupDate)}</div>
                     <div className="resv-card__sub">

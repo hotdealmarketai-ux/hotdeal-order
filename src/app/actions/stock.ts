@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-import { canOrderNow } from "@/lib/deadline";
+import { orderOpenNow } from "@/lib/order-open";
 import { kstToday } from "@/lib/date";
 import { logError } from "@/lib/log";
 
@@ -19,7 +19,7 @@ export async function holdStockAction(input: {
   if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
     return { ok: false, error: "권한이 없어요." };
   }
-  if (!canOrderNow(user.role)) {
+  if (!(await orderOpenNow(user.role))) {
     return { ok: false, error: "지금은 담기 시간이 아니에요." };
   }
   const itemId = String(input.itemId ?? "");

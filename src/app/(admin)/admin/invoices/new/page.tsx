@@ -1,5 +1,5 @@
 import { Topbar } from "@/components/Topbar";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -28,12 +28,11 @@ export default async function NewInvoicePage(props: {
   const merchant = await prisma.user.findUnique({ where: { id: userId } });
   if (!merchant || !isMerchant(merchant.role as Role)) notFound();
 
-  // 이미 이 날짜 계산서가 있으면(취소 제외) 그리로 이동
+  // 같은 날짜에 계산서를 여러 장 발행할 수 있음(부분·추가 청구). 기존 존재 여부만 확인.
   const existing = await prisma.invoice.findFirst({
     where: { userId, date, status: { not: "VOID" } },
     select: { id: true },
   });
-  if (existing) redirect(`/admin/invoices/${existing.id}`);
 
   // 그날 발주 내역 — 참고용(출고 기준으로 직접 입력하므로 자동 채움 안 함)
   const { start, end } = kstDayRange(date);
@@ -60,8 +59,8 @@ export default async function NewInvoicePage(props: {
 
   const categories = allowedCategoriesFor(merchant.role as Role);
 
-  // 예약분 자동 채움 — 이 날짜(발주일)에 로드되는 확정 예약분을 공구(TOOL)에 미리 채운다(변동 없이 그대로 출고).
-  const reserved = await getReservationInvoiceItems(userId, date);
+  // 예약분 자동 채움 — 그 날짜 '첫 계산서'에만(무한 발행 시 중복 청구 방지). 확정 예약분을 공구(TOOL)에 미리 채움.
+  const reserved = existing ? [] : await getReservationInvoiceItems(userId, date);
   const initialItems: InvoiceInitialItem[] = reserved.map((r) => ({
     category: "TOOL" as Category,
     name: r.name,

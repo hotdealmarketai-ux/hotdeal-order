@@ -74,6 +74,7 @@ export default async function AdminHome() {
       title: "주간발주",
       badge: weeklyCount > 0 ? weeklyCount : undefined,
     },
+    { href: "/admin/billing", title: "계산서 발행" },
     { href: "/admin/deposits", title: "입금 관리" },
     { href: "/admin/inventory", title: "재고" },
     { href: "/admin/audit", title: "로그 내역" },

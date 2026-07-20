@@ -140,7 +140,7 @@ export default async function WeeklyOrderPage({
         )}
 
         <Link
-          href="/weekly/invoices"
+          href="/invoices"
           style={{
             display: "flex",
             justifyContent: "space-between",

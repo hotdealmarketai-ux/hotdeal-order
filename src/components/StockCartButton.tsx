@@ -64,11 +64,11 @@ export function StockCartButton({
     <>
       <button
         type="button"
-        className={`btn btn--xs ${mine > 0 ? "btn--soft" : "btn--primary"}`}
+        className="btn btn--xs btn--primary"
         style={{ flexShrink: 0 }}
         onClick={openSheet}
       >
-        {mine > 0 ? `담음 ${mine}개` : "담기"}
+        담기
       </button>
 
       {open && (

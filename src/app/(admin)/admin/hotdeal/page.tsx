@@ -15,6 +15,9 @@ import {
 } from "@/lib/date";
 import { DateBar } from "@/components/DateBar";
 import { CancelRequestActions } from "@/components/CancelRequestActions";
+import { dailyForceOpen } from "@/lib/order-open";
+import { isOrderOpen } from "@/lib/deadline";
+import { setDailyForceOpenAction } from "@/app/actions/dev";
 
 // 핫딜마켓 가맹점 발주를 '카테고리(보내는 곳)'별로.
 const HOTDEAL = { user: { role: "MERCHANT_HOTDEAL" } } as const;
@@ -89,21 +92,10 @@ export default async function AdminHotdeal(props: {
       g.cats.sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
   }
 
-  // #3 그룹별 계산서 상태 — 목록의 '계산서 작성/발행' 버튼 라벨·링크에 사용(발주취소는 발주서 안으로 이동).
-  const invByKey = new Map<string, { id: string; status: string }>();
-  if (combined && groups.length > 0) {
-    const invs = await prisma.invoice.findMany({
-      where: {
-        userId: { in: [...new Set(groups.map((g) => g.userId))] },
-        kind: "DAILY",
-        date: { in: [...new Set(groups.map((g) => g.date))] },
-        status: { not: "VOID" },
-      },
-      select: { id: true, userId: true, date: true, status: true },
-    });
-    for (const iv of invs)
-      invByKey.set(`${iv.userId}__${iv.date}`, { id: iv.id, status: iv.status });
-  }
+  // 계산서 발행은 관리자 '계산서 발행' 메뉴(/admin/billing)로 일원화 — 이 목록에선 발주만 관리.
+  // 일반발주 임시 오픈(개발/특례) — 운영시간이 아니어도 발주창을 연다.
+  const forceOpen = await dailyForceOpen();
+  const naturalOpen = isOrderOpen();
 
   return (
     <>
@@ -120,6 +112,33 @@ export default async function AdminHotdeal(props: {
               {s.label}
             </Link>
           ))}
+        </div>
+
+        {/* 개발/특례용 — 일반발주 임시 오픈(운영시간 아니어도 발주 가능). 관리자만. */}
+        <div className="pushcard" style={{ marginBottom: 12 }}>
+          <div className="pushcard__main">
+            <div className="pushcard__title">일반발주 임시 오픈</div>
+            <div className="pushcard__sub">
+              {naturalOpen
+                ? "지금은 발주 시간이에요."
+                : forceOpen
+                  ? "임시 오픈 중 — 지금도 발주 가능"
+                  : "운영시간(낮12~밤8시)이 아니어도 열어요 (테스트용)"}
+            </div>
+          </div>
+          <form action={setDailyForceOpenAction}>
+            <input type="hidden" name="on" value={forceOpen ? "false" : "true"} />
+            <button
+              type="submit"
+              role="switch"
+              aria-checked={forceOpen || naturalOpen}
+              aria-label="일반발주 임시 오픈"
+              className={`switch ${forceOpen || naturalOpen ? "is-on" : ""}`}
+              disabled={naturalOpen}
+            >
+              <span className="switch__knob" />
+            </button>
+          </form>
         </div>
 
         <p className="lead" style={{ marginTop: 0 }}>
@@ -172,39 +191,8 @@ export default async function AdminHotdeal(props: {
                       {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
                     </div>
                   </Link>
-                  {g.cancelReq ? (
+                  {g.cancelReq && (
                     <CancelRequestActions userId={g.userId} store={g.store} />
-                  ) : (
-                    (() => {
-                      const inv = invByKey.get(`${g.userId}__${g.date}`);
-                      const s = inv?.status;
-                      const label = !s
-                        ? "계산서 작성"
-                        : s === "PAID"
-                          ? "완납"
-                          : s === "ISSUED"
-                            ? "발행됨"
-                            : "계산서 작성중";
-                      const cls =
-                        s === "DRAFT"
-                          ? "btn btn--xs btn--warn" // 작성중 = 노랑
-                          : s === "PAID" || s === "ISSUED"
-                            ? "btn btn--xs btn--soft"
-                            : "btn btn--xs btn--primary"; // 작성 = 초록
-                      return (
-                        <Link
-                          href={
-                            inv
-                              ? `/admin/invoices/${inv.id}`
-                              : `/admin/invoices/new?user=${g.userId}&date=${g.date}`
-                          }
-                          className={cls}
-                          style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-                        >
-                          {label}
-                        </Link>
-                      );
-                    })()
                   )}
                 </div>
               );

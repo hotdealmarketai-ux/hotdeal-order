@@ -196,6 +196,30 @@ export default async function MyPage(props: {
           </div>
         )}
 
+        <Link
+          href="/invoices"
+          className="card"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            marginTop: 16,
+            textDecoration: "none",
+            color: "inherit",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 15.5 }}>입금요청서</div>
+            <div className="row__sub" style={{ marginTop: 2 }}>
+              발행된 계산서·미수 모두 여기서 확인
+            </div>
+          </div>
+          <span style={{ color: "var(--green-700)", fontWeight: 800 }}>
+            {ar.balance > 0 ? `${fmt(ar.balance)}원 ›` : "보기 ›"}
+          </span>
+        </Link>
+
         <div style={{ marginTop: 22 }}>
           <LogoutButton />
         </div>
