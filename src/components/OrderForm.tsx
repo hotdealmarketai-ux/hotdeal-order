@@ -223,7 +223,6 @@ export function OrderForm({
           </span>
           <span className="entrycard__main">
             <span className="entrycard__title">칸에 직접 입력하기</span>
-            <span className="entrycard__sub">품목·수량을 칸에 하나씩 적어요</span>
           </span>
           <span className="entrycard__chev">›</span>
         </button>
@@ -260,7 +259,6 @@ export function OrderForm({
         </span>
         <span className="entrycard__main">
           <span className="entrycard__title">채팅으로 발주하기</span>
-          <span className="entrycard__sub">말하듯 적으면 AI가 발주서로 정리해요</span>
         </span>
         <span className="entrycard__chev">›</span>
       </button>
@@ -319,9 +317,11 @@ export function OrderForm({
         {/* ⑤ 받는 곳 밴드 → 라벨 줄 통합 */}
         <div className="itemshead">
           <span className="itemshead__label">
-            발주 품목 · {receiverLabel(active, role)}
+            {multi ? "발주 품목" : receiverLabel(active, role)}
           </span>
-          <span className="itemshead__count">{countByCat[active] ?? 0}건</span>
+          {(countByCat[active] ?? 0) > 0 && (
+            <span className="itemshead__count">{countByCat[active]}건</span>
+          )}
         </div>
 
         {active === "TOFU" ? (

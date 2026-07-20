@@ -107,51 +107,43 @@ export function InstallPrompt() {
   return (
     <div className="installbar" role="dialog" aria-label="홈 화면에 추가 안내">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="installbar__icon" src="/icon-192.png" alt="" width={40} height={40} />
-      <div className="installbar__body">
-        <div className="installbar__title">홈 화면에 추가하세요</div>
-        <div className="installbar__desc">
-          {mode === "ios" ? (
-            <>
-              아래{" "}
-              <svg
-                className="installbar__share"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.9"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M12 3v12" />
-                <path d="M8 7l4-4 4 4" />
-                <path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" />
-              </svg>{" "}
-              공유 버튼을 누르고 <b>‘홈 화면에 추가’</b>를 누르세요.
-            </>
-          ) : mode === "android" ? (
-            <>
-              브라우저 <b>⋮</b> 메뉴에서 <b>‘홈 화면에 추가’</b>를 누르세요.
-            </>
-          ) : (
-            <>앱처럼 빠르게 열려요. 오른쪽 ‘추가’를 누르세요.</>
-          )}
-        </div>
-      </div>
+      <img className="installbar__icon" src="/icon-192.png" alt="" width={22} height={22} />
+      <span className="installbar__text">
+        {mode === "ios" ? (
+          <>
+            공유{" "}
+            <svg
+              className="installbar__share"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M12 3v12" />
+              <path d="M8 7l4-4 4 4" />
+              <path d="M6 12v7a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7" />
+            </svg>{" "}
+            → <b>홈 화면에 추가</b>
+          </>
+        ) : mode === "android" ? (
+          <>
+            <b>⋮</b> → <b>홈 화면에 추가</b>
+          </>
+        ) : (
+          <>홈 화면에 추가하면 앱처럼 빨라요</>
+        )}
+      </span>
       {mode === "prompt" && (
         <button className="installbar__cta" type="button" onClick={install}>
           추가
         </button>
       )}
-      <button
-        className="installbar__close"
-        type="button"
-        onClick={dismiss}
-        aria-label="닫기"
-      >
+      <button className="installbar__close" type="button" onClick={dismiss} aria-label="닫기">
         ✕
       </button>
     </div>

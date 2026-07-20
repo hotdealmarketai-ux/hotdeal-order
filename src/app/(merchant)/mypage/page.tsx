@@ -6,7 +6,6 @@ import {
   CATEGORIES,
   CATEGORY_ORDER,
   receiverLabel,
-  ROLE_LABEL,
   type Category,
 } from "@/lib/constants";
 import { formatKDate } from "@/lib/format";
@@ -96,9 +95,6 @@ export default async function MyPage(props: {
 
         <div className="card">
           <div className="receipt__store">{user.storeName}</div>
-          <div className="receipt__meta" style={{ marginTop: 4 }}>
-            {ROLE_LABEL[user.role]}
-          </div>
           <div className="divider" />
           <div className="kv">
             <span className="kv__k">아이디</span>
@@ -112,12 +108,12 @@ export default async function MyPage(props: {
             <span className="kv__k">주소</span>
             <span className="kv__v">{user.address}</span>
           </div>
-          <div className={`kv kv--strong ${ar.balance > 0 ? "kv--due" : ""}`}>
-            <span className="kv__k">미수 잔액</span>
-            <span className="kv__v">
-              {ar.balance > 0 ? `${fmt(ar.balance)}원` : "0원"}
-            </span>
-          </div>
+          {ar.balance > 0 && (
+            <div className="kv kv--strong kv--due">
+              <span className="kv__k">미수 잔액</span>
+              <span className="kv__v">{fmt(ar.balance)}원</span>
+            </div>
+          )}
           <div style={{ marginTop: 14 }}>
             <Link href="/mypage/edit" className="btn btn--ghost">
               프로필 수정
@@ -212,7 +208,7 @@ export default async function MyPage(props: {
           <div>
             <div style={{ fontWeight: 800, fontSize: 15.5 }}>입금요청서</div>
             <div className="row__sub" style={{ marginTop: 2 }}>
-              발행된 계산서·미수 모두 여기서 확인
+              계산서·미수 확인
             </div>
           </div>
           <span style={{ color: "var(--green-700)", fontWeight: 800 }}>

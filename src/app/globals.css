@@ -3102,56 +3102,58 @@ body {
   .msg__typing span { animation: none; }
 }
 
-/* 홈 화면에 추가(PWA 설치) 안내 배너 — 하단, 미설치 시 노출 */
+/* 홈 화면에 추가(PWA 설치) 안내 — 하단 1줄 슬림 바(미설치 시) */
 .installbar {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 8px);
-  width: calc(100% - 24px);
-  max-width: calc(var(--maxw) - 24px);
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 6px);
+  width: calc(100% - 20px);
+  max-width: calc(var(--maxw) - 20px);
   z-index: 44; /* 하단 네비(40) 위, 채팅 플로팅(45)·팝업(90) 아래 */
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 11px 12px;
+  gap: 8px;
+  padding: 6px 8px 6px 10px;
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(18, 60, 38, 0.2);
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(18, 60, 38, 0.14);
   animation: installbar-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes installbar-in {
-  from { opacity: 0; transform: translate(-50%, 16px); }
+  from { opacity: 0; transform: translate(-50%, 12px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
   .installbar { animation: none; }
 }
-.installbar__icon { flex-shrink: 0; width: 40px; height: 40px; border-radius: 10px; }
-.installbar__body { flex: 1; min-width: 0; }
-.installbar__title { font-size: 14.5px; font-weight: 800; color: var(--fg); }
-.installbar__desc { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.38; }
-.installbar__desc b { color: var(--fg); font-weight: 700; }
+.installbar__icon { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; }
+.installbar__text {
+  flex: 1; min-width: 0;
+  font-size: 12.5px; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.installbar__text b { color: var(--fg); font-weight: 700; }
 .installbar__share { display: inline-block; vertical-align: -2px; color: var(--green-700); }
 .installbar__cta {
   flex-shrink: 0; border: none; cursor: pointer;
   background: var(--green-700); color: #fff;
-  font-size: 14px; font-weight: 800;
-  padding: 9px 16px; border-radius: 999px;
+  font-size: 12.5px; font-weight: 800;
+  padding: 6px 13px; border-radius: 999px;
 }
 .installbar__cta:active { transform: scale(0.96); }
 .installbar__close {
   flex-shrink: 0; border: none; background: transparent; cursor: pointer;
-  width: 28px; height: 28px; border-radius: 8px; padding: 0;
-  color: var(--muted-2); font-size: 15px;
+  width: 26px; height: 26px; border-radius: 999px; padding: 0;
+  color: var(--muted-2); font-size: 14px;
   display: grid; place-items: center;
 }
 .installbar__close:active { background: var(--chip-mute-bg); }
 
-/* 배너가 떠 있을 때 채팅 플로팅 버튼을 배너 위로 올림(2줄 안내까지 안 겹치게) */
+/* 배너가 떠 있을 때 채팅 플로팅 버튼을 슬림 바 위로 살짝 올림 */
 :root[data-installbar="1"] .chatfab {
-  bottom: calc(var(--nav-h) + 112px + env(safe-area-inset-bottom));
+  bottom: calc(var(--nav-h) + 58px + env(safe-area-inset-bottom));
 }
 
 /* ══ 예약발주 · 재고 담기 · 공구 — 브랜드(진녹색 포인트) 통일 ══ */
