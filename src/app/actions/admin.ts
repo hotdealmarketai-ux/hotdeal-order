@@ -92,18 +92,35 @@ export async function deleteMemberAction(formData: FormData) {
   const userId = String(formData.get("userId") ?? "");
   if (!userId || userId === admin.id) return; // 본인 삭제 금지
 
-  // 삭제 전 스냅샷(복구 참고용) — 회원 요약 + 함께 지워질 발주 건수
+  // 삭제 전 스냅샷(복구 참고용) — 회원 요약 + 함께 지워질 데이터 건수
   const victim = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true, username: true, storeName: true, phone: true, address: true,
       role: true, status: true, payerNames: true, createdAt: true,
-      _count: { select: { orders: true } },
+      _count: {
+        select: {
+          orders: true,
+          invoices: true,
+          weeklyOrders: true,
+          reservationOrders: true,
+        },
+      },
     },
   });
   if (!victim) return; // 이미 없는 회원
 
+  // 회원을 참조하는 모든 소유 데이터를 먼저 지워야 user.delete 가 FK 제약에 막히지 않는다.
+  // (이전엔 발주(Order)만 지워, 계산서·주간발주·예약발주·재고담기가 있는 회원은 삭제가 실패했다.)
+  // - Invoice/WeeklyOrder/ReservationOrder/Order: 각자의 항목(Item)은 onDelete:Cascade 로 함께 삭제.
+  // - StockHold: 담기 홀드(임시).
+  // - Notification/PushSubscription/ChatThread: User FK 가 Cascade 라 user.delete 시 자동 삭제.
+  // - Deposit(matchedUserId): onDelete:SetNull — 실제 은행 입금 기록은 보존하고 매칭만 해제.
   await prisma.$transaction([
+    prisma.invoice.deleteMany({ where: { userId } }),
+    prisma.weeklyOrder.deleteMany({ where: { userId } }),
+    prisma.reservationOrder.deleteMany({ where: { userId } }),
+    prisma.stockHold.deleteMany({ where: { userId } }),
     prisma.order.deleteMany({ where: { userId } }),
     prisma.user.delete({ where: { id: userId } }),
   ]);
@@ -113,7 +130,7 @@ export async function deleteMemberAction(formData: FormData) {
     actorName: admin.storeName,
     targetType: "user",
     targetId: userId,
-    summary: `회원 삭제: ${victim.storeName}(${victim.username}) · 발주 ${victim._count.orders}건 함께 삭제`,
+    summary: `회원 삭제: ${victim.storeName}(${victim.username}) · 발주 ${victim._count.orders} · 계산서 ${victim._count.invoices} · 주간 ${victim._count.weeklyOrders} · 예약 ${victim._count.reservationOrders}건 함께 삭제`,
     snapshot: victim,
   });
   revalidatePath("/admin/members");
