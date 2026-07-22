@@ -15,10 +15,19 @@ function toInt(v: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+type ParseResult = {
+  rows: Row[]; // 이름 기준 dedupe된 최종 목록
+  dupNames: string[]; // 두 번 이상 나온 품목명(첫 줄만 반영, 나머지 무시)
+  dataLines: number; // 헤더/빈줄 제외한 붙여넣은 데이터 줄 수
+  skippedHeader: boolean;
+};
 // 붙여넣은 텍스트 파싱 — 탭(엑셀 기본) 우선, 없으면 콤마. 이름 기준 dedupe. 헤더줄 스킵.
-function parseRows(text: string): Row[] {
+function parseRows(text: string): ParseResult {
   const seen = new Set<string>();
-  const out: Row[] = [];
+  const dup = new Set<string>();
+  const rows: Row[] = [];
+  let dataLines = 0;
+  let skippedHeader = false;
   for (const raw of text.split(/\r?\n/)) {
     if (!raw.trim()) continue;
     const cells = raw.includes("\t") ? raw.split("\t") : raw.split(",");
@@ -27,12 +36,19 @@ function parseRows(text: string): Row[] {
     const c1 = (cells[1] ?? "").trim();
     const c2 = (cells[2] ?? "").trim();
     // 헤더줄 추정 시 스킵(품목/상품/이름 + 수량/재고/공급/단가/가격)
-    if (/품목|상품|이름/.test(name) && /수량|재고|공급|단가|가격/.test(c1 + c2)) continue;
-    if (seen.has(name)) continue;
+    if (/품목|상품|이름/.test(name) && /수량|재고|공급|단가|가격/.test(c1 + c2)) {
+      skippedHeader = true;
+      continue;
+    }
+    dataLines++;
+    if (seen.has(name)) {
+      dup.add(name); // 같은 이름 두 번째부터 — 첫 줄만 반영
+      continue;
+    }
     seen.add(name);
-    out.push({ name, qty: toInt(c1), supplyPrice: toInt(c2) });
+    rows.push({ name, qty: toInt(c1), supplyPrice: toInt(c2) });
   }
-  return out;
+  return { rows, dupNames: [...dup], dataLines, skippedHeader };
 }
 
 export function InventoryBulkImport({ currentNames }: { currentNames: string[] }) {
@@ -43,7 +59,10 @@ export function InventoryBulkImport({ currentNames }: { currentNames: string[] }
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  const parsed = useMemo(() => parseRows(text), [text]);
+  const { rows: parsed, dupNames, dataLines, skippedHeader } = useMemo(
+    () => parseRows(text),
+    [text],
+  );
   const diff = useMemo(() => {
     const cur = new Set(currentNames);
     const pastedNames = new Set(parsed.map((p) => p.name));
@@ -116,6 +135,19 @@ export function InventoryBulkImport({ currentNames }: { currentNames: string[] }
             <span className={`badge ${diff.del.length ? "badge--danger" : "badge--mute"}`}>
               삭제 {diff.del.length}
             </span>
+          </div>
+
+          <div className="notice notice--mute" style={{ marginTop: 10 }}>
+            붙여넣은 {dataLines}줄 → 품목 <b>{parsed.length}개</b>
+            {skippedHeader && " · 헤더 줄 자동 제외"}
+            {dupNames.length > 0 && (
+              <>
+                <br />
+                같은 품목명 <b>{dupNames.length}개는 첫 줄만</b> 반영돼요(아래 줄은 무시):{" "}
+                {dupNames.slice(0, 20).join(", ")}
+                {dupNames.length > 20 ? " …" : ""}
+              </>
+            )}
           </div>
 
           <div className="bulkprev">
