@@ -24,7 +24,7 @@ import { kstDateOf, kstToday, shiftDate, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { orderOpenNow } from "@/lib/order-open";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
-import { myHolds } from "@/lib/stock-hold";
+import { myHolds, heldByItem } from "@/lib/stock-hold";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import { RequestCancelButton } from "@/components/RequestCancelButton";
@@ -73,10 +73,33 @@ export default async function OrderPage(props: {
   const reservedLabel =
     reservedTool.length > 0 ? `픽업 ${labelDate(shiftDate(orderDay, 1))} 예약분` : "";
 
-  // 공구 담기 = 서버 담기원장(오늘 발주창). localStorage 대신 이걸 발주에 넣는다.
+  // 공구 담기 = 서버 담기원장(오늘 발주창). 발주 화면에서 바로 +/- 하도록 남은수량·공급가까지 실어보낸다.
+  // 남은수량(available) = 기준재고 − 전체 담기(내 것 포함). 실시간 공유 = 모든 가맹점이 같은 값을 본다.
   const toolCart =
     user.role === "MERCHANT_HOTDEAL"
-      ? (await myHolds(user.id, orderDay)).map((h) => ({ name: h.name, qty: String(h.qty) }))
+      ? await (async () => {
+          const [mine, held, invItems] = await Promise.all([
+            myHolds(user.id, orderDay),
+            heldByItem(orderDay),
+            prisma.inventoryItem.findMany({
+              where: { deletedAt: null },
+              select: { id: true, qty: true, supplyPrice: true },
+            }),
+          ]);
+          const invById = new Map(invItems.map((i) => [i.id, i]));
+          return mine.map((h) => {
+            const inv = invById.get(h.itemId);
+            const base = inv?.qty ?? 0;
+            return {
+              itemId: h.itemId,
+              name: h.name,
+              qty: String(h.qty),
+              mine: h.qty,
+              available: Math.max(0, base - (held[h.itemId] ?? 0)),
+              supplyPrice: inv?.supplyPrice ?? 0,
+            };
+          });
+        })()
       : [];
 
   return (

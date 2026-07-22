@@ -9,6 +9,8 @@ import {
 } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { FulfillmentPicker } from "./FulfillmentPicker";
+import { StockCartButton } from "./StockCartButton";
+import type { ToolHold } from "./OrderForm";
 import {
   CATEGORIES,
   CATEGORY_ORDER,
@@ -48,7 +50,7 @@ export function ChatOrder({
   locked?: boolean;
   reservedTool?: { name: string; qty: number }[];
   reservedLabel?: string;
-  toolCart?: { name: string; qty: string }[];
+  toolCart?: ToolHold[];
 }) {
   // 채움채(TOFU)=체크리스트. 공구(TOOL)=자유입력 불가(담기/예약분만). 자유입력은 과일·야채만.
   const chatCats = categories.filter((c) => c !== "TOFU" && c !== "TOOL");
@@ -75,8 +77,9 @@ export function ChatOrder({
     createOrderAction,
     {},
   );
-  // 재고 담기(서버 담기원장)로 담아둔 공구 품목 — 발주에 함께 포함 + 화면에 읽기전용 노출
-  const [cartItems] = useState<{ name: string; qty: string }[]>(() => toolCart);
+  // 재고 담기(서버 담기원장) — 발주에 포함 + 공구 섹션에서 남은수량 보며 +/-.
+  // 서버 소스라 담기/빼기(router.refresh) 후 항상 최신(모든 가맹점 공유).
+  const cartItems = toolCart;
 
   const tofuChecked = () =>
     tofuOpen && CHAEUMCHAE_CATALOG.some((p) => (tofuQty[p.seq] ?? "").trim());
@@ -163,7 +166,7 @@ export function ChatOrder({
     // 담기(공구)는 읽기전용이지만 발주엔 포함 — payload에 직접 추가(예약분은 단일출처라 미포함)
     if (hasTool && cartItems.length > 0) {
       const tool = cartItems
-        .filter((c) => c.name.trim())
+        .filter((c) => c.name.trim() && Number(c.qty) > 0)
         .map((c) => ({ name: c.name, qty: c.qty, note: "" }));
       if (tool.length) byCat.set("TOOL", tool);
     }
@@ -267,12 +270,24 @@ export function ChatOrder({
           <div className="toolro__group">
             <div className="toolro__head">
               <span className="chip">담은 재고 · 공구</span>
-              <span className="toolro__hint">재고 현황에서 수정·삭제</span>
+              <span className="toolro__hint">남은 수량 보며 담기 / 빼기</span>
             </div>
-            {cartItems.map((c, i) => (
-              <div className="toolro__item" key={`ct${i}`}>
-                <span className="toolro__name">{c.name}</span>
-                <span className="toolro__qty">{c.qty}</span>
+            {cartItems.map((t) => (
+              <div className="stockline" key={t.itemId}>
+                <div className="stockline__info">
+                  <span className="stockline__name">{t.name}</span>
+                  <span className="stockline__meta">
+                    남은 {t.available}개 · 담음 {t.mine}개
+                  </span>
+                </div>
+                <StockCartButton
+                  itemId={t.itemId}
+                  name={t.name}
+                  disabled={locked}
+                  available={t.available}
+                  mine={t.mine}
+                  supplyPrice={t.supplyPrice}
+                />
               </div>
             ))}
           </div>

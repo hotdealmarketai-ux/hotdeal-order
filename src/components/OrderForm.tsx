@@ -26,6 +26,7 @@ import {
 import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
 import { FulfillmentPicker } from "./FulfillmentPicker";
+import { StockCartButton } from "./StockCartButton";
 import {
   CATEGORIES,
   FULFILLMENT_LABEL,
@@ -37,6 +38,14 @@ import {
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 
 type Row = { id: number; name: string; qty: string; note: string };
+export type ToolHold = {
+  itemId: string;
+  name: string;
+  qty: string;
+  mine: number;
+  available: number;
+  supplyPrice: number;
+};
 
 function isFilled(r: Row) {
   return !!(r.name.trim() || r.qty.trim() || r.note.trim());
@@ -64,8 +73,8 @@ export function OrderForm({
   /** 픽업 전날 자동 반영되는 예약분(읽기전용) — 공구에 표시만, 주문엔 복제 안 함 */
   reservedTool?: { name: string; qty: number }[];
   reservedLabel?: string;
-  /** 재고 담기(서버 담기원장) — 공구에 읽기전용으로 표시 + 발주에 포함 */
-  toolCart?: { name: string; qty: string }[];
+  /** 재고 담기(서버 담기원장) — 공구에서 남은수량 보며 +/-. 발주 페이로드도 이 서버소스 기준 */
+  toolCart?: ToolHold[];
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -75,15 +84,7 @@ export function OrderForm({
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
     const init: Record<string, Row[]> = {};
     for (const c of categories) init[c] = [newRow()];
-    // 공구(TOOL) = 담기(서버 담기원장)로 채움. 자유입력 없음.
-    if (categories.includes("TOOL") && toolCart.length) {
-      init.TOOL = toolCart.map((c) => ({
-        id: ++uid.current,
-        name: c.name,
-        qty: c.qty,
-        note: "",
-      }));
-    }
+    // 공구(TOOL)는 서버 담기원장(toolCart)이 단일 소스 — rowsByCat 에 담지 않는다.
     return init;
   });
   const [pickup, setPickup] = useState("");
@@ -143,13 +144,20 @@ export function OrderForm({
             ).map((p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }));
             return { category: c, items };
           }
+          if (c === "TOOL") {
+            // 공구는 서버 담기원장(toolCart)이 소스 — +/- 후 refresh 되면 여기도 최신
+            const items = toolCart
+              .filter((t) => t.name.trim() && Number(t.qty) > 0)
+              .map((t) => ({ name: t.name, qty: t.qty, note: "" }));
+            return { category: c, items };
+          }
           const items = (rowsByCat[c] ?? [])
             .filter(isFilled)
             .map((r) => ({ name: r.name, qty: r.qty, note: r.note }));
           return { category: c, items };
         })
         .filter((g) => g.items.length > 0),
-    [categories, rowsByCat, tofuQty],
+    [categories, rowsByCat, tofuQty, toolCart],
   );
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
@@ -394,21 +402,33 @@ export function OrderForm({
                 ))}
               </div>
             )}
-            {rows.filter(isFilled).length > 0 && (
+            {toolCart.length > 0 && (
               <div className="toolro__group">
                 <div className="toolro__head">
                   <span className="chip">담은 재고</span>
-                  <span className="toolro__hint">재고 현황에서 수정·삭제</span>
+                  <span className="toolro__hint">남은 수량 보며 담기 / 빼기</span>
                 </div>
-                {rows.filter(isFilled).map((r) => (
-                  <div className="toolro__item" key={r.id}>
-                    <span className="toolro__name">{r.name}</span>
-                    <span className="toolro__qty">{r.qty}</span>
+                {toolCart.map((t) => (
+                  <div className="stockline" key={t.itemId}>
+                    <div className="stockline__info">
+                      <span className="stockline__name">{t.name}</span>
+                      <span className="stockline__meta">
+                        남은 {t.available}개 · 담음 {t.mine}개
+                      </span>
+                    </div>
+                    <StockCartButton
+                      itemId={t.itemId}
+                      name={t.name}
+                      disabled={locked}
+                      available={t.available}
+                      mine={t.mine}
+                      supplyPrice={t.supplyPrice}
+                    />
                   </div>
                 ))}
               </div>
             )}
-            {reservedTool.length === 0 && rows.filter(isFilled).length === 0 && (
+            {reservedTool.length === 0 && toolCart.length === 0 && (
               <div className="empty">
                 공구는 직접 적을 수 없어요.
                 <br />
