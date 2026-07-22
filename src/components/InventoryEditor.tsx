@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { autosaveInventoryAction } from "@/app/actions/admin";
+import { InvSearch } from "./InvSearch";
 
 type Item = { id: string; name: string; qty: string; supplyPrice: string };
 
@@ -9,6 +10,7 @@ type Item = { id: string; name: string; qty: string; supplyPrice: string };
 // 각 품목은 한 줄(품목명 · 수량 · 공급가 · 삭제)로 컴팩트하게.
 export function InventoryEditor({ initial }: { initial: Item[] }) {
   const [items, setItems] = useState<Item[]>(initial);
+  const [q, setQ] = useState("");
   const [status, setStatus] = useState<"idle" | "saving" | "saved">("idle");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(items);
@@ -37,8 +39,16 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
     scheduleSave();
   };
 
+  // 검색은 '표시'만 필터 — items(전체)는 그대로 유지해야 자동저장이 필터된 행을 지우지 않는다.
+  const query = q.trim().toLowerCase();
+  const visible = query
+    ? items.filter((it) => it.name.toLowerCase().includes(query))
+    : items;
+
   return (
     <>
+      <InvSearch value={q} onChange={setQ} />
+
       <div className="invedit__status">
         {status === "saving" ? "저장 중…" : status === "saved" ? "자동 저장됨 ✓" : " "}
       </div>
@@ -46,6 +56,10 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
       {items.length === 0 ? (
         <div className="empty">
           <p>등록된 재고가 없어요.</p>
+        </div>
+      ) : query && visible.length === 0 ? (
+        <div className="empty">
+          <p>‘{q.trim()}’ 검색 결과가 없어요.</p>
         </div>
       ) : (
         <div className="invtable">
@@ -55,7 +69,7 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
             <span className="invcol invcol--price">공급가</span>
             <span className="invcol invcol--del" />
           </div>
-          {items.map((it) => (
+          {visible.map((it) => (
             <div className="invrow" key={it.id}>
               <input
                 className="invin invcol--name"

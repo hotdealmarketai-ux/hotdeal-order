@@ -53,3 +53,6 @@ _copy/
 orderya-copy.txt
 _*.mjs
 _*.cjs
+_copy-data.json
+_extract-copy.mjs
+문구수정목록.xlsx

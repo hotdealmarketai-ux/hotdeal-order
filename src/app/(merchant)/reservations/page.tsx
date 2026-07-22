@@ -3,8 +3,8 @@ import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { getMerchantReservationBatches } from "@/lib/reservation-data";
-import { labelDate } from "@/lib/date";
-import { reservationStatusOf, reservationDeadlineLabel } from "@/lib/reservation";
+import { reservationStatusOf } from "@/lib/reservation";
+import { ReservationDates } from "@/components/ReservationDates";
 
 export default async function ReservationsPage() {
   const user = await requireMerchant();
@@ -33,10 +33,10 @@ export default async function ReservationsPage() {
                   className={`card resv-card${b.reservedQty > 0 ? " resv-card--mine" : ""}`}
                 >
                   <div className="resv-card__main">
-                    <div className="resv-card__title">픽업 {labelDate(b.pickupDate)}</div>
-                    <div className="resv-card__sub">
-                      예약 마감 {reservationDeadlineLabel(b.reserveDate)}
-                    </div>
+                    <ReservationDates
+                      reserveDate={b.reserveDate}
+                      pickupDate={b.pickupDate}
+                    />
                     <div className="resv-card__meta">
                       상품 {b.productCount}개
                       {b.reservedQty > 0 ? ` · 내 예약 ${b.reservedQty}개` : ""}

@@ -3243,6 +3243,36 @@ a.resv-card:active { transform: scale(0.995); }
 /* 내가 예약한(수량>0) 날짜 카드 — 브랜드 배경으로 구분 */
 .resv-card--mine { background: var(--green-100); border-color: var(--green-150); }
 
+/* 예약발주 3날짜(예약·픽업·마감) — 셋 다 크고 명확하게, 색상 라벨로 구분 */
+.resvdates { display: flex; flex-direction: column; gap: 8px; }
+.resvdates__row { display: flex; align-items: center; gap: 10px; }
+.resvdates__k {
+  flex: 0 0 auto; width: 48px; text-align: center;
+  font-size: 12.5px; font-weight: 800; border-radius: 999px; padding: 4px 0;
+}
+.resvdates__k--reserve { background: var(--chip-mute-bg); color: var(--muted); }
+.resvdates__k--pickup { background: var(--green-700); color: #fff; }
+.resvdates__k--deadline { background: var(--danger-bg); color: var(--danger); }
+.resvdates__v { font-size: 15.5px; font-weight: 700; color: var(--fg); letter-spacing: -0.01em; }
+.resvdates__v--strong { font-size: 17px; font-weight: 800; color: var(--green-700); }
+.resvdates__v--deadline { font-size: 14.5px; color: var(--danger); font-weight: 700; }
+.resvdates-card { margin-bottom: 14px; }
+
+/* 재고현황 이름 검색 (점주·관리자 공용) */
+.invsearch { position: relative; display: flex; align-items: center; margin-bottom: 12px; }
+.invsearch__ic { position: absolute; left: 13px; color: var(--muted); pointer-events: none; }
+.invsearch__input {
+  width: 100%; box-sizing: border-box; padding: 12px 38px 12px 40px;
+  border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface);
+  font-size: 15px; color: var(--fg);
+}
+.invsearch__input::placeholder { color: var(--muted); }
+.invsearch__clear {
+  position: absolute; right: 8px; width: 26px; height: 26px; border-radius: 999px;
+  display: grid; place-items: center; background: var(--chip-mute-bg); color: var(--muted);
+  border: 0; cursor: pointer; font-size: 13px;
+}
+
 /* 관리자 — 확정 점주 행 */
 .resv-conf { display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }

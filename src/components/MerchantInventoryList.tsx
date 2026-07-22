@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { StockCartButton } from "./StockCartButton";
+import { InvSearch } from "./InvSearch";
 
 type Item = {
   id: string;
@@ -34,8 +35,14 @@ export function MerchantInventoryList({
 }) {
   const [sort, setSort] = useState<SortKey>("name");
   const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
 
-  const sorted = [...items].sort((a, b) => {
+  const query = q.trim().toLowerCase();
+  const filtered = query
+    ? items.filter((it) => it.name.toLowerCase().includes(query))
+    : items;
+
+  const sorted = [...filtered].sort((a, b) => {
     switch (sort) {
       case "qtyDesc":
         return b.available - a.available || a.name.localeCompare(b.name, "ko");
@@ -52,6 +59,8 @@ export function MerchantInventoryList({
 
   return (
     <>
+      <InvSearch value={q} onChange={setQ} />
+
       <div className="invsort">
         <span className="invsort__hint">{hint}</span>
         <button
@@ -96,6 +105,12 @@ export function MerchantInventoryList({
           </>
         )}
       </div>
+
+      {query && sorted.length === 0 && (
+        <div className="empty">
+          <p>‘{q.trim()}’ 검색 결과가 없어요.</p>
+        </div>
+      )}
 
       <div className="list">
         {sorted.map((it) => (

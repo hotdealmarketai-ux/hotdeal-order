@@ -4,6 +4,7 @@ import { requireMerchant } from "@/lib/session";
 import { getMerchantReservation } from "@/lib/reservation-data";
 import { ReservationOrderForm } from "@/components/ReservationOrderForm";
 import { ReservationDeadlineCountdown } from "@/components/ReservationDeadlineCountdown";
+import { ReservationDates } from "@/components/ReservationDates";
 import { isReservationClosed } from "@/lib/reservation";
 import { labelDate } from "@/lib/date";
 
@@ -27,6 +28,12 @@ export default async function ReservationDetailPage(props: {
         />
       </Topbar>
       <div className="page">
+        <div className="card resvdates-card">
+          <ReservationDates
+            reserveDate={detail.reserveDate}
+            pickupDate={detail.pickupDate}
+          />
+        </div>
         <ReservationOrderForm
           batchId={detail.id}
           products={detail.products}
