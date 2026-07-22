@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { StockCartButton } from "./StockCartButton";
 import { InvSearch } from "./InvSearch";
+import { useLiveStock } from "@/lib/useLiveStock";
 
 type Item = {
   id: string;
@@ -36,6 +37,7 @@ export function MerchantInventoryList({
   const [sort, setSort] = useState<SortKey>("name");
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const live = useLiveStock(); // 남은수량 실시간(다른 점주 담기 반영)
 
   const query = q.trim().toLowerCase();
   const filtered = query
@@ -113,7 +115,10 @@ export function MerchantInventoryList({
       )}
 
       <div className="list">
-        {sorted.map((it) => (
+        {sorted.map((it) => {
+          const avail = live.availableOf(it.id, it.available);
+          const mineQ = live.mineOf(it.id, it.mine);
+          return (
           <div className="row" key={it.id}>
             <div className="row__main">
               <div className="row__title">{it.name}</div>
@@ -123,16 +128,16 @@ export function MerchantInventoryList({
               >
                 <span
                   className={`badge ${
-                    it.available <= 0
+                    avail <= 0
                       ? "badge--danger"
-                      : it.available < 5
+                      : avail < 5
                         ? "badge--wait"
                         : "badge--ok"
                   }`}
                 >
-                  {it.available <= 0 ? "품절" : `${it.available}개`}
+                  {avail <= 0 ? "품절" : `${avail}개`}
                 </span>
-                {it.mine > 0 && <span className="badge badge--ai">담음 {it.mine}개</span>}
+                {mineQ > 0 && <span className="badge badge--ai">담음 {mineQ}개</span>}
                 {it.supplyPrice > 0 && <span>공급가 {won(it.supplyPrice)}원</span>}
               </div>
             </div>
@@ -140,12 +145,13 @@ export function MerchantInventoryList({
               itemId={it.id}
               name={it.name}
               disabled={!canAdd}
-              available={it.available}
-              mine={it.mine}
+              available={avail}
+              mine={mineQ}
               supplyPrice={it.supplyPrice}
             />
           </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

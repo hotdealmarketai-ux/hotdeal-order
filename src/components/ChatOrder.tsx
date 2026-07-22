@@ -10,6 +10,7 @@ import {
 import { SubmitButton } from "./SubmitButton";
 import { FulfillmentPicker } from "./FulfillmentPicker";
 import { StockCartButton } from "./StockCartButton";
+import { useLiveStock } from "@/lib/useLiveStock";
 import type { ToolHold } from "./OrderForm";
 import {
   CATEGORIES,
@@ -80,6 +81,7 @@ export function ChatOrder({
   // 재고 담기(서버 담기원장) — 발주에 포함 + 공구 섹션에서 남은수량 보며 +/-.
   // 서버 소스라 담기/빼기(router.refresh) 후 항상 최신(모든 가맹점 공유).
   const cartItems = toolCart;
+  const live = useLiveStock(); // 공구 남은수량 실시간
 
   const tofuChecked = () =>
     tofuOpen && CHAEUMCHAE_CATALOG.some((p) => (tofuQty[p.seq] ?? "").trim());
@@ -272,24 +274,28 @@ export function ChatOrder({
               <span className="chip">담은 재고 · 공구</span>
               <span className="toolro__hint">남은 수량 보며 담기 / 빼기</span>
             </div>
-            {cartItems.map((t) => (
-              <div className="stockline" key={t.itemId}>
-                <div className="stockline__info">
-                  <span className="stockline__name">{t.name}</span>
-                  <span className="stockline__meta">
-                    남은 {t.available}개 · 담음 {t.mine}개
-                  </span>
+            {cartItems.map((t) => {
+              const avail = live.availableOf(t.itemId, t.available);
+              const mineQ = live.mineOf(t.itemId, t.mine);
+              return (
+                <div className="stockline" key={t.itemId}>
+                  <div className="stockline__info">
+                    <span className="stockline__name">{t.name}</span>
+                    <span className="stockline__meta">
+                      남은 {avail}개 · 담음 {mineQ}개
+                    </span>
+                  </div>
+                  <StockCartButton
+                    itemId={t.itemId}
+                    name={t.name}
+                    disabled={locked}
+                    available={avail}
+                    mine={mineQ}
+                    supplyPrice={t.supplyPrice}
+                  />
                 </div>
-                <StockCartButton
-                  itemId={t.itemId}
-                  name={t.name}
-                  disabled={locked}
-                  available={t.available}
-                  mine={t.mine}
-                  supplyPrice={t.supplyPrice}
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

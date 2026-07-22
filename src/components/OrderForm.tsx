@@ -27,6 +27,7 @@ import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
 import { FulfillmentPicker } from "./FulfillmentPicker";
 import { StockCartButton } from "./StockCartButton";
+import { useLiveStock } from "@/lib/useLiveStock";
 import {
   CATEGORIES,
   FULFILLMENT_LABEL,
@@ -94,6 +95,7 @@ export function OrderForm({
   const [previewing, setPreviewing] = useState(false);
   const [confirmTab, setConfirmTab] = useState<Category>(categories[0]);
   const [localError, setLocalError] = useState("");
+  const live = useLiveStock(); // 공구 담은 재고 남은수량 실시간
   const [state, formAction] = useActionState<OrderFormState, FormData>(
     createOrderAction,
     {},
@@ -408,24 +410,28 @@ export function OrderForm({
                   <span className="chip">담은 재고</span>
                   <span className="toolro__hint">남은 수량 보며 담기 / 빼기</span>
                 </div>
-                {toolCart.map((t) => (
-                  <div className="stockline" key={t.itemId}>
-                    <div className="stockline__info">
-                      <span className="stockline__name">{t.name}</span>
-                      <span className="stockline__meta">
-                        남은 {t.available}개 · 담음 {t.mine}개
-                      </span>
+                {toolCart.map((t) => {
+                  const avail = live.availableOf(t.itemId, t.available);
+                  const mineQ = live.mineOf(t.itemId, t.mine);
+                  return (
+                    <div className="stockline" key={t.itemId}>
+                      <div className="stockline__info">
+                        <span className="stockline__name">{t.name}</span>
+                        <span className="stockline__meta">
+                          남은 {avail}개 · 담음 {mineQ}개
+                        </span>
+                      </div>
+                      <StockCartButton
+                        itemId={t.itemId}
+                        name={t.name}
+                        disabled={locked}
+                        available={avail}
+                        mine={mineQ}
+                        supplyPrice={t.supplyPrice}
+                      />
                     </div>
-                    <StockCartButton
-                      itemId={t.itemId}
-                      name={t.name}
-                      disabled={locked}
-                      available={t.available}
-                      mine={t.mine}
-                      supplyPrice={t.supplyPrice}
-                    />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
             {reservedTool.length === 0 && toolCart.length === 0 && (

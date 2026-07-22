@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { holdStockAction } from "@/app/actions/stock";
+import { refreshLiveStock } from "@/lib/useLiveStock";
 import { Sheet } from "./Sheet";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -33,6 +34,11 @@ export function StockCartButton({
   const maxForMe = available + mine; // 내가 담을 수 있는 최대(남은 + 내가 이미 담은 것)
   const soldOut = maxForMe <= 0;
 
+  // 실시간으로 남은수량이 줄면(다른 점주가 담음) 열려있는 스테퍼 값도 상한에 맞춰 내림
+  useEffect(() => {
+    setCount((c) => Math.min(Math.max(1, c), Math.max(1, maxForMe)));
+  }, [maxForMe]);
+
   if (disabled || (soldOut && mine <= 0)) {
     return (
       <span className="badge badge--mute" style={{ opacity: 0.6, flexShrink: 0 }}>
@@ -54,10 +60,12 @@ export function StockCartButton({
       const res = await holdStockAction({ itemId, qty });
       if (!res.ok) {
         setErr(res.error ?? "담기에 실패했어요.");
+        refreshLiveStock(); // 실패(초과)여도 최신 남은수량 반영
         return;
       }
       setOpen(false);
       router.refresh();
+      refreshLiveStock(); // 내 담기/빼기를 전 화면에 즉시 반영
     });
 
   return (
