@@ -239,6 +239,111 @@ export async function deleteInventoryAction(formData: FormData) {
   revalidatePath("/inventory");
 }
 
+// 엑셀(스프레드시트) 붙여넣기 일괄 반영 — 앱이 기준(원본). 시트를 고치는 게 아니라 앱에 직접 넣는다.
+// 3열: 품목명 / 수량 / 공급가. '엑셀 목록으로 전체 교체'(붙여넣기에 없는 기존 품목은 삭제).
+// - 이름을 키로 upsert(기존 품목은 id를 보존 → 담기 원장 연결 유지). sortOrder는 붙여넣은 순서.
+// - StockHold.itemId는 FK가 아니라 품목 삭제/교체에도 원장은 보존된다(이름 스냅샷).
+// - ⚠️ 빈 목록이면 아무것도 하지 않는다(전량 삭제 사고 방지). 시트 반영은 pending만(단방향, 다음 크론).
+export type BulkInventoryResult = {
+  ok: boolean;
+  error?: string;
+  added?: number;
+  updated?: number;
+  deleted?: number;
+};
+export async function bulkReplaceInventoryAction(
+  payloadJson: string,
+): Promise<BulkInventoryResult> {
+  const admin = await requireAdmin();
+
+  let rows: { name?: string; qty?: unknown; supplyPrice?: unknown }[];
+  try {
+    rows = JSON.parse(String(payloadJson ?? "[]"));
+  } catch {
+    return { ok: false, error: "붙여넣은 내용을 읽지 못했어요. 다시 붙여넣어 주세요." };
+  }
+  if (!Array.isArray(rows)) return { ok: false, error: "형식이 올바르지 않아요." };
+
+  // 문자/숫자 어느 쪽이 와도 안전하게 정수화
+  const numOf = (v: unknown) => toInt(v == null ? null : String(v));
+  // 정제 + 이름 기준 dedupe(첫 번째만 채택 — 이름이 동기화 키)
+  const seen = new Set<string>();
+  const clean: { name: string; qty: number; supplyPrice: number }[] = [];
+  for (const r of rows) {
+    const name = String(r.name ?? "").trim();
+    if (!name) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    clean.push({ name, qty: numOf(r.qty), supplyPrice: numOf(r.supplyPrice) });
+  }
+  // 전량 삭제 사고 방지 — 빈 목록이면 거부(실수로 전체가 지워지는 것 차단)
+  if (clean.length === 0) {
+    return { ok: false, error: "붙여넣은 품목이 없어요. (안전을 위해 전체 삭제는 막았어요)" };
+  }
+
+  const current = await prisma.inventoryItem.findMany({
+    select: { id: true, name: true },
+  });
+  const nameToId = new Map<string, string>();
+  for (const it of current) if (!nameToId.has(it.name)) nameToId.set(it.name, it.id);
+
+  const pastedNames = new Set(clean.map((c) => c.name));
+  const keepIds = new Set<string>();
+  for (const name of pastedNames) {
+    const id = nameToId.get(name);
+    if (id) keepIds.add(id);
+  }
+  // 삭제 대상: 붙여넣기에 없는 기존 품목 + 같은 이름 중복행(첫 id 외)
+  const deleteRows = current.filter((it) => !keepIds.has(it.id));
+  const deleteIds = deleteRows.map((it) => it.id);
+
+  let added = 0;
+  let updated = 0;
+  await prisma.$transaction(
+    async (tx) => {
+      if (deleteIds.length) {
+        await tx.inventoryItem.deleteMany({ where: { id: { in: deleteIds } } });
+      }
+      for (let i = 0; i < clean.length; i++) {
+        const c = clean[i];
+        const id = nameToId.get(c.name);
+        if (id) {
+          await tx.inventoryItem.update({
+            where: { id },
+            data: { qty: c.qty, supplyPrice: c.supplyPrice, sortOrder: i },
+          });
+          updated++;
+        } else {
+          await tx.inventoryItem.create({
+            data: { name: c.name, qty: c.qty, supplyPrice: c.supplyPrice, sortOrder: i },
+          });
+          added++;
+        }
+      }
+    },
+    { timeout: 20000 },
+  );
+
+  await setInventoryPushPending(); // 단방향: 다음 크론이 시트로 반영
+  await writeAudit({
+    action: "inventory.bulkReplace",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "inventory",
+    targetId: "",
+    summary: `재고 일괄 교체: 갱신 ${updated} · 신규 ${added} · 삭제 ${deleteIds.length}`,
+    snapshot: {
+      added,
+      updated,
+      deletedCount: deleteIds.length,
+      deletedNames: deleteRows.map((it) => it.name).slice(0, 300),
+    },
+  });
+  revalidatePath("/admin/inventory");
+  revalidatePath("/inventory");
+  return { ok: true, added, updated, deleted: deleteIds.length };
+}
+
 // R4 재고 자동저장 — 편집기 입력을 디바운스로 계속 저장. 현재 목록으로 DB를 맞춘다(이름/수량/공급가
 // 갱신 + 목록에서 빠진 항목 삭제). 시트 반영은 push하지 않고 'pending' 표시만 → 다음 크론이 반영(단방향).
 export async function autosaveInventoryAction(payloadJson: string) {

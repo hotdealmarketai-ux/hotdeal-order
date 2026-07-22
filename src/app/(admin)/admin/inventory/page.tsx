@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { addInventoryAction } from "@/app/actions/admin";
 import { InventoryEditor } from "@/components/InventoryEditor";
+import { InventoryBulkImport } from "@/components/InventoryBulkImport";
 
 export default async function AdminInventory() {
   await requireAdmin();
@@ -16,6 +17,8 @@ export default async function AdminInventory() {
     <>
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
+        <InventoryBulkImport currentNames={items.map((it) => it.name)} />
+
         <div className="card">
           <div className="section-label" style={{ margin: "0 0 10px" }}>
             새 품목 추가

@@ -2474,6 +2474,17 @@ a {
 .fulfill__addrk { flex: 0 0 auto; font-size: 11.5px; font-weight: 800; color: #fff; background: var(--green-700); border-radius: 999px; padding: 2px 9px; }
 .fulfill__addrv { min-width: 0; font-size: 13px; font-weight: 600; color: var(--green-700); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 재고 엑셀 붙여넣기 미리보기 */
+.bulkdiff { display: flex; gap: 6px; margin-top: 12px; }
+.bulkprev { margin-top: 10px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.bulkprev__row { display: grid; grid-template-columns: 1fr 52px 96px; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.bulkprev__row:last-child { border-bottom: 0; }
+.bulkprev__row:nth-child(even) { background: var(--chip-mute-bg); }
+.bulkprev__name { min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.bulkprev__tag { flex: 0 0 auto; font-size: 10.5px; font-weight: 800; color: var(--green-700); background: var(--green-100); border-radius: 999px; padding: 1px 6px; }
+.bulkprev__qty { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); min-width: 0; }
+.bulkprev__price { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 다크 그린 총액 밴드 */
 .grandband { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--green-800); border-radius: 14px; padding: 15px 17px; margin-top: 12px; }
 .grandband__label { color: rgba(255, 255, 255, 0.8); font-size: 13.5px; font-weight: 600; }
