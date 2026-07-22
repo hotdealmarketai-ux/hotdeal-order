@@ -267,7 +267,7 @@ export function ChatOrder({
           <div className="toolro__group">
             <div className="toolro__head">
               <span className="chip">담은 재고 · 공구</span>
-              <span className="toolro__hint">재고현황에서 수정·삭제</span>
+              <span className="toolro__hint">재고 현황에서 수정·삭제</span>
             </div>
             {cartItems.map((c, i) => (
               <div className="toolro__item" key={`ct${i}`}>
@@ -310,7 +310,7 @@ export function ChatOrder({
               className="chatcompose__input"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="여기에 발주 내용을 적어 주세요"
+              placeholder="여기에 발주 내용을 적어 주세요."
               rows={4}
               disabled={locked || phase === "loading"}
             />
@@ -319,6 +319,17 @@ export function ChatOrder({
           {toolBlock}
 
           {tofuList}
+
+          {/* 수령 방식(직접 픽업/배송) — 채팅 발주에서도 작성 단계에 노출 */}
+          {needsFulfillment && (
+            <div style={{ marginTop: 16 }}>
+              <FulfillmentPicker
+                value={fulfillment}
+                onChange={onFulfillmentChange ?? (() => {})}
+                address={address}
+              />
+            </div>
+          )}
 
           <button
             type="button"
@@ -344,14 +355,14 @@ export function ChatOrder({
 
           <div className="chatbubble chatbubble--bot" style={{ marginTop: 12 }}>
             <div className="chatbubble__text">
-              이렇게 정리했어요. 맞는지 확인하고 고칠 부분은 바로 수정해 주세요.
+              이렇게 정리했어요. 맞는 지 확인하고 고칠 부분은 바로 수정해 주세요.
             </div>
           </div>
 
           {/* 카테고리 탭 — 발주가 많아도 종류별로 나눠 확인/수정(세로 스크롤 짧게) */}
           {droppedTool && (
             <div className="notice notice--mute" style={{ marginTop: 12 }}>
-              공구 품목은 직접 적을 수 없어요. 재고현황 ‘담기’로 담아주세요. (예약분은 자동 반영)
+              공구 품목은 직접 적을 수 없어요. 재고현황 ‘담기’로 담아주세요.
             </div>
           )}
 
@@ -385,7 +396,7 @@ export function ChatOrder({
               if (shown.length === 0) {
                 return (
                   <div className="notice notice--mute" style={{ marginTop: 12 }}>
-                    이 종류엔 발주가 없어요.
+                    이 종류엔 발주가 없습니다.
                   </div>
                 );
               }

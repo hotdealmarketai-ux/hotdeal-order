@@ -42,7 +42,7 @@ export default async function InventoryPage() {
       <div className="page">
         {items.length === 0 ? (
           <div className="empty">
-            <p>아직 등록된 재고가 없어요.</p>
+            <p>아직 등록된 재고가 없습니다.</p>
           </div>
         ) : (
           <MerchantInventoryList
@@ -56,8 +56,8 @@ export default async function InventoryPage() {
             canAdd={canAdd}
             hint={
               canAdd
-                ? "담기를 누르면 오늘 발주에 담겨요."
-                : "발주 시간에만 담을 수 있어요."
+                ? "담기를 누르면 오늘 발주에 담깁니다."
+                : "발주 시간에만 담을 수 있습니다."
             }
           />
         )}

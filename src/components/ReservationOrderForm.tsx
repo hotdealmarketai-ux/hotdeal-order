@@ -52,7 +52,7 @@ export function ReservationOrderForm({
       ) : confirmed ? (
         <div className="resv-lock">예약이 확정되어 잠겨 있어요. 수정하려면 아래 ‘수정’을 누르세요.</div>
       ) : (
-        <div className="resv-lock">필요한 수량을 적고 ‘예약 확정’을 누르면 예약돼요. (확정 후 마감 전까지 수정 가능)</div>
+        <div className="resv-lock">필요한 수량을 적고 ‘예약 확정’을 누르면 예약됩니다.</div>
       )}
 
       <form action={confirmReservationAction}>

@@ -1,8 +1,8 @@
 import { labelDate } from "@/lib/date";
 import { reservationDeadlineLabel } from "@/lib/reservation";
 
-// 예약발주 3날짜를 크고 명확하게 — 픽업만 보여 헷갈리던 것 해소.
-// 예약 = reserveDate, 픽업 = pickupDate, 마감 = reserveDate 다음날 낮 12시.
+// 예약발주 날짜 — 픽업·마감을 같은 크기로 나란히, 예약은 아래 작게.
+// 라벨은 조용히(muted), 강조는 값의 색으로(픽업=녹색, 마감=빨강). 깔끔·직관.
 export function ReservationDates({
   reserveDate,
   pickupDate,
@@ -13,21 +13,18 @@ export function ReservationDates({
   return (
     <div className="resvdates">
       <div className="resvdates__row">
-        <span className="resvdates__k resvdates__k--reserve">예약</span>
-        <span className="resvdates__v">{labelDate(reserveDate)}</span>
-      </div>
-      <div className="resvdates__row">
-        <span className="resvdates__k resvdates__k--pickup">픽업</span>
-        <span className="resvdates__v resvdates__v--strong">
+        <span className="resvdates__k">픽업</span>
+        <span className="resvdates__v resvdates__v--pickup">
           {labelDate(pickupDate)}
         </span>
       </div>
       <div className="resvdates__row">
-        <span className="resvdates__k resvdates__k--deadline">마감</span>
+        <span className="resvdates__k">마감</span>
         <span className="resvdates__v resvdates__v--deadline">
           {reservationDeadlineLabel(reserveDate)}
         </span>
       </div>
+      <div className="resvdates__reserve">예약 {labelDate(reserveDate)}</div>
     </div>
   );
 }

@@ -3243,19 +3243,17 @@ a.resv-card:active { transform: scale(0.995); }
 /* 내가 예약한(수량>0) 날짜 카드 — 브랜드 배경으로 구분 */
 .resv-card--mine { background: var(--green-100); border-color: var(--green-150); }
 
-/* 예약발주 3날짜(예약·픽업·마감) — 셋 다 크고 명확하게, 색상 라벨로 구분 */
-.resvdates { display: flex; flex-direction: column; gap: 8px; }
-.resvdates__row { display: flex; align-items: center; gap: 10px; }
+/* 예약발주 날짜 — 픽업·마감 같은 크기로 나란히, 예약은 아래 작게. 라벨 muted, 값에 색 강조 */
+.resvdates { display: flex; flex-direction: column; }
+.resvdates__row { display: flex; align-items: baseline; gap: 12px; }
+.resvdates__row + .resvdates__row { margin-top: 6px; }
 .resvdates__k {
-  flex: 0 0 auto; width: 48px; text-align: center;
-  font-size: 12.5px; font-weight: 800; border-radius: 999px; padding: 4px 0;
+  flex: 0 0 auto; width: 32px; font-size: 13px; font-weight: 700; color: var(--muted);
 }
-.resvdates__k--reserve { background: var(--chip-mute-bg); color: var(--muted); }
-.resvdates__k--pickup { background: var(--green-700); color: #fff; }
-.resvdates__k--deadline { background: var(--danger-bg); color: var(--danger); }
-.resvdates__v { font-size: 15.5px; font-weight: 700; color: var(--fg); letter-spacing: -0.01em; }
-.resvdates__v--strong { font-size: 17px; font-weight: 800; color: var(--green-700); }
-.resvdates__v--deadline { font-size: 14.5px; color: var(--danger); font-weight: 700; }
+.resvdates__v { font-size: 15px; font-weight: 800; color: var(--fg); letter-spacing: -0.01em; }
+.resvdates__v--pickup { color: var(--green-700); }
+.resvdates__v--deadline { color: var(--danger); }
+.resvdates__reserve { margin-top: 9px; font-size: 12px; font-weight: 600; color: var(--muted); }
 .resvdates-card { margin-bottom: 14px; }
 
 /* 재고현황 이름 검색 (점주·관리자 공용) */

@@ -36,7 +36,7 @@ export default async function ReceiptPage(props: {
 
         {order.status === "CANCELLED" ? (
           <div className="notice notice--error" style={{ marginBottom: 14 }}>
-            <b>취소 완료</b> · 이 발주는 취소되었습니다.
+            <b>취소 완료</b> · 발주가 취소되었습니다.
           </div>
         ) : isPastDay ? (
           <div className="notice notice--ok" style={{ marginBottom: 14 }}>

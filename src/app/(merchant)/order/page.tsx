@@ -117,7 +117,7 @@ export default async function OrderPage(props: {
         )}
         {cancelErr === "invoiced" && (
           <div className="notice notice--error" style={{ marginBottom: 16 }}>
-            계산서가 이미 발행되어 취소 요청을 할 수 없어요. 새롭에 문의해 주세요.
+            계산서가 이미 발행되어 취소 요청을 할 수 없습니다.
           </div>
         )}
         {receivableLock.locked ? (
@@ -129,7 +129,7 @@ export default async function OrderPage(props: {
               {receivableLock.unpaidDate
                 ? `${labelDate(receivableLock.unpaidDate)} 입금요청서 ${receivableLock.unpaidTotal.toLocaleString("ko-KR")}원`
                 : ""}{" "}
-              입금이 확인되면 발주가 다시 열려요. (급하면 새롭에 문의)
+              입금이 확인되면 발주가 다시 활성화 됩니다.
             </div>
             <Link href="/invoices" className="btn btn--primary">
               입금요청서 보기
@@ -141,7 +141,7 @@ export default async function OrderPage(props: {
             {cancelPending ? (
               <div className="notice notice--edit" style={{ marginBottom: 16 }}>
                 <b>취소 요청됨</b> · 관리자 승인 대기중이에요. 승인되면 발주가
-                취소되고 발주창이 다시 열려요.
+                취소되고 발주창이 다시 활성화 됩니다.
               </div>
             ) : (
               <div className="notice notice--mute" style={{ marginBottom: 16 }}>

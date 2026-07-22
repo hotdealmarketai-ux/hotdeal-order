@@ -19,7 +19,7 @@ export default async function PendingPage() {
       ? "가입이 반려되었어요"
       : "가입 신청이 접수되었어요";
   const message = suspended
-    ? "계정이 정지된 상태예요. 본사에 문의해 주세요."
+    ? "계정이 정지된 상태예요."
     : rejected
       ? "자세한 내용은 본사에 문의해 주세요."
       : "본사에서 가입 신청을 확인하고 있어요.\n승인되면 바로 발주를 넣을 수 있어요.";

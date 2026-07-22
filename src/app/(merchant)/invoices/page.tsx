@@ -39,7 +39,7 @@ export default async function MerchantInvoicesPage() {
         )}
 
         {invoices.length === 0 ? (
-          <div className="notice notice--mute">아직 받은 입금요청서가 없어요.</div>
+          <div className="notice notice--mute">아직 받은 입금요청서가 없습니다.</div>
         ) : (
           <div className="list">
             {invoices.map((inv) => {

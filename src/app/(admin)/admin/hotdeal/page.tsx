@@ -122,7 +122,7 @@ export default async function AdminHotdeal(props: {
               {naturalOpen
                 ? "지금은 발주 시간이에요."
                 : forceOpen
-                  ? "임시 오픈 중 — 지금도 발주 가능"
+                  ? "임시 오픈 중 — 지금 발주 가능"
                   : "운영시간(낮12~밤8시)이 아니어도 열어요 (테스트용)"}
             </div>
           </div>

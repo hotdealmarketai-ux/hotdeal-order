@@ -28,13 +28,13 @@ export function CollectDepositsButton() {
           style={{ marginBottom: 10 }}
         >
           {r.accounts === 0
-            ? "팝빌에 등록된 계좌가 없어요. 계좌 등록 후 다시 수집해 주세요."
+            ? "등록된 계좌가 없어요. 계좌 등록 후 다시 수집해 주세요."
             : `✓ 입금 ${r.created}건 새로 수집 · 점포 매칭 ${r.matchedStores}건 · 자동 입금확인 ${r.paidInvoices}건`}
           {r.errors.length > 0 && ` · 오류: ${r.errors.join(", ")}`}
         </div>
       )}
       <SubmitButton pendingText="수집 중… (최대 30초)">
-        지금 수집 (팝빌 계좌조회)
+        지금 수집
       </SubmitButton>
     </form>
   );

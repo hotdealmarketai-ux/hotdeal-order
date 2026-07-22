@@ -398,7 +398,7 @@ export function OrderForm({
               <div className="toolro__group">
                 <div className="toolro__head">
                   <span className="chip">담은 재고</span>
-                  <span className="toolro__hint">재고현황에서 수정·삭제</span>
+                  <span className="toolro__hint">재고 현황에서 수정·삭제</span>
                 </div>
                 {rows.filter(isFilled).map((r) => (
                   <div className="toolro__item" key={r.id}>
@@ -412,7 +412,7 @@ export function OrderForm({
               <div className="empty">
                 공구는 직접 적을 수 없어요.
                 <br />
-                재고현황에서 ‘담기’로 담아주세요. 예약분은 픽업 전날 자동으로 표시돼요.
+                재고 현황에서 ‘담기’로 담아주세요. 예약분은 픽업 전날 자동으로 표시됩니다.
               </div>
             )}
           </div>

@@ -392,7 +392,7 @@ export async function pushInventoryToSheetAction(
   revalidatePath("/admin/inventory");
   if (r.ok) return { ok: true, at: Date.now() };
   if (r.error === "no-credentials")
-    return { ok: false, error: "구글 서비스계정이 설정되지 않았어요(관리자 환경변수 필요)." };
+    return { ok: false, error: "구글 서비스계정이 설정되지 않았어요." };
   return { ok: false, error: "시트 반영에 실패했어요. 잠시 후 다시 시도해 주세요." };
 }
 

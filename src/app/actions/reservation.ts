@@ -60,7 +60,7 @@ export async function saveReservationBatchAction(
     // 이미 점주 예약이 있으면 날짜 변경 금지(마감/로드 타이밍 어긋남 방지) — 기존 날짜 유지.
     if (existing._count.orders > 0) {
       if (reserveDate !== existing.reserveDate || pickupDate !== existing.pickupDate) {
-        return { error: "이미 예약이 접수된 배치는 날짜를 바꿀 수 없어요. (상품만 수정 가능)" };
+        return { error: "이미 예약이 접수된 배치는 날짜를 바꿀 수 없어요." };
       }
     } else {
       // reserveDate 를 다른 배치와 겹치게 바꾸려 하면 거절

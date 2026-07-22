@@ -143,7 +143,7 @@ export function MemberEditForm({
           </div>
         </div>
         {isSelf && (
-          <p className="hint">본인 계정은 역할·상태를 바꿀 수 없어요(잠금 방지).</p>
+          <p className="hint">본인 계정은 역할·상태를 바꿀 수 없습니다.</p>
         )}
 
         <div style={{ marginTop: 8 }}>

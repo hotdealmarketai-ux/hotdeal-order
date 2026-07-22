@@ -39,7 +39,7 @@ export function BillingLauncher({ userId, canWeekly }: { userId: string; canWeek
             주간발주 계산서
           </div>
           <p className="resv-note" style={{ marginTop: 0 }}>
-            그 주(週) 주간발주 기준으로 발행합니다.
+            그 주의 주간발주 기준으로 발행합니다.
           </p>
           <button
             type="button"

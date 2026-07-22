@@ -77,7 +77,7 @@ export function SignupForm() {
           id="payerName"
           name="payerName"
           className="input"
-          placeholder="입금 시 통장에 찍히는 이름"
+          placeholder="입금자"
           required
         />
       </div>

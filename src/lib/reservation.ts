@@ -34,7 +34,7 @@ export function validateBatchDates(
   if (daysBetween(pickupDate, reserveDate) < 2) {
     return {
       ok: false,
-      error: "픽업일자는 예약일자보다 최소 2일 뒤여야 해요. (예약이 마감된 뒤 전날 공구로 나가야 하므로)",
+      error: "픽업일자는 예약일자보다 최소 2일 뒤여야 합니다.",
     };
   }
   return { ok: true };

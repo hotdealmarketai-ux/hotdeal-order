@@ -21,7 +21,7 @@ export default async function ReservationsPage() {
         </div>
 
         {batches.length === 0 ? (
-          <div className="empty">지금은 예약할 수 있는 상품이 없어요.</div>
+          <div className="empty">지금은 예약할 수 있는 상품이 없습니다.</div>
         ) : (
           <div className="stack">
             {batches.map((b) => {

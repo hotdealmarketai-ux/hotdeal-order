@@ -135,7 +135,7 @@ export default async function WeeklyOrderPage({
         )}
         {sp.err === "invoiced" && (
           <div className="notice notice--error" style={{ marginBottom: 12 }}>
-            입금요청서가 이미 발행되어 취소할 수 없어요. 새롭에 문의해 주세요.
+            입금요청서가 이미 발행되어 취소할 수 없습니다.
           </div>
         )}
 
@@ -233,13 +233,13 @@ export default async function WeeklyOrderPage({
             <div className="notice notice--error">
               <b>지난 주간발주 입금이 확인되지 않았습니다. 입금 부탁드립니다.</b>
               <br />
-              입금이 확인되면 주간발주가 다시 열려요. (급하면 새롭에 문의)
+              입금이 확인되면 주간발주가 다시 활성화 됩니다.
             </div>
           ) : (
             <WeeklyOrderForm products={products} />
           )
         ) : (
-          <div className="notice notice--mute">이 주엔 주간발주가 없어요.</div>
+          <div className="notice notice--mute">이 주엔 주간발주가 없습니다.</div>
         )}
       </div>
     </>

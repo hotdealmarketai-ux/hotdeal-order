@@ -100,8 +100,7 @@ export function InventoryBulkImport({ currentNames }: { currentNames: string[] }
         엑셀에서 한번에 붙여넣기
       </div>
       <p className="hint" style={{ marginBottom: 10 }}>
-        엑셀에서 <b>품목명 · 수량 · 공급가</b> 3열을 복사해 아래에 붙여넣으세요. 붙여넣은
-        목록으로 <b>전체 교체</b>됩니다.
+        엑셀에서 <b>품목명 · 수량 · 공급가</b> 3열을 복사해 아래에 붙여넣으세요.
       </p>
       <textarea
         className="input"

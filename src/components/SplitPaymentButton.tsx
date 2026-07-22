@@ -17,7 +17,7 @@ export function SplitPaymentButton({
   if (alreadyRequested) {
     return (
       <div className="notice notice--mute" style={{ marginTop: 12 }}>
-        분할 입금 요청이 접수됐어요. 새롭에서 확인 후 처리해 드려요.
+        분할 입금 요청이 접수됐어요. 확인 후 처리해 드려요.
       </div>
     );
   }
