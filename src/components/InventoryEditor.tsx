@@ -15,13 +15,26 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(items);
   latest.current = items;
+  // 각 행이 '마지막으로 저장/로드된' 수량 — 서버가 관리자가 실제 바꾼 행만 반영하게 함(과다판매 방지).
+  const baseline = useRef<Record<string, string>>(
+    Object.fromEntries(initial.map((it) => [it.id, it.qty])),
+  );
 
   const scheduleSave = () => {
     setStatus("saving");
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
+      const snapshot = latest.current;
+      const payload = snapshot.map((it) => ({
+        ...it,
+        baseQty: baseline.current[it.id] ?? it.qty,
+      }));
       try {
-        await autosaveInventoryAction(JSON.stringify(latest.current));
+        await autosaveInventoryAction(JSON.stringify(payload));
+        // 저장 성공 → 기준값을 방금 보낸 수량으로 갱신(다음 변경 판별 기준)
+        const nb: Record<string, string> = {};
+        for (const it of snapshot) nb[it.id] = it.qty;
+        baseline.current = nb;
         setStatus("saved");
       } catch {
         setStatus("idle");

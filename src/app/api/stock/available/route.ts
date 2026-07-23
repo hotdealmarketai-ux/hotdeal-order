@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { prisma } from "@/lib/prisma";
-import { kstToday } from "@/lib/date";
+import { windowKeyAt } from "@/lib/schedule";
 
 // 재고 남은수량 실시간 폴링 소스 — 남은수량 뜨는 모든 화면이 짧은 주기로 이걸 읽어 갱신.
 // available = 기준재고 − 전체 담기(모든 가맹점). mine = 내 담기. 모두 '현재 발주창(오늘)' 기준.
@@ -13,7 +13,7 @@ export async function GET() {
   if (!user || user.role !== "MERCHANT_HOTDEAL") {
     return NextResponse.json({ available: {}, mine: {} });
   }
-  const date = kstToday();
+  const date = windowKeyAt();
   const [held, items, mine] = await Promise.all([
     heldByItem(date),
     prisma.inventoryItem.findMany({

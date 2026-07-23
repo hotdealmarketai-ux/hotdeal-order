@@ -25,6 +25,7 @@ import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { orderOpenNow } from "@/lib/order-open";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
 import { myHolds, heldByItem } from "@/lib/stock-hold";
+import { windowKeyAt } from "@/lib/schedule";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import { RequestCancelButton } from "@/components/RequestCancelButton";
@@ -78,9 +79,10 @@ export default async function OrderPage(props: {
   const toolCart =
     user.role === "MERCHANT_HOTDEAL"
       ? await (async () => {
+          const holdKey = windowKeyAt(); // 담기 창키(주말 연속창=토요일 하나). orderDay(캘린더)와 구분.
           const [mine, held, invItems] = await Promise.all([
-            myHolds(user.id, orderDay),
-            heldByItem(orderDay),
+            myHolds(user.id, holdKey),
+            heldByItem(holdKey),
             prisma.inventoryItem.findMany({
               where: { deletedAt: null },
               select: { id: true, qty: true, supplyPrice: true },

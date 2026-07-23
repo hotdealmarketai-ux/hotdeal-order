@@ -5,8 +5,8 @@ import { canViewInventory } from "@/lib/constants";
 import { hasOrderWindow, currentWindowStartUtc } from "@/lib/deadline";
 import { orderOpenNow } from "@/lib/order-open";
 import { prisma } from "@/lib/prisma";
-import { kstToday } from "@/lib/date";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
+import { windowKeyAt } from "@/lib/schedule";
 import { MerchantInventoryList } from "@/components/MerchantInventoryList";
 
 // 재고현황 — 앱 기준(단방향 시트 미러, R3). '담기'로 오늘 발주(공구)에 자동 임시저장(#6).
@@ -29,10 +29,10 @@ export default async function InventoryPage() {
     });
     if (existing) canAdd = false; // 이미 발주함 → 발주창에서 수정
   }
-  const today = kstToday();
-  // 실시간 남은수량 = 기준재고 − Σ담기(모든 점주, 오늘 발주창). 내 담기 수량도 함께.
-  const held = await heldByItem(today);
-  const mineRows = await myHolds(user.id, today);
+  const holdKey = windowKeyAt(); // 담기 창키(주말 연속창=토요일 하나)
+  // 실시간 남은수량 = 기준재고 − Σ담기(모든 점주, 현재 발주창). 내 담기 수량도 함께.
+  const held = await heldByItem(holdKey);
+  const mineRows = await myHolds(user.id, holdKey);
   const mine: Record<string, number> = {};
   for (const h of mineRows) mine[h.itemId] = h.qty;
 

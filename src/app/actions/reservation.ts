@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireUser } from "@/lib/session";
+import { requireAdmin, requireMerchant } from "@/lib/session";
 import { writeAudit } from "@/lib/audit";
 import { validateBatchDates, isReservationClosed } from "@/lib/reservation";
 
@@ -176,7 +176,7 @@ export async function deleteReservationBatchAction(formData: FormData) {
 
 // 확정 = 수량 저장 + 잠금. 마감 전에만. (0 수량만 있으면 클라에서 버튼 비활성 → 항상 1개↑ 전제)
 export async function confirmReservationAction(formData: FormData) {
-  const user = await requireUser();
+  const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
   const batchId = String(formData.get("batchId") ?? "");
   let raw: { productId?: string; qty?: number | string }[] = [];
@@ -231,7 +231,7 @@ export async function confirmReservationAction(formData: FormData) {
 
 // 수정 = 잠금 해제(수량은 유지). 마감 후엔 불가.
 export async function unlockReservationAction(formData: FormData) {
-  const user = await requireUser();
+  const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
   const batchId = String(formData.get("batchId") ?? "");
   const batch = await prisma.reservationBatch.findFirst({

@@ -34,6 +34,7 @@ import {
   notifyMerchantOrderPlaced,
   notifyVendorOrderEdited,
   notifyAdminOrderEdited,
+  sendPushToRole,
 } from "@/lib/push";
 
 export type OrderFormState = { error?: string };
@@ -465,6 +466,13 @@ export async function createOrderAction(
       await commitStockHolds(user.id);
     } catch (e) {
       logError("stock.commit", e, { userId: user.id });
+      // 커밋 실패 = 발주는 생성됐는데 기준재고 미차감 + 홀드 잔존 → 창 마감 후 과다판매 위험.
+      // 조용히 두지 않고 관리자에게 알려 수동 정합하게 한다(재고 드리프트 가시화).
+      await sendPushToRole("ADMIN_SAEROP", {
+        title: "재고 차감 실패 — 확인이 필요합니다.",
+        body: `${user.storeName} 발주의 재고 반영이 실패했어요. 재고를 확인해 주세요.`,
+        url: "/admin/inventory",
+      }).catch(() => {});
     }
   }
 

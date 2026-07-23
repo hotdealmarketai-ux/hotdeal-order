@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { orderOpenNow } from "@/lib/order-open";
-import { kstToday } from "@/lib/date";
+import { windowKeyAt } from "@/lib/schedule";
 import { logError } from "@/lib/log";
 
 export type HoldResult = { ok: boolean; error?: string; available?: number };
@@ -24,7 +24,7 @@ export async function holdStockAction(input: {
   }
   const itemId = String(input.itemId ?? "");
   const qty = Math.max(0, Math.floor(Number(input.qty) || 0));
-  const windowDate = kstToday();
+  const windowDate = windowKeyAt();
   if (!itemId) return { ok: false, error: "품목을 찾을 수 없어요." };
 
   try {
@@ -79,7 +79,7 @@ export async function releaseHoldAction(itemId: string): Promise<HoldResult> {
   const user = await getCurrentUser();
   if (!user || user.role !== "MERCHANT_HOTDEAL") return { ok: false };
   await prisma.stockHold.deleteMany({
-    where: { userId: user.id, itemId: String(itemId), windowDate: kstToday() },
+    where: { userId: user.id, itemId: String(itemId), windowDate: windowKeyAt() },
   });
   revalidatePath("/inventory");
   revalidatePath("/order");

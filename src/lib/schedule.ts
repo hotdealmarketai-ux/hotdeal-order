@@ -56,6 +56,19 @@ export function currentWindowStartUtc(now: number = Date.now()): number {
   return utcAt(y, mo, da, OPEN_HOUR);
 }
 
+/**
+ * 현재 발주창을 식별하는 키(그 창 시작일, KST YYYY-MM-DD).
+ * 평일=그날, 주말(토12시~일20시)=토요일 하나의 키.
+ * 재고 담기(StockHold.windowDate)·미수 창 판별의 단일 기준.
+ * 순수 계산(문자열 포맷도 여기서) — date.ts 의존 없이 parts() 재사용.
+ */
+export function windowKeyAt(now: number = Date.now()): string {
+  const p = parts(currentWindowStartUtc(now));
+  const mm = String(p.mo + 1).padStart(2, "0");
+  const dd = String(p.da).padStart(2, "0");
+  return `${p.y}-${mm}-${dd}`;
+}
+
 /** 닫혀있을 때 다음 발주 시작(정오) instant */
 export function nextOpenUtc(now: number = Date.now()): number {
   for (let i = 0; i < 8; i++) {

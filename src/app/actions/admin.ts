@@ -12,6 +12,7 @@ import {
   currentDeadlineUtc,
 } from "@/lib/schedule";
 import { hasOrderWindow } from "@/lib/deadline";
+import { restoreStockForOrder } from "@/lib/stock-hold";
 import {
   notifyMerchantOrdersCancelled,
   notifyMerchantSignupApproved,
@@ -65,6 +66,15 @@ export async function updateMemberAction(
     status = "APPROVED";
   }
 
+  // '정상(APPROVED)' 상태는 반드시 배정된 역할이 있어야 한다. 역할 미배정(APPLICANT)+APPROVED는
+  // 홈 경로가 없어 로그인 후 무한 리다이렉트로 계정이 영구 잠긴다 → 원천 차단.
+  if (status === "APPROVED" && role === "APPLICANT") {
+    return {
+      error:
+        "‘정상’ 상태로 두려면 역할을 먼저 지정하세요. (‘가입 대기’ 역할로는 정상 상태가 될 수 없어요)",
+    };
+  }
+
   await prisma.user.update({
     where: { id: userId },
     data: { storeName, phone, address, role, status, payerNames },
@@ -81,6 +91,14 @@ export async function setMemberStatusAction(formData: FormData) {
   const status = String(formData.get("status") ?? "") as Status;
   if (!userId || !EDITABLE_STATUSES.includes(status)) return;
   if (userId === admin.id) return; // 본인 정지 금지
+  // 역할 미배정(APPLICANT)을 APPROVED로 복구하면 로그인 후 락아웃 → 막는다(역할부터 지정해야 함).
+  if (status === "APPROVED") {
+    const target = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (!target || target.role === "APPLICANT") return;
+  }
   await prisma.user.update({ where: { id: userId }, data: { status } });
   revalidatePath("/admin/members");
   revalidatePath(`/admin/members/${userId}`);
@@ -180,8 +198,9 @@ export async function rejectUserAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
+// 재고 수량·공급가는 음수가 없다. 하이픈/음수 입력은 0으로 바닥 처리(음수 재고·시트 전파 방지).
 const toInt = (v: FormDataEntryValue | null) =>
-  parseInt(String(v ?? "").replace(/[^0-9-]/g, ""), 10) || 0;
+  Math.max(0, parseInt(String(v ?? "").replace(/[^0-9-]/g, ""), 10) || 0);
 
 export async function addInventoryAction(formData: FormData) {
   await requireAdmin();
@@ -348,7 +367,13 @@ export async function bulkReplaceInventoryAction(
 // 갱신 + 목록에서 빠진 항목 삭제). 시트 반영은 push하지 않고 'pending' 표시만 → 다음 크론이 반영(단방향).
 export async function autosaveInventoryAction(payloadJson: string) {
   await requireAdmin();
-  let rows: { id?: string; name?: string; qty?: unknown; supplyPrice?: unknown }[];
+  let rows: {
+    id?: string;
+    name?: string;
+    qty?: unknown;
+    supplyPrice?: unknown;
+    baseQty?: unknown; // 편집기가 로드/직전저장 시점에 본 수량(변경 판별용)
+  }[];
   try {
     rows = JSON.parse(String(payloadJson ?? "[]"));
   } catch {
@@ -366,11 +391,16 @@ export async function autosaveInventoryAction(payloadJson: string) {
       const id = String(r.id ?? "");
       if (!id) continue;
       const name = String(r.name ?? "").trim();
+      // ⚠️ 과다판매 방지: 자동저장은 편집기의 스냅샷이라, 관리자가 '안 건드린' 행의 qty를
+      // 다시 써버리면 그 사이 점주 발주확정으로 차감된 base가 되살아난다.
+      // → 관리자가 실제로 수량을 바꾼 행(baseQty와 다름)만 qty를 절대반영(=실사 정정 의도),
+      //   안 바꾼 행은 qty를 건드리지 않아 동시 발주 차감을 보존한다.
+      const qtyChanged = toInt(String(r.qty ?? "")) !== toInt(String(r.baseQty ?? r.qty ?? ""));
       await tx.inventoryItem.update({
         where: { id },
         data: {
           ...(name ? { name } : {}),
-          qty: toInt(String(r.qty ?? "")),
+          ...(qtyChanged ? { qty: toInt(String(r.qty ?? "")) } : {}),
           supplyPrice: toInt(String(r.supplyPrice ?? "")),
         },
       });
@@ -464,6 +494,11 @@ export async function cancelStoreOrdersAction(
     if (inv) {
       return { error: "계산서가 발행되어 취소할 수 없어요. 먼저 계산서를 취소하세요." };
     }
+  }
+  // 취소되는 발주가 확정했던 공구(TOOL) 재고를 기준재고에 되돌린다(이름 매칭). 삭제 전에 수행해야
+  // 항목이 남아있다(점주 발주취소 경로와 동일한 복구 — 지점취소만 빠져 있어 재고가 과소계상되던 버그).
+  for (const o of targets) {
+    await restoreStockForOrder(o.id).catch(() => {});
   }
   // #2 하드삭제 — 취소한 발주는 완전 삭제(취소 완료로 남기지 않고 모든 목록·내역에서 제거).
   const res = await prisma.order.deleteMany({
