@@ -194,7 +194,7 @@ export default async function WeeklyOrderPage({
           </div>
         )}
 
-        {editMode ? (
+        {editMode && (!invoice || invoice.status === "DRAFT") ? (
           <>
             <div className="notice notice--mute" style={{ marginBottom: 12 }}>
               주간발주를 수정 중이에요. 저장하면 다시 접수됩니다.
@@ -219,14 +219,19 @@ export default async function WeeklyOrderPage({
               <span className={`badge ${status.cls}`}>{status.label}</span>
             </div>
             <WeeklyReceipt items={receiptItems} />
-            {open && isCurrent && (
+            {open && isCurrent && (!invoice || invoice.status === "DRAFT") ? (
               <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
                 <Link href="/weekly?edit=1" className="btn btn--primary btn--block">
                   수정하러 가기
                 </Link>
-                {(!invoice || invoice.status === "DRAFT") && <CancelWeeklyOrderButton />}
+                <CancelWeeklyOrderButton />
               </div>
-            )}
+            ) : open && isCurrent && invoice ? (
+              // 입금요청서 발행 후엔 수정·취소 불가(청구액↔발주 불일치 방지)
+              <div className="notice notice--mute" style={{ marginTop: 16 }}>
+                입금요청서가 발행되어 이번 주간발주는 수정할 수 없어요. 변경이 필요하면 본사에 문의해 주세요.
+              </div>
+            ) : null}
           </>
         ) : isCurrent && open ? (
           lock.locked ? (

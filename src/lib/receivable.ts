@@ -36,12 +36,14 @@ export function isUnlockActiveThisWindow(
   );
 }
 
-// 점포의 미수 잔액(발행·미입금 계산서 합) + 미입금 건수
+// 점포의 미수 잔액(발행·미입금 계산서 합) + 미입금 건수.
+// '받을 총액' — 일반·주간 등 전 종류(ISSUED)를 합산해 화면 간 일관되게 표시(마이·발주·관리자 공통).
+// ※ 발주 잠금(orderLockOf)은 이와 별개로 '일반 지난창 미입금'만 사용 — 잠금 규칙은 바뀌지 않는다.
 export async function receivableOf(
   userId: string,
 ): Promise<{ balance: number; count: number }> {
   const ar = await prisma.invoice.aggregate({
-    where: { userId, status: "ISSUED", kind: "DAILY" },
+    where: { userId, status: "ISSUED" },
     _sum: { total: true },
     _count: true,
   });

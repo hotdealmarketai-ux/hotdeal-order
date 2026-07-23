@@ -76,6 +76,24 @@ export async function createWeeklyOrderAction(
   }
 
   const weekKey = weeklyKeyAt();
+
+  // 입금요청서(계산서)가 발행된 뒤엔 발주 내용을 바꿀 수 없다 — 청구액↔발주 불일치 방지.
+  // (취소 경로엔 이미 이 가드가 있는데 수정 경로만 빠져 desync가 발생하던 버그.)
+  const issuedInvoice = await prisma.invoice.findFirst({
+    where: {
+      userId: user.id,
+      kind: "WEEKLY",
+      date: weekKey,
+      status: { in: ["ISSUED", "PAID"] },
+    },
+    select: { id: true },
+  });
+  if (issuedInvoice) {
+    return {
+      error: "이미 입금요청서가 발행되어 주간발주를 수정할 수 없어요. 본사에 문의해 주세요.",
+    };
+  }
+
   try {
     const existing = await prisma.weeklyOrder.findUnique({
       where: { userId_weekKey: { userId: user.id, weekKey } },
