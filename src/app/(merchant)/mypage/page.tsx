@@ -55,8 +55,11 @@ export default async function MyPage(props: {
     ]);
 
   // 날짜별 입금요청서 상태 (ISSUED=입금요청, PAID=입금완료)
+  // 같은 날짜에 계산서가 여러 장일 수 있으므로(무한발행), 미입금(ISSUED)이 하나라도 있으면
+  // '입금 요청'을 우선 표시(다중 시 마지막 값으로 덮여 '완료'로 오표시되던 것 방지).
   const invByDate = new Map<string, "ISSUED" | "PAID">();
   for (const inv of invoices) {
+    if (invByDate.get(inv.date) === "ISSUED") continue;
     invByDate.set(inv.date, inv.status as "ISSUED" | "PAID");
   }
 
