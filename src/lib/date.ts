@@ -13,9 +13,14 @@ export function kstDateOf(d: Date | string): string {
   return new Date(date.getTime() + KST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-/** YYYY-MM-DD(KST) 형식 검증 + 보정. 잘못되면 오늘로. */
+/** YYYY-MM-DD(KST) 형식 + 실제 존재하는 날짜인지 검증 + 보정. 잘못되면 오늘로. */
 export function normalizeDateStr(s?: string | null): string {
-  if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (s && /^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    // 형식만 맞고 달력상 불가능한 날짜(2026-02-30 등)는 Date가 조용히 다음 달로 롤오버한다.
+    // 왕복 확인(kstDateOf(parsed) === s)으로 실제 존재하는 날짜만 통과시킨다.
+    const d = new Date(`${s}T00:00:00+09:00`);
+    if (!Number.isNaN(d.getTime()) && kstDateOf(d) === s) return s;
+  }
   return kstToday();
 }
 

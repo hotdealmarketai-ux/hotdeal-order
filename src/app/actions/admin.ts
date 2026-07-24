@@ -537,6 +537,12 @@ export async function cancelStoreOrdersAction(
     if (inv) {
       return { error: "계산서가 발행되어 취소할 수 없어요. 먼저 계산서를 취소하세요." };
     }
+    // 작성중(DRAFT) 계산서는 발행을 막지 않지만, 발주가 삭제되면 그 초안이 '삭제된 발주' 기준으로
+    // 남아 나중에 잘못 발행될 수 있다 → 해당 날짜의 DRAFT 계산서를 함께 VOID 처리한다.
+    await prisma.invoice.updateMany({
+      where: { userId, kind: "DAILY", date: { in: invDates }, status: "DRAFT" },
+      data: { status: "VOID", voidedAt: new Date() },
+    });
   }
   // 취소되는 발주가 확정했던 공구(TOOL) 재고를 기준재고에 되돌린다(이름 매칭). 삭제 전에 수행해야
   // 항목이 남아있다(점주 발주취소 경로와 동일한 복구 — 지점취소만 빠져 있어 재고가 과소계상되던 버그).

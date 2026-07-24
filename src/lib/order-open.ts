@@ -6,9 +6,15 @@ import type { Role } from "@/lib/constants";
 
 const KEY = "daily_force_open";
 
+const FORCE_OPEN_TTL_MS = 18 * 60 * 60 * 1000; // 18시간
+
 export async function dailyForceOpen(): Promise<boolean> {
   const m = await prisma.appMeta.findUnique({ where: { key: KEY } });
-  return !!m;
+  if (!m) return false;
+  // 자동 만료 — 켠 지 18시간이 지나면 무효로 본다(관리자가 끄는 걸 잊어도 다음날 자동 해제).
+  // syncedAt = 마지막으로 ON 한 시각(setDailyForceOpen에서 갱신).
+  if (Date.now() - m.syncedAt.getTime() > FORCE_OPEN_TTL_MS) return false;
+  return true;
 }
 
 export async function setDailyForceOpen(on: boolean): Promise<void> {
