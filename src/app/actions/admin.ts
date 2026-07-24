@@ -45,6 +45,15 @@ export async function updateMemberAction(
   let role = String(formData.get("role") ?? "") as Role;
   let status = String(formData.get("status") ?? "") as Status;
 
+  // 본인(관리자) 계정은 역할/상태를 낮춰 스스로 잠그지 못하게 안전값으로 고정한다.
+  // ⚠️ 반드시 아래 유효성 검사보다 '먼저' — 본인 편집 화면에선 역할/상태 select가 disabled라
+  // 브라우저가 값을 아예 전송하지 않는다. 검증을 먼저 하면 role="" 이라 항상
+  // '올바르지 않은 역할이에요'로 실패해, 관리자가 자기 상호/연락처/주소/입금자명을 못 고쳤다.
+  if (userId === admin.id) {
+    role = "ADMIN_SAEROP";
+    status = "APPROVED";
+  }
+
   // 입금자명 — 콤마/줄바꿈으로 여러 개, 중복·공백 정리
   const payerNames = [
     ...new Set(
@@ -59,12 +68,6 @@ export async function updateMemberAction(
   if (!ALL_ROLES.includes(role)) return { error: "올바르지 않은 역할이에요." };
   if (!EDITABLE_STATUSES.includes(status)) return { error: "올바르지 않은 상태예요." };
   if (!storeName) return { error: "상호명을 입력하세요." };
-
-  // 본인(관리자) 계정은 역할/상태를 낮춰 스스로 잠그지 못하게 보호
-  if (userId === admin.id) {
-    role = "ADMIN_SAEROP";
-    status = "APPROVED";
-  }
 
   // '정상(APPROVED)' 상태는 반드시 배정된 역할이 있어야 한다. 역할 미배정(APPLICANT)+APPROVED는
   // 홈 경로가 없어 로그인 후 무한 리다이렉트로 계정이 영구 잠긴다 → 원천 차단.

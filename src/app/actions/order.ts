@@ -348,7 +348,12 @@ export async function createOrderAction(
   // 재제출·새 탭·채팅+그리드 각각 제출로 같은 창에 Order가 중복 생성되면 채움채/집계가 2배로
   // 나가는 사고(확정 버그 #1)를 막는다. 소매·벤더(창 없음)는 자유 발주라 해당 없음.
   if (hasOrderWindow(user.role)) {
-    const since = new Date(currentWindowStartUtc());
+    // 관리자 강제오픈으로 '정오 이전'에 발주하면 currentWindowStartUtc(=오늘 12시)가 미래라
+    // 방금 넣은 발주를 못 찾아 중복 방지가 통째로 무력화된다 → 창 시작과 '오늘 0시' 중
+    // 이른 쪽을 기준으로 조회한다. (주말 연속창은 토 12시 < 일 0시라 그대로 유지)
+    const since = new Date(
+      Math.min(currentWindowStartUtc(), kstDayRange(kstToday()).start.getTime()),
+    );
     const existing = await prisma.order.findFirst({
       where: { userId: user.id, createdAt: { gte: since }, status: { not: "CANCELLED" } },
       select: { id: true },

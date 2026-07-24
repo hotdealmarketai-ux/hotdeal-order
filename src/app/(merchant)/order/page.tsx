@@ -20,7 +20,7 @@ import {
   currentWindowStartUtc,
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
-import { kstDateOf, kstToday, shiftDate, labelDate } from "@/lib/date";
+import { kstDateOf, kstToday, kstDayRange, shiftDate, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { orderOpenNow } from "@/lib/order-open";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
@@ -48,7 +48,11 @@ export default async function OrderPage(props: {
   let existingOrderDate: string | null = null;
   let cancelPending = false;
   if (windowed && open) {
-    const since = new Date(currentWindowStartUtc());
+    // 서버(createOrderAction)와 동일 기준 — 강제오픈으로 정오 이전에 넣은 발주도 잡아
+    // '수정 모드'로 전환되게 한다(둘이 어긋나면 화면은 새 발주, 서버는 거부로 혼란).
+    const since = new Date(
+      Math.min(currentWindowStartUtc(), kstDayRange(kstToday()).start.getTime()),
+    );
     const existing = await prisma.order.findFirst({
       where: {
         userId: user.id,
