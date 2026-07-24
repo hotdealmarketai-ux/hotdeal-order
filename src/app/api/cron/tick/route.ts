@@ -84,7 +84,9 @@ export async function GET(request: Request) {
   }
 
   // 시간 민감 알림은 grace 짧게(늦으면 안 보냄), 채움채 제출은 3시간(같은 KST일 내), 연체 안내는 하루.
-  await timed("tick:open", 12, 0, [1, 2, 3, 4, 5, 6], "/api/cron/notify?type=open", 30);
+  // '발주 시작' 알림은 멱등이라 grace를 넉넉히(120분) — 디스패처가 크게 지연돼도 반드시 발송.
+  // (마감·1시간전은 늦으면 오해라 30분 유지 — 늦은 마감 알림보다 미발송이 나음)
+  await timed("tick:open", 12, 0, [1, 2, 3, 4, 5, 6], "/api/cron/notify?type=open", 120);
   await timed("tick:warn", 19, 0, [1, 2, 3, 4, 5, 0], "/api/cron/notify?type=warn", 30);
   await timed("tick:deadline", 20, 0, [1, 2, 3, 4, 5, 0], "/api/cron/notify?type=deadline", 30);
   await timed("tick:chaeumchae", 20, 5, [1, 2, 3, 4, 5, 0], "/api/cron/submit-chaeumchae", 180);

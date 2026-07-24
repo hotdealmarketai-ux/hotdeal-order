@@ -267,23 +267,21 @@ export async function pushInventoryToSheet(): Promise<{
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: { name: true, qty: true, supplyPrice: true },
   });
+  // 빈 DB 가드 — 재고가 0행일 때(마이그레이션·초기화 중 등) push하면 시트를 정상인 것처럼
+  // 통째로 비워버린다. pull과 대칭으로, 비어 있으면 시트를 건드리지 않고 보존한다.
+  if (dbItems.length === 0) {
+    logError("inventory.push.emptyDbSkip", new Error("DB 재고 0행 — 시트 보존 위해 push 건너뜀"), {});
+    return { ok: false, error: "empty-db" };
+  }
+
   const values: string[][] = [
     HEADER,
     ...dbItems.map((it) => [it.name, String(it.qty), String(it.supplyPrice)]),
   ];
 
   try {
-    // 1) 데이터영역 전체 비우기(잔여 옛 행 확실 제거). 헤더(1행)는 유지.
-    const clearRange = encodeURIComponent(a1(title, "A2:C"));
-    const clr = await gfetch(`${API}/values/${clearRange}:clear`, token, {
-      method: "POST",
-    });
-    if (!clr.ok) {
-      const t = await clr.text();
-      logError("inventory.push.clear", new Error(t), { status: clr.status });
-      return { ok: false, error: `clear ${clr.status}` };
-    }
-    // 2) 헤더 + 전체 품목 다시 쓰기.
+    // 1) 먼저 헤더 + 전체 품목을 쓴다(write 우선). write가 실패하면 시트는 그대로 남는다.
+    //    (기존엔 clear→write라 clear 후 write가 실패하면 시트가 헤더만 남고 통째로 비었다.)
     const updRange = encodeURIComponent(a1(title, `A1:C${values.length}`));
     const upd = await gfetch(
       `${API}/values/${updRange}?valueInputOption=RAW`,
@@ -298,6 +296,16 @@ export async function pushInventoryToSheet(): Promise<{
       const t = await upd.text();
       logError("inventory.push.update", new Error(t), { status: upd.status });
       return { ok: false, error: `update ${upd.status}` };
+    }
+    // 2) write 성공 후에만, 새 데이터 '아래'에 남은 옛 행을 비운다(품목이 줄어든 경우 잔여 제거).
+    //    이 clear가 실패해도 최신 데이터는 이미 써졌으니 시트가 비지 않는다(옛 행만 잠깐 남음).
+    const trimRange = encodeURIComponent(a1(title, `A${values.length + 1}:C`));
+    const clr = await gfetch(`${API}/values/${trimRange}:clear`, token, {
+      method: "POST",
+    });
+    if (!clr.ok) {
+      logError("inventory.push.trim", new Error(await clr.text()), { status: clr.status });
+      // 최신 데이터는 이미 반영됨 — 잔여 옛 행 정리만 실패. 성공으로 간주하고 다음 push에서 재정리.
     }
   } catch (err) {
     logError("inventory.push.write", err, {});
