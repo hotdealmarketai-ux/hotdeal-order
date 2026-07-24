@@ -149,7 +149,9 @@ async function claudeNormalize(input: NormalizeInput): Promise<NormalizeResult> 
   if (!apiKey) throw new Error("no key");
 
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic({ apiKey });
+  // 타임아웃 미지정이면 SDK 기본이 10분이라, API가 늦으면 점주의 '발주 확정'이 그동안 멈춘다.
+  // 15초 안에 응답이 없으면 실패시켜 호출자의 규칙기반 폴백으로 즉시 넘긴다(최악 ~30초).
+  const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
   const payload = {
@@ -310,7 +312,9 @@ async function claudeChatParse(input: ChatParseInput): Promise<ChatParseResult> 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("no key");
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic({ apiKey });
+  // 타임아웃 미지정이면 SDK 기본이 10분이라, API가 늦으면 점주의 '발주 확정'이 그동안 멈춘다.
+  // 15초 안에 응답이 없으면 실패시켜 호출자의 규칙기반 폴백으로 즉시 넘긴다(최악 ~30초).
+  const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
   const multi = input.categories.length > 1;
   const allowed = new Set(input.categories.map((c) => c.key));
@@ -372,7 +376,9 @@ export async function normalizePickupTime(raw: string): Promise<string> {
   if (!apiKey) return r;
   try {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey });
+    // 타임아웃 미지정이면 SDK 기본이 10분이라, API가 늦으면 점주의 '발주 확정'이 그동안 멈춘다.
+  // 15초 안에 응답이 없으면 실패시켜 호출자의 규칙기반 폴백으로 즉시 넘긴다(최악 ~30초).
+  const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
     const msg = await client.messages.create({
       model,
@@ -539,7 +545,9 @@ async function claudeAggregate(
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("no key");
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic({ apiKey });
+  // 타임아웃 미지정이면 SDK 기본이 10분이라, API가 늦으면 점주의 '발주 확정'이 그동안 멈춘다.
+  // 15초 안에 응답이 없으면 실패시켜 호출자의 규칙기반 폴백으로 즉시 넘긴다(최악 ~30초).
+  const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
   const payload = { category: input.categoryLabel, lines: input.lines.slice(0, 400) };
@@ -671,7 +679,9 @@ async function claudeReport(input: ReportInput): Promise<AuctionReportResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("no key");
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic({ apiKey });
+  // 타임아웃 미지정이면 SDK 기본이 10분이라, API가 늦으면 점주의 '발주 확정'이 그동안 멈춘다.
+  // 15초 안에 응답이 없으면 실패시켜 호출자의 규칙기반 폴백으로 즉시 넘긴다(최악 ~30초).
+  const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
   const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
   const payload = { date: input.dateLabel, lines: input.lines.slice(0, 400) };

@@ -63,7 +63,8 @@ export async function askAssistant(history: AssistantMsg[]): Promise<string> {
   }
   try {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey });
+    // 타임아웃 미지정 시 SDK 기본 10분 — 답이 늦으면 도우미 화면이 계속 대기 상태가 된다.
+    const client = new Anthropic({ apiKey, timeout: 15_000, maxRetries: 1 });
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
     // 이력은 user/assistant 교대라 그냥 자르면 첫 메시지가 assistant가 될 수 있고,
     // 그러면 API가 400을 내 세션 내내 답변이 끊긴다(대화가 길어지면 항상 발생).
