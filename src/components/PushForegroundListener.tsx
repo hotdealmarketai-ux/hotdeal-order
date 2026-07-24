@@ -20,6 +20,12 @@ export function PushForegroundListener() {
     const onMessage = (e: MessageEvent) => {
       const d = e.data;
       if (!d || d.kind !== "push") return;
+      // 채팅 알림은 알림시스템(벨/토스트)에서 제외하는 설계 — 채팅창의 미읽음 배지가 담당한다.
+      // 인앱 토스트로도 띄우면 그 설계와 모순되므로 채팅 타입은 토스트를 생략한다.
+      if (d.type === "chat") {
+        router.refresh(); // 채팅 미읽음 배지만 갱신
+        return;
+      }
       seq.current += 1;
       setToast({
         id: seq.current,

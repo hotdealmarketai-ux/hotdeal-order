@@ -80,21 +80,17 @@ async function merchantUnread(merchantId: string): Promise<number> {
   });
 }
 async function adminUnread(): Promise<number> {
-  const threads = await prisma.chatThread.findMany({
-    select: { id: true, adminClearedAt: true },
-  });
-  let total = 0;
-  for (const t of threads) {
-    total += await prisma.chatMessage.count({
-      where: {
-        threadId: t.id,
-        fromAdmin: false,
-        readAt: null,
-        ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
-      },
-    });
-  }
-  return total;
+  // 스레드마다 count 쿼리(N+1) 대신 단일 JOIN 집계 — 폴링(5초)마다 스레드 수만큼 쿼리하던 것 제거.
+  // 스레드별 adminClearedAt 이후 메시지만(비운 시각 반영).
+  const rows = await prisma.$queryRaw<{ n: bigint }[]>`
+    SELECT COUNT(*)::bigint AS n
+    FROM "ChatMessage" m
+    JOIN "ChatThread" t ON m."threadId" = t."id"
+    WHERE m."fromAdmin" = false
+      AND m."readAt" IS NULL
+      AND (t."adminClearedAt" IS NULL OR m."createdAt" > t."adminClearedAt")
+  `;
+  return Number(rows[0]?.n ?? 0);
 }
 
 // ── bootstrap: 역할 + 미읽음(플로팅 배지용) ──
@@ -228,13 +224,16 @@ export async function sendChat(
   if (!text) return { ok: false, error: "" };
 
   // 남용 방지 — 같은 발신자가 0.4초 내 연속 전송하면 무시(스크립트 폭주 차단). #9 리뷰
-  const recent = await prisma.chatMessage.findFirst({
-    where: { senderId: v.id },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true },
-  });
-  if (recent && Date.now() - recent.createdAt.getTime() < 400) {
-    return { ok: false, error: "" };
+  // 관리자는 여러 스레드에 빠르게 답장할 수 있으므로 제외(스팸 방어는 점주 대상만).
+  if (v.kind !== "admin") {
+    const recent = await prisma.chatMessage.findFirst({
+      where: { senderId: v.id },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    if (recent && Date.now() - recent.createdAt.getTime() < 400) {
+      return { ok: false, error: "" };
+    }
   }
 
   try {

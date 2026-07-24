@@ -200,8 +200,11 @@ export function ChatWidget() {
     const p = pendingChatParam.current;
     pendingChatParam.current = null;
     try {
-      // URL에서 ?chat= 제거(뒤로가기/새로고침 시 재오픈 방지)
-      window.history.replaceState({}, "", window.location.pathname);
+      // URL에서 'chat' 파라미터만 제거(뒤로가기/새로고침 시 재오픈 방지).
+      // pathname으로 통째 대체하면 다른 쿼리(?view= 등)·해시까지 날아가므로 chat만 지운다.
+      const u = new URL(window.location.href);
+      u.searchParams.delete("chat");
+      window.history.replaceState({}, "", u.pathname + u.search + u.hash);
     } catch {
       /* noop */
     }
