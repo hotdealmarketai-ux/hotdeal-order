@@ -28,11 +28,17 @@ export default async function NewInvoicePage(props: {
   const merchant = await prisma.user.findUnique({ where: { id: userId } });
   if (!merchant || !isMerchant(merchant.role as Role)) notFound();
 
-  // 같은 날짜에 계산서를 여러 장 발행할 수 있음(부분·추가 청구). 기존 존재 여부만 확인.
-  const existing = await prisma.invoice.findFirst({
+  // 같은 날짜에 계산서를 여러 장 발행할 수 있음(부분·추가 청구).
+  // 예약분 자동채움을 '첫 계산서'로만 제한하면, 그날 다른 계산서를 먼저 발행한 경우 예약분이
+  // 영영 미청구로 남는다 → 기존 계산서(취소 제외)에 이미 들어간 공구(TOOL) 품목명을 모아
+  // '아직 청구 안 된 예약분'만 자동채움한다(중복청구도, 누락도 방지).
+  const existingInvoices = await prisma.invoice.findMany({
     where: { userId, date, status: { not: "VOID" } },
-    select: { id: true },
+    select: { items: { where: { category: "TOOL" }, select: { name: true } } },
   });
+  const billedToolNames = new Set<string>();
+  for (const inv of existingInvoices)
+    for (const it of inv.items) billedToolNames.add(it.name.trim());
 
   // 그날 발주 내역 — 참고용(출고 기준으로 직접 입력하므로 자동 채움 안 함)
   const { start, end } = kstDayRange(date);
@@ -59,14 +65,16 @@ export default async function NewInvoicePage(props: {
 
   const categories = allowedCategoriesFor(merchant.role as Role);
 
-  // 예약분 자동 채움 — 그 날짜 '첫 계산서'에만(무한 발행 시 중복 청구 방지). 확정 예약분을 공구(TOOL)에 미리 채움.
-  const reserved = existing ? [] : await getReservationInvoiceItems(userId, date);
-  const initialItems: InvoiceInitialItem[] = reserved.map((r) => ({
-    category: "TOOL" as Category,
-    name: r.name,
-    qty: String(r.qty),
-    unitPrice: String(r.supplyPrice),
-  }));
+  // 예약분 자동 채움 — 확정 예약분 중 '아직 어느 계산서에도 안 들어간' 품목만 공구(TOOL)에 채움.
+  const reserved = await getReservationInvoiceItems(userId, date);
+  const initialItems: InvoiceInitialItem[] = reserved
+    .filter((r) => !billedToolNames.has(r.name.trim()))
+    .map((r) => ({
+      category: "TOOL" as Category,
+      name: r.name,
+      qty: String(r.qty),
+      unitPrice: String(r.supplyPrice),
+    }));
 
   return (
     <>

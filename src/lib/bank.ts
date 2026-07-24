@@ -1,8 +1,9 @@
 // 팝빌 계좌조회(EasyFinBank) — 하나 법인계좌 '입금' 수집 + 점포 자동매칭 + 계산서 자동 입금확인.
 // 서버 전용. POPBILL_* 키 없으면 명시적 에러(조용히 넘어가지 않음 — 돈이라서).
 import { prisma } from "@/lib/prisma";
-import { notifyMerchantInvoicePaid } from "@/lib/push";
+import { notifyMerchantInvoicePaid, sendPushToRole } from "@/lib/push";
 import { kstDateOf } from "@/lib/date";
+import { logError } from "@/lib/log";
 import { clearWeeklyUnlockIfSettled } from "@/lib/weekly";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -284,8 +285,24 @@ export async function replaceManualPlaceholderWithReal(
     where: { bankTid: `manual-${inv.id}` },
     select: { id: true, amount: true },
   });
+  if (!synth) return false;
   // 합성입금이 '전액 합성'(=계산서 total, 즉 실입금과 동일)일 때만 대체(부분충당은 손대지 않음).
-  if (!synth || synth.amount !== dep.amount) return false;
+  // 금액이 다르면 자동으로 손대지 않는다 — 차액(부분입금/과입금)을 코드가 임의로 덮으면 안 되므로.
+  // 다만 이대로 두면 합성 + 실입금이 통장에 '둘 다' 남아 조용히 이중계상되니, 관리자에게 알린다.
+  if (synth.amount !== dep.amount) {
+    logError("bank.manualPlaceholderMismatch", new Error("합성입금과 실입금 금액 불일치"), {
+      userId,
+      invoiceId: inv.id,
+      synthAmount: synth.amount,
+      realAmount: dep.amount,
+    });
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: "입금 확인이 필요합니다.",
+      body: `수동 확인한 금액(${synth.amount.toLocaleString("ko-KR")}원)과 실제 입금(${dep.amount.toLocaleString("ko-KR")}원)이 달라요. 입출금 내역을 정리해 주세요.`,
+      url: "/admin/deposits",
+    }).catch(() => {});
+    return false;
+  }
   await prisma.$transaction([
     prisma.deposit.delete({ where: { id: synth.id } }),
     prisma.deposit.update({
