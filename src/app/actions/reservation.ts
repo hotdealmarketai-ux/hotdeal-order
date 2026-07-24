@@ -54,10 +54,17 @@ export async function saveReservationBatchAction(
   if (batchId) {
     const existing = await prisma.reservationBatch.findFirst({
       where: { id: batchId, active: true },
-      select: { id: true, reserveDate: true, pickupDate: true, _count: { select: { orders: true } } },
+      select: {
+        id: true,
+        reserveDate: true,
+        pickupDate: true,
+        // '확정된' 예약만 센다 — 점주가 '수정'(잠금해제)만 누르고 방치하면 confirmed:false 행이
+        // 남는데, 이를 세면 실제 확정이 없는데도 관리자가 날짜를 영영 못 바꾸게 된다.
+        _count: { select: { orders: { where: { confirmed: true } } } },
+      },
     });
     if (!existing) return { error: "예약 배치를 찾을 수 없어요." };
-    // 이미 점주 예약이 있으면 날짜 변경 금지(마감/로드 타이밍 어긋남 방지) — 기존 날짜 유지.
+    // 이미 '확정된' 점주 예약이 있으면 날짜 변경 금지(마감/로드 타이밍 어긋남 방지) — 기존 날짜 유지.
     if (existing._count.orders > 0) {
       if (reserveDate !== existing.reserveDate || pickupDate !== existing.pickupDate) {
         return { error: "이미 예약이 접수된 배치는 날짜를 바꿀 수 없어요." };

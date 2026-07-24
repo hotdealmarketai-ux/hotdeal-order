@@ -188,7 +188,9 @@ export async function getReservationInvoiceItems(
   orderDayKst: string,
 ): Promise<{ name: string; qty: number; supplyPrice: number }[]> {
   const pickupDate = shiftDate(orderDayKst, 1);
-  const batch = await prisma.reservationBatch.findFirst({
+  // 같은 픽업일에 배치가 여러 개일 수 있으므로(오전/오후·품목군 분리) 그 픽업일의 '모든' 활성
+  // 배치에서 이 점주의 확정 예약분을 합친다(findFirst는 첫 배치만 잡아 나머지가 조용히 누락됐다).
+  const batches = await prisma.reservationBatch.findMany({
     where: { active: true, pickupDate },
     select: {
       orders: {
@@ -202,8 +204,18 @@ export async function getReservationInvoiceItems(
       },
     },
   });
-  const items = batch?.orders[0]?.items ?? [];
-  return items.filter((i) => i.qty > 0);
+  // 같은 품목명은 수량 합산(공급가는 처음 값 유지)
+  const merged = new Map<string, { name: string; qty: number; supplyPrice: number }>();
+  for (const b of batches)
+    for (const o of b.orders)
+      for (const it of o.items) {
+        if (it.qty <= 0) continue;
+        const key = it.name.trim();
+        const cur = merged.get(key);
+        if (cur) cur.qty += it.qty;
+        else merged.set(key, { name: it.name, qty: it.qty, supplyPrice: it.supplyPrice });
+      }
+  return [...merged.values()];
 }
 
 // 픽업 전날(=오늘 발주창) 공구에 읽기전용으로 로드할 '확정 예약' 항목. 단일출처(주문 복제 X).
@@ -215,7 +227,8 @@ export async function getReservationLoadForOrder(
 ): Promise<ReservationLoadItem[]> {
   // 로드일 == 픽업 전날  ⇒  픽업일 == 발주일 + 1
   const pickupDate = shiftDate(orderDayKst, 1);
-  const batch = await prisma.reservationBatch.findFirst({
+  // 같은 픽업일의 모든 활성 배치에서 이 점주 확정분을 합친다(findFirst는 첫 배치만 잡아 누락됐다).
+  const batches = await prisma.reservationBatch.findMany({
     where: { active: true, pickupDate },
     select: {
       orders: {
@@ -224,7 +237,13 @@ export async function getReservationLoadForOrder(
       },
     },
   });
-  const items = batch?.orders[0]?.items ?? [];
-  return items.filter((i) => i.qty > 0).map((i) => ({ name: i.name, qty: i.qty }));
+  const merged = new Map<string, number>();
+  for (const b of batches)
+    for (const o of b.orders)
+      for (const it of o.items) {
+        if (it.qty <= 0) continue;
+        merged.set(it.name, (merged.get(it.name) ?? 0) + it.qty);
+      }
+  return [...merged.entries()].map(([name, qty]) => ({ name, qty }));
 }
 
