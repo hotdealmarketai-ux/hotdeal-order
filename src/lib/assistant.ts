@@ -65,11 +65,16 @@ export async function askAssistant(history: AssistantMsg[]): Promise<string> {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
     const client = new Anthropic({ apiKey });
     const model = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+    // 이력은 user/assistant 교대라 그냥 자르면 첫 메시지가 assistant가 될 수 있고,
+    // 그러면 API가 400을 내 세션 내내 답변이 끊긴다(대화가 길어지면 항상 발생).
+    // → 자른 뒤 앞쪽 assistant를 버려 반드시 user로 시작하게 한다.
+    const trimmed = history.slice(-12);
+    while (trimmed.length > 0 && trimmed[0].role !== "user") trimmed.shift();
     const msg = await client.messages.create({
       model,
       max_tokens: 700,
       system: APP_GUIDE,
-      messages: history.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+      messages: trimmed.map((m) => ({ role: m.role, content: m.content })),
     });
     const text = msg.content
       .map((b) => (b.type === "text" ? b.text : ""))

@@ -205,6 +205,20 @@ function cleanItems(rows: RawRow[]) {
     .slice(0, MAX_ITEMS);
 }
 
+// 품목명은 썼는데 수량이 비었거나 0 이하인 항목을 찾는다(있으면 그 품목명 반환).
+// 수량 없는 품목이 그대로 업자 발주서로 나가 확인 전화·누락으로 이어지던 것을 막는다.
+// '3박스'·'조금' 같은 글자 수량은 그대로 허용 — 숫자가 있고 그 값이 0 이하일 때만 오류로 본다.
+function findBadQtyItem(items: { name: string; qty: string }[]): string | null {
+  for (const it of items) {
+    if (!it.name) continue;
+    const q = it.qty.trim();
+    if (!q) return it.name;
+    const m = q.match(/-?\d+(?:\.\d+)?/);
+    if (m && parseFloat(m[0]) <= 0) return it.name;
+  }
+  return null;
+}
+
 // #5 베니지민 고구마: 야채여도 '과일'로 취급(과일 파트/서부일광 출고). 품목명은 '고구마',
 // 설명(note)에 '베니지민' 태그. 오직 '베니지민'이 들어간 고구마만 — 다른 고구마는 야채 그대로.
 // groups 를 제자리에서 변형(빈 그룹 제거). 이름 정규화 + 카테고리 라우팅을 결정론적으로 처리.
@@ -364,6 +378,10 @@ export async function createOrderAction(
     if (items.length === 0) continue;
     if (!items.some((r) => r.name)) {
       return { error: `${CATEGORIES[category].label} 품목명을 입력하세요.` };
+    }
+    const badQty = findBadQtyItem(items);
+    if (badQty) {
+      return { error: `‘${badQty}’ 수량을 입력해 주세요.` };
     }
     groups.push({ category, items });
   }
@@ -562,6 +580,8 @@ export async function updateOrderAction(
   const items = cleanItems(parsed);
   if (items.length === 0) return { error: "발주할 품목을 한 개 이상 입력하세요." };
   if (!items.some((r) => r.name)) return { error: "품목명을 입력하세요." };
+  const badQtyItem = findBadQtyItem(items);
+  if (badQtyItem) return { error: `‘${badQtyItem}’ 수량을 입력해 주세요.` };
 
   const orderDate = kstDateOf(order.createdAt);
   const pickupTime = await buildPickup(user.role, formData, orderDate);

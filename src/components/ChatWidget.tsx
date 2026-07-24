@@ -113,8 +113,17 @@ export function ChatWidget() {
     });
   };
 
+  // 지금 맨 아래(근처)를 보고 있는가 — 폴링 갱신 때 위로 올려 읽는 중이면 끌어내리지 않기 위해.
+  const isNearBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+
   const loadThreadMessages = useCallback(
-    async (tid: string, isAdmin: boolean) => {
+    async (tid: string, isAdmin: boolean, fromPoll = false) => {
+      // 폴링 갱신이면 '이미 아래에 있을 때만' 따라 내려간다(위치는 갱신 전에 판단).
+      const stick = !fromPoll || isNearBottom();
       const res = isAdmin ? await adminLoadThread(tid) : await merchantLoadChat();
       if (!res) {
         // 잘못된/사라진 스레드(예: 유효하지 않은 ?chat=) → 관리자는 목록으로 복귀
@@ -131,19 +140,21 @@ export function ChatWidget() {
       setThreadId(res.threadId);
       setMessages(res.messages);
       setUnread(await chatUnread().catch(() => 0));
-      scrollDown();
+      if (stick) scrollDown();
     },
     [],
   );
 
-  const openMerchantChat = useCallback(async () => {
+  const openMerchantChat = useCallback(async (fromPoll = false) => {
     setView("thread");
+    // 폴링 갱신이면 '이미 아래에 있을 때만' 따라 내려간다(위로 올려 읽는 중이면 유지).
+    const stick = !fromPoll || isNearBottom();
     const res = await merchantLoadChat();
     if (res) {
       setThreadId(res.threadId);
       setMessages(res.messages);
       setUnread(await chatUnread().catch(() => 0));
-      scrollDown();
+      if (stick) scrollDown();
     }
   }, []);
 
@@ -158,12 +169,19 @@ export function ChatWidget() {
     setOpen(true);
     setMenuOpen(false);
     // 가맹점: 기본 'AI 도우미'(클라이언트). 관리자 문의 탭일 때만 사람 채팅 로드.
+    // 단, 안 읽은 관리자 메시지가 있으면 '관리자 문의' 탭으로 열어 답장이 바로 보이게 한다
+    // (배지를 눌렀는데 AI 탭이 열려 "알림은 떴는데 아무것도 없다"가 되던 문제).
     if (role === "merchant") {
-      if (mMode === "admin") await openMerchantChat();
+      if (unread > 0) {
+        setMMode("admin");
+        await openMerchantChat();
+      } else if (mMode === "admin") {
+        await openMerchantChat();
+      }
     } else {
       await openAdminList();
     }
-  }, [role, mMode, openMerchantChat, openAdminList]);
+  }, [role, mMode, unread, openMerchantChat, openAdminList]);
 
   // 가맹점 탭 전환(AI ↔ 관리자 문의)
   const switchMMode = useCallback(
@@ -206,8 +224,9 @@ export function ChatWidget() {
     const merchantAdmin = role === "merchant" && mMode === "admin";
     if (merchantAdmin || (role === "admin" && view === "thread" && threadId)) {
       const id = setInterval(() => {
-        if (merchantAdmin) openMerchantChat();
-        else if (threadId) loadThreadMessages(threadId, true);
+        // fromPoll=true → 위로 올려 읽는 중이면 스크롤 위치를 유지한다.
+        if (merchantAdmin) openMerchantChat(true);
+        else if (threadId) loadThreadMessages(threadId, true, true);
       }, 3500);
       return () => clearInterval(id);
     }
