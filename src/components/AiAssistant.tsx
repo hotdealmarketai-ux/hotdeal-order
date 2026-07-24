@@ -2,8 +2,15 @@
 
 import { useRef, useState } from "react";
 import { askAssistantAction } from "@/app/actions/assistant";
+import { AiStockList } from "./AiStockList";
+import type { StockMatch } from "@/lib/stock-match";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = {
+  role: "user" | "assistant";
+  content: string;
+  stock?: StockMatch[]; // 재고 문의로 판단된 답변엔 담기 카드가 함께
+  canAdd?: boolean;
+};
 
 const CHIPS = [
   "발주는 어떻게 하나요?",
@@ -43,6 +50,8 @@ export function AiAssistant() {
           res?.ok && res.text
             ? res.text
             : "지금은 답변이 어려워요. 위 '관리자 문의' 탭에서 여쭤봐 주세요.",
+        stock: res?.ok ? res.stock : undefined,
+        canAdd: res?.canAdd,
       },
     ]);
     scrollDown();
@@ -79,6 +88,9 @@ export function AiAssistant() {
               </div>
               <div className="msg__col">
                 <div className="msg__bubble">{m.content}</div>
+                {m.stock && m.stock.length > 0 && (
+                  <AiStockList items={m.stock} canAdd={m.canAdd ?? false} />
+                )}
               </div>
             </div>
           ),

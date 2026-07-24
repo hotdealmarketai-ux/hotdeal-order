@@ -3151,6 +3151,18 @@ body {
 }
 .aichips button:active { background: var(--green-100); }
 
+/* 챗봇 안 재고 카드 — 재고현황 한 줄과 동일한 구성(담기는 기존 StockCartButton 재사용) */
+.aistock { display: flex; flex-direction: column; gap: 7px; margin: 8px 0 2px; }
+.aistock__row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg); border: 1px solid var(--line-strong);
+  border-radius: 14px; padding: 10px 12px;
+}
+.aistock__main { flex: 1; min-width: 0; }
+.aistock__name { font-size: 14px; font-weight: 700; color: var(--fg); }
+.aistock__sub { display: flex; gap: 6px; align-items: center; margin-top: 3px; flex-wrap: wrap; }
+.aistock__price { font-size: 12px; color: var(--muted); }
+
 /* AI 입력 중 … 점 애니메이션 */
 .msg__typing { display: inline-flex; gap: 4px; align-items: center; min-height: 20px; }
 .msg__typing span {
