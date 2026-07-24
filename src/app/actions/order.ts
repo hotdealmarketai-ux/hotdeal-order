@@ -522,6 +522,29 @@ export async function updateOrderAction(
     };
   }
 
+  // '이번 발주창'에 넣은 발주만 수정 가능 — 창이 열려 있다고 지난 창(이미 업체로 나간) 발주까지
+  // 고칠 수 있으면 실제 출고와 어긋난다.
+  if (
+    hasOrderWindow(user.role) &&
+    order.createdAt.getTime() < currentWindowStartUtc()
+  ) {
+    return { error: "지난 발주는 수정할 수 없어요. 본사에 문의해 주세요." };
+  }
+
+  // 계산서가 발행된 날짜의 발주는 수정 불가(역할 무관) — 청구액↔발주 내용 불일치 방지.
+  const issuedInv = await prisma.invoice.findFirst({
+    where: {
+      userId: user.id,
+      kind: "DAILY",
+      date: kstDateOf(order.createdAt),
+      status: { in: ["ISSUED", "PAID"] },
+    },
+    select: { id: true },
+  });
+  if (issuedInv) {
+    return { error: "입금요청서가 발행된 발주는 수정할 수 없어요. 본사에 문의해 주세요." };
+  }
+
   // 1일 미수 잠금 — 미입금 상태면 수정도 차단(서버 강제)
   const lock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
   if (lock.locked) {

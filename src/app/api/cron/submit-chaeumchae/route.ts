@@ -52,32 +52,55 @@ export async function GET(request: Request) {
   });
 
   const bySeq = new Map<string, { name: string; qty: number }>();
-  let unmapped = 0;
+  // 채움채로 안 나간(매핑 실패=이름 불일치, 또는 수량0) 원본 품목명 — 관리자 경고용.
+  const skipped: string[] = [];
   for (const o of orders) {
     for (const it of o.items) {
       const seq = seqForName(it.name);
       if (!seq) {
-        unmapped++;
+        skipped.push(it.name.trim() || "(이름없음)");
         continue;
       }
       const q = parseTofuQty(it.qty);
-      if (q <= 0) continue;
+      if (q <= 0) {
+        skipped.push(it.name.trim() || "(이름없음)");
+        continue;
+      }
       const name = CHAEUMCHAE_CATALOG.find((p) => p.seq === seq)?.name ?? it.name;
       const cur = bySeq.get(seq);
       bySeq.set(seq, { name, qty: (cur?.qty ?? 0) + q });
     }
   }
+  const unmapped = skipped.length;
   const items: SubmitItem[] = [...bySeq.entries()].map(([seq, v]) => ({
     seq,
     name: v.name,
     quantity: v.qty,
   }));
 
+  // 누락 품목이 있으면(이름 불일치·수량0) 관리자에게 경고 — 두부가 조용히 안 나가는 것 방지.
+  // 정상 제출 여부와 무관하게 누락이 있을 때만. 실제 실행 시각에만(dryrun 제외).
+  if (!dryrun && skipped.length > 0) {
+    const uniq = [...new Set(skipped)];
+    await sendPushToRole("ADMIN_SAEROP", {
+      title: `채움채 발주에서 ${skipped.length}개 품목이 누락됐어요.`,
+      body: `품목명을 확인해 주세요: ${uniq.slice(0, 10).join(", ")}${uniq.length > 10 ? " 외" : ""}`,
+      url: "/admin",
+    }).catch((e) => logError("cron.chaeumchae.skippedAlert", e));
+  }
+
   if (items.length === 0) {
-    return Response.json({ ok: true, submitted: false, reason: "두부 발주 없음", orderDay, unmapped });
+    return Response.json({
+      ok: true,
+      submitted: false,
+      reason: "두부 발주 없음",
+      orderDay,
+      unmapped,
+      skipped: skipped.length,
+    });
   }
   if (dryrun) {
-    return Response.json({ ok: true, dryrun: true, orderDay, items, unmapped });
+    return Response.json({ ok: true, dryrun: true, orderDay, items, unmapped, skipped });
   }
 
   // 멱등: 같은 출고일엔 한 번만 제출(디스패처+GH Actions 동시 실행에도 중복 제출 방지).

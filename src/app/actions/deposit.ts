@@ -37,7 +37,9 @@ function revalidateDeposit() {
 }
 
 // 미매칭 입금을 관리자가 특정 점포로 수동 매칭.
-// remember=true면 그 입금자명을 점포에 기억(다음부턴 자동매칭), 금액 일치 계산서 1장이면 자동 입금확인.
+// remember=true면 그 입금자명을 점포에 기억(다음부턴 자동매칭).
+// 자동 입금확인은 '입금자명이 일치하는' 매칭에서 금액 일치 계산서가 1장일 때만(강한 근거).
+// 금액만 우연히 일치한 매칭은 점포 귀속까지만 — 입금확정은 관리자가 계산서에서 별도 확인.
 export async function matchDepositManuallyAction(formData: FormData) {
   await requireAdmin();
   const depositId = String(formData.get("depositId") ?? "");
@@ -65,9 +67,22 @@ export async function matchDepositManuallyAction(formData: FormData) {
     });
   }
 
-  // 매칭하면 미수도 줄어들도록 — 금액이 딱 맞는 미수 계산서(ISSUED) 1장이 있으면 자동 입금확인.
-  // (자동매칭과 동일한 게이트: 입금시점 이전 발행 + 분할요청 아님, 애매하면 귀속만.)
-  const paidId = await tryAutoPayInvoice(userId, dep.amount, dep.txAt);
+  // 자동 입금확인은 '강한 근거(입금자명 일치)'일 때만 — 금액만 우연히 일치한 매칭으로는
+  // 결제를 확정하지 않는다(오확정 + 점주에게 잘못된 '입금완료' 알림 방지).
+  // 금액만 맞는 건은 점포 '귀속'까지만 하고, 입금확정은 관리자가 계산서에서 한 번 더 확인.
+  // (자동매칭 경로(bank.ts)는 등록 입금자명 정확일치라 이미 강한 근거 — 그대로 유지.)
+  const norm = (s: string) => (s ?? "").replace(/\s+/g, "").toLowerCase();
+  const dp = norm(dep.payerName ?? "");
+  const payerMatched =
+    !!dp &&
+    store.payerNames.some((p) => {
+      const np = norm(p);
+      return np.length >= 3 && (dp.includes(np) || np.includes(dp));
+    });
+
+  const paidId = payerMatched
+    ? await tryAutoPayInvoice(userId, dep.amount, dep.txAt)
+    : null;
   if (paidId) {
     await prisma.deposit.update({
       where: { id: depositId },

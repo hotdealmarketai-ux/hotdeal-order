@@ -161,7 +161,7 @@ export async function notifyMerchantWeeklyInvoiceIssued(userId: string) {
     await sendPushToUser(userId, {
       title: "주간발주 입금요청서가 도착했습니다.",
       body: "",
-      url: "/weekly/invoices",
+      url: "/invoices",
     });
   } catch (err) {
     logError("push.notifyMerchantWeeklyInvoiceIssued", err, { userId });
@@ -177,7 +177,7 @@ export async function notifyMerchantWeeklyInvoiceOverdue(
     await sendPushToUser(userId, {
       title: `주간발주 입금 ${total.toLocaleString("ko-KR")}원이 아직 확인되지 않았습니다. 토요일 전 입금 부탁드립니다.`,
       body: "",
-      url: "/weekly/invoices",
+      url: "/invoices",
     });
   } catch (err) {
     logError("push.notifyMerchantWeeklyInvoiceOverdue", err, { userId });
