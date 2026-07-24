@@ -78,10 +78,28 @@ export async function updateMemberAction(
     };
   }
 
+  // 변경 전 값(감사로그용) — 역할/상태가 바뀌면 '누가·언제·무엇을' 남긴다.
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, status: true, storeName: true, username: true },
+  });
+
   await prisma.user.update({
     where: { id: userId },
     data: { storeName, phone, address, role, status, payerNames },
   });
+
+  // 권한 상승·정지 등 계정 조작은 추적 가능해야 한다(단순 정보 수정은 로그 남기지 않음).
+  if (before && (before.role !== role || before.status !== status)) {
+    await writeAudit({
+      action: "member.update",
+      actorId: admin.id,
+      actorName: admin.storeName,
+      targetType: "user",
+      targetId: userId,
+      summary: `회원 변경: ${before.storeName}(${before.username}) · 역할 ${before.role}→${role} · 상태 ${before.status}→${status}`,
+    });
+  }
   revalidatePath("/admin/members");
   revalidatePath(`/admin/members/${userId}`);
   return { ok: true };
@@ -94,15 +112,24 @@ export async function setMemberStatusAction(formData: FormData) {
   const status = String(formData.get("status") ?? "") as Status;
   if (!userId || !EDITABLE_STATUSES.includes(status)) return;
   if (userId === admin.id) return; // 본인 정지 금지
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, status: true, storeName: true, username: true },
+  });
+  if (!before) return;
   // 역할 미배정(APPLICANT)을 APPROVED로 복구하면 로그인 후 락아웃 → 막는다(역할부터 지정해야 함).
-  if (status === "APPROVED") {
-    const target = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { role: true },
-    });
-    if (!target || target.role === "APPLICANT") return;
-  }
+  if (status === "APPROVED" && before.role === "APPLICANT") return;
   await prisma.user.update({ where: { id: userId }, data: { status } });
+  if (before.status !== status) {
+    await writeAudit({
+      action: "member.status",
+      actorId: admin.id,
+      actorName: admin.storeName,
+      targetType: "user",
+      targetId: userId,
+      summary: `회원 상태 변경: ${before.storeName}(${before.username}) · ${before.status}→${status}`,
+    });
+  }
   revalidatePath("/admin/members");
   revalidatePath(`/admin/members/${userId}`);
 }
@@ -163,13 +190,26 @@ export async function resetMemberPasswordAction(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
   const pw = String(formData.get("password") ?? "");
   if (!userId) return { error: "잘못된 요청이에요." };
   if (pw.length < 4) return { error: "비밀번호는 4자 이상으로 정해주세요." };
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { storeName: true, username: true },
+  });
   const passwordHash = await bcrypt.hash(pw, 10);
   await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  // 비밀번호 '값'은 절대 남기지 않고, 초기화가 있었다는 사실만 기록.
+  await writeAudit({
+    action: "member.passwordReset",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "user",
+    targetId: userId,
+    summary: `비밀번호 초기화: ${target?.storeName ?? ""}(${target?.username ?? userId})`,
+  });
   revalidatePath(`/admin/members/${userId}`);
   return { ok: true };
 }

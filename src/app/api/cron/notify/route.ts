@@ -46,22 +46,28 @@ export async function GET(request: Request) {
   const job = typeParam ? JOBS[typeParam] : pick(dow, h);
   if (!job) return Response.json({ ok: true, sent: false, dow, h });
 
-  // 멱등: 같은 종류를 같은 KST 날짜에 두 번 보내지 않음(디스패처+GH Actions 겹쳐도 안전)
+  // 멱등: 같은 종류를 같은 KST 날짜에 두 번 보내지 않음(디스패처+GH Actions 겹쳐도 안전).
+  // ⚠️ findUnique→발송→upsert 는 원자적이지 않아, 두 호출이 겹치면 둘 다 통과해
+  //    전 가맹점주에게 알림이 '두 번' 간다. → 발송 전에 create 로 원자적 선점(키가 @id).
+  //    (채움채 크론과 동일 패턴)
   const key = `notify:${job.type}:${kstDateOf(new Date(atMs))}`;
-  const already = await prisma.appMeta.findUnique({ where: { key } });
-  if (already) {
+  try {
+    await prisma.appMeta.create({ data: { key, syncedAt: new Date() } });
+  } catch {
+    // 이미 선점됨(동시 실행 또는 이전에 발송 완료) → 스킵
     return Response.json({ ok: true, sent: false, dedup: true, type: job.type });
   }
 
-  await sendPushToRole("MERCHANT_HOTDEAL", {
-    title: job.title,
-    body: "",
-    url: "/order",
-  });
-  await prisma.appMeta.upsert({
-    where: { key },
-    create: { key, syncedAt: new Date() },
-    update: { syncedAt: new Date() },
-  });
+  try {
+    await sendPushToRole("MERCHANT_HOTDEAL", {
+      title: job.title,
+      body: "",
+      url: "/order",
+    });
+  } catch (err) {
+    // 발송이 통째로 실패하면 선점을 되돌려 다음 실행에서 재시도(무음 유실 방지).
+    await prisma.appMeta.deleteMany({ where: { key } }).catch(() => {});
+    throw err;
+  }
   return Response.json({ ok: true, sent: true, type: job.type, dow, h });
 }
