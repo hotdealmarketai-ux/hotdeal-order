@@ -308,6 +308,7 @@ model InventoryItem {
   status    String   @default("") // (레거시) 상태/수량 텍스트 — 점진적으로 qty로 대체
   qty       Int      @default(0) // #6/#12 남은수량(시트 B열)
   supplyPrice Int    @default(0) // #6/#12 개당 공급가(시트 C열)
+  expiry    String   @default("") // #9 유통기한 YYYY-MM-DD(빈값=없음, 시트 D열)
   memo      String   @default("")
   sortOrder Int      @default(0)
   // #12 시트 삭제 전파용 소프트삭제 마커(선택) — 현재는 미사용, 향후 tombstone

@@ -2,9 +2,16 @@
 
 import { useState, useRef, useEffect } from "react";
 import { autosaveInventoryAction } from "@/app/actions/admin";
+import { expiryInfo } from "@/lib/date";
 import { InvSearch } from "./InvSearch";
 
-type Item = { id: string; name: string; qty: string; supplyPrice: string };
+type Item = {
+  id: string;
+  name: string;
+  qty: string;
+  supplyPrice: string;
+  expiry: string; // #9 유통기한 "YYYY-MM-DD"(빈값=없음)
+};
 
 // R4 재고 자동저장 — 입력하는 족족(디바운스 0.8s) DB에 저장. 시트는 크론이 주기적으로 반영(단방향).
 // 각 품목은 한 줄(품목명 · 수량 · 공급가 · 삭제)로 컴팩트하게.
@@ -80,9 +87,12 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
             <span className="invcol invcol--name">품목명</span>
             <span className="invcol invcol--qty">남은 수량</span>
             <span className="invcol invcol--price">공급가</span>
+            <span className="invcol invcol--expiry">유통기한</span>
             <span className="invcol invcol--del" />
           </div>
-          {visible.map((it) => (
+          {visible.map((it) => {
+            const exp = expiryInfo(it.expiry);
+            return (
             <div className="invrow" key={it.id}>
               <input
                 className="invin invcol--name"
@@ -104,6 +114,19 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
                 placeholder="0"
                 onChange={(e) => setField(it.id, "supplyPrice", e.target.value)}
               />
+              <span className="invcol--expiry invexp">
+                <input
+                  className="invin invexp__in"
+                  value={it.expiry}
+                  placeholder="26-07-27"
+                  onChange={(e) => setField(it.id, "expiry", e.target.value)}
+                />
+                {exp && (
+                  <span className={`invexp__dday invexp__dday--${exp.level}`}>
+                    {exp.dday}
+                  </span>
+                )}
+              </span>
               <button
                 type="button"
                 className="invrow__del invcol--del"
@@ -113,7 +136,8 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
                 ✕
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>

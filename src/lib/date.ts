@@ -113,3 +113,51 @@ export function orderRangeForShipment(shipmentDayKst: string): { start: Date; en
 export function labelShipment(shipmentDayKst: string): string {
   return `출고 ${labelDate(shipmentDayKst)}`;
 }
+
+// ── #9 유통기한 ──────────────────────────────────────────────
+/**
+ * 유통기한 입력 정규화. "26-07-27" · "2026-07-27" · "2026.7.27" · "2026/07/27" → "2026-07-27".
+ * 형식이 아니거나 달력상 없는 날짜(2026-02-30 등)면 "" 반환(저장 안 됨).
+ */
+export function normalizeExpiry(input: string): string {
+  const s = String(input ?? "").trim();
+  if (!s) return "";
+  const m = s.match(/^(\d{2}|\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})$/);
+  if (!m) return "";
+  let [, y, mo, d] = m;
+  if (y.length === 2) y = `20${y}`;
+  const iso = `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  const dt = new Date(`${iso}T00:00:00+09:00`);
+  if (Number.isNaN(dt.getTime()) || kstDateOf(dt) !== iso) return "";
+  return iso;
+}
+
+/** 유통기한 풀 표기: "2026-07-27" → "2026년 07월 27일 월요일" */
+export function labelExpiryFull(dateStr: string): string {
+  const [y, mo, d] = dateStr.split("-");
+  if (!y || !mo || !d) return dateStr;
+  const wd = ["일", "월", "화", "수", "목", "금", "토"][dowOf(dateStr)];
+  return `${y}년 ${mo}월 ${d}일 ${wd}요일`;
+}
+
+/** 오늘(KST) 기준 남은 일수. "2026-07-27" → 정수(양수=남음, 0=오늘, 음수=지남) */
+export function daysUntilKst(dateStr: string): number {
+  const target = new Date(`${dateStr}T00:00:00+09:00`).getTime();
+  const today = new Date(`${kstToday()}T00:00:00+09:00`).getTime();
+  return Math.round((target - today) / 86400000);
+}
+
+/**
+ * 유통기한 표시 정보. 빈값/형식오류면 null.
+ *  full: "2026년 07월 27일 월요일", dday: "D-3"·"D-DAY"·"만료 2일",
+ *  level: 지남(expired)/임박 30일이내(soon)/여유(ok)
+ */
+export function expiryInfo(
+  dateStr: string,
+): { full: string; dday: string; days: number; level: "expired" | "soon" | "ok" } | null {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  const days = daysUntilKst(dateStr);
+  const dday = days === 0 ? "D-DAY" : days > 0 ? `D-${days}` : `만료 ${-days}일`;
+  const level = days < 0 ? "expired" : days <= 30 ? "soon" : "ok";
+  return { full: labelExpiryFull(dateStr), dday, days, level };
+}

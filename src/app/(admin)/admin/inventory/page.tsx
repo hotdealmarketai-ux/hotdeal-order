@@ -58,6 +58,7 @@ export default async function AdminInventory() {
             name: it.name,
             qty: it.qty ? String(it.qty) : "",
             supplyPrice: it.supplyPrice ? String(it.supplyPrice) : "",
+            expiry: it.expiry ?? "",
           }))}
         />
       </div>

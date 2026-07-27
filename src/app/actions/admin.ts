@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { kstDayRange, kstDateOf } from "@/lib/date";
+import { kstDayRange, kstDateOf, normalizeExpiry } from "@/lib/date";
 import { safePushInventory, setInventoryPushPending } from "@/lib/inventory-sheet";
 import {
   currentWindowStartUtc,
@@ -415,6 +415,7 @@ export async function autosaveInventoryAction(payloadJson: string) {
     name?: string;
     qty?: unknown;
     supplyPrice?: unknown;
+    expiry?: unknown; // #9 유통기한 "YY-MM-DD"/"YYYY-MM-DD" (정규화 후 저장)
     baseQty?: unknown; // 편집기가 로드/직전저장 시점에 본 수량(변경 판별용)
   }[];
   try {
@@ -439,12 +440,19 @@ export async function autosaveInventoryAction(payloadJson: string) {
       // → 관리자가 실제로 수량을 바꾼 행(baseQty와 다름)만 qty를 절대반영(=실사 정정 의도),
       //   안 바꾼 행은 qty를 건드리지 않아 동시 발주 차감을 보존한다.
       const qtyChanged = toInt(String(r.qty ?? "")) !== toInt(String(r.baseQty ?? r.qty ?? ""));
+      // #9 유통기한: 빈값이면 삭제, 유효한 날짜면 정규화 저장, 입력 중 부분/오타면 기존값 유지
+      // (자동저장이 타이핑 중간에 유효값을 지우지 않도록).
+      const rawExp = String(r.expiry ?? "").trim();
+      const normExp = normalizeExpiry(rawExp);
+      const expiryUpdate =
+        rawExp === "" ? { expiry: "" } : normExp ? { expiry: normExp } : {};
       await tx.inventoryItem.update({
         where: { id },
         data: {
           ...(name ? { name } : {}),
           ...(qtyChanged ? { qty: toInt(String(r.qty ?? "")) } : {}),
           supplyPrice: toInt(String(r.supplyPrice ?? "")),
+          ...expiryUpdate,
         },
       });
     }

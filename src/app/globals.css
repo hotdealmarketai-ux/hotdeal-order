@@ -2867,7 +2867,18 @@ body {
 .invcol--name { flex: 1 1 auto; min-width: 0; text-align: left; }
 .invcol--qty { flex: 0 0 66px; text-align: center; }
 .invcol--price { flex: 0 0 84px; text-align: center; }
+.invcol--expiry { flex: 0 0 104px; text-align: center; }
 .invcol--del { flex: 0 0 32px; }
+/* #9 유통기한 입력칸 + D-N 배지(세로 스택) */
+.invexp { display: flex; flex-direction: column; align-items: stretch; gap: 1px; }
+.invexp__in { padding: 7px 6px; text-align: center; font-size: 13px; font-variant-numeric: tabular-nums; width: 100%; }
+.invexp__dday {
+  font-size: 10px; font-weight: 800; line-height: 1.4; text-align: center;
+  border-radius: 4px;
+}
+.invexp__dday--soon { color: var(--danger); }
+.invexp__dday--expired { color: #fff; background: var(--danger); }
+.invexp__dday--ok { color: var(--muted); }
 .invin {
   border: none;
   background: transparent;

@@ -2,7 +2,8 @@
 //  · 읽기(pull, 시트→DB): 크론이 매 분 호출. 서비스계정이 있으면 Sheets API(비공개 시트 OK),
 //    없으면 공개 시트 CSV export로 폴백.
 //  · 쓰기(push, DB→시트): 관리자가 앱에서 수정/추가/제거하면 DB 전체를 시트에 다시 써서 일치시킴.
-// 컬럼: A=품목명, B=남은 수량, C=공급가. 1행은 헤더. 시트가 기준(시트에 없는 품목은 pull 시 삭제).
+// 컬럼: A=품목명, B=남은 수량, C=공급가, D=유통기한(#9, push 전용). 1행은 헤더.
+// (pull은 A:C만 읽어 D는 앱 전용 — 유통기한은 앱에서만 관리하고 시트엔 표시용으로 씀.)
 //
 // 데이터 정합 안전장치(리뷰 반영):
 //  · push는 데이터영역(A2:C)을 clear한 뒤 다시 쓴다 → 삭제된 품목이 잔여행으로 부활하지 않음(결정론적).
@@ -19,7 +20,7 @@ const SHEET_ID =
 const GID = process.env.INVENTORY_SHEET_GID || "0";
 const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 const API = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`;
-const HEADER = ["품목명", "남은 수량", "공급가"];
+const HEADER = ["품목명", "남은 수량", "공급가", "유통기한"];
 const PENDING_KEY = "inventory_push_pending";
 
 // A1 표기에서 탭 이름은 작은따옴표로 감싸고 내부 '는 ''로 이스케이프(공백·특수문자 대비).
@@ -265,7 +266,7 @@ export async function pushInventoryToSheet(): Promise<{
   const dbItems = await prisma.inventoryItem.findMany({
     where: { deletedAt: null },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    select: { name: true, qty: true, supplyPrice: true },
+    select: { name: true, qty: true, supplyPrice: true, expiry: true },
   });
   // 빈 DB 가드 — 재고가 0행일 때(마이그레이션·초기화 중 등) push하면 시트를 정상인 것처럼
   // 통째로 비워버린다. pull과 대칭으로, 비어 있으면 시트를 건드리지 않고 보존한다.
@@ -276,13 +277,18 @@ export async function pushInventoryToSheet(): Promise<{
 
   const values: string[][] = [
     HEADER,
-    ...dbItems.map((it) => [it.name, String(it.qty), String(it.supplyPrice)]),
+    ...dbItems.map((it) => [
+      it.name,
+      String(it.qty),
+      String(it.supplyPrice),
+      it.expiry ?? "", // #9 유통기한(D열)
+    ]),
   ];
 
   try {
     // 1) 먼저 헤더 + 전체 품목을 쓴다(write 우선). write가 실패하면 시트는 그대로 남는다.
     //    (기존엔 clear→write라 clear 후 write가 실패하면 시트가 헤더만 남고 통째로 비었다.)
-    const updRange = encodeURIComponent(a1(title, `A1:C${values.length}`));
+    const updRange = encodeURIComponent(a1(title, `A1:D${values.length}`));
     const upd = await gfetch(
       `${API}/values/${updRange}?valueInputOption=RAW`,
       token,
@@ -299,7 +305,7 @@ export async function pushInventoryToSheet(): Promise<{
     }
     // 2) write 성공 후에만, 새 데이터 '아래'에 남은 옛 행을 비운다(품목이 줄어든 경우 잔여 제거).
     //    이 clear가 실패해도 최신 데이터는 이미 써졌으니 시트가 비지 않는다(옛 행만 잠깐 남음).
-    const trimRange = encodeURIComponent(a1(title, `A${values.length + 1}:C`));
+    const trimRange = encodeURIComponent(a1(title, `A${values.length + 1}:D`));
     const clr = await gfetch(`${API}/values/${trimRange}:clear`, token, {
       method: "POST",
     });
