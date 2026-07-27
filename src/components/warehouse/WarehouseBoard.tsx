@@ -21,8 +21,9 @@ const LOCATIONS = [
   { key: "FRIDGE", label: "냉장고" },
 ] as const;
 
-// 캔버스 논리 크기(평면도) — 스크롤로 넓게 사용. 스냅 시 캔버스 가장자리/중앙 기준도 됨.
-const CANVAS = { w: 1600, h: 1000 };
+// 캔버스 논리 크기(평면도) 기본값 — 사용자가 자유 리사이즈(#12) 가능, localStorage 유지.
+const CANVAS_DEFAULT = { w: 1600, h: 1000 };
+const CANVAS_KEY = "wh_canvas";
 const SNAP = 6; // 스냅 임계(px)
 const MIN = 40; // 최소 박스 크기(px)
 
@@ -34,13 +35,13 @@ type Active =
 type Rect = { x: number; y: number; w: number; h: number };
 
 // ── 드래그 스냅: moving 사각형의 좌/중/우, 상/중/하를 다른 박스·캔버스에 맞춘다 ──
-function snapDrag(m: Rect, others: Rect[]) {
+function snapDrag(m: Rect, others: Rect[], cw: number, ch: number) {
   let x = m.x,
     y = m.y;
   const v: number[] = [],
     h: number[] = [];
-  const vT = [0, CANVAS.w / 2, CANVAS.w, ...others.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])];
-  const hT = [0, CANVAS.h / 2, CANVAS.h, ...others.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])];
+  const vT = [0, cw / 2, cw, ...others.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])];
+  const hT = [0, ch / 2, ch, ...others.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])];
   const vA: [number, number][] = [[m.x, 0], [m.x + m.w / 2, m.w / 2], [m.x + m.w, m.w]];
   let bv: { d: number; x: number; l: number } | null = null;
   for (const [pos, off] of vA)
@@ -67,14 +68,14 @@ function snapDrag(m: Rect, others: Rect[]) {
 }
 
 // ── 리사이즈 스냅: 움직이는 모서리(handle 방향)만 다른 박스·캔버스에 맞춘다 ──
-function snapResize(handle: Handle, box: BoxDTO, dx: number, dy: number, others: Rect[]) {
+function snapResize(handle: Handle, box: BoxDTO, dx: number, dy: number, others: Rect[], cw: number, ch: number) {
   let { x, y, w, h } = box;
   const west = handle.includes("w");
   const east = handle.includes("e");
   const north = handle.includes("n");
   const south = handle.includes("s");
-  const vT = [0, CANVAS.w, ...others.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])];
-  const hT = [0, CANVAS.h, ...others.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])];
+  const vT = [0, cw, ...others.flatMap((o) => [o.x, o.x + o.w / 2, o.x + o.w])];
+  const hT = [0, ch, ...others.flatMap((o) => [o.y, o.y + o.h / 2, o.y + o.h])];
   const vg: number[] = [],
     hg: number[] = [];
   if (east) {
@@ -153,6 +154,24 @@ export function WarehouseBoard({
   const [q, setQ] = useState("");
   const [showIntro, setShowIntro] = useState(true); // #12 로그인 인트로(오늘 발주 요약)
   const [expiryOn, setExpiryOn] = useState(false); // #12 유통기한 임박(-30일) 하이라이트 토글
+  const [canvas, setCanvas] = useState(CANVAS_DEFAULT); // #12 자유 리사이즈 캔버스
+  const [formEdit, setFormEdit] = useState(false); // #12 폼박스(창문/문/계단) 편집모드 — OFF면 클릭 안 됨
+  const [hovered, setHovered] = useState<string | null>(null); // #12 겹침: 호버 박스를 앞으로
+  const canvasRef = useRef(canvas);
+  canvasRef.current = canvas;
+
+  // 캔버스 크기 복원(localStorage). 리사이즈 후 저장.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CANVAS_KEY);
+      if (raw) {
+        const c = JSON.parse(raw);
+        if (c && c.w > 0 && c.h > 0) setCanvas({ w: c.w, h: c.h });
+      }
+    } catch {
+      /* noop */
+    }
+  }, []);
 
   // 품목 id → 정보(유통기한 임박 판정용). 오늘 발주 품목명(정규화) 집합.
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
@@ -205,6 +224,25 @@ export function WarehouseBoard({
     }
   };
 
+  // #12 폼박스(창문/문/계단 등 구조물) 추가 — 재고 아님. 편집모드를 켜 바로 배치.
+  const addForm = async (label: string) => {
+    const res = await createBox({
+      location,
+      itemId: null,
+      label,
+      x: 60,
+      y: 60,
+      w: 120,
+      h: 60,
+      color: "form",
+    }).catch(() => null);
+    if (res?.ok && res.box) {
+      setBoxes((b) => [...b, res.box!]);
+      setFormEdit(true);
+      setSelected(res.box.id);
+    }
+  };
+
   const removeBox = async (id: string) => {
     setBoxes((b) => b.filter((x) => x.id !== id));
     if (selectedRef.current === id) setSelected(null);
@@ -239,17 +277,20 @@ export function WarehouseBoard({
       const others: Rect[] = boxesRef.current
         .filter((b) => b.id !== a.id)
         .map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
+      const cv = canvasRef.current;
       if (a.mode === "drag") {
         const s = snapDrag(
           { x: a.box.x + (e.clientX - a.sx), y: a.box.y + (e.clientY - a.sy), w: a.box.w, h: a.box.h },
           others,
+          cv.w,
+          cv.h,
         );
         setBoxes((bs) =>
           bs.map((b) => (b.id === a.id ? { ...b, x: Math.max(0, s.x), y: Math.max(0, s.y) } : b)),
         );
         setGuides({ v: s.v, h: s.h });
       } else {
-        const r = snapResize(a.handle, a.box, e.clientX - a.sx, e.clientY - a.sy, others);
+        const r = snapResize(a.handle, a.box, e.clientX - a.sx, e.clientY - a.sy, others, cv.w, cv.h);
         setBoxes((bs) =>
           bs.map((b) => (b.id === a.id ? { ...b, x: r.x, y: r.y, w: r.w, h: r.h } : b)),
         );
@@ -392,15 +433,41 @@ export function WarehouseBoard({
               </button>
             ))}
           </div>
+          <div className="whforms">
+            <div className="whforms__hd">
+              <span>구조물(폼박스)</span>
+              <button
+                type="button"
+                className={`whforms__edit ${formEdit ? "is-on" : ""}`}
+                onClick={() => setFormEdit((v) => !v)}
+                title="켜면 폼박스를 옮기고 지울 수 있어요. 끄면 클릭 안 돼 배경으로 고정돼요."
+              >
+                {formEdit ? "편집 중" : "편집"}
+              </button>
+            </div>
+            <div className="whforms__btns">
+              {["창문", "문", "계단", "벽"].map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className="whforms__add"
+                  onClick={() => addForm(f)}
+                >
+                  ＋ {f}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="whside__hint">
-            품목을 클릭해 추가 · 드래그로 이동 · 모서리로 크기조절 · 옆 박스에 자동정렬(스냅) · Delete로 삭제
+            품목을 클릭해 추가 · 드래그로 이동 · 모서리로 크기조절 · 자동정렬(스냅) · Delete로 삭제 · 겹치면 마우스를 올려 앞으로
           </div>
         </aside>
 
         <div className="whcanvaswrap">
           <div
             className="whcanvas"
-            style={{ width: CANVAS.w, height: CANVAS.h }}
+            style={{ width: canvas.w, height: canvas.h }}
             onPointerDown={(e) => {
               if (e.target === e.currentTarget) setSelected(null);
             }}
@@ -415,21 +482,31 @@ export function WarehouseBoard({
 
             {boxes.map((b) => {
               const sel = b.id === selected;
-              const today = isTodayBox(b.label); // 오늘 발주 품목 → 반짝
-              const expSoon = expiryOn && isExpiryBox(b); // 유통기한 임박 토글 ON + 임박
+              const isForm = b.color === "form"; // 폼박스(구조물)
+              const today = !isForm && isTodayBox(b.label); // 오늘 발주 품목 → 반짝
+              const expSoon = !isForm && expiryOn && isExpiryBox(b); // 유통기한 임박 토글 ON + 임박
+              // 폼박스는 편집모드 아니면 클릭 안 됨(배경 고정). z: 폼박스는 뒤, 재고는 앞, 호버/선택은 최상.
+              const clickable = !isForm || formEdit;
+              let zi = isForm ? b.z : 1000 + b.z;
+              if (today || expSoon) zi = 1500 + b.z;
+              if (hovered === b.id) zi = 2000;
+              if (sel) zi = 3000;
               return (
                 <div
                   key={b.id}
-                  className={`whbox ${sel ? "whbox--sel" : ""} ${today ? "whbox--today" : ""} ${expSoon ? "whbox--expiry" : ""}`}
+                  className={`whbox ${isForm ? "whbox--form" : ""} ${sel ? "whbox--sel" : ""} ${today ? "whbox--today" : ""} ${expSoon ? "whbox--expiry" : ""}`}
                   style={{
                     left: b.x,
                     top: b.y,
                     width: b.w,
                     height: b.h,
-                    zIndex: sel ? 999 : today || expSoon ? 500 + b.z : b.z,
+                    zIndex: zi,
+                    pointerEvents: clickable ? "auto" : "none",
                   }}
-                  onPointerDown={(e) => startDrag(e, b)}
-                  onDoubleClick={() => renameBox(b)}
+                  onPointerDown={(e) => clickable && startDrag(e, b)}
+                  onDoubleClick={() => clickable && renameBox(b)}
+                  onPointerEnter={() => !isForm && setHovered(b.id)}
+                  onPointerLeave={() => setHovered((h) => (h === b.id ? null : h))}
                 >
                   <span className="whbox__label">{b.label}</span>
                   {sel && (
@@ -454,6 +531,39 @@ export function WarehouseBoard({
                 </div>
               );
             })}
+
+            {/* #12 평면도 자유 리사이즈 — 우하단 핸들 드래그 */}
+            <div
+              className="whcanvas__resize"
+              title="드래그해서 평면도 크기 조절"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const el = e.currentTarget;
+                el.setPointerCapture(e.pointerId);
+                const sx = e.clientX;
+                const sy = e.clientY;
+                const sw = canvasRef.current.w;
+                const sh = canvasRef.current.h;
+                const move = (ev: PointerEvent) => {
+                  setCanvas({
+                    w: Math.max(600, Math.round(sw + (ev.clientX - sx))),
+                    h: Math.max(400, Math.round(sh + (ev.clientY - sy))),
+                  });
+                };
+                const up = () => {
+                  el.removeEventListener("pointermove", move);
+                  el.removeEventListener("pointerup", up);
+                  try {
+                    localStorage.setItem(CANVAS_KEY, JSON.stringify(canvasRef.current));
+                  } catch {
+                    /* noop */
+                  }
+                };
+                el.addEventListener("pointermove", move);
+                el.addEventListener("pointerup", up);
+              }}
+            />
           </div>
           {loading && <div className="whloading">불러오는 중…</div>}
         </div>

@@ -3539,3 +3539,25 @@ a.resv-card:active { transform: scale(0.995); }
 .whintro__go { background: #2563eb; color: #fff; border: none; border-radius: 11px; padding: 13px 28px; font-size: 16px; font-weight: 800; cursor: pointer; font-family: inherit; }
 .whintro__go:hover { background: #1d4ed8; }
 .whintro__hint { margin-top: 14px; font-size: 12px; color: #6b7f9e; }
+
+/* #12 구조물(폼박스) 사이드바 섹션 */
+.whforms { padding: 10px 14px; border-top: 1px solid #22304a; }
+.whforms__hd { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 800; color: #8ea0bd; margin-bottom: 8px; letter-spacing: 0.02em; }
+.whforms__edit { border: 1px solid #2c3b57; background: transparent; color: #b8c6de; padding: 4px 10px; border-radius: 7px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.whforms__edit.is-on { background: #2563eb; border-color: #2563eb; color: #fff; }
+.whforms__btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.whforms__add { border: 1px dashed #3a4b6b; background: #0c1420; color: #b8c6de; padding: 6px 11px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.whforms__add:hover { background: #16223a; }
+
+/* #12 폼박스(구조물) — 점선 외곽, 채움 거의 없음, 회색 */
+.whbox--form { background: rgba(148, 163, 184, 0.08); border: 2px dashed #94a3b8; color: #64748b; font-weight: 600; }
+.whbox--form.whbox--sel { border-color: #ff3b6b; color: #475569; }
+
+/* #12 캔버스(평면도) 자유 리사이즈 핸들(우하단) */
+.whcanvas__resize {
+  position: absolute; right: 0; bottom: 0; width: 22px; height: 22px;
+  z-index: 4000; cursor: nwse-resize; touch-action: none;
+  background: linear-gradient(135deg, transparent 45%, #2563eb 45%);
+  border-bottom-right-radius: 6px;
+}
+.whcanvas__resize:hover { background: linear-gradient(135deg, transparent 45%, #1d4ed8 45%); }

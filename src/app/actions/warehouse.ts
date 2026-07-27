@@ -62,12 +62,14 @@ export async function createBox(input: {
   y?: number;
   w?: number;
   h?: number;
+  color?: string; // #12 "form" = 폼박스(창문/문/계단 등 구조물)
 }): Promise<{ ok: boolean; box?: BoxDTO; error?: string }> {
   await requireWarehouse();
   if (!isLoc(input.location)) return { ok: false, error: "잘못된 위치" };
   const label = String(input.label ?? "").trim().slice(0, 80);
   if (!label) return { ok: false, error: "이름이 필요해요." };
-  // z = 현재 위치의 최대 z + 1 (맨 위로)
+  const color = input.color === "form" ? "form" : "";
+  // 폼박스(구조물)는 맨 뒤(z=0), 재고박스는 맨 위(최대 z + 1).
   const top = await prisma.warehouseBox.findFirst({
     where: { location: input.location },
     orderBy: { z: "desc" },
@@ -82,7 +84,8 @@ export async function createBox(input: {
       y: clampPos(input.y ?? 40),
       w: clampSize(input.w ?? 140),
       h: clampSize(input.h ?? 90),
-      z: (top?.z ?? 0) + 1,
+      color,
+      z: color === "form" ? 0 : (top?.z ?? 0) + 1,
     },
   });
   revalidatePath("/warehouse");
