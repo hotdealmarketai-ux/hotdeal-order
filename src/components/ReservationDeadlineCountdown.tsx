@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { reservationDeadlineUtc } from "@/lib/reservation";
 import { labelDate } from "@/lib/date";
 
-// 예약발주 마감 카운트다운 — 주간발주/일반발주와 동일 구조. 예약일자+1 12시가 마감.
+// 예약발주 마감 카운트다운 — 일반발주와 동일하게 예약일 저녁 8시(토요일은 일요일 20시)가 마감.
 function pad(n: number) {
   return String(n).padStart(2, "0");
 }

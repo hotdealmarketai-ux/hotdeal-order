@@ -46,7 +46,7 @@ export async function saveReservationBatchAction(
   const products = Array.isArray(payload.products) ? payload.products : [];
   const batchId = payload.batchId ? String(payload.batchId) : null;
 
-  // 픽업일은 이제 '상품별'. 살아있는(삭제 안 됨) 이름 있는 상품마다 픽업일 필수 + 예약+2일 이상.
+  // 픽업일은 이제 '상품별'. 살아있는(삭제 안 됨) 이름 있는 상품마다 픽업일 필수 + 예약 다음날부터.
   const liveNamed = products.filter((p) => !p.deleted && String(p.name ?? "").trim());
   for (const p of liveNamed) {
     const pk = String(p.pickupDate ?? "").trim();

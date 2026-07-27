@@ -2,9 +2,13 @@
 // 서버 데이터 접근(prisma 쿼리)은 actions/reservation.ts 에 둔다(주간발주 schedule/weekly 분리 패턴).
 import { shiftDate, labelDate } from "@/lib/date";
 
-// 예약 마감 = 예약일자 다음날 낮 12:00 (KST) 의 UTC 인스턴트
+// 예약 마감 = 예약일자가 속한 '일반발주 창'의 마감(저녁 8시). 일반발주와 함께 20시에 취합.
+//  - 월~금·일: 그날 20:00 KST
+//  - 토요일: 주말 연속창(토12~일20)이라 다음날(일) 20:00
 export function reservationDeadlineUtc(reserveDate: string): Date {
-  return new Date(`${shiftDate(reserveDate, 1)}T12:00:00+09:00`);
+  const dow = new Date(`${reserveDate}T00:00:00Z`).getUTCDay(); // 그 캘린더 날짜의 요일(0=일..6=토)
+  const closeDate = dow === 6 ? shiftDate(reserveDate, 1) : reserveDate;
+  return new Date(`${closeDate}T20:00:00+09:00`);
 }
 
 // 공구 자동로드일(= 픽업 전날) KST YYYY-MM-DD — 그날 발주창 공구에 읽기전용으로 뜬다.
@@ -24,25 +28,28 @@ export function daysBetween(a: string, b: string): number {
   return Math.round((ta - tb) / 86_400_000);
 }
 
-// 관리자 등록 검증 — 픽업일자는 예약일자+2일 이상이어야(예약 마감[예약+1 12시] 뒤에 공구[픽업-1]로 로드되게).
+// 관리자 등록 검증 — 픽업일자는 예약일자보다 최소 하루 뒤(다음날 픽업 허용).
+// 마감(예약일 20시) 당일 발주창(=픽업 전날)에 로드되므로 픽업 = 예약+1도 가능해졌다.
 export function validateBatchDates(
   reserveDate: string,
   pickupDate: string,
 ): { ok: boolean; error?: string } {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(reserveDate)) return { ok: false, error: "예약일자를 선택하세요." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) return { ok: false, error: "픽업일자를 선택하세요." };
-  if (daysBetween(pickupDate, reserveDate) < 2) {
+  if (daysBetween(pickupDate, reserveDate) < 1) {
     return {
       ok: false,
-      error: "픽업일자는 예약일자보다 최소 2일 뒤여야 합니다.",
+      error: "픽업일자는 예약일자보다 뒤여야 합니다(빠르면 다음날).",
     };
   }
   return { ok: true };
 }
 
-// 마감 카운트다운/안내 라벨: "7월 21일 (월) 낮 12시"
+// 마감 카운트다운/안내 라벨: "7월 21일 (월) 저녁 8시" (토요일 예약은 일요일 20시)
 export function reservationDeadlineLabel(reserveDate: string): string {
-  return `${labelDate(shiftDate(reserveDate, 1))} 낮 12시`;
+  const dow = new Date(`${reserveDate}T00:00:00Z`).getUTCDay();
+  const closeDate = dow === 6 ? shiftDate(reserveDate, 1) : reserveDate;
+  return `${labelDate(closeDate)} 저녁 8시`;
 }
 
 // 상태 배지 + 편집잠금 판정(점주/관리자 공용)

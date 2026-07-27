@@ -73,10 +73,10 @@ export function ReservationBatchEditor({ batch }: { batch?: ReservationBatchDeta
     [batch?.id, reserveDate, rows],
   );
 
-  // 예약일자 검증 + 상품별 픽업 검증(픽업 ≥ 예약 + 2). 한 행이라도 어긋나면 경고.
+  // 예약일자 검증 + 상품별 픽업 검증(픽업 ≥ 예약 + 1, 다음날 픽업 허용). 한 행이라도 어긋나면 경고.
   const reserveValid = /^\d{4}-\d{2}-\d{2}$/.test(reserveDate);
   const rowPickupInvalid = (pk: string) =>
-    reserveValid && /^\d{4}-\d{2}-\d{2}$/.test(pk) && daysBetween(pk, reserveDate) < 2;
+    reserveValid && /^\d{4}-\d{2}-\d{2}$/.test(pk) && daysBetween(pk, reserveDate) < 1;
   const anyBadPickup = shown.some(
     (r) => r.name.trim() && (!/^\d{4}-\d{2}-\d{2}$/.test(r.pickupDate) || rowPickupInvalid(r.pickupDate)),
   );
@@ -113,12 +113,12 @@ export function ReservationBatchEditor({ batch }: { batch?: ReservationBatchDeta
         )}
         {reserveValid && (
           <div className="resv-note">
-            예약 마감 <b>{reservationDeadlineLabel(reserveDate)}</b> · 픽업일은 상품마다 지정해요(예약일 +2일 이상).
+            예약 마감 <b>{reservationDeadlineLabel(reserveDate)}</b> · 픽업일은 상품마다 지정해요(예약 다음날부터 가능).
           </div>
         )}
         {anyBadPickup && (
           <div className="resv-note resv-note--warn">
-            픽업일이 비었거나 예약일 +2일 미만인 상품이 있어요. 확인해 주세요.
+            픽업일이 비었거나 예약일보다 뒤가 아닌 상품이 있어요. 확인해 주세요.
           </div>
         )}
       </div>
