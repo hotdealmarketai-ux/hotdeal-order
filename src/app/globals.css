@@ -2005,7 +2005,7 @@ a {
   color: rgba(255, 255, 255, 0.85);
 }
 .tbar__back:active { background: rgba(255, 255, 255, 0.12); }
-.tbar__brand { font-size: 20px; font-weight: 800; letter-spacing: -0.04em; }
+.tbar__brand { font-size: 20px; font-weight: 800; letter-spacing: -0.04em; white-space: nowrap; flex-shrink: 0; }
 .tbar__title { font-size: 16px; font-weight: 800; }
 .tbar__spacer { flex: 1; }
 .tbar__chip {
@@ -2016,13 +2016,17 @@ a {
   border-radius: 7px;
   padding: 5px 11px;
   white-space: nowrap;
+  /* 헤더가 좁으면 지점명이 브랜드/아이콘을 밀지 않고 스스로 말줄임(…) */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* 저시력 점주용 글자 확대/축소 버튼 — 헤더(로고 옆). 밝은 알약형. */
-.zoomctl { display: inline-flex; gap: 5px; margin-left: 10px; flex-shrink: 0; }
+.zoomctl { display: inline-flex; gap: 4px; margin-left: 6px; flex-shrink: 0; }
 .zoomctl__btn {
   font-size: 13px; font-weight: 800; color: #fff; font-family: inherit;
   background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 8px; min-width: 34px; height: 30px; padding: 0 6px; cursor: pointer;
+  border-radius: 8px; min-width: 30px; height: 30px; padding: 0 5px; cursor: pointer;
   line-height: 1; display: inline-flex; align-items: center; justify-content: center;
 }
 .zoomctl__btn:active { background: rgba(255, 255, 255, 0.3); }
@@ -2363,7 +2367,7 @@ a {
 /* 3.1 헤더 — 그라데이션 + 로고 */
 .tbar { background: var(--header-grad); }
 .tbar__row { padding: 16px 20px; }
-.tbar__brand { display: inline-flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 800; letter-spacing: -0.3px; color: #fff; }
+.tbar__brand { display: inline-flex; align-items: center; gap: 9px; font-size: 19px; font-weight: 800; letter-spacing: -0.3px; color: #fff; white-space: nowrap; flex-shrink: 0; }
 .tbar__brand img { width: 34px; height: 34px; object-fit: contain; display: block; }
 .tbar__title { color: #fff; font-size: 17px; font-weight: 800; }
 .tbar__back { background: rgba(255, 255, 255, 0.14); color: #fff; width: 34px; height: 34px; border-radius: 999px; font-size: 19px; font-weight: 600; }
