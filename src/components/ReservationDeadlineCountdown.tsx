@@ -21,10 +21,10 @@ function clock(ms: number) {
 
 export function ReservationDeadlineCountdown({
   reserveDate,
-  pickupDate,
+  pickupDates,
 }: {
   reserveDate: string;
-  pickupDate: string;
+  pickupDates: string[];
 }) {
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -35,7 +35,11 @@ export function ReservationDeadlineCountdown({
   }, []);
 
   const deadline = reservationDeadlineUtc(reserveDate).getTime();
-  const pickup = `픽업 ${labelDate(pickupDate)}`;
+  // 픽업이 상품별 → 여러 날짜. 칩엔 개수만 간결히(상세는 아래 날짜 블록/상품별 표기).
+  const pickup =
+    pickupDates.length <= 1
+      ? `픽업 ${pickupDates[0] ? labelDate(pickupDates[0]) : "-"}`
+      : `픽업 ${pickupDates.length}일`;
 
   if (now === null) {
     return (
@@ -55,7 +59,7 @@ export function ReservationDeadlineCountdown({
         <div className="countdown__main">
           <span className="countdown__pre">예약이 마감되었습니다</span>
           <span className="countdown__clock" style={{ fontSize: 19 }}>
-            {labelDate(pickupDate)} 픽업
+            {pickup}
           </span>
         </div>
         <span className="countdown__chip">마감됨</span>

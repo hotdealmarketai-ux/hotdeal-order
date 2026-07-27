@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/reservation";
 import { SubmitButton } from "./SubmitButton";
 import type { ReservationProductRow } from "@/lib/reservation-data";
+import { labelDate } from "@/lib/date";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
@@ -70,7 +71,12 @@ export function ReservationOrderForm({
             <div className="resv-item" key={p.id}>
               <div className="resv-item__main">
                 <div className="resv-item__name">{p.name}</div>
-                <div className="resv-item__price">공급가 {won(p.supplyPrice)}원</div>
+                <div className="resv-item__price">
+                  {p.pickupDate && (
+                    <span className="resv-item__pickup">픽업 {labelDate(p.pickupDate)}</span>
+                  )}
+                  공급가 {won(p.supplyPrice)}원
+                </div>
               </div>
               {locked ? (
                 <div className="resv-item__fixed">{shownQty > 0 ? `${shownQty}개` : "-"}</div>

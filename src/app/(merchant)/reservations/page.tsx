@@ -35,7 +35,7 @@ export default async function ReservationsPage() {
                   <div className="resv-card__main">
                     <ReservationDates
                       reserveDate={b.reserveDate}
-                      pickupDate={b.pickupDate}
+                      pickupDates={b.pickupDates}
                     />
                     <div className="resv-card__meta">
                       상품 {b.productCount}개

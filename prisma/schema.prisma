@@ -230,6 +230,9 @@ model ReservationProduct {
   batchId     String
   batch       ReservationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
   name        String
+  // 픽업일자 KST YYYY-MM-DD — 상품별로 다름(배치가 아닌 상품 단위). 공구 자동로드 = 이 픽업 전날.
+  // 기존 데이터는 마이그레이션에서 배치 pickupDate로 백필. 신규는 항상 검증된 날짜 저장.
+  pickupDate  String           @default("")
   supplyPrice Int              @default(0) // 점주 공급가(원) — 지금은 표시·집계용
   sortOrder   Int              @default(0)
   active      Boolean          @default(true) // false = 소프트삭제
@@ -265,9 +268,12 @@ model ReservationOrderItem {
   productId   String // ReservationProduct.id (매칭용, FK 아님 — 편집/삭제돼도 스냅샷 보존)
   name        String // 스냅샷
   supplyPrice Int              @default(0) // 스냅샷
+  // 픽업일자 스냅샷 KST YYYY-MM-DD — 확정 시 상품에서 복사. 자동로드가 이 값(==발주일+1)으로 필터.
+  pickupDate  String           @default("")
   qty         Int              @default(0)
 
   @@unique([orderId, productId]) // 주문 내 상품 1행
+  @@index([pickupDate]) // 픽업 전날 공구 자동로드 필터용
 }
 
 // 재고 담기원장 — 점주가 재고현황에서 '담기'한 순간의 실시간 보류(HELD).

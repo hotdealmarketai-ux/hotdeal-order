@@ -13,12 +13,12 @@ type ProductInput = {
   id?: string | null;
   name?: string;
   supplyPrice?: string | number;
+  pickupDate?: string; // 상품별 픽업일자 KST YYYY-MM-DD
   deleted?: boolean;
 };
 type BatchPayload = {
   batchId?: string | null;
   reserveDate?: string;
-  pickupDate?: string;
   products?: ProductInput[];
 };
 
@@ -41,12 +41,21 @@ export async function saveReservationBatchAction(
   }
 
   const reserveDate = String(payload.reserveDate ?? "").trim();
-  const pickupDate = String(payload.pickupDate ?? "").trim();
-  const v = validateBatchDates(reserveDate, pickupDate);
-  if (!v.ok) return { error: v.error };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reserveDate)) return { error: "예약일자를 선택하세요." };
 
   const products = Array.isArray(payload.products) ? payload.products : [];
   const batchId = payload.batchId ? String(payload.batchId) : null;
+
+  // 픽업일은 이제 '상품별'. 살아있는(삭제 안 됨) 이름 있는 상품마다 픽업일 필수 + 예약+2일 이상.
+  const liveNamed = products.filter((p) => !p.deleted && String(p.name ?? "").trim());
+  for (const p of liveNamed) {
+    const pk = String(p.pickupDate ?? "").trim();
+    const v = validateBatchDates(reserveDate, pk);
+    if (!v.ok) return { error: `'${String(p.name).trim()}' — ${v.error}` };
+  }
+  // 배치 pickupDate는 하위호환용 대표값(상품 픽업 중 가장 이른 날). 상품 없으면 예약일 폴백.
+  const pickups = liveNamed.map((p) => String(p.pickupDate).trim());
+  const batchPickup = pickups.length ? pickups.slice().sort()[0] : reserveDate;
 
   let targetId = batchId;
   let created = false;
@@ -57,36 +66,33 @@ export async function saveReservationBatchAction(
       select: {
         id: true,
         reserveDate: true,
-        pickupDate: true,
         // '확정된' 예약만 센다 — 점주가 '수정'(잠금해제)만 누르고 방치하면 confirmed:false 행이
-        // 남는데, 이를 세면 실제 확정이 없는데도 관리자가 날짜를 영영 못 바꾸게 된다.
+        // 남는데, 이를 세면 실제 확정이 없는데도 관리자가 예약일자를 영영 못 바꾸게 된다.
         _count: { select: { orders: { where: { confirmed: true } } } },
       },
     });
     if (!existing) return { error: "예약 배치를 찾을 수 없어요." };
-    // 이미 '확정된' 점주 예약이 있으면 날짜 변경 금지(마감/로드 타이밍 어긋남 방지) — 기존 날짜 유지.
-    if (existing._count.orders > 0) {
-      if (reserveDate !== existing.reserveDate || pickupDate !== existing.pickupDate) {
-        return { error: "이미 예약이 접수된 배치는 날짜를 바꿀 수 없어요." };
-      }
-    } else {
-      // reserveDate 를 다른 배치와 겹치게 바꾸려 하면 거절
-      if (reserveDate !== existing.reserveDate) {
-        const dup = await prisma.reservationBatch.findUnique({ where: { reserveDate } });
-        if (dup && dup.id !== batchId) return { error: "그 예약일자는 이미 있어요." };
-      }
-      await prisma.reservationBatch.update({
-        where: { id: batchId },
-        data: { reserveDate, pickupDate },
-      });
+    // 확정 예약이 있으면 '예약일자'만 고정(마감 타이밍 보호). 상품별 픽업은 아이템 스냅샷으로
+    // 보호되므로(확정분은 각자 스냅샷 픽업일을 유지) 관리자가 카탈로그 픽업을 조정해도 안전.
+    const locked = existing._count.orders > 0;
+    if (locked && reserveDate !== existing.reserveDate) {
+      return { error: "이미 예약이 접수된 배치는 예약일자를 바꿀 수 없어요." };
     }
+    if (!locked && reserveDate !== existing.reserveDate) {
+      const dup = await prisma.reservationBatch.findUnique({ where: { reserveDate } });
+      if (dup && dup.id !== batchId) return { error: "그 예약일자는 이미 있어요." };
+    }
+    await prisma.reservationBatch.update({
+      where: { id: batchId },
+      data: { reserveDate: locked ? existing.reserveDate : reserveDate, pickupDate: batchPickup },
+    });
   } else {
     const dup = await prisma.reservationBatch.findUnique({ where: { reserveDate } });
     if (dup) {
       return { error: "그 예약일자는 이미 있어요. 기존 예약을 눌러 수정해 주세요." };
     }
     const b = await prisma.reservationBatch.create({
-      data: { reserveDate, pickupDate },
+      data: { reserveDate, pickupDate: batchPickup },
       select: { id: true },
     });
     targetId = b.id;
@@ -119,17 +125,25 @@ export async function saveReservationBatchAction(
     const name = String(p.name ?? "").trim().slice(0, 100);
     if (!name) continue; // 이름 없는 빈 추가행 무시
     const supplyPrice = toInt(p.supplyPrice, 0);
+    const pk = String(p.pickupDate ?? "").trim(); // 위에서 검증됨(예약+2 이상)
     if (pid) {
       ops.push(
         prisma.reservationProduct.updateMany({
           where: { id: pid, batchId: targetId },
-          data: { name, supplyPrice, active: true },
+          data: { name, supplyPrice, pickupDate: pk, active: true },
         }),
       );
     } else {
       ops.push(
         prisma.reservationProduct.create({
-          data: { batchId: targetId, name, supplyPrice, sortOrder: nextSort++, active: true },
+          data: {
+            batchId: targetId,
+            name,
+            supplyPrice,
+            pickupDate: pk,
+            sortOrder: nextSort++,
+            active: true,
+          },
         }),
       );
     }
@@ -142,7 +156,7 @@ export async function saveReservationBatchAction(
     actorName: admin.storeName,
     targetType: "ReservationBatch",
     targetId,
-    summary: `예약 ${reserveDate} · 픽업 ${pickupDate} · 상품 ${products.filter((p) => !p.deleted && String(p.name ?? "").trim()).length}개`,
+    summary: `예약 ${reserveDate} · 상품 ${liveNamed.length}개(픽업 상품별)`,
   });
 
   revalidatePath("/admin/reservations");
@@ -197,7 +211,10 @@ export async function confirmReservationAction(formData: FormData) {
     where: { id: batchId, active: true },
     select: {
       reserveDate: true,
-      products: { where: { active: true }, select: { id: true, name: true, supplyPrice: true } },
+      products: {
+        where: { active: true },
+        select: { id: true, name: true, supplyPrice: true, pickupDate: true },
+      },
     },
   });
   if (!batch) redirect("/reservations");
@@ -224,6 +241,7 @@ export async function confirmReservationAction(formData: FormData) {
           productId: i.productId,
           name: p.name,
           supplyPrice: p.supplyPrice,
+          pickupDate: p.pickupDate, // 픽업일 스냅샷 — 확정 후 카탈로그 변경돼도 이 값으로 자동로드
           qty: i.qty,
           sortOrder: idx,
         },

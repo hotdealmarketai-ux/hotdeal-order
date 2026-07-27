@@ -5,12 +5,17 @@ import { kstToday, shiftDate } from "@/lib/date";
 export type ReservationBatchListItem = {
   id: string;
   reserveDate: string;
-  pickupDate: string;
+  pickupDates: string[]; // 이 예약일자에 올라온 상품들의 픽업일(중복제거·오름차순)
   productCount: number;
   orderCount: number;
 };
 
-// 관리자 목록 — 활성 배치 + 상품/예약 건수. 예약일자 내림차순.
+// 활성 상품들의 픽업일 distinct 정렬 목록
+function distinctPickups(products: { pickupDate: string }[]): string[] {
+  return [...new Set(products.map((p) => p.pickupDate).filter(Boolean))].sort();
+}
+
+// 관리자 목록 — 활성 배치 + 상품/예약 건수 + 픽업일 목록. 예약일자 내림차순.
 export async function getReservationBatchesAdmin(): Promise<ReservationBatchListItem[]> {
   const batches = await prisma.reservationBatch.findMany({
     where: { active: true },
@@ -18,27 +23,32 @@ export async function getReservationBatchesAdmin(): Promise<ReservationBatchList
     select: {
       id: true,
       reserveDate: true,
-      pickupDate: true,
+      products: { where: { active: true }, select: { pickupDate: true } },
       _count: { select: { products: { where: { active: true } }, orders: true } },
     },
   });
   return batches.map((b) => ({
     id: b.id,
     reserveDate: b.reserveDate,
-    pickupDate: b.pickupDate,
+    pickupDates: distinctPickups(b.products),
     productCount: b._count.products,
     orderCount: b._count.orders,
   }));
 }
 
-export type ReservationProductRow = { id: string; name: string; supplyPrice: number };
+export type ReservationProductRow = {
+  id: string;
+  name: string;
+  supplyPrice: number;
+  pickupDate: string;
+};
 
 export type ReservationBatchDetail = {
   id: string;
   reserveDate: string;
-  pickupDate: string;
+  pickupDates: string[]; // 상품들의 픽업일(distinct)
   products: ReservationProductRow[];
-  hasOrders: boolean; // 점주 예약이 하나라도 있으면 날짜 변경 잠금
+  hasOrders: boolean; // 확정 예약이 하나라도 있으면 예약일자 변경 잠금
 };
 
 export async function getReservationBatch(id: string): Promise<ReservationBatchDetail | null> {
@@ -47,11 +57,10 @@ export async function getReservationBatch(id: string): Promise<ReservationBatchD
     select: {
       id: true,
       reserveDate: true,
-      pickupDate: true,
       products: {
         where: { active: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-        select: { id: true, name: true, supplyPrice: true },
+        select: { id: true, name: true, supplyPrice: true, pickupDate: true },
       },
       _count: { select: { orders: true } },
     },
@@ -60,7 +69,7 @@ export async function getReservationBatch(id: string): Promise<ReservationBatchD
   return {
     id: b.id,
     reserveDate: b.reserveDate,
-    pickupDate: b.pickupDate,
+    pickupDates: distinctPickups(b.products),
     products: b.products,
     hasOrders: b._count.orders > 0,
   };
@@ -71,50 +80,49 @@ export async function getReservationBatch(id: string): Promise<ReservationBatchD
 export type MerchantReservationListItem = {
   id: string;
   reserveDate: string;
-  pickupDate: string;
+  pickupDates: string[]; // 이 예약일자 상품들의 픽업일(중복제거·오름차순)
   productCount: number;
   confirmed: boolean;
   reservedQty: number; // 내가 예약한 총 수량
 };
 
-// 점주에게 보일 배치 — 활성 + 상품 1개↑ + 픽업 안 지남. 내 예약 상태 포함. 예약일자 오름차순.
+// 점주에게 보일 배치 — 활성 + '픽업 안 지난 상품'이 1개↑ 있는 배치. 내 예약 상태 포함. 예약일자 오름차순.
 export async function getMerchantReservationBatches(
   userId: string,
 ): Promise<MerchantReservationListItem[]> {
   const today = kstToday();
   const batches = await prisma.reservationBatch.findMany({
-    where: { active: true, pickupDate: { gte: today } },
+    // 픽업이 상품별이므로: 아직 픽업 안 지난 활성 상품이 하나라도 있는 배치만 노출.
+    where: { active: true, products: { some: { active: true, pickupDate: { gte: today } } } },
     orderBy: { reserveDate: "asc" },
     select: {
       id: true,
       reserveDate: true,
-      pickupDate: true,
-      _count: { select: { products: { where: { active: true } } } },
+      // 미래 픽업 상품만(지난 픽업 상품은 목록 픽업일 표시에서 제외)
+      products: { where: { active: true, pickupDate: { gte: today } }, select: { pickupDate: true } },
       orders: {
         where: { userId },
         select: { confirmed: true, items: { select: { qty: true } } },
       },
     },
   });
-  return batches
-    .filter((b) => b._count.products > 0)
-    .map((b) => {
-      const order = b.orders[0] ?? null;
-      return {
-        id: b.id,
-        reserveDate: b.reserveDate,
-        pickupDate: b.pickupDate,
-        productCount: b._count.products,
-        confirmed: order?.confirmed ?? false,
-        reservedQty: order ? order.items.reduce((s, i) => s + i.qty, 0) : 0,
-      };
-    });
+  return batches.map((b) => {
+    const order = b.orders[0] ?? null;
+    return {
+      id: b.id,
+      reserveDate: b.reserveDate,
+      pickupDates: distinctPickups(b.products),
+      productCount: b.products.length,
+      confirmed: order?.confirmed ?? false,
+      reservedQty: order ? order.items.reduce((s, i) => s + i.qty, 0) : 0,
+    };
+  });
 }
 
 export type MerchantReservationDetail = {
   id: string;
   reserveDate: string;
-  pickupDate: string;
+  pickupDates: string[];
   products: ReservationProductRow[];
   confirmed: boolean;
   qtyByProduct: Record<string, number>;
@@ -129,11 +137,10 @@ export async function getMerchantReservation(
     select: {
       id: true,
       reserveDate: true,
-      pickupDate: true,
       products: {
         where: { active: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-        select: { id: true, name: true, supplyPrice: true },
+        select: { id: true, name: true, supplyPrice: true, pickupDate: true },
       },
       orders: {
         where: { userId },
@@ -148,7 +155,7 @@ export async function getMerchantReservation(
   return {
     id: b.id,
     reserveDate: b.reserveDate,
-    pickupDate: b.pickupDate,
+    pickupDates: distinctPickups(b.products),
     products: b.products,
     confirmed: order?.confirmed ?? false,
     qtyByProduct,
@@ -183,67 +190,51 @@ export async function getBatchConfirmations(batchId: string): Promise<BatchConfi
 }
 
 // 계산서용 — 이 발주일(orderDay)에 로드되는 확정 예약분(이름·수량·점주공급가). 일반 계산서 공구에 자동 채움.
+// 픽업이 상품별이므로 배치가 아닌 '아이템 픽업일'(스냅샷)이 발주일+1인 확정 아이템만 모은다.
 export async function getReservationInvoiceItems(
   userId: string,
   orderDayKst: string,
 ): Promise<{ name: string; qty: number; supplyPrice: number }[]> {
   const pickupDate = shiftDate(orderDayKst, 1);
-  // 같은 픽업일에 배치가 여러 개일 수 있으므로(오전/오후·품목군 분리) 그 픽업일의 '모든' 활성
-  // 배치에서 이 점주의 확정 예약분을 합친다(findFirst는 첫 배치만 잡아 나머지가 조용히 누락됐다).
-  const batches = await prisma.reservationBatch.findMany({
-    where: { active: true, pickupDate },
-    select: {
-      orders: {
-        where: { userId, confirmed: true },
-        select: {
-          items: {
-            select: { name: true, qty: true, supplyPrice: true },
-            orderBy: { sortOrder: "asc" },
-          },
-        },
-      },
+  const items = await prisma.reservationOrderItem.findMany({
+    where: {
+      pickupDate,
+      qty: { gt: 0 },
+      order: { userId, confirmed: true, batch: { active: true } },
     },
+    select: { name: true, qty: true, supplyPrice: true },
+    orderBy: { sortOrder: "asc" },
   });
   // 같은 품목명은 수량 합산(공급가는 처음 값 유지)
   const merged = new Map<string, { name: string; qty: number; supplyPrice: number }>();
-  for (const b of batches)
-    for (const o of b.orders)
-      for (const it of o.items) {
-        if (it.qty <= 0) continue;
-        const key = it.name.trim();
-        const cur = merged.get(key);
-        if (cur) cur.qty += it.qty;
-        else merged.set(key, { name: it.name, qty: it.qty, supplyPrice: it.supplyPrice });
-      }
+  for (const it of items) {
+    const key = it.name.trim();
+    const cur = merged.get(key);
+    if (cur) cur.qty += it.qty;
+    else merged.set(key, { name: it.name, qty: it.qty, supplyPrice: it.supplyPrice });
+  }
   return [...merged.values()];
 }
 
 // 픽업 전날(=오늘 발주창) 공구에 읽기전용으로 로드할 '확정 예약' 항목. 단일출처(주문 복제 X).
-// 반환: 오늘이 로드일인, 이 점주가 확정한 배치들의 품목·수량.
+// 상품별 픽업이므로 아이템 픽업일(스냅샷)이 발주일+1인 것만. 다른 배치·다른 예약일자여도 합쳐진다.
 export type ReservationLoadItem = { name: string; qty: number };
 export async function getReservationLoadForOrder(
   userId: string,
   orderDayKst: string,
 ): Promise<ReservationLoadItem[]> {
-  // 로드일 == 픽업 전날  ⇒  픽업일 == 발주일 + 1
-  const pickupDate = shiftDate(orderDayKst, 1);
-  // 같은 픽업일의 모든 활성 배치에서 이 점주 확정분을 합친다(findFirst는 첫 배치만 잡아 누락됐다).
-  const batches = await prisma.reservationBatch.findMany({
-    where: { active: true, pickupDate },
-    select: {
-      orders: {
-        where: { userId, confirmed: true },
-        select: { items: { select: { name: true, qty: true }, orderBy: { sortOrder: "asc" } } },
-      },
+  const pickupDate = shiftDate(orderDayKst, 1); // 로드일 == 픽업 전날 ⇒ 픽업 == 발주일+1
+  const items = await prisma.reservationOrderItem.findMany({
+    where: {
+      pickupDate,
+      qty: { gt: 0 },
+      order: { userId, confirmed: true, batch: { active: true } },
     },
+    select: { name: true, qty: true },
+    orderBy: { sortOrder: "asc" },
   });
   const merged = new Map<string, number>();
-  for (const b of batches)
-    for (const o of b.orders)
-      for (const it of o.items) {
-        if (it.qty <= 0) continue;
-        merged.set(it.name, (merged.get(it.name) ?? 0) + it.qty);
-      }
+  for (const it of items) merged.set(it.name, (merged.get(it.name) ?? 0) + it.qty);
   return [...merged.entries()].map(([name, qty]) => ({ name, qty }));
 }
 

@@ -3326,6 +3326,7 @@ a.resv-card:active { transform: scale(0.995); }
 .resv-item__main { flex: 1; min-width: 0; }
 .resv-item__name { font-size: 15.5px; font-weight: 700; color: var(--fg); }
 .resv-item__price { margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+.resv-item__pickup { color: var(--green-700); font-weight: 700; margin-right: 8px; }
 .resv-item__qty { flex-shrink: 0; display: flex; align-items: center; gap: 7px; }
 .resv-item__qty input { width: 66px; height: 44px; text-align: center; font-family: inherit;
   font-size: 16px; font-weight: 800; }

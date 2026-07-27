@@ -3,7 +3,7 @@ import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { getReservationBatchesAdmin } from "@/lib/reservation-data";
 import { labelDate } from "@/lib/date";
-import { isReservationClosed, reservationLoadDate } from "@/lib/reservation";
+import { isReservationClosed } from "@/lib/reservation";
 
 export default async function AdminReservationsPage() {
   await requireAdmin();
@@ -29,7 +29,9 @@ export default async function AdminReservationsPage() {
                   <div className="resv-card__main">
                     <div className="resv-card__title">예약 {labelDate(b.reserveDate)}</div>
                     <div className="resv-card__sub">
-                      픽업 {labelDate(b.pickupDate)} · 공구반영 {labelDate(reservationLoadDate(b.pickupDate))}
+                      {b.pickupDates.length === 0
+                        ? "상품 없음"
+                        : `픽업 ${b.pickupDates.map((d) => labelDate(d)).join(" · ")}`}
                     </div>
                     <div className="resv-card__meta">
                       상품 {b.productCount}개 · 예약 {b.orderCount}건

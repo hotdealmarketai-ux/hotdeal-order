@@ -21,17 +21,17 @@ export default async function ReservationDetailPage(props: {
 
   return (
     <>
-      <Topbar backHref="/reservations" title={`픽업 ${labelDate(detail.pickupDate)}`}>
+      <Topbar backHref="/reservations" title={`예약 ${labelDate(detail.reserveDate)}`}>
         <ReservationDeadlineCountdown
           reserveDate={detail.reserveDate}
-          pickupDate={detail.pickupDate}
+          pickupDates={detail.pickupDates}
         />
       </Topbar>
       <div className="page">
         <div className="card resvdates-card">
           <ReservationDates
             reserveDate={detail.reserveDate}
-            pickupDate={detail.pickupDate}
+            pickupDates={detail.pickupDates}
           />
         </div>
         <ReservationOrderForm

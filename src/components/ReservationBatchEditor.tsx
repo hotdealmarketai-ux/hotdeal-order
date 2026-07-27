@@ -8,26 +8,28 @@ import {
   type ReservationBatchState,
 } from "@/app/actions/reservation";
 import { SubmitButton } from "./SubmitButton";
-import {
-  daysBetween,
-  reservationDeadlineLabel,
-  reservationLoadDate,
-} from "@/lib/reservation";
-import { labelDate } from "@/lib/date";
+import { daysBetween, reservationDeadlineLabel } from "@/lib/reservation";
 import type { ReservationBatchDetail } from "@/lib/reservation-data";
 
-type Row = { key: string; id: string | null; name: string; supplyPrice: string; deleted: boolean };
+type Row = {
+  key: string;
+  id: string | null;
+  name: string;
+  supplyPrice: string;
+  pickupDate: string; // 상품별 픽업일자
+  deleted: boolean;
+};
 
 export function ReservationBatchEditor({ batch }: { batch?: ReservationBatchDetail | null }) {
   const uid = useRef(0);
   const [reserveDate, setReserveDate] = useState(batch?.reserveDate ?? "");
-  const [pickupDate, setPickupDate] = useState(batch?.pickupDate ?? "");
   const [rows, setRows] = useState<Row[]>(() =>
     (batch?.products ?? []).map((p) => ({
       key: `k${uid.current++}`,
       id: p.id,
       name: p.name,
       supplyPrice: String(p.supplyPrice),
+      pickupDate: p.pickupDate ?? "",
       deleted: false,
     })),
   );
@@ -51,7 +53,7 @@ export function ReservationBatchEditor({ batch }: { batch?: ReservationBatchDeta
   function addRow() {
     setRows((prev) => [
       ...prev,
-      { key: `k${uid.current++}`, id: null, name: "", supplyPrice: "0", deleted: false },
+      { key: `k${uid.current++}`, id: null, name: "", supplyPrice: "0", pickupDate: "", deleted: false },
     ]);
   }
 
@@ -60,21 +62,24 @@ export function ReservationBatchEditor({ batch }: { batch?: ReservationBatchDeta
     () => ({
       batchId: batch?.id ?? null,
       reserveDate,
-      pickupDate,
       products: rows.map((r) => ({
         id: r.id,
         name: r.name,
         supplyPrice: r.supplyPrice,
+        pickupDate: r.pickupDate,
         deleted: r.deleted,
       })),
     }),
-    [batch?.id, reserveDate, pickupDate, rows],
+    [batch?.id, reserveDate, rows],
   );
 
-  // 날짜 안내/검증(클라이언트) — 픽업 ≥ 예약 + 2
-  const datesValid = /^\d{4}-\d{2}-\d{2}$/.test(reserveDate) && /^\d{4}-\d{2}-\d{2}$/.test(pickupDate);
-  const gap = datesValid ? daysBetween(pickupDate, reserveDate) : null;
-  const dateWarn = gap !== null && gap < 2 ? "픽업일자는 예약일자보다 2일 이상 뒤여야 해요." : "";
+  // 예약일자 검증 + 상품별 픽업 검증(픽업 ≥ 예약 + 2). 한 행이라도 어긋나면 경고.
+  const reserveValid = /^\d{4}-\d{2}-\d{2}$/.test(reserveDate);
+  const rowPickupInvalid = (pk: string) =>
+    reserveValid && /^\d{4}-\d{2}-\d{2}$/.test(pk) && daysBetween(pk, reserveDate) < 2;
+  const anyBadPickup = shown.some(
+    (r) => r.name.trim() && (!/^\d{4}-\d{2}-\d{2}$/.test(r.pickupDate) || rowPickupInvalid(r.pickupDate)),
+  );
 
   return (
     <form action={formAction}>
@@ -92,44 +97,34 @@ export function ReservationBatchEditor({ batch }: { batch?: ReservationBatchDeta
       )}
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <div className="resv-dates">
-          <label className="resv-dates__field">
-            <span>예약일자</span>
-            <input
-              className="input"
-              type="date"
-              value={reserveDate}
-              onChange={(e) => setReserveDate(e.target.value)}
-              disabled={datesLocked}
-              required
-            />
-          </label>
-          <label className="resv-dates__field">
-            <span>픽업일자</span>
-            <input
-              className="input"
-              type="date"
-              value={pickupDate}
-              onChange={(e) => setPickupDate(e.target.value)}
-              disabled={datesLocked}
-              required
-            />
-          </label>
-        </div>
+        <label className="resv-dates__field">
+          <span>예약일자 (마감 기준)</span>
+          <input
+            className="input"
+            type="date"
+            value={reserveDate}
+            onChange={(e) => setReserveDate(e.target.value)}
+            disabled={datesLocked}
+            required
+          />
+        </label>
         {datesLocked && (
-          <div className="resv-note">예약이 접수되어 날짜는 고정됐어요. 상품만 수정할 수 있어요.</div>
+          <div className="resv-note">예약이 접수되어 예약일자는 고정됐어요. 상품·픽업일은 수정할 수 있어요.</div>
         )}
-        {dateWarn && <div className="resv-note resv-note--warn">{dateWarn}</div>}
-        {datesValid && !dateWarn && (
+        {reserveValid && (
           <div className="resv-note">
-            예약 마감 <b>{reservationDeadlineLabel(reserveDate)}</b> · 공구 자동반영{" "}
-            <b>{labelDate(reservationLoadDate(pickupDate))}</b>
+            예약 마감 <b>{reservationDeadlineLabel(reserveDate)}</b> · 픽업일은 상품마다 지정해요(예약일 +2일 이상).
+          </div>
+        )}
+        {anyBadPickup && (
+          <div className="resv-note resv-note--warn">
+            픽업일이 비었거나 예약일 +2일 미만인 상품이 있어요. 확인해 주세요.
           </div>
         )}
       </div>
 
       <div className="itemshead">
-        <span className="itemshead__label">상품 (이름 · 점주공급가)</span>
+        <span className="itemshead__label">상품 (이름 · 픽업일 · 점주공급가)</span>
         <span className="itemshead__count">{shown.length}개</span>
       </div>
 
@@ -142,6 +137,16 @@ export function ReservationBatchEditor({ batch }: { batch?: ReservationBatchDeta
             placeholder="상품명"
           />
           <div className="wprow__nums">
+            <span className="wprow__field">
+              픽업{" "}
+              <input
+                className="input"
+                type="date"
+                value={r.pickupDate}
+                onChange={(e) => update(r.key, "pickupDate", e.target.value)}
+                style={rowPickupInvalid(r.pickupDate) ? { borderColor: "var(--danger)" } : undefined}
+              />
+            </span>
             <span className="wprow__field">
               공급가{" "}
               <input
