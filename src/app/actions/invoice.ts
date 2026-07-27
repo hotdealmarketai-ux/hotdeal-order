@@ -132,9 +132,20 @@ export async function saveInvoiceAction(
   }
   const items = cleanItems(Array.isArray(raw) ? raw : [], isIssue);
   if ("error" in items) return items;
-  // 발행은 최소 1건 필요. 임시저장·확정은 0건도 허용(작성 중).
+  // 발행은 최소 1건 필요.
   if (isIssue && items.length === 0) {
     return { error: "품목을 한 개 이상 입력하세요." };
+  }
+  // 발행이 아닌 저장인데 입력 품목이 하나도 없으면(전부 지움/빈 확정) → 빈 '작성중' 초안을
+  // 남기지 않는다. 기존 초안이면 삭제, 신규면 만들지 않음(요청: 글자 1개↑ 있어야 작성중으로 뜨게).
+  if (!isIssue && items.length === 0) {
+    if (invoiceId) {
+      await prisma.invoice.deleteMany({ where: { id: invoiceId, status: "DRAFT" } });
+    }
+    revalidatePath("/admin/invoices");
+    revalidatePath(`/admin/combined/${userId}/${date}`);
+    revalidatePath("/admin");
+    redirect("/admin/invoices");
   }
 
   // 같은 점포·같은 날짜에 여러 장 발행 허용(부분 청구·추가 청구). 중복 방지 제거.
