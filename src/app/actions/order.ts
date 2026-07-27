@@ -343,10 +343,11 @@ export async function createOrderAction(
     return { error: "지난 발주가 결제되지 않아 발주가 잠겨 있어요. 입금 확인 후 가능해요." };
   }
 
-  // 이번 발주 창에 이미 넣은 발주가 있으면(가맹점) 새 발주 생성 차단 — 수정만 허용.
-  // page.tsx의 lockedToEdit(현재 창 기존 발주 조회)를 '서버에서도' 강제 — 더블클릭·뒤로가기
-  // 재제출·새 탭·채팅+그리드 각각 제출로 같은 창에 Order가 중복 생성되면 채움채/집계가 2배로
-  // 나가는 사고(확정 버그 #1)를 막는다. 소매·벤더(창 없음)는 자유 발주라 해당 없음.
+  // 이번 발주 창에 '이미 넣은 카테고리'만 중복 생성 차단(수정에서 고치게) — 아직 안 넣은
+  // 카테고리(예: 채움채)는 나중에 추가 발주 허용(#6). 카테고리당 1건 유지 = 더블클릭·재제출로
+  // 같은 카테고리가 2배 나가는 사고(확정 버그 #1) 방지 + 빠뜨린 종류만 덧붙이기 가능.
+  // 소매·벤더(창 없음)는 자유 발주라 해당 없음.
+  let orderedCats = new Set<string>();
   if (hasOrderWindow(user.role)) {
     // 관리자 강제오픈으로 '정오 이전'에 발주하면 currentWindowStartUtc(=오늘 12시)가 미래라
     // 방금 넣은 발주를 못 찾아 중복 방지가 통째로 무력화된다 → 창 시작과 '오늘 0시' 중
@@ -354,15 +355,11 @@ export async function createOrderAction(
     const since = new Date(
       Math.min(currentWindowStartUtc(), kstDayRange(kstToday()).start.getTime()),
     );
-    const existing = await prisma.order.findFirst({
+    const existing = await prisma.order.findMany({
       where: { userId: user.id, createdAt: { gte: since }, status: { not: "CANCELLED" } },
-      select: { id: true },
+      select: { category: true },
     });
-    if (existing) {
-      return {
-        error: "이번 발주 시간에 이미 넣은 발주가 있어요. '발주 수정'에서 고쳐 주세요.",
-      };
-    }
+    orderedCats = new Set(existing.map((o) => o.category));
   }
 
   const allowed = allowedCategoriesFor(user.role);
@@ -396,6 +393,14 @@ export async function createOrderAction(
 
   if (groups.length === 0) {
     return { error: "발주할 품목을 한 개 이상 입력하세요." };
+  }
+
+  // 이미 발주한 카테고리를 또 제출하면 거부(중복 방지). 안 넣었던 카테고리만 새로 추가된다(#6).
+  const dupCat = groups.find((g) => orderedCats.has(g.category));
+  if (dupCat) {
+    return {
+      error: `${CATEGORIES[dupCat.category].label}는 이번 발주 시간에 이미 넣었어요. '발주 수정'에서 고쳐 주세요.`,
+    };
   }
 
   // 픽업시간: '오늘 날짜 + 정갈한 시간'으로 정리 (예: 2026년 6월 27일 토요일 오전 7시 30분)
