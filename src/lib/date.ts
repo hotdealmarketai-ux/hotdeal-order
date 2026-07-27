@@ -70,3 +70,34 @@ export function shiftDate(dateStr: string, days: number): string {
   const base = new Date(`${dateStr}T00:00:00+09:00`).getTime() + days * 24 * 60 * 60 * 1000;
   return kstDateOf(new Date(base));
 }
+
+/** YYYY-MM-DD(KST)의 요일 (0=일 … 6=토) */
+export function dowOf(dateStr: string): number {
+  return new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+}
+
+/**
+ * 출고일(물건 챙기는/출고하는 날) = 발주일 + 1일.
+ * 단 일요일은 휴무라, 토요일·일요일 발주는 '다음 월요일'로 묶어서 본다.
+ *   월~목 발주 → 다음날(화~금) / 금 발주 → 토 / 토 발주 → 월 / 일 발주 → 월
+ * (즉 발주+1이 일요일이면 하루 더 밀어 월요일로)
+ */
+export function shipmentDayOf(orderDateKst: string): string {
+  const next = shiftDate(orderDateKst, 1);
+  return dowOf(next) === 0 ? shiftDate(orderDateKst, 2) : next;
+}
+
+/**
+ * 출고일 → 그 출고일에 실린 '발주일'들의 createdAt 범위 [start, end).
+ *   월요일 출고 = 토·일 발주 2일치 / 그 외 = 출고 전날 하루.
+ * (shipmentDayOf의 역함수. 목록이 출고일로 묶여도 상세는 원래 발주 범위로 조회되게.)
+ */
+export function orderRangeForShipment(shipmentDayKst: string): { start: Date; end: Date } {
+  if (dowOf(shipmentDayKst) === 1) {
+    // 월요일 출고 ← 토요일·일요일 발주
+    const sat = shiftDate(shipmentDayKst, -2);
+    const sun = shiftDate(shipmentDayKst, -1);
+    return { start: kstDayRange(sat).start, end: kstDayRange(sun).end };
+  }
+  return kstDayRange(shiftDate(shipmentDayKst, -1));
+}

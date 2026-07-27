@@ -113,6 +113,8 @@ a {
 .page {
   flex: 1;
   padding: 18px 18px 28px;
+  /* 저시력 확대 — '본문만' 확대(고정 헤더/네비는 그대로). 비율 유지라 세로로 안 밀림. */
+  zoom: var(--zoom, 1);
 }
 .page--tight {
   padding: 8px 18px 28px;

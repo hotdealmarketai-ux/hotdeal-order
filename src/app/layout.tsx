@@ -45,7 +45,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var z=localStorage.getItem('appZoom');if(z&&z!=='1')document.documentElement.style.zoom=z;}catch(e){}",
+              "try{var z=localStorage.getItem('appZoom');if(z)document.documentElement.style.setProperty('--zoom',z);}catch(e){}",
           }}
         />
         <link
