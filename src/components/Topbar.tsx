@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { NotificationBell } from "./NotificationBell";
 import { PushToggle } from "./PushToggle";
 import { BackButton } from "./BackButton";
+import { ZoomControls } from "./ZoomControls";
 
 export function Topbar({
   title,
@@ -45,6 +46,8 @@ export function Topbar({
           </Link>
         ) : null}
         {title ? <span className="tbar__title">{title}</span> : null}
+        {/* 저시력 점주용 글자 확대/축소 — 로고(브랜드)와 상호명 칩 사이 */}
+        <ZoomControls />
         <span className="tbar__spacer" />
         {right}
         {/* 알림설정(푸시 켜기/끄기) — 전역(모든 역할·모든 페이지). 어느 페이지에서도 항상 노출 */}

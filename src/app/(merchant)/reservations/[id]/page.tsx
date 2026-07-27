@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { getMerchantReservation } from "@/lib/reservation-data";
@@ -15,7 +15,8 @@ export default async function ReservationDetailPage(props: {
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
   const { id } = await props.params;
   const detail = await getMerchantReservation(id, user.id);
-  if (!detail) notFound();
+  // 배치가 삭제/숨김되면 404 대신 예약발주 목록으로 (점주가 막다른 페이지에 갇히지 않게)
+  if (!detail) redirect("/reservations");
 
   const closed = isReservationClosed(detail.reserveDate);
 

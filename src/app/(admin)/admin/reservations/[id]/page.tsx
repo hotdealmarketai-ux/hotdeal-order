@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { getReservationBatch, getBatchConfirmations } from "@/lib/reservation-data";
@@ -16,7 +16,8 @@ export default async function EditReservationBatchPage(props: {
   await requireAdmin();
   const { id } = await props.params;
   const batch = await getReservationBatch(id);
-  if (!batch) notFound();
+  // 삭제/숨김된 배치면 404 대신 목록으로
+  if (!batch) redirect("/admin/reservations");
   const confirmations = await getBatchConfirmations(batch.id);
 
   return (

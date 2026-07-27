@@ -535,11 +535,15 @@ a {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 2px 12px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line-soft);
+  padding: 11px 10px;
+  border-radius: 7px;
 }
-.receipt-item:last-child {
-  border-bottom: none;
+/* 줄무늬(핑퐁) — 노안 점주가 품목↔수량을 헷갈리지 않게 한 줄씩 배경 반전 */
+.receipt-item:nth-child(odd) {
+  background: var(--green-100);
+}
+.receipt-item:nth-child(even) {
+  background: var(--bg);
 }
 .receipt-item__name {
   font-size: 15.5px;
@@ -1572,7 +1576,7 @@ a {
 }
 .invcols {
   display: grid;
-  grid-template-columns: 1.3fr 0.62fr 1fr 74px;
+  grid-template-columns: 2.3fr 0.7fr 1fr 60px;
   gap: 6px;
   font-size: 12px;
   color: var(--muted-2);
@@ -1580,7 +1584,7 @@ a {
 }
 .invrow {
   display: grid;
-  grid-template-columns: 1.3fr 0.62fr 1fr 74px;
+  grid-template-columns: 2.3fr 0.7fr 1fr 60px;
   gap: 6px;
   align-items: center;
   padding: 5px 0;
@@ -2011,6 +2015,17 @@ a {
   padding: 5px 11px;
   white-space: nowrap;
 }
+/* 저시력 점주용 글자 확대/축소 버튼 — 헤더(로고 옆). 밝은 알약형. */
+.zoomctl { display: inline-flex; gap: 5px; margin-left: 10px; flex-shrink: 0; }
+.zoomctl__btn {
+  font-size: 13px; font-weight: 800; color: #fff; font-family: inherit;
+  background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.34);
+  border-radius: 8px; min-width: 34px; height: 30px; padding: 0 6px; cursor: pointer;
+  line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+}
+.zoomctl__btn:active { background: rgba(255, 255, 255, 0.3); }
+.zoomctl__btn:disabled { opacity: 0.4; }
+
 /* 헤더 안 히어로 슬롯 (예: 발주 마감 카운트다운) */
 .tbar__hero { padding: 10px 20px 16px; }
 

@@ -41,6 +41,13 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
+        {/* 저시력 점주 글자 확대 — 저장된 배율을 렌더 전에 선반영(깜빡임 방지). 전역. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var z=localStorage.getItem('appZoom');if(z&&z!=='1')document.documentElement.style.zoom=z;}catch(e){}",
+          }}
+        />
         <link
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
