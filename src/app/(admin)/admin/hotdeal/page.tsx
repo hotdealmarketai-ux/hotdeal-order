@@ -10,8 +10,10 @@ import {
   kstDateOf,
   labelDate,
   kstToday,
-  kstDayRange,
   normalizeDateStr,
+  orderRangeForShipment,
+  shipmentDayOf,
+  dowOf,
 } from "@/lib/date";
 import { DateBar } from "@/components/DateBar";
 import { CancelRequestActions } from "@/components/CancelRequestActions";
@@ -35,9 +37,11 @@ export default async function AdminHotdeal(props: {
   await requireAdmin();
   const { scope = "all", date: dateParam } = await props.searchParams;
   const sel = SCOPES.find((s) => s.key === scope) ?? SCOPES[0];
+  // date = '출고일'. 이 날 출고할 발주(= 전날 발주, 월요일 출고는 토·일 발주)를 조회한다.
   const date = normalizeDateStr(dateParam);
   const isToday = date === kstToday();
-  const { start, end } = kstDayRange(date);
+  const isSunday = dowOf(date) === 0; // 일요일은 출고 없음
+  const { start, end } = orderRangeForShipment(date);
 
   const orders = await prisma.order.findMany({
     where: { ...sel.where, createdAt: { gte: start, lt: end } },
@@ -141,11 +145,20 @@ export default async function AdminHotdeal(props: {
           </form>
         </div>
 
-        <p className="lead" style={{ marginTop: 0 }}>
-          {labelDate(date)}
+        <p className="lead" style={{ marginTop: 0, marginBottom: 2 }}>
+          출고 {labelDate(date)}
           {isToday ? " (오늘)" : ""} · {orders.length}건
         </p>
-        <DateBar date={date} basePath="/admin/hotdeal" query={`scope=${scope}`} />
+        <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--muted)" }}>
+          이 날 출고할 발주예요 · 발주일은 전날(월요일 출고 = 토·일 발주)
+        </p>
+        <DateBar
+          date={date}
+          basePath="/admin/hotdeal"
+          query={`scope=${scope}`}
+          labelPrefix="출고 "
+          max={shipmentDayOf(kstToday())}
+        />
 
         <Link
           href={`/admin/summary?ctx=hotdeal&scope=${scope}&date=${date}`}
@@ -157,7 +170,11 @@ export default async function AdminHotdeal(props: {
 
         {orders.length === 0 ? (
           <div className="empty">
-            <p>해당 날짜에 발주가 없습니다.</p>
+            <p>
+              {isSunday
+                ? "일요일은 출고가 없어요. (토·일 발주는 월요일 출고)"
+                : "이 날 출고할 발주가 없습니다."}
+            </p>
           </div>
         ) : combined ? (
           <div className="list">
@@ -187,7 +204,7 @@ export default async function AdminHotdeal(props: {
                       ) : null}
                     </div>
                     <div className="row__sub">
-                      {labelDate(g.date)} ·{" "}
+                      발주 {labelDate(g.date)} ·{" "}
                       {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
                     </div>
                   </Link>

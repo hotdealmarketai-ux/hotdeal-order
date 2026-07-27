@@ -9,7 +9,7 @@ import {
   type Category,
 } from "@/lib/constants";
 import { formatKDate } from "@/lib/format";
-import { kstDateOf, kstToday, labelDate } from "@/lib/date";
+import { kstDateOf, kstToday, labelDate, shipmentDayOf } from "@/lib/date";
 import { receivableOf } from "@/lib/receivable";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -121,7 +121,7 @@ export default async function MyPage(props: {
         href: `/order/day/${g.date}`,
         type: "일반",
         title: labelDate(g.date),
-        sub: `${g.cats.map((c) => CATEGORIES[c].label).join(" · ")} · 총 ${g.items}건`,
+        sub: `출고 ${labelDate(shipmentDayOf(g.date))} · ${g.cats.map((c) => CATEGORIES[c].label).join(" · ")} · 총 ${g.items}건`,
         badge:
           g.cancelled === g.orders && g.orders > 0 ? (
             <span className="badge badge--danger">취소 완료</span>
@@ -257,7 +257,7 @@ export default async function MyPage(props: {
                       {cat.label} · {o._count.items}건
                     </div>
                     <div className="row__sub">
-                      {formatKDate(o.createdAt)} ·{" "}
+                      {formatKDate(o.createdAt)} · 출고 {labelDate(shipmentDayOf(d))} ·{" "}
                       {receiverLabel(o.category as Category, user.role)}
                     </div>
                   </div>

@@ -4,7 +4,12 @@ import Link from "next/link";
 import { requireVendor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { VENDOR_LABEL, type Role } from "@/lib/constants";
-import { normalizeDateStr, kstDayRange, labelDate, kstToday } from "@/lib/date";
+import {
+  normalizeDateStr,
+  labelDate,
+  kstToday,
+  orderRangeForShipment,
+} from "@/lib/date";
 import { aggregateOrders } from "@/lib/ai";
 import { displayQty } from "@/lib/qty";
 
@@ -22,7 +27,7 @@ export default async function VendorSummary(props: {
       <div className="page">
         <h1 className="h1">{isToday ? "오늘 전체주문" : "전체주문 집계"}</h1>
         <p className="lead">
-          {labelDate(date)} · {VENDOR_LABEL[user.role as Role] ?? ""}
+          출고 {labelDate(date)} · {VENDOR_LABEL[user.role as Role] ?? ""}
         </p>
 
         {user.role === "VENDOR_SEOBU" && (
@@ -69,7 +74,8 @@ async function AggregateSection({
   vendorRole: string;
   vendorLabel: string;
 }) {
-  const { start, end } = kstDayRange(date);
+  // date = 출고일 → 그 출고일에 실린 발주(전날/주말) 범위로 집계.
+  const { start, end } = orderRangeForShipment(date);
   const orders = await prisma.order.findMany({
     where: { vendorRole, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     include: { user: true, items: { orderBy: { sortOrder: "asc" } } },

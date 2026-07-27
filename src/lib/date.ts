@@ -89,15 +89,27 @@ export function shipmentDayOf(orderDateKst: string): string {
 
 /**
  * 출고일 → 그 출고일에 실린 '발주일'들의 createdAt 범위 [start, end).
- *   월요일 출고 = 토·일 발주 2일치 / 그 외 = 출고 전날 하루.
+ *   월요일 출고 = 토·일 발주 2일치 / 화~토 = 출고 전날 하루 / 일요일 = 출고 없음(빈 범위).
  * (shipmentDayOf의 역함수. 목록이 출고일로 묶여도 상세는 원래 발주 범위로 조회되게.)
+ * 어떤 발주도 정확히 하나의 출고일로만 매핑됨(깔끔한 분할) → 발주가 목록에서 사라지지 않음.
  */
 export function orderRangeForShipment(shipmentDayKst: string): { start: Date; end: Date } {
-  if (dowOf(shipmentDayKst) === 1) {
+  const dow = dowOf(shipmentDayKst);
+  if (dow === 0) {
+    // 일요일은 출고 없음(토·일 발주는 월요일 출고) → 어떤 createdAt도 안 걸리는 빈 범위
+    const zero = new Date(0);
+    return { start: zero, end: zero };
+  }
+  if (dow === 1) {
     // 월요일 출고 ← 토요일·일요일 발주
     const sat = shiftDate(shipmentDayKst, -2);
     const sun = shiftDate(shipmentDayKst, -1);
     return { start: kstDayRange(sat).start, end: kstDayRange(sun).end };
   }
   return kstDayRange(shiftDate(shipmentDayKst, -1));
+}
+
+/** 출고일 라벨(발주일 병기용): 출고일 문자열 → "출고 7월 28일 (화)" */
+export function labelShipment(shipmentDayKst: string): string {
+  return `출고 ${labelDate(shipmentDayKst)}`;
 }

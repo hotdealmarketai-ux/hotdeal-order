@@ -12,10 +12,20 @@ function CalIcon() {
   );
 }
 
-export function VendorDateBar({ date }: { date: string }) {
+export function VendorDateBar({
+  date,
+  labelPrefix = "",
+  max,
+}: {
+  date: string;
+  labelPrefix?: string;
+  max?: string;
+}) {
   const router = useRouter();
   const go = (d: string) => router.push(`/vendor?date=${d}`);
-  const isToday = date === kstToday();
+  const today = kstToday();
+  const isToday = date === today;
+  const maxDate = max ?? today;
 
   return (
     <div className="datebar">
@@ -28,13 +38,13 @@ export function VendorDateBar({ date }: { date: string }) {
         ‹
       </button>
       <div className="datebar__center">
-        <span className="datebar__label">{labelDate(date)}</span>
+        <span className="datebar__label">{labelPrefix}{labelDate(date)}</span>
         <span className="datebar__cal" aria-label="날짜 선택">
           <CalIcon />
           <input
             type="date"
             value={date}
-            max={kstToday()}
+            max={maxDate}
             onChange={(e) => e.target.value && go(e.target.value)}
           />
         </span>
@@ -43,6 +53,7 @@ export function VendorDateBar({ date }: { date: string }) {
         type="button"
         className="datebar__arrow"
         onClick={() => go(shiftDate(date, 1))}
+        disabled={date >= maxDate}
         aria-label="다음 날"
       >
         ›
@@ -51,7 +62,7 @@ export function VendorDateBar({ date }: { date: string }) {
         <button
           type="button"
           className="btn btn--xs btn--soft"
-          onClick={() => go(kstToday())}
+          onClick={() => go(today)}
         >
           오늘
         </button>

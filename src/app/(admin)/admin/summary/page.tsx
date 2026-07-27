@@ -3,7 +3,12 @@ import { Topbar } from "@/components/Topbar";
 import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { normalizeDateStr, kstDayRange, labelDate, kstToday } from "@/lib/date";
+import {
+  normalizeDateStr,
+  labelDate,
+  kstToday,
+  orderRangeForShipment,
+} from "@/lib/date";
 import { aggregateOrders, type AggregateMode } from "@/lib/ai";
 import { displayQty } from "@/lib/qty";
 
@@ -45,7 +50,7 @@ export default async function AdminSummary(props: {
       <Topbar backHref={`${sel.backHref}&date=${date}`} title={`${sel.label} 집계`} />
       <div className="page">
         <p className="lead">
-          {labelDate(date)}
+          출고 {labelDate(date)}
           {date === kstToday() ? " (오늘)" : ""}
         </p>
         <Suspense fallback={<AggLoading />}>
@@ -80,7 +85,8 @@ async function AggSection({
   label: string;
   mode: AggregateMode;
 }) {
-  const { start, end } = kstDayRange(date);
+  // date = 출고일 → 그 출고일에 실린 발주(전날/주말) 범위로 집계.
+  const { start, end } = orderRangeForShipment(date);
   const orders = await prisma.order.findMany({
     where: { ...where, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     include: { user: true, items: { orderBy: { sortOrder: "asc" } } },

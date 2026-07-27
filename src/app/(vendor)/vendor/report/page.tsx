@@ -4,7 +4,12 @@ import { notFound } from "next/navigation";
 import { requireVendor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { VENDOR_LABEL, type Role } from "@/lib/constants";
-import { normalizeDateStr, kstDayRange, labelDate, kstToday } from "@/lib/date";
+import {
+  normalizeDateStr,
+  labelDate,
+  kstToday,
+  orderRangeForShipment,
+} from "@/lib/date";
 import { auctionReport } from "@/lib/ai";
 import { displayQty } from "@/lib/qty";
 
@@ -24,7 +29,7 @@ export default async function VendorReport(props: {
       <div className="page">
         <h1 className="h1">오늘 발주 레포트</h1>
         <p className="lead">
-          {labelDate(date)}
+          출고 {labelDate(date)}
           {isToday ? " (오늘)" : ""} · {VENDOR_LABEL[user.role as Role] ?? ""}
         </p>
 
@@ -65,7 +70,8 @@ async function ReportSection({
   vendorLabel: string;
   dateLabel: string;
 }) {
-  const { start, end } = kstDayRange(date);
+  // date = 출고일 → 그 출고일에 실린 발주(전날/주말) 범위로 레포트.
+  const { start, end } = orderRangeForShipment(date);
   const orders = await prisma.order.findMany({
     where: { vendorRole, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     include: { user: true, items: { orderBy: { sortOrder: "asc" } } },

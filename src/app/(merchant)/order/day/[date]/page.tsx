@@ -16,7 +16,13 @@ import {
   currentWindowStartUtc,
 } from "@/lib/deadline";
 import { formatKDateTime } from "@/lib/format";
-import { kstDayRange, kstToday, labelDate, normalizeDateStr } from "@/lib/date";
+import {
+  kstDayRange,
+  kstToday,
+  labelDate,
+  normalizeDateStr,
+  shipmentDayOf,
+} from "@/lib/date";
 import { ReceiptCard } from "@/components/ReceiptCard";
 import { SplitPaymentButton } from "@/components/SplitPaymentButton";
 import { PrintButton } from "@/components/PrintButton";
@@ -188,6 +194,9 @@ export default async function DayReceiptPage(props: {
                   {user.phone}
                 </div>
               )}
+              <div className="row__sub" style={{ marginTop: 4 }}>
+                발주 {labelDate(date)} · 출고 {labelDate(shipmentDayOf(date))}
+              </div>
             </div>
             {sorted.map((order) => {
             const cat = CATEGORIES[order.category as Category];
