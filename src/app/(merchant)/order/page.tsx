@@ -200,6 +200,7 @@ export default async function OrderPage(props: {
             reservedTool={reservedTool}
             reservedLabel={reservedLabel}
             toolCart={toolCart}
+            windowKey={windowKeyAt()}
           />
         )}
       </div>

@@ -17,7 +17,7 @@
 
 "use client";
 
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   createOrderAction,
   previewGridOrderAction,
@@ -62,6 +62,7 @@ export function OrderForm({
   reservedTool = [],
   reservedLabel = "",
   toolCart = [],
+  windowKey = "",
 }: {
   categories: Category[];
   needsPickup: boolean;
@@ -76,6 +77,8 @@ export function OrderForm({
   reservedLabel?: string;
   /** 재고 담기(서버 담기원장) — 공구에서 남은수량 보며 +/-. 발주 페이로드도 이 서버소스 기준 */
   toolCart?: ToolHold[];
+  /** 현재 발주창 키 — 입력 초안(임시저장)의 유효 범위. 창이 바뀌면(다음날) 초안 자동 폐기. */
+  windowKey?: string;
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -102,6 +105,70 @@ export function OrderForm({
   );
 
   const rows = rowsByCat[active] ?? [];
+
+  // ── #4 발주 입력 초안 보존 ──────────────────────────────────
+  // 다른 페이지 이동/백그라운드에도 입력이 안 지워지게 localStorage에 임시저장.
+  // '같은 발주창(windowKey)'일 때만 복원 → 마감 지나 창이 바뀌면(다음날) 자동 폐기.
+  // 주의: 발주 데이터(DB)와 무관한 브라우저 로컬 임시본일 뿐.
+  const DRAFT_KEY = "orderDraft_v1";
+  const restored = useRef(false);
+
+  useEffect(() => {
+    if (restored.current || !windowKey) return;
+    restored.current = true;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (!d || d.windowKey !== windowKey) {
+        localStorage.removeItem(DRAFT_KEY); // 다른(지난) 발주창 초안 → 폐기
+        return;
+      }
+      if (d.rowsByCat && typeof d.rowsByCat === "object") {
+        const remapped: Record<string, Row[]> = {};
+        for (const c of categories) {
+          const list = Array.isArray(d.rowsByCat[c]) ? d.rowsByCat[c] : null;
+          remapped[c] =
+            list && list.length
+              ? withTrailingEmpty(
+                  list.map((r: { name?: string; qty?: string; note?: string }) => ({
+                    id: ++uid.current,
+                    name: String(r?.name ?? ""),
+                    qty: String(r?.qty ?? ""),
+                    note: String(r?.note ?? ""),
+                  })),
+                )
+              : [newRow()];
+        }
+        setRowsByCat(remapped);
+      }
+      if (typeof d.pickup === "string") setPickup(d.pickup);
+      if (typeof d.fulfillment === "string") setFulfillment(d.fulfillment as Fulfillment);
+      if (d.tofuQty && typeof d.tofuQty === "object") setTofuQty(d.tofuQty);
+    } catch {
+      /* noop */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!restored.current || !windowKey) return;
+    try {
+      const hasAny =
+        Object.values(rowsByCat).some((list) => list.some(isFilled)) ||
+        Object.values(tofuQty).some((v) => v && v.trim()) ||
+        !!pickup ||
+        !!fulfillment;
+      if (hasAny) {
+        localStorage.setItem(
+          DRAFT_KEY,
+          JSON.stringify({ windowKey, rowsByCat, pickup, fulfillment, tofuQty }),
+        );
+      }
+    } catch {
+      /* noop */
+    }
+  }, [rowsByCat, pickup, fulfillment, tofuQty, windowKey]);
 
   function withTrailingEmpty(list: Row[]): Row[] {
     const last = list[list.length - 1];
