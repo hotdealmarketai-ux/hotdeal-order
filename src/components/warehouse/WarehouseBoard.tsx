@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { logoutAction } from "@/app/actions/auth";
+import { expiryInfo } from "@/lib/date";
 import {
   createBox,
   deleteBox,
@@ -10,7 +11,9 @@ import {
   type BoxDTO,
 } from "@/app/actions/warehouse";
 
-type Item = { id: string; name: string; qty: number };
+type Item = { id: string; name: string; qty: number; expiry: string };
+
+const norm = (s: string) => s.replace(/\s/g, "");
 
 const LOCATIONS = [
   { key: "FLOOR1", label: "1층" },
@@ -130,11 +133,17 @@ export function WarehouseBoard({
   items,
   initialLocation,
   initialBoxes,
+  todayCount,
+  todayStores,
+  todayItemNames,
 }: {
   storeName: string;
   items: Item[];
   initialLocation: string;
   initialBoxes: BoxDTO[];
+  todayCount: number;
+  todayStores: string[];
+  todayItemNames: string[];
 }) {
   const [location, setLocation] = useState<string>(initialLocation);
   const [boxes, setBoxes] = useState<BoxDTO[]>(initialBoxes);
@@ -142,6 +151,26 @@ export function WarehouseBoard({
   const [selected, setSelected] = useState<string | null>(null);
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [q, setQ] = useState("");
+  const [showIntro, setShowIntro] = useState(true); // #12 로그인 인트로(오늘 발주 요약)
+  const [expiryOn, setExpiryOn] = useState(false); // #12 유통기한 임박(-30일) 하이라이트 토글
+
+  // 품목 id → 정보(유통기한 임박 판정용). 오늘 발주 품목명(정규화) 집합.
+  const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
+  const todaySet = useMemo(() => new Set(todayItemNames), [todayItemNames]);
+  // 박스가 '오늘 발주 품목'인지 — 라벨 정규화 후 오늘 품목명과 포함관계(느슨 매칭, 반짝 힌트용).
+  const isTodayBox = (label: string) => {
+    const n = norm(label);
+    if (n.length < 2) return false;
+    if (todaySet.has(n)) return true;
+    for (const t of todaySet) if (t.includes(n) || n.includes(t)) return true;
+    return false;
+  };
+  // 박스의 품목이 유통기한 임박(≤30일)/만료인지 — itemId로 재고 조회 후 expiryInfo.
+  const isExpiryBox = (b: BoxDTO) => {
+    if (!b.itemId) return false;
+    const info = expiryInfo(itemById.get(b.itemId)?.expiry ?? "");
+    return !!info && (info.level === "soon" || info.level === "expired");
+  };
 
   const active = useRef<Active | null>(null);
   const boxesRef = useRef(boxes);
@@ -265,6 +294,42 @@ export function WarehouseBoard({
 
   return (
     <div className="whwrap">
+      {showIntro && (
+        <div className="whintro" onClick={() => setShowIntro(false)}>
+          <div className="whintro__card" onClick={(e) => e.stopPropagation()}>
+            <div className="whintro__logo">📦 창고관리</div>
+            <div className="whintro__count">
+              오늘의 발주는 <b>{todayCount}</b>건입니다
+            </div>
+            {todayStores.length > 0 ? (
+              <div className="whintro__stores">
+                <div className="whintro__storeshd">
+                  오늘 발주 넣은 지점 · {todayStores.length}곳
+                </div>
+                <div className="whintro__storelist">
+                  {todayStores.map((s) => (
+                    <span key={s} className="whintro__store">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="whintro__none">아직 오늘 들어온 발주가 없어요.</div>
+            )}
+            <button
+              type="button"
+              className="whintro__go"
+              onClick={() => setShowIntro(false)}
+            >
+              창고 보기 →
+            </button>
+            <div className="whintro__hint">
+              평면도에서 오늘 발주 품목이 반짝여요.
+            </div>
+          </div>
+        </div>
+      )}
       <header className="whtop">
         <div className="whtop__brand">
           <span className="whtop__logo">📦</span>
@@ -283,11 +348,21 @@ export function WarehouseBoard({
             </button>
           ))}
         </div>
-        <form action={logoutAction}>
-          <button type="submit" className="whtop__logout">
-            로그아웃
+        <div className="whtop__right">
+          <button
+            type="button"
+            className={`whtop__expiry ${expiryOn ? "is-on" : ""}`}
+            onClick={() => setExpiryOn((v) => !v)}
+            title="유통기한 30일 이내(만료 포함) 품목을 평면도에서 반짝이게 표시"
+          >
+            ⏳ 유통기한 임박
           </button>
-        </form>
+          <form action={logoutAction}>
+            <button type="submit" className="whtop__logout">
+              로그아웃
+            </button>
+          </form>
+        </div>
       </header>
 
       <div className="whmain">
@@ -340,11 +415,19 @@ export function WarehouseBoard({
 
             {boxes.map((b) => {
               const sel = b.id === selected;
+              const today = isTodayBox(b.label); // 오늘 발주 품목 → 반짝
+              const expSoon = expiryOn && isExpiryBox(b); // 유통기한 임박 토글 ON + 임박
               return (
                 <div
                   key={b.id}
-                  className={`whbox ${sel ? "whbox--sel" : ""}`}
-                  style={{ left: b.x, top: b.y, width: b.w, height: b.h, zIndex: sel ? 999 : b.z }}
+                  className={`whbox ${sel ? "whbox--sel" : ""} ${today ? "whbox--today" : ""} ${expSoon ? "whbox--expiry" : ""}`}
+                  style={{
+                    left: b.x,
+                    top: b.y,
+                    width: b.w,
+                    height: b.h,
+                    zIndex: sel ? 999 : today || expSoon ? 500 + b.z : b.z,
+                  }}
                   onPointerDown={(e) => startDrag(e, b)}
                   onDoubleClick={() => renameBox(b)}
                 >

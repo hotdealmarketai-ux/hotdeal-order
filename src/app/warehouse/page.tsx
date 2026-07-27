@@ -1,20 +1,42 @@
 import { requireWarehouse } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { kstToday, kstDayRange } from "@/lib/date";
 import { WarehouseBoard } from "@/components/warehouse/WarehouseBoard";
 import type { BoxDTO } from "@/app/actions/warehouse";
 
 export const dynamic = "force-dynamic";
 
+const norm = (s: string) => s.replace(/\s/g, "");
+
 // PC 창고관리 — 위치별 평면도에 재고 품목을 박스로 배치.
 export default async function WarehousePage() {
   const user = await requireWarehouse();
 
-  // 재고현황 품목(읽기 전용) — 팔레트에서 박스로 추가할 원본.
+  // 재고현황 품목(읽기 전용) — 팔레트에서 박스로 추가할 원본. 유통기한(#9)도 실어 임박 하이라이트.
   const items = await prisma.inventoryItem.findMany({
     where: { deletedAt: null },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, qty: true },
+    select: { id: true, name: true, qty: true, expiry: true },
   });
+
+  // 오늘 들어온 발주(#12 인트로/글로우) — 건수·지점·품목명(정규화). 취소 제외.
+  const { start, end } = kstDayRange(kstToday());
+  const todayOrders = await prisma.order.findMany({
+    where: { createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
+    select: {
+      user: { select: { storeName: true } },
+      items: { select: { name: true, rawName: true } },
+    },
+  });
+  const todayCount = todayOrders.length;
+  const todayStores = [...new Set(todayOrders.map((o) => o.user.storeName))];
+  const todayItemNames = [
+    ...new Set(
+      todayOrders.flatMap((o) =>
+        o.items.map((it) => norm(it.name || it.rawName || "")).filter((n) => n.length >= 2),
+      ),
+    ),
+  ];
 
   // 초기 위치(1층) 박스만 서버에서 로드 — 나머지는 탭 전환 시 클라이언트가 불러온다.
   const rows = await prisma.warehouseBox.findMany({
@@ -37,9 +59,17 @@ export default async function WarehousePage() {
   return (
     <WarehouseBoard
       storeName={user.storeName}
-      items={items}
+      items={items.map((it) => ({
+        id: it.id,
+        name: it.name,
+        qty: it.qty,
+        expiry: it.expiry ?? "",
+      }))}
       initialLocation="FLOOR1"
       initialBoxes={initialBoxes}
+      todayCount={todayCount}
+      todayStores={todayStores}
+      todayItemNames={todayItemNames}
     />
   );
 }
