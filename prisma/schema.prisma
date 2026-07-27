@@ -402,3 +402,23 @@ model AuditLog {
   @@index([createdAt])
   @@index([action, createdAt])
 }
+
+// PC용 관리자 창고 관리 — 위치(1층/냉동고/냉장고)별 평면도에 재고 품목을 박스로 배치.
+// itemId는 InventoryItem을 '느슨하게' 참조(FK/relation 아님) — 품목이 삭제돼도 박스는 남고,
+// label(품목명 스냅샷)로 계속 표시. 발주/재고 등 기존 테이블과 완전히 독립(추가 전용).
+model WarehouseBox {
+  id        String   @id @default(cuid())
+  location  String // FLOOR1 | FREEZER | FRIDGE
+  itemId    String? // InventoryItem.id 느슨 참조(관계 아님)
+  label     String   @default("") // 표시 이름(품목명 스냅샷 또는 자유 입력)
+  x         Int      @default(40)
+  y         Int      @default(40)
+  w         Int      @default(140)
+  h         Int      @default(90)
+  color     String   @default("") // 향후 색상 구분용(디테일 단계)
+  z         Int      @default(0) // 겹침 순서
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([location])
+}

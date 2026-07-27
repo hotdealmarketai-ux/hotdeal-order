@@ -78,6 +78,23 @@ async function main() {
     });
   }
 
+  // PC 창고관리 전용 계정 — admin / 1234. role=WAREHOUSE 로그인 시 /warehouse로 이동.
+  // update:{} 로 멱등 — 최초 배포에만 생성, 이후엔 손대지 않음(비밀번호를 바꿔도 보존).
+  const warehouseHash = await bcrypt.hash("1234", 10);
+  await prisma.user.upsert({
+    where: { username: "admin" },
+    update: {},
+    create: {
+      username: "admin",
+      passwordHash: warehouseHash,
+      role: "WAREHOUSE",
+      status: "APPROVED",
+      storeName: "창고관리",
+      phone: "",
+      address: "",
+    },
+  });
+
   // 가입 승인 흐름 테스트용 대기 신청자
   await prisma.user.upsert({
     where: { username: "waiting" },

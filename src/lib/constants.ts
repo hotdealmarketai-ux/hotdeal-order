@@ -9,7 +9,8 @@ export type Role =
   | "VENDOR_SEOBU" // 서부일광 (과일)
   | "VENDOR_JANGHEUNG" // 조은팜 (야채) — 내부 식별자는 JANGHEUNG 유지(DB 저장값)
   | "VENDOR_CHAEUMCHAE" // 채움채 (두부류)
-  | "ADMIN_SAEROP"; // 새롭 (본사·관리자·공구)
+  | "ADMIN_SAEROP" // 새롭 (본사·관리자·공구)
+  | "WAREHOUSE"; // PC 창고관리 전용 계정(발주/회원 권한 없음, /warehouse만)
 
 export type Status = "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED";
 
@@ -117,6 +118,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   VENDOR_JANGHEUNG: "조은팜",
   VENDOR_CHAEUMCHAE: "채움채",
   ADMIN_SAEROP: "새롭 (본사)",
+  WAREHOUSE: "창고관리",
 };
 
 // 관리자가 가입 승인 시 배정 가능한 점주 타입
@@ -186,6 +188,7 @@ export function homePathFor(role: Role, status: Status): string {
   if (status !== "APPROVED") return "/pending";
   // 새롭(관리자) 인트로 = 관리(홈) 탭. 공구 발주 현황은 네비 '공동구매 발주'로 진입.
   // isAdmin 을 isVendor 보다 먼저 — ADMIN_SAEROP 는 둘 다 참이라 순서가 중요.
+  if (role === "WAREHOUSE") return "/warehouse"; // PC 창고관리 전용
   if (isAdmin(role)) return "/admin";
   if (isVendor(role)) return "/vendor";
   if (isMerchant(role)) return "/order";

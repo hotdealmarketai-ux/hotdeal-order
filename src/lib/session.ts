@@ -77,3 +77,11 @@ export async function requireAdmin(): Promise<AppUser> {
   if (!isAdmin(user.role)) redirect("/login");
   return user;
 }
+
+/** PC 창고관리 전용 계정 */
+export async function requireWarehouse(): Promise<AppUser> {
+  const user = await requireUser();
+  if (user.status !== "APPROVED") redirect("/pending");
+  if (user.role !== "WAREHOUSE") redirect("/login");
+  return user;
+}
