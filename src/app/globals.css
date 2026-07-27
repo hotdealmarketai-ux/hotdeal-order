@@ -1990,7 +1990,7 @@ a {
 .tbar__row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-height: 52px;
   padding: 6px 16px;
 }
@@ -2022,11 +2022,15 @@ a {
   text-overflow: ellipsis;
 }
 /* 저시력 점주용 글자 확대/축소 버튼 — 헤더(로고 옆). 밝은 알약형. */
-.zoomctl { display: inline-flex; gap: 4px; margin-left: 6px; flex-shrink: 0; }
+.zoomctl { display: inline-flex; gap: 3px; margin-left: 5px; flex-shrink: 0; }
+/* 좁은 화면(폰): 로고 아이콘 숨겨 지점명 공간 확보 — '핫딜오더' 워드마크 텍스트는 유지. */
+@media (max-width: 480px) {
+  .tbar__brand img { display: none; }
+}
 .zoomctl__btn {
-  font-size: 13px; font-weight: 800; color: #fff; font-family: inherit;
+  font-size: 12px; font-weight: 800; color: #fff; font-family: inherit;
   background: rgba(255, 255, 255, 0.16); border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 8px; min-width: 30px; height: 30px; padding: 0 5px; cursor: pointer;
+  border-radius: 8px; min-width: 28px; height: 30px; padding: 0 4px; cursor: pointer;
   line-height: 1; display: inline-flex; align-items: center; justify-content: center;
 }
 .zoomctl__btn:active { background: rgba(255, 255, 255, 0.3); }
