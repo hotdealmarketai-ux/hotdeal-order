@@ -52,6 +52,7 @@ export default async function InventoryPage() {
               available: Math.max(0, it.qty - (held[it.id] ?? 0)),
               mine: mine[it.id] ?? 0,
               supplyPrice: it.supplyPrice,
+              expiry: it.expiry ?? "",
             }))}
             canAdd={canAdd}
             hint={

@@ -28,6 +28,7 @@ import { ChatOrder } from "./ChatOrder";
 import { FulfillmentPicker } from "./FulfillmentPicker";
 import { StockCartButton } from "./StockCartButton";
 import { useLiveStock } from "@/lib/useLiveStock";
+import { expiryInfo } from "@/lib/date";
 import {
   CATEGORIES,
   FULFILLMENT_LABEL,
@@ -46,6 +47,7 @@ export type ToolHold = {
   mine: number;
   available: number;
   supplyPrice: number;
+  expiry?: string; // #9 유통기한 "YYYY-MM-DD"(빈값=없음)
 };
 
 function isFilled(r: Row) {
@@ -480,12 +482,25 @@ export function OrderForm({
                 {toolCart.map((t) => {
                   const avail = live.availableOf(t.itemId, t.available);
                   const mineQ = live.mineOf(t.itemId, t.mine);
+                  const exp = expiryInfo(t.expiry ?? "");
                   return (
                     <div className="stockline" key={t.itemId}>
                       <div className="stockline__info">
                         <span className="stockline__name">{t.name}</span>
                         <span className="stockline__meta">
                           남은 {avail}개 · 담음 {mineQ}개
+                          {exp && (
+                            <span
+                              style={
+                                exp.level === "ok"
+                                  ? undefined
+                                  : { color: "var(--danger)", fontWeight: 700 }
+                              }
+                              title={`유통기한 ${exp.full}`}
+                            >
+                              {" "}· 유통 {exp.dday}
+                            </span>
+                          )}
                         </span>
                       </div>
                       <StockCartButton

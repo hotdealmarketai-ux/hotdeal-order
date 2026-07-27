@@ -4,6 +4,7 @@ import { useState } from "react";
 import { StockCartButton } from "./StockCartButton";
 import { InvSearch } from "./InvSearch";
 import { useLiveStock } from "@/lib/useLiveStock";
+import { expiryInfo } from "@/lib/date";
 
 type Item = {
   id: string;
@@ -11,6 +12,7 @@ type Item = {
   available: number; // 실시간 남은수량(기준재고 − 전체 담기)
   mine: number; // 내가 담은 수량
   supplyPrice: number;
+  expiry: string; // #9 유통기한 "YYYY-MM-DD"(빈값=없음)
 };
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -118,13 +120,14 @@ export function MerchantInventoryList({
         {sorted.map((it) => {
           const avail = live.availableOf(it.id, it.available);
           const mineQ = live.mineOf(it.id, it.mine);
+          const exp = expiryInfo(it.expiry);
           return (
           <div className="row" key={it.id}>
             <div className="row__main">
               <div className="row__title">{it.name}</div>
               <div
                 className="row__sub"
-                style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 3 }}
+                style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 3, flexWrap: "wrap" }}
               >
                 <span
                   className={`badge ${
@@ -139,6 +142,20 @@ export function MerchantInventoryList({
                 </span>
                 {mineQ > 0 && <span className="badge badge--ai">담음 {mineQ}개</span>}
                 {it.supplyPrice > 0 && <span>공급가 {won(it.supplyPrice)}원</span>}
+                {exp && (
+                  <span
+                    className={`badge ${
+                      exp.level === "expired"
+                        ? "badge--danger"
+                        : exp.level === "soon"
+                          ? "badge--wait"
+                          : "badge--mute"
+                    }`}
+                    title={`유통기한 ${exp.full}`}
+                  >
+                    유통 {exp.dday}
+                  </span>
+                )}
               </div>
             </div>
             <StockCartButton
