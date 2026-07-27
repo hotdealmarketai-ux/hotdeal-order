@@ -161,10 +161,12 @@ export async function saveReservationBatchAction(
 
   revalidatePath("/admin/reservations");
   revalidatePath("/reservations");
+  revalidatePath(`/admin/reservations/${targetId}`);
 
-  // 신규 생성이면 편집 페이지로 이동(이후 상품 추가 편집이 그 배치를 가리키게)
-  if (created) redirect(`/admin/reservations/${targetId}`);
-  return { ok: true };
+  // 저장 후 항상 '목록'으로 이동 — 서버 리다이렉트라 최신 목록이 그려져 방금 저장한 예약이
+  // 바로 보인다(예전엔 신규는 편집페이지로 갔는데, 그러면 목록 클라 캐시가 오래돼 '목록에 안
+  // 나온다'처럼 보였다). 편집은 목록에서 그 예약을 눌러 이어서.
+  redirect("/admin/reservations");
 }
 
 // 관리자: 예약 배치 소프트삭제(숨김). 점주 예약이 있으면 경고만 하고 그대로 진행(집계는 남음).
