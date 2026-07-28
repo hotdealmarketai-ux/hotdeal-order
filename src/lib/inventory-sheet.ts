@@ -136,6 +136,44 @@ async function readRowsViaCsv(): Promise<Row[] | { error: string }> {
   return rowsFromMatrix(parseCsv(text));
 }
 
+// 시트 내용을 '읽기만' 한다(A~D: 품목명·수량·공급가·유통기한). 1회성 '시트→앱 불러오기'의
+// 미리보기/반영에 쓰는 명시적 관리자 경로용. DB를 건드리지 않는다(호출측이 삭제 없이 upsert).
+export type SheetInvRow = {
+  name: string;
+  qty: number;
+  supplyPrice: number;
+  expiry: string; // 원문 그대로(정규화는 호출측에서)
+};
+export async function readInventorySheet(): Promise<SheetInvRow[] | { error: string }> {
+  const toRows = (matrix: string[][]): SheetInvRow[] =>
+    matrix
+      .slice(1) // 헤더 제외
+      .map((r) => ({
+        name: (r[0] ?? "").trim(),
+        qty: toInt(r[1]),
+        supplyPrice: toInt(r[2]),
+        expiry: (r[3] ?? "").trim(),
+      }))
+      .filter((it) => it.name);
+  try {
+    if (hasGoogleCreds()) {
+      const token = await getGoogleAccessToken(SCOPE);
+      const title = await sheetTitleForGid(token);
+      const range = encodeURIComponent(a1(title, "A1:D"));
+      const res = await gfetch(`${API}/values/${range}?majorDimension=ROWS`, token);
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) return { error: `values.get ${res.status}` };
+      return toRows(Array.isArray(j.values) ? j.values : []);
+    }
+    const csv = await readRowsViaCsv();
+    if (!Array.isArray(csv)) return csv; // { error }
+    // CSV 폴백은 A~C만 파싱하므로 유통기한은 빈값(공개시트일 때만 사용)
+    return csv.map((r) => ({ ...r, expiry: "" }));
+  } catch (e) {
+    return { error: (e as Error)?.message || "시트 읽기 실패" };
+  }
+}
+
 // ⚠️ 사용 안 함(단방향 전환 R3). 절대 크론/액션에서 호출하지 말 것 —
 // 시트를 기준으로 DB를 덮어써 '시트에 없는 품목을 삭제'한다(과거 데이터 손실 사고의 원인).
 // 시트→앱 가져오기가 정말 필요하면 별도 명시적 관리자 액션으로만, 삭제 없이 재설계할 것.
