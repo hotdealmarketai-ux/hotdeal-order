@@ -191,28 +191,33 @@ export function InvoiceForm({
     return true;
   }
 
-  // 확정 상태를 DB에 즉시 저장(현장이 달라 시간차 확정 — 오전 과채, 이후 공구/채움채).
-  function persistConfirmed(next: Set<string>) {
+  // 확정/수정을 DB에 즉시 저장(현장이 달라 시간차 확정 — 오전 과채, 이후 공구/채움채).
+  // '토글한 그 카테고리'만 서버에 알려, 다른 컴퓨터가 확정한 다른 카테고리를 덮어쓰지 않게 한다.
+  function persistConfirmed(cat: Category, on: boolean) {
     const fd = new FormData();
     if (invoiceId) fd.set("invoiceId", invoiceId);
     fd.set("userId", userId);
     fd.set("date", date);
     fd.set("payload", JSON.stringify(payload));
-    fd.set("confirmedCats", [...next].join(","));
+    fd.set("confirmCat", cat); // 토글한 카테고리 하나
+    fd.set("confirmOn", on ? "1" : "0"); // 확정=1 / 수정(해제)=0
     fd.set("allCats", categories.join(","));
     fd.set("mode", "confirm");
     startTransition(() => formAction(fd));
   }
   function toggleConfirm(c: Category) {
     const next = new Set(confirmed);
+    let on: boolean;
     if (next.has(c)) {
       next.delete(c); // 수정 — 잠금 해제
+      on = false;
     } else {
       if (!validateCat(c)) return; // 확정 — 유효할 때만 잠금
       next.add(c);
+      on = true;
     }
     setConfirmed(next);
-    persistConfirmed(next);
+    persistConfirmed(c, on);
   }
 
   // 발행 전 검증 — 서버(cleanItems)와 동일 규칙
