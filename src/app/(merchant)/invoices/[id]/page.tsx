@@ -2,7 +2,12 @@ import { notFound } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { SAEROP_BANK_ACCOUNT, SAEROP_ACCOUNT_HOLDER } from "@/lib/constants";
+import {
+  SAEROP_BANK_ACCOUNT,
+  SAEROP_ACCOUNT_HOLDER,
+  CATEGORIES,
+  CATEGORY_ORDER,
+} from "@/lib/constants";
 import { labelDateLong } from "@/lib/date";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { PrintButton } from "@/components/PrintButton";
@@ -36,6 +41,11 @@ export default async function MerchantInvoiceDetailPage({
     sub: `${it.qty} × ${won(it.unitPrice)}`,
     amount: it.amount,
   }));
+  // 일반발주 계산서는 과일/야채/공구/채움채로 분류(안 넘기면 전부 '기타'로 나옴). 주간은 기본값.
+  const invCats =
+    inv.kind === "DAILY"
+      ? CATEGORY_ORDER.map((c) => ({ key: c, label: CATEGORIES[c].label }))
+      : undefined;
 
   return (
     <>
@@ -51,7 +61,7 @@ export default async function MerchantInvoiceDetailPage({
           {labelDateLong(inv.date)} · {KIND[inv.kind] ?? "계산서"}
         </p>
 
-        <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" />
+        <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" cats={invCats} />
 
         {inv.status === "ISSUED" && (
           <div className="payband">

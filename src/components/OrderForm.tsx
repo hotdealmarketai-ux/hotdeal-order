@@ -132,7 +132,7 @@ export function OrderForm({
           const list = Array.isArray(d.rowsByCat[c]) ? d.rowsByCat[c] : null;
           remapped[c] =
             list && list.length
-              ? withTrailingEmpty(
+              ? normalizeRows(
                   list.map((r: { name?: string; qty?: string; note?: string }) => ({
                     id: ++uid.current,
                     name: String(r?.name ?? ""),
@@ -172,10 +172,13 @@ export function OrderForm({
     }
   }, [rowsByCat, pickup, fulfillment, tofuQty, windowKey]);
 
-  function withTrailingEmpty(list: Row[]): Row[] {
-    const last = list[list.length - 1];
-    if (!last || last.name || last.qty || last.note) return [...list, newRow()];
-    return list;
+  // 채워진 줄 + '지금 편집 중인 줄'만 남기고(포커스 유지) 나머지 빈 줄은 접는다.
+  // 끝에는 입력용 빈 줄 하나를 항상 유지 → 항목을 지우면 늘어난 빈 칸이 자동으로 줄어든다(최소 1줄).
+  function normalizeRows(list: Row[], editingId?: number): Row[] {
+    const kept = list.filter((r) => isFilled(r) || r.id === editingId);
+    const last = kept[kept.length - 1];
+    if (!last || isFilled(last)) kept.push(newRow());
+    return kept;
   }
 
   function updateRow(id: number, field: keyof Row, value: string) {
@@ -184,7 +187,7 @@ export function OrderForm({
       const list = prev[active].map((r) =>
         r.id === id ? { ...r, [field]: value } : r,
       );
-      return { ...prev, [active]: withTrailingEmpty(list) };
+      return { ...prev, [active]: normalizeRows(list, id) };
     });
   }
 
@@ -193,15 +196,14 @@ export function OrderForm({
       const list = (prev[cat] ?? []).map((r) =>
         r.id === id ? { ...r, [field]: value } : r,
       );
-      return { ...prev, [cat]: withTrailingEmpty(list) };
+      return { ...prev, [cat]: normalizeRows(list, id) };
     });
   }
 
   function removeRow(id: number) {
     setRowsByCat((prev) => {
-      let list = prev[active].filter((r) => r.id !== id);
-      if (list.length === 0) list = [newRow()];
-      return { ...prev, [active]: withTrailingEmpty(list) };
+      const list = prev[active].filter((r) => r.id !== id);
+      return { ...prev, [active]: normalizeRows(list) };
     });
   }
 
@@ -282,12 +284,12 @@ export function OrderForm({
         // 제출한 카테고리는 응답값으로 교체(응답에 없으면 = 옮겨감 → 빈칸)
         for (const g of payload) {
           if (g.category === "TOFU") continue;
-          next[g.category] = withTrailingEmpty((byCat.get(g.category) ?? []).map(toRow));
+          next[g.category] = normalizeRows((byCat.get(g.category) ?? []).map(toRow));
         }
         // 응답에만 있는 카테고리(remap 목적지, 예: 과일)도 반영
         for (const g of res.groups ?? []) {
           if (!payload.some((p) => p.category === g.category)) {
-            next[g.category] = withTrailingEmpty(g.items.map(toRow));
+            next[g.category] = normalizeRows(g.items.map(toRow));
           }
         }
         return next;

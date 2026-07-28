@@ -1635,11 +1635,15 @@ a {
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
-  padding: 11px 0;
-  border-top: 1px solid var(--line-soft);
+  padding: 11px 10px;
+  border-radius: 7px;
   font-size: 14.5px;
   font-weight: 600;
 }
+/* F 계산서(입금요청서)도 발주서처럼 브랜드컬러↔흰색 핑퐁(지브라)으로 알아보기 쉽게.
+   .invcat 안 첫 자식은 __head라 첫 품목행은 nth-child(2)=짝수부터 시작. */
+.invcat .invline:nth-child(even) { background: var(--green-100); }
+.invcat .invline:nth-child(odd) { background: var(--surface); }
 .invline__meta {
   color: var(--muted);
   font-size: 12.5px;

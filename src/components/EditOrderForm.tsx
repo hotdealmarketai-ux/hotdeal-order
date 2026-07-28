@@ -67,27 +67,27 @@ export function EditOrderForm({
     {},
   );
 
-  function withTrailingEmpty(list: Row[]): Row[] {
-    const last = list[list.length - 1];
-    if (!last || last.name || last.qty || last.note) return [...list, newRow()];
-    return list;
+  // 채워진 줄 + '지금 편집 중인 줄'만 남기고(포커스 유지) 나머지 빈 줄은 접는다.
+  // 끝에는 입력용 빈 줄 하나를 항상 유지 → 항목을 지우면 늘어난 빈 칸이 자동으로 줄어든다(최소 1줄).
+  function normalizeRows(list: Row[], editingId?: number): Row[] {
+    const kept = list.filter((r) => isFilled(r) || r.id === editingId);
+    const last = kept[kept.length - 1];
+    if (!last || isFilled(last)) kept.push(newRow());
+    return kept;
   }
 
   function updateRow(id: number, field: keyof Row, value: string) {
     setConfirming(false);
     setRows((prev) =>
-      withTrailingEmpty(
+      normalizeRows(
         prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)),
+        id,
       ),
     );
   }
 
   function removeRow(id: number) {
-    setRows((prev) => {
-      let list = prev.filter((r) => r.id !== id);
-      if (list.length === 0) list = [newRow()];
-      return withTrailingEmpty(list);
-    });
+    setRows((prev) => normalizeRows(prev.filter((r) => r.id !== id)));
   }
 
   const items = useMemo(() => {

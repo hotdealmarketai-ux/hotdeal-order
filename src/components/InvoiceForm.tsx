@@ -94,9 +94,12 @@ export function InvoiceForm({
       const list = prev[cat].map((r) =>
         r.id === id ? { ...r, [field]: value } : r,
       );
-      const last = list[list.length - 1];
-      const next = !last || isFilled(last) ? [...list, newRow()] : list;
-      return { ...prev, [cat]: next };
+      // 채워진 줄 + '지금 편집 중인 줄'만 남기고(포커스 유지), 나머지 빈 줄은 접는다.
+      // 끝에는 입력용 빈 줄 하나를 항상 유지 → 항목을 지우면 늘어난 빈 칸이 자동으로 줄어든다.
+      const kept = list.filter((r) => isFilled(r) || r.id === id);
+      const last = kept[kept.length - 1];
+      if (!last || isFilled(last)) kept.push(newRow());
+      return { ...prev, [cat]: kept };
     });
   }
 

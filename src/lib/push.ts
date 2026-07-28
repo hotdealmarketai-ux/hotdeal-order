@@ -185,12 +185,13 @@ export async function notifyMerchantWeeklyInvoiceOverdue(
 }
 
 // 점주에게 '입금요청서(계산서) 발행' 알림 — 지난 발주의 해당 날짜 입금요청서로 이동
-export async function notifyMerchantInvoiceIssued(userId: string, date: string) {
+export async function notifyMerchantInvoiceIssued(userId: string, invoiceId: string) {
   try {
     await sendPushToUser(userId, {
       title: "입금요청서가 발행되었습니다.",
       body: "",
-      url: `/order/day/${date}?view=invoice`,
+      // 발행된 그 계산서(입금요청서)로 바로 이동 — 예전 /order/day 뷰는 발주 없으면 404였음.
+      url: `/invoices/${invoiceId}`,
     });
   } catch (err) {
     console.error("[push] notifyMerchantInvoiceIssued failed:", err);

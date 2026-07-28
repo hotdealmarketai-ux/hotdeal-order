@@ -9,22 +9,24 @@ export type ReceiptItem = {
   amount: number;
 };
 
-// 주간발주 영수증/계산서 — 카테고리별로 묶어 표시. 서버 컴포넌트.
+// 영수증/계산서 — 카테고리별로 묶어 표시. 서버 컴포넌트.
+// cats: 분류에 쓸 카테고리 목록. 기본은 주간발주 카탈로그. 일반발주 계산서는 과일/야채/공구/채움채를 넘긴다
+// (안 넘기면 일반발주 품목이 전부 '기타'로 빠지는 버그).
 export function WeeklyReceipt({
   items,
   totalLabel = "합계",
   band = false,
+  cats = WEEKLY_CATEGORIES,
 }: {
   items: ReceiptItem[];
   totalLabel?: string;
   band?: boolean; // 총액을 다크 그린 밴드로
+  cats?: readonly { key: string; label: string }[];
 }) {
   const total = items.reduce((n, it) => n + it.amount, 0);
-  const cats = WEEKLY_CATEGORIES.filter((c) =>
-    items.some((it) => it.category === c.key),
-  );
-  // 카탈로그 카테고리에 없는 항목(예: 구 데이터)도 빠뜨리지 않게
-  const others = items.filter((it) => !cats.some((c) => c.key === it.category));
+  const shown = cats.filter((c) => items.some((it) => it.category === c.key));
+  // 목록에 없는 카테고리 항목(구 데이터 등)도 빠뜨리지 않게
+  const others = items.filter((it) => !shown.some((c) => c.key === it.category));
 
   const renderGroup = (label: string, list: ReceiptItem[], key: string) => (
     <div className="invcat" key={key}>
@@ -46,7 +48,7 @@ export function WeeklyReceipt({
 
   return (
     <div>
-      {cats.map((c) =>
+      {shown.map((c) =>
         renderGroup(
           c.label,
           items.filter((it) => it.category === c.key),

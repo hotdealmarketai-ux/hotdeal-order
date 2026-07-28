@@ -145,7 +145,7 @@ export async function saveInvoiceAction(
     if (upd.count === 0) {
       return { error: "발행된 계산서는 수정할 수 없어요. 취소 후 다시 작성해 주세요." };
     }
-    await notifyMerchantInvoiceIssued(userId, date);
+    await notifyMerchantInvoiceIssued(userId, invoiceId);
     revalidatePath("/admin/invoices");
     revalidatePath("/admin/deposits");
     revalidatePath(`/admin/combined/${userId}/${date}`);

@@ -12,12 +12,14 @@ import {
 } from "@/lib/constants";
 import { kstDayRange, labelDate } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
+import { getReservationInvoiceItems } from "@/lib/reservation-data";
 import {
   InvoiceForm,
   type InvoiceInitialItem,
   type InvoiceRefGroup,
 } from "@/components/InvoiceForm";
 import { InvoiceAdminActions } from "@/components/InvoiceAdminActions";
+import { DeleteDraftButton } from "@/components/DeleteDraftButton";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -75,6 +77,22 @@ export default async function AdminInvoiceDetail(props: {
       qty: String(it.qty),
       unitPrice: String(it.unitPrice),
     }));
+    // 예약분 자동채움 — 아직 이 계산서에 안 들어간 확정 예약분만 공구(TOOL)에 덧붙인다
+    // (초안을 다시 열어도 예약분이 사라지지 않게).
+    const billedTool = new Set(
+      inv.items.filter((it) => it.category === "TOOL").map((it) => it.name.trim()),
+    );
+    const reserved = await getReservationInvoiceItems(inv.userId, inv.date);
+    for (const r of reserved) {
+      if (!billedTool.has(r.name.trim())) {
+        initialItems.push({
+          category: "TOOL" as Category,
+          name: r.name,
+          qty: String(r.qty),
+          unitPrice: String(r.supplyPrice),
+        });
+      }
+    }
     const allowed = allowedCategoriesFor(inv.user.role as Role);
     const categories = allowed.length ? allowed : [...CATEGORY_ORDER];
 
@@ -100,6 +118,7 @@ export default async function AdminInvoiceDetail(props: {
             refGroups={refGroups}
             confirmedCats={inv.confirmedCats}
           />
+          <DeleteDraftButton invoiceId={inv.id} />
         </div>
       </>
     );

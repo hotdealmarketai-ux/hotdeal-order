@@ -1,5 +1,5 @@
 import { Topbar } from "@/components/Topbar";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -27,6 +27,15 @@ export default async function NewInvoicePage(props: {
 
   const merchant = await prisma.user.findUnique({ where: { id: userId } });
   if (!merchant || !isMerchant(merchant.role as Role)) notFound();
+
+  // 같은 점포·날짜에 '작성중(DRAFT)' 계산서가 이미 있으면 새로 만들지 않고 그걸 연다.
+  // (매번 새 빈 폼이면 계산서가 여러 개 생겨 '발행된 계산서'에 중복으로 쌓임 — 사용자 신고.)
+  const existingDraft = await prisma.invoice.findFirst({
+    where: { userId, date, status: "DRAFT" },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true },
+  });
+  if (existingDraft) redirect(`/admin/invoices/${existingDraft.id}`);
 
   // 같은 날짜에 계산서를 여러 장 발행할 수 있음(부분·추가 청구).
   // 예약분 자동채움을 '첫 계산서'로만 제한하면, 그날 다른 계산서를 먼저 발행한 경우 예약분이
