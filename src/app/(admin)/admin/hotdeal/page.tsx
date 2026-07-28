@@ -13,8 +13,10 @@ import {
   normalizeDateStr,
   orderRangeForShipment,
   shipmentDayOf,
+  shiftDate,
   dowOf,
 } from "@/lib/date";
+import { getReservationStoresForPickup } from "@/lib/reservation-data";
 import { DateBar } from "@/components/DateBar";
 import { CancelRequestActions } from "@/components/CancelRequestActions";
 import { dailyForceOpen } from "@/lib/order-open";
@@ -62,6 +64,7 @@ export default async function AdminHotdeal(props: {
     cancelledCount: number;
     cancelReq: boolean;
     edited: boolean;
+    resvCount: number; // 이 출고일 확정 공구 예약분 건수(발주 없이 예약만 있어도 표시)
   }[] = [];
   if (combined) {
     const map = new Map<string, (typeof groups)[number]>();
@@ -80,6 +83,7 @@ export default async function AdminHotdeal(props: {
           cancelledCount: 0,
           cancelReq: false,
           edited: false,
+          resvCount: 0,
         };
         map.set(key, g);
         groups.push(g);
@@ -92,6 +96,34 @@ export default async function AdminHotdeal(props: {
       if (o.cancelRequested && o.status !== "CANCELLED") g.cancelReq = true;
       if (o.edited && !o.confirmed && o.status !== "CANCELLED") g.edited = true;
     }
+
+    // 공구 예약분(픽업=출고일) 합류 — 발주 있는 점포엔 공구 종류·건수 추가,
+    // 예약만 있는 점포는 합본 그룹을 새로 만든다(발주일=출고일−1로 링크).
+    const resvStores = await getReservationStoresForPickup(date);
+    const byUser = new Map(groups.map((g) => [g.userId, g]));
+    for (const s of resvStores) {
+      const g = byUser.get(s.userId);
+      if (g) {
+        if (!g.cats.includes("TOOL")) g.cats.push("TOOL");
+        g.resvCount += s.count;
+      } else {
+        const ng = {
+          userId: s.userId,
+          store: s.storeName,
+          date: shiftDate(date, -1),
+          cats: ["TOOL"] as Category[],
+          items: 0,
+          total: 0,
+          cancelledCount: 0,
+          cancelReq: false,
+          edited: false,
+          resvCount: s.count,
+        };
+        groups.push(ng);
+        byUser.set(s.userId, ng);
+      }
+    }
+
     for (const g of groups)
       g.cats.sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
   }
@@ -165,7 +197,7 @@ export default async function AdminHotdeal(props: {
           발주 취합 보기
         </Link>
 
-        {orders.length === 0 ? (
+        {(combined ? groups.length === 0 : orders.length === 0) ? (
           <div className="empty">
             <p>
               {isSunday
@@ -202,7 +234,9 @@ export default async function AdminHotdeal(props: {
                     </div>
                     <div className="row__sub">
                       발주 {labelDate(g.date)} ·{" "}
-                      {g.cats.map((c) => CATEGORIES[c].label).join("·")} · 총 {g.items}건
+                      {g.cats.map((c) => CATEGORIES[c].label).join("·")}
+                      {g.items > 0 ? ` · 총 ${g.items}건` : ""}
+                      {g.resvCount > 0 ? ` · 공구예약 ${g.resvCount}건` : ""}
                     </div>
                   </Link>
                   {g.cancelReq && (

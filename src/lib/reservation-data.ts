@@ -344,3 +344,62 @@ export async function getReservationLinesForPickup(
   }));
 }
 
+// 픽업일(=출고일)의 확정 예약분을 '점포별'로 요약(userId 포함) — 발주(Order) 없는
+// 예약전용 점포까지 목록/합본에 띄우기 위함. 공구 벤더·관리자 핫딜마켓 발주에서 사용.
+export type ReservationStoreSummary = {
+  userId: string;
+  storeName: string;
+  count: number; // 예약 품목 줄 수
+  qty: number; // 총 수량
+};
+export async function getReservationStoresForPickup(
+  pickupDate: string,
+): Promise<ReservationStoreSummary[]> {
+  const items = await prisma.reservationOrderItem.findMany({
+    where: {
+      pickupDate,
+      qty: { gt: 0 },
+      order: { confirmed: true, batch: { active: true } },
+    },
+    select: {
+      qty: true,
+      order: { select: { userId: true, user: { select: { storeName: true } } } },
+    },
+  });
+  const map = new Map<string, ReservationStoreSummary>();
+  for (const it of items) {
+    const uid = it.order.userId;
+    const cur = map.get(uid) ?? {
+      userId: uid,
+      storeName: it.order.user.storeName,
+      count: 0,
+      qty: 0,
+    };
+    cur.count += 1;
+    cur.qty += it.qty;
+    map.set(uid, cur);
+  }
+  return [...map.values()].sort((a, b) =>
+    a.storeName.localeCompare(b.storeName),
+  );
+}
+
+// 한 점포의 픽업일 확정 예약분 품목(이름·수량 합산) — 예약전용 발주서·병합용.
+export async function getReservationItemsForStorePickup(
+  userId: string,
+  pickupDate: string,
+): Promise<ReservationLoadItem[]> {
+  const items = await prisma.reservationOrderItem.findMany({
+    where: {
+      pickupDate,
+      qty: { gt: 0 },
+      order: { userId, confirmed: true, batch: { active: true } },
+    },
+    select: { name: true, qty: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  const merged = new Map<string, number>();
+  for (const it of items) merged.set(it.name, (merged.get(it.name) ?? 0) + it.qty);
+  return [...merged.entries()].map(([name, qty]) => ({ name, qty }));
+}
+

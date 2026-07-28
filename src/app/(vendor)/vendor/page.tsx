@@ -14,6 +14,7 @@ import {
 } from "@/lib/date";
 import { LogoutButton } from "@/components/LogoutButton";
 import { VendorDateBar } from "@/components/VendorDateBar";
+import { getReservationStoresForPickup } from "@/lib/reservation-data";
 
 export default async function VendorPage(props: {
   searchParams: Promise<{ date?: string }>;
@@ -31,6 +32,17 @@ export default async function VendorPage(props: {
     include: { user: true, _count: { select: { items: true } } },
     orderBy: { createdAt: "desc" },
   });
+
+  // 공구 벤더(새롭)만: 이 출고일 확정 예약분이 있는 점포 중, 공구 담기 발주가 '없는' 점포도
+  // 목록에 띄운다(예약분은 실제 Order가 없어 원래 안 뜸 → 창고 준비 누락 방지).
+  const orderUserIds = new Set(orders.map((o) => o.userId));
+  const resvOnly =
+    user.role === "ADMIN_SAEROP"
+      ? (await getReservationStoresForPickup(date)).filter(
+          (s) => !orderUserIds.has(s.userId),
+        )
+      : [];
+  const nothing = orders.length === 0 && resvOnly.length === 0;
 
   return (
     <>
@@ -59,7 +71,7 @@ export default async function VendorPage(props: {
           {isToday ? "오늘 전체주문 집계 보기" : "이 날짜 전체주문 집계"}
         </Link>
 
-        {orders.length === 0 ? (
+        {nothing ? (
           <div className="empty">
             <p>
               {isSunday
@@ -90,6 +102,20 @@ export default async function VendorPage(props: {
                 </Link>
               );
             })}
+            {/* 예약분만 있는 점포(공구 담기 발주 없음) — 예약 발주서로 진입 */}
+            {resvOnly.map((s) => (
+              <Link
+                href={`/vendor/reservation/${s.userId}?date=${date}`}
+                className="row"
+                key={`resv-${s.userId}`}
+              >
+                <div className="row__main">
+                  <div className="row__title">{s.storeName}</div>
+                  <div className="row__sub">공구 예약분 {s.count}건</div>
+                </div>
+                <span className="badge badge--ai">예약</span>
+              </Link>
+            ))}
           </div>
         )}
 

@@ -36,9 +36,19 @@ export default async function AdminCombinedReceipt(props: {
     include: { items: { orderBy: { sortOrder: "asc" } } },
     orderBy: { createdAt: "asc" },
   });
-  // #9 발주취소로 전량 삭제되면(orders 0) 또는 잔존 CANCELLED만 남으면 → 404 대신 발주 목록으로.
   const active = orders.filter((o) => o.status !== "CANCELLED");
-  if (active.length === 0) redirect("/admin/hotdeal");
+
+  // 확정 예약분(픽업 = 발주일+1)을 합본 발주서에도 읽기전용으로 표시 — 창고 준비 누락 방지.
+  // (예약분은 실제 발주 Order에 복제되지 않아 별도 조회. 점주 발주화면 공구와 같은 소스·게이트)
+  const reservedTool =
+    merchant.role === "MERCHANT_HOTDEAL"
+      ? await getReservationLoadForOrder(userId, date)
+      : [];
+  const reservedPickup = shiftDate(date, 1);
+
+  // #9 발주취소로 전량 삭제되면(orders 0)/잔존 CANCELLED만 → 목록으로. 단 예약분만 있는
+  // 점포(발주 없이 확정 예약분만)는 예약분을 보여줘야 하므로 리다이렉트하지 않는다.
+  if (active.length === 0 && reservedTool.length === 0) redirect("/admin/hotdeal");
 
   // 같은 종류(과일/야채/공구/두부)는 한 섹션으로 병합 — 4종이 합쳐진 하나의 발주서
   type Item = { name: string; qty: string; note: string };
@@ -56,14 +66,6 @@ export default async function AdminCombinedReceipt(props: {
   const totalItems = sections.reduce((n, s) => n + s.items.length, 0);
   // 수령 방식(직접 픽업/배송) — 발주 1건 전체에 동일, 배송이면 매장 주소로 갖다줘야 함.
   const fulfillment = active.find((o) => o.fulfillment)?.fulfillment ?? null;
-
-  // 확정 예약분(픽업 = 발주일+1)을 합본 발주서에도 읽기전용으로 표시 — 창고 준비 누락 방지.
-  // (예약분은 실제 발주 Order에 복제되지 않아 별도 조회. 점주 발주화면 공구와 같은 소스·게이트)
-  const reservedTool =
-    merchant.role === "MERCHANT_HOTDEAL"
-      ? await getReservationLoadForOrder(userId, date)
-      : [];
-  const reservedPickup = shiftDate(date, 1);
 
   // 관리자 발주 수정 — 계산서 발행분은 잠금(정합).
   // combined의 date = '발주일'(createdAt 기준)인데 Invoice.date = '출고일'이라, 출고일로 매칭.
@@ -88,15 +90,17 @@ export default async function AdminCombinedReceipt(props: {
     <>
       <Topbar backHref="/admin/hotdeal" title="발주서" />
       <div className="page">
-        {/* #3 발주서 안 상단 발주취소(계산서는 목록으로) · #8 크게·전체폭 */}
-        <div style={{ marginBottom: 16 }}>
-          <CancelStoreOrdersButton
-            userId={userId}
-            date={date}
-            store={merchant.storeName}
-            big
-          />
-        </div>
+        {/* #3 발주서 안 상단 발주취소(계산서는 목록으로) · #8 크게·전체폭. 예약분만 있으면 취소할 발주가 없어 숨김. */}
+        {active.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <CancelStoreOrdersButton
+              userId={userId}
+              date={date}
+              store={merchant.storeName}
+              big
+            />
+          </div>
+        )}
 
         <div className="receipt" id="receipt-print">
           <div className="receipt__head">
@@ -115,9 +119,11 @@ export default async function AdminCombinedReceipt(props: {
                   {fulfillmentLabel(fulfillment)}
                 </span>
               )}
-              <span className="badge badge--mute">
-                {sections.length}종 · {totalItems}건
-              </span>
+              {sections.length > 0 && (
+                <span className="badge badge--mute">
+                  {sections.length}종 · {totalItems}건
+                </span>
+              )}
               {reservedTool.length > 0 && (
                 <span className="badge badge--ai">
                   예약분 {reservedTool.length}건
@@ -175,7 +181,9 @@ export default async function AdminCombinedReceipt(props: {
           <PrintButton />
         </div>
 
-        {/* 관리자 발주 수정 — 프린트 영역 밖. 종류별로 해당 발주를 고칠 수 있어요. */}
+        {/* 관리자 발주 수정 — 프린트 영역 밖. 종류별로 해당 발주를 고칠 수 있어요.
+            예약분만 있는 점포(발주 없음)는 고칠 발주가 없어 숨긴다. */}
+        {active.length > 0 && (
         <div className="card card--flat" style={{ marginTop: 18 }}>
           <div className="section-label" style={{ marginBottom: 10 }}>
             발주 수정
@@ -205,6 +213,7 @@ export default async function AdminCombinedReceipt(props: {
             </div>
           )}
         </div>
+        )}
       </div>
     </>
   );
