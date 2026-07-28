@@ -28,8 +28,9 @@ export default async function WarehousePage() {
       items: { select: { name: true, rawName: true } },
     },
   });
-  const todayCount = todayOrders.length;
   const todayStores = [...new Set(todayOrders.map((o) => o.user.storeName))];
+  // '오늘의 발주 N건' = 발주 넣은 지점 수(지점 8곳이면 8건). 발주 row 수가 아님.
+  const todayCount = todayStores.length;
   const todayItemNames = [
     ...new Set(
       todayOrders.flatMap((o) =>

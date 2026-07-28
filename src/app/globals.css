@@ -3048,7 +3048,15 @@ body {
 }
 .stockmeta__qty { font-weight: 700; color: var(--fg); }
 .stockmeta__qty.is-low { color: #b7791f; }
-.stockmeta__qty.is-out { color: var(--danger); }
+/* 품절 — 빨간 알약으로 눈에 띄게(재고 0이어도 숨기지 않고 품절 표시) */
+.stockmeta__qty.is-out {
+  color: #fff; background: var(--danger); border-radius: 999px;
+  padding: 1px 9px; font-weight: 800; font-size: 12px;
+}
+/* 품절 행 — 살짝 톤다운(깔끔한 강조). .list .row(투명)보다 우선하도록 특이도 확보 */
+.row--soldout,
+.list .row.row--soldout { background: rgba(220, 38, 38, 0.055); }
+.row--soldout .row__title { color: var(--muted); }
 .stockmeta__exp.is-warn { color: var(--danger); font-weight: 600; }
 .stockmeta__mine { color: var(--green-700); font-weight: 700; }
 /* 예약발주 연동 잠금 행 — 담기 불가, '예약발주 진행 중' */
@@ -3818,7 +3826,34 @@ a.resv-card:active { transform: scale(0.995); }
 .whpal__meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .whpal__placed { font-size: 11px; color: #7ea2e6; background: #17233b; padding: 2px 6px; border-radius: 6px; }
 .whpal__qty { font-size: 12px; color: #8ea0bd; min-width: 20px; text-align: right; }
-.whside__hint { padding: 10px 14px; font-size: 11px; line-height: 1.6; color: #6b7f9e; border-top: 1px solid #22304a; }
+.whpal__qty.is-out { color: #f87171; font-weight: 800; }
+.whpal__item--exp { background: #2c1d10; }
+.whpal__item--exp .whpal__name { color: #fbbf24; }
+.whpal__expbadge { margin-right: 4px; }
+
+/* 우클릭 컨텍스트 메뉴(박스 삭제/이름변경) */
+.whmenu__scrim { position: fixed; inset: 0; z-index: 5000; }
+.whmenu {
+  position: fixed; z-index: 5001; min-width: 132px; background: #1a2438;
+  border: 1px solid #30425f; border-radius: 8px; padding: 4px; box-shadow: 0 8px 28px #0009;
+}
+.whmenu button {
+  display: block; width: 100%; text-align: left; border: none; background: none;
+  color: #dbe4f2; font-family: inherit; font-size: 13.5px; font-weight: 600;
+  padding: 9px 12px; border-radius: 6px; cursor: pointer;
+}
+.whmenu button:hover { background: #26344e; }
+.whmenu__del { color: #ff6b8a; }
+
+/* 자동 저장 표시 칩 */
+.whsave {
+  position: fixed; right: 18px; bottom: 18px; z-index: 4000;
+  background: #16351f; color: #7ee0a0; border: 1px solid #2f6b45;
+  font-size: 12.5px; font-weight: 700; padding: 8px 14px; border-radius: 999px;
+  opacity: 0; transform: translateY(6px);
+  transition: opacity 0.2s ease, transform 0.2s ease; pointer-events: none;
+}
+.whsave.is-on { opacity: 1; transform: translateY(0); }
 
 /* 캔버스(평면도) */
 .whcanvaswrap { flex: 1; overflow: auto; position: relative; background: #0b1119; }
@@ -3839,13 +3874,22 @@ a.resv-card:active { transform: scale(0.995); }
 .whbox {
   position: absolute; box-sizing: border-box;
   background: #dbeafe; border: 2px solid #2563eb; border-radius: 6px;
-  display: flex; align-items: center; justify-content: center; text-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; text-align: center;
   color: #14243f; font-weight: 700; font-size: 13px; line-height: 1.25;
   cursor: grab; touch-action: none; user-select: none; overflow: hidden; padding: 4px;
 }
 .whbox:active { cursor: grabbing; }
 .whbox--sel { border-color: #ff3b6b; box-shadow: 0 0 0 2px #ff3b6b40; background: #e3edff; }
-.whbox__label { pointer-events: none; overflow: hidden; text-overflow: ellipsis; }
+.whbox__label { pointer-events: none; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+/* 남은수량(재고현황 실시간) — 박스 라벨 밑 */
+.whbox__qty { pointer-events: none; font-size: 11px; font-weight: 800; color: #1d4ed8; }
+.whbox__qty.is-out { color: #dc2626; }
+/* 품절 박스 — 빨강 틴트 */
+.whbox--out { background: #fee2e2; border-color: #dc2626; color: #7f1d1d; }
+.whbox--out .whbox__label { color: #7f1d1d; }
+/* 유통기한 필터 ON — 임박 아닌 박스는 흐리게 */
+.whbox--dim { opacity: 0.3; filter: grayscale(0.45); }
 .whbox__del {
   position: absolute; top: -10px; right: -10px; width: 20px; height: 20px;
   border-radius: 50%; border: none; background: #ff3b6b; color: #fff;

@@ -157,8 +157,44 @@ export function WarehouseBoard({
   const [canvas, setCanvas] = useState(CANVAS_DEFAULT); // #12 자유 리사이즈 캔버스
   const [formEdit, setFormEdit] = useState(false); // #12 폼박스(창문/문/계단) 편집모드 — OFF면 클릭 안 됨
   const [hovered, setHovered] = useState<string | null>(null); // #12 겹침: 호버 박스를 앞으로
+  const [liveQty, setLiveQty] = useState<Record<string, number>>({}); // 재고현황 실시간 남은수량
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null); // 우클릭 메뉴
+  const [saved, setSaved] = useState(false); // 자동 저장 표시
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const canvasRef = useRef(canvas);
   canvasRef.current = canvas;
+
+  // 자동 저장 표시(박스 추가/이동/리사이즈/삭제/이름변경은 즉시 DB 저장됨) — 잠깐 '자동 저장됨' 노출
+  const flashSaved = () => {
+    setSaved(true);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 1400);
+  };
+  const flashSavedRef = useRef(flashSaved);
+  flashSavedRef.current = flashSaved;
+
+  // 재고현황 실시간 폴링 — 박스/팔레트의 남은수량을 재고와 같이 바꾼다(6초, 탭 숨김 시 정지).
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        const res = await fetch("/api/warehouse/stock", { cache: "no-store" });
+        if (res.ok) {
+          const j = (await res.json()) as { qty?: Record<string, number> };
+          if (!cancelled && j.qty) setLiveQty(j.qty);
+        }
+      } catch {
+        /* noop */
+      }
+    };
+    poll();
+    const id = setInterval(poll, 6000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   // 캔버스 크기 복원(localStorage). 리사이즈 후 저장.
   useEffect(() => {
@@ -188,6 +224,16 @@ export function WarehouseBoard({
   const isExpiryBox = (b: BoxDTO) => {
     if (!b.itemId) return false;
     const info = expiryInfo(itemById.get(b.itemId)?.expiry ?? "");
+    return !!info && (info.level === "soon" || info.level === "expired");
+  };
+  // 품목 남은수량(실시간 우선, 없으면 SSR 값). null = 재고 아님(폼박스 등)
+  const qtyOf = (itemId: string | null | undefined): number | null => {
+    if (!itemId) return null;
+    if (itemId in liveQty) return liveQty[itemId];
+    return itemById.get(itemId)?.qty ?? null;
+  };
+  const isExpirySoonItem = (it: Item) => {
+    const info = expiryInfo(it.expiry);
     return !!info && (info.level === "soon" || info.level === "expired");
   };
 
@@ -221,6 +267,7 @@ export function WarehouseBoard({
     if (res?.ok && res.box) {
       setBoxes((b) => [...b, res.box!]);
       setSelected(res.box.id);
+      flashSavedRef.current();
     }
   };
 
@@ -240,6 +287,7 @@ export function WarehouseBoard({
       setBoxes((b) => [...b, res.box!]);
       setFormEdit(true);
       setSelected(res.box.id);
+      flashSavedRef.current();
     }
   };
 
@@ -247,6 +295,7 @@ export function WarehouseBoard({
     setBoxes((b) => b.filter((x) => x.id !== id));
     if (selectedRef.current === id) setSelected(null);
     await deleteBox(id).catch(() => {});
+    flashSavedRef.current();
   };
 
   const renameBox = async (box: BoxDTO) => {
@@ -254,6 +303,7 @@ export function WarehouseBoard({
     if (!next || next === box.label) return;
     setBoxes((b) => b.map((x) => (x.id === box.id ? { ...x, label: next } : x)));
     await updateBox({ id: box.id, label: next }).catch(() => {});
+    flashSavedRef.current();
   };
 
   const startDrag = (e: React.PointerEvent, box: BoxDTO) => {
@@ -303,7 +353,10 @@ export function WarehouseBoard({
       active.current = null;
       setGuides({ v: [], h: [] });
       const cur = boxesRef.current.find((b) => b.id === a.id);
-      if (cur) updateBox({ id: cur.id, x: cur.x, y: cur.y, w: cur.w, h: cur.h }).catch(() => {});
+      if (cur) {
+        updateBox({ id: cur.id, x: cur.x, y: cur.y, w: cur.w, h: cur.h }).catch(() => {});
+        flashSavedRef.current();
+      }
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -365,9 +418,6 @@ export function WarehouseBoard({
             >
               창고 보기 →
             </button>
-            <div className="whintro__hint">
-              평면도에서 오늘 발주 품목이 반짝여요.
-            </div>
           </div>
         </div>
       )}
@@ -417,21 +467,30 @@ export function WarehouseBoard({
           />
           <div className="whpal">
             {filtered.length === 0 && <div className="whpal__empty">품목이 없어요.</div>}
-            {filtered.map((it) => (
-              <button
-                key={it.id}
-                type="button"
-                className="whpal__item"
-                onClick={() => addItem(it)}
-                title="클릭하면 평면도에 박스로 추가돼요"
-              >
-                <span className="whpal__name">{it.name}</span>
-                <span className="whpal__meta">
-                  {placedItemIds.has(it.id) && <span className="whpal__placed">배치됨</span>}
-                  <span className="whpal__qty">{it.qty}</span>
-                </span>
-              </button>
-            ))}
+            {filtered.map((it) => {
+              const qv = qtyOf(it.id) ?? it.qty;
+              const soldOut = qv <= 0;
+              const expSoon = expiryOn && isExpirySoonItem(it);
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={`whpal__item${expSoon ? " whpal__item--exp" : ""}`}
+                  onClick={() => addItem(it)}
+                >
+                  <span className="whpal__name">
+                    {expSoon && <span className="whpal__expbadge">⏳</span>}
+                    {it.name}
+                  </span>
+                  <span className="whpal__meta">
+                    {placedItemIds.has(it.id) && <span className="whpal__placed">배치됨</span>}
+                    <span className={`whpal__qty${soldOut ? " is-out" : ""}`}>
+                      {soldOut ? "품절" : `${qv}개`}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
           <div className="whforms">
             <div className="whforms__hd">
@@ -459,9 +518,6 @@ export function WarehouseBoard({
             </div>
           </div>
 
-          <div className="whside__hint">
-            품목을 클릭해 추가 · 드래그로 이동 · 모서리로 크기조절 · 자동정렬(스냅) · Delete로 삭제 · 겹치면 마우스를 올려 앞으로
-          </div>
         </aside>
 
         <div className="whcanvaswrap">
@@ -485,6 +541,9 @@ export function WarehouseBoard({
               const isForm = b.color === "form"; // 폼박스(구조물)
               const today = !isForm && isTodayBox(b.label); // 오늘 발주 품목 → 반짝
               const expSoon = !isForm && expiryOn && isExpiryBox(b); // 유통기한 임박 토글 ON + 임박
+              // 유통기한 필터 ON일 때 임박 아닌 재고 박스는 흐리게(임박만 도드라지게 필터 효과)
+              const dim = !isForm && expiryOn && !expSoon;
+              const qv = qtyOf(b.itemId); // 남은수량(재고 박스만)
               // 폼박스는 편집모드 아니면 클릭 안 됨(배경 고정). z: 폼박스는 뒤, 재고는 앞, 호버/선택은 최상.
               const clickable = !isForm || formEdit;
               let zi = isForm ? b.z : 1000 + b.z;
@@ -494,7 +553,7 @@ export function WarehouseBoard({
               return (
                 <div
                   key={b.id}
-                  className={`whbox ${isForm ? "whbox--form" : ""} ${sel ? "whbox--sel" : ""} ${today ? "whbox--today" : ""} ${expSoon ? "whbox--expiry" : ""}`}
+                  className={`whbox ${isForm ? "whbox--form" : ""} ${sel ? "whbox--sel" : ""} ${today ? "whbox--today" : ""} ${expSoon ? "whbox--expiry" : ""} ${dim ? "whbox--dim" : ""} ${qv != null && qv <= 0 ? "whbox--out" : ""}`}
                   style={{
                     left: b.x,
                     top: b.y,
@@ -505,10 +564,21 @@ export function WarehouseBoard({
                   }}
                   onPointerDown={(e) => clickable && startDrag(e, b)}
                   onDoubleClick={() => clickable && renameBox(b)}
+                  onContextMenu={(e) => {
+                    if (!clickable) return;
+                    e.preventDefault();
+                    setSelected(b.id);
+                    setMenu({ id: b.id, x: e.clientX, y: e.clientY });
+                  }}
                   onPointerEnter={() => !isForm && setHovered(b.id)}
                   onPointerLeave={() => setHovered((h) => (h === b.id ? null : h))}
                 >
                   <span className="whbox__label">{b.label}</span>
+                  {!isForm && qv != null && (
+                    <span className={`whbox__qty${qv <= 0 ? " is-out" : ""}`}>
+                      {qv <= 0 ? "품절" : `${qv}개`}
+                    </span>
+                  )}
                   {sel && (
                     <button
                       type="button"
@@ -567,6 +637,48 @@ export function WarehouseBoard({
           </div>
           {loading && <div className="whloading">불러오는 중…</div>}
         </div>
+      </div>
+
+      {/* 우클릭 컨텍스트 메뉴 — 삭제/이름변경 */}
+      {menu && (
+        <>
+          <div
+            className="whmenu__scrim"
+            onPointerDown={() => setMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu(null);
+            }}
+          />
+          <div className="whmenu" style={{ left: menu.x, top: menu.y }}>
+            <button
+              type="button"
+              onClick={() => {
+                const b = boxesRef.current.find((x) => x.id === menu.id);
+                setMenu(null);
+                if (b) renameBox(b);
+              }}
+            >
+              이름 변경
+            </button>
+            <button
+              type="button"
+              className="whmenu__del"
+              onClick={() => {
+                const id = menu.id;
+                setMenu(null);
+                removeBox(id);
+              }}
+            >
+              삭제
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* 자동 저장 표시 */}
+      <div className={`whsave${saved ? " is-on" : ""}`} aria-live="polite">
+        ✓ 자동 저장됨
       </div>
     </div>
   );
