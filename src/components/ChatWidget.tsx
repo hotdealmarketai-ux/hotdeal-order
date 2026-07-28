@@ -545,7 +545,7 @@ export function ChatWidget() {
                 className="chatbcast-btn"
                 onClick={() => setBroadcastOpen(true)}
               >
-                📢 전체공지 보내기
+                전체공지 보내기
               </button>
             </div>
             <div className="chatlist" ref={scrollRef}>

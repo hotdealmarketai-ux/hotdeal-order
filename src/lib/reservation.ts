@@ -67,7 +67,7 @@ export function reservationStatusOf(
   if (isReservationClosed(reserveDate, now)) {
     return order?.confirmed && has
       ? { label: "예약 확정", cls: "badge--ok", locked: true }
-      : { label: "예약 마감", cls: "badge--mute", locked: true };
+      : { label: "예약 마감", cls: "badge--danger", locked: true };
   }
   if (order?.confirmed && has) return { label: "확정됨", cls: "badge--ai", locked: true };
   // 담은 게 없으면 '예약 중'이 아니라 '예약 가능'(사용자 요청 — 다 0이면 예약 중 풀림).

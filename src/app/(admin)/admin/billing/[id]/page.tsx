@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { canOrderWeekly, type Role } from "@/lib/constants";
 import { labelDate } from "@/lib/date";
 import { BillingLauncher } from "@/components/BillingLauncher";
 
@@ -55,7 +54,7 @@ export default async function AdminBillingMerchantPage(props: {
         <div className="itemshead">
           <span className="itemshead__label">계산서 발행</span>
         </div>
-        <BillingLauncher userId={merchant.id} canWeekly={canOrderWeekly(merchant.role as Role)} />
+        <BillingLauncher userId={merchant.id} />
 
         <div className="itemshead" style={{ marginTop: 24 }}>
           <span className="itemshead__label">발행된 계산서</span>
@@ -67,15 +66,22 @@ export default async function AdminBillingMerchantPage(props: {
           <div className="list">
             {invoices.map((inv) => {
               const s = STATUS[inv.status] ?? STATUS.ISSUED;
+              const isDraft = inv.status === "DRAFT";
               return (
-                <Link href={`/admin/invoices/${inv.id}`} className="row" key={inv.id}>
+                <Link
+                  href={`/admin/invoices/${inv.id}`}
+                  className={`row${isDraft ? " row--draft" : ""}`}
+                  key={inv.id}
+                >
                   <div className="row__main">
                     <div className="row__title">
                       {labelDate(inv.date)} · {KIND[inv.kind] ?? inv.kind}
                     </div>
                     <div className="row__sub">{won(inv.total)}원</div>
                   </div>
-                  <span className={`badge ${s.cls}`}>{s.label}</span>
+                  <span className={`badge ${isDraft ? "badge--onbrand" : s.cls}`}>
+                    {s.label}
+                  </span>
                 </Link>
               );
             })}

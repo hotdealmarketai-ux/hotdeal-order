@@ -26,12 +26,12 @@ export default async function VendorPage(props: {
   const isSunday = dowOf(date) === 0; // 일요일은 출고 없음
   const { start, end } = orderRangeForShipment(date);
   const isToday = date === kstToday();
+  // 새롭 본사 출고 = 공구(ADMIN_SAEROP) + 채움채(VENDOR_CHAEUMCHAE)를 지점별로 하나로 묶어 본다.
+  const isSaerop = user.role === "ADMIN_SAEROP";
 
-  // 새롭 본사 출고 = 공구(ADMIN_SAEROP) + 채움채(VENDOR_CHAEUMCHAE) 발주를 함께. 다른 벤더는 본인 것만.
-  const vendorRoles =
-    user.role === "ADMIN_SAEROP"
-      ? ["ADMIN_SAEROP", "VENDOR_CHAEUMCHAE"]
-      : [user.role];
+  const vendorRoles = isSaerop
+    ? ["ADMIN_SAEROP", "VENDOR_CHAEUMCHAE"]
+    : [user.role];
 
   const orders = await prisma.order.findMany({
     where: { vendorRole: { in: vendorRoles }, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
@@ -39,21 +39,21 @@ export default async function VendorPage(props: {
     orderBy: { createdAt: "desc" },
   });
 
-  // 공구 벤더(새롭)만: 이 출고일 확정 예약분. 발주 있는 점포는 그 행에 예약분을 함께 표시하고,
-  // 발주가 '없는'(예약전용) 점포는 별도 행으로 목록에 띄운다(창고 준비 누락 방지).
-  const orderUserIds = new Set(orders.map((o) => o.userId));
-  const resvStores =
-    user.role === "ADMIN_SAEROP" ? await getReservationStoresForPickup(date) : [];
-  const resvByUser = new Map(resvStores.map((s) => [s.userId, s]));
-  const resvOnly = resvStores.filter((s) => !orderUserIds.has(s.userId));
-  // 같은 점포에 발주가 여러 건이어도 예약분은 첫 행에만 한 번 표시(중복/합산 오해 방지).
-  const resvRowIds = new Set<string>();
-  const seenResv = new Set<string>();
-  for (const o of orders) {
-    if (!seenResv.has(o.userId) && resvByUser.has(o.userId)) resvRowIds.add(o.id);
-    seenResv.add(o.userId);
-  }
-  const nothing = orders.length === 0 && resvOnly.length === 0;
+  // 공구 벤더(새롭)만: 이 출고일 확정 예약분(픽업=출고일).
+  const resvStores = isSaerop ? await getReservationStoresForPickup(date) : [];
+
+  // ── 본사 출고: 지점별로 1행(공구+채움채+예약분 통합). 딱 지점명만. ──
+  const storeRows = (() => {
+    if (!isSaerop) return [];
+    const m = new Map<string, string>(); // userId -> storeName
+    for (const o of orders) m.set(o.userId, o.user.storeName);
+    for (const s of resvStores) if (!m.has(s.userId)) m.set(s.userId, s.storeName);
+    return [...m.entries()]
+      .map(([userId, storeName]) => ({ userId, storeName }))
+      .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
+  })();
+
+  const nothing = isSaerop ? storeRows.length === 0 : orders.length === 0;
 
   return (
     <>
@@ -62,24 +62,32 @@ export default async function VendorPage(props: {
         right={<TopbarChip>{VENDOR_LABEL[user.role] ?? user.storeName}</TopbarChip>}
       />
       <div className="page">
-        <h1 className="h1">발주 목록</h1>
-        <p className="lead" style={{ marginBottom: 2 }}>
-          출고 {labelDate(date)}
-          {isToday ? " (오늘)" : ""} · {orders.length}건
-        </p>
+        {isSaerop ? (
+          <h1 className="h1" style={{ textAlign: "center" }}>발주 목록</h1>
+        ) : (
+          <>
+            <h1 className="h1">발주 목록</h1>
+            <p className="lead" style={{ marginBottom: 2 }}>
+              출고 {labelDate(date)}
+              {isToday ? " (오늘)" : ""} · {orders.length}건
+            </p>
+          </>
+        )}
 
-        <VendorDateBar
-          date={date}
-          labelPrefix="출고 "
-          max={shipmentDayOf(kstToday())}
-        />
+        <div style={{ marginTop: isSaerop ? 18 : 0 }}>
+          <VendorDateBar
+            date={date}
+            labelPrefix="출고 "
+            max={shipmentDayOf(kstToday())}
+          />
+        </div>
 
         <Link
           href={`/vendor/summary?date=${date}`}
           className="btn btn--primary"
           style={{ marginBottom: 16 }}
         >
-          {isToday ? "오늘 전체주문 집계 보기" : "이 날짜 전체주문 집계"}
+          {isSaerop ? "집계" : isToday ? "오늘 전체주문 집계 보기" : "이 날짜 전체주문 집계"}
         </Link>
 
         {nothing ? (
@@ -89,6 +97,22 @@ export default async function VendorPage(props: {
                 ? "일요일은 출고가 없어요. (토·일 발주는 월요일 출고)"
                 : "이 날 출고할 발주가 없습니다."}
             </p>
+          </div>
+        ) : isSaerop ? (
+          // 본사 출고 — 지점명만, 핑퐁 지브라, 화살표만. 눌러서 통합 발주서로.
+          <div className="list vstorelist">
+            {storeRows.map((s) => (
+              <Link
+                href={`/vendor/store/${s.userId}?date=${date}`}
+                className="row"
+                key={s.userId}
+              >
+                <div className="row__main">
+                  <div className="row__title">{s.storeName}</div>
+                </div>
+                <span className="row__chev">›</span>
+              </Link>
+            ))}
           </div>
         ) : (
           <div className="list">
@@ -101,40 +125,18 @@ export default async function VendorPage(props: {
                     <div className="row__sub">
                       {formatKDateTime(o.createdAt)} · {cat.label} {o._count.items}건
                       {o.pickupTime ? ` · 픽업 ${o.pickupTime}` : ""}
-                      {resvRowIds.has(o.id)
-                        ? ` · 예약분 ${resvByUser.get(o.userId)!.count}건`
-                        : ""}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    {resvRowIds.has(o.id) && (
-                      <span className="badge badge--ai">예약</span>
-                    )}
-                    {o.edited && !o.confirmed ? (
-                      <span className="badge badge--edit">발주 수정</span>
-                    ) : o.confirmed ? (
-                      <span className="badge badge--ok">발주 확인</span>
-                    ) : (
-                      <span className="row__chev">›</span>
-                    )}
-                  </div>
+                  {o.edited && !o.confirmed ? (
+                    <span className="badge badge--edit">발주 수정</span>
+                  ) : o.confirmed ? (
+                    <span className="badge badge--ok">발주 확인</span>
+                  ) : (
+                    <span className="row__chev">›</span>
+                  )}
                 </Link>
               );
             })}
-            {/* 예약분만 있는 점포(공구 담기 발주 없음) — 예약 발주서로 진입 */}
-            {resvOnly.map((s) => (
-              <Link
-                href={`/vendor/reservation/${s.userId}?date=${date}`}
-                className="row"
-                key={`resv-${s.userId}`}
-              >
-                <div className="row__main">
-                  <div className="row__title">{s.storeName}</div>
-                  <div className="row__sub">공구 예약분 {s.count}건</div>
-                </div>
-                <span className="badge badge--ai">예약</span>
-              </Link>
-            ))}
           </div>
         )}
 
