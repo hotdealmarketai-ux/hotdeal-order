@@ -20,7 +20,7 @@ import {
   ORDER_OPEN_LABEL,
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
-import { kstToday, kstDateOf, kstDayRange, fullKLabel } from "@/lib/date";
+import { kstToday, kstDateOf, kstDayRange, fullKLabel, shipmentDayOf } from "@/lib/date";
 import { currentWindowStartUtc } from "@/lib/schedule";
 import { displayQty } from "@/lib/qty";
 import { commitStockHolds } from "@/lib/stock-hold";
@@ -561,12 +561,14 @@ export async function updateOrderAction(
     return { error: "지난 발주는 수정할 수 없어요. 본사에 문의해 주세요." };
   }
 
-  // 계산서가 발행된 날짜의 발주는 수정 불가(역할 무관) — 청구액↔발주 내용 불일치 방지.
+  // 계산서가 발행된 발주는 수정 불가(역할 무관) — 청구액↔발주 내용 불일치 방지.
+  // 계산서 Invoice.date = '출고일'(발주일+1) 기준이라, 발주의 출고일로 매칭해야 함.
+  // (발주일로 찾으면 '어제 발주분(오늘 출고)' 계산서와 '오늘 넣은 발주(내일 출고)'가 겹쳐 오작동)
   const issuedInv = await prisma.invoice.findFirst({
     where: {
       userId: user.id,
       kind: "DAILY",
-      date: kstDateOf(order.createdAt),
+      date: shipmentDayOf(kstDateOf(order.createdAt)),
       status: { in: ["ISSUED", "PAID"] },
     },
     select: { id: true },
@@ -714,11 +716,12 @@ export async function adminUpdateOrderAction(
   }
 
   // 계산서 발행분은 잠금(청구액↔발주 정합) — 관리자도 동일. 발행 후 변경은 계산서 수정으로.
+  // Invoice.date = 출고일 기준 → 발주의 출고일(shipmentDayOf)로 매칭(발주일로 찾으면 하루 어긋나 오작동).
   const issuedInv = await prisma.invoice.findFirst({
     where: {
       userId: order.userId,
       kind: "DAILY",
-      date: kstDateOf(order.createdAt),
+      date: shipmentDayOf(kstDateOf(order.createdAt)),
       status: { in: ["ISSUED", "PAID"] },
     },
     select: { id: true },

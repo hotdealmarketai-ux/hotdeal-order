@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { kstDayRange, kstDateOf, normalizeExpiry } from "@/lib/date";
+import { kstDayRange, kstDateOf, normalizeExpiry, shipmentDayOf } from "@/lib/date";
 import {
   safePushInventory,
   setInventoryPushPending,
@@ -856,8 +856,9 @@ export async function cancelStoreOrdersAction(
     where: { userId, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     select: { id: true, createdAt: true },
   });
-  // 계산서(미수)가 발행됐으면 취소 불가 — 먼저 계산서 VOID 필요
-  const invDates = [...new Set(targets.map((o) => kstDateOf(o.createdAt)))];
+  // 계산서(미수)가 발행됐으면 취소 불가 — 먼저 계산서 VOID 필요.
+  // Invoice.date = '출고일' 기준이라 발주의 출고일(shipmentDayOf)로 매칭(발주일로 찾으면 하루 어긋남).
+  const invDates = [...new Set(targets.map((o) => shipmentDayOf(kstDateOf(o.createdAt))))];
   if (invDates.length > 0) {
     const inv = await prisma.invoice.findFirst({
       where: { userId, kind: "DAILY", date: { in: invDates }, status: { in: ["ISSUED", "PAID"] } },

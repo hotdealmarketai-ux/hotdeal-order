@@ -9,7 +9,7 @@ import {
   fulfillmentLabel,
   type Category,
 } from "@/lib/constants";
-import { kstDayRange, labelDate, normalizeDateStr } from "@/lib/date";
+import { kstDayRange, labelDate, normalizeDateStr, shipmentDayOf } from "@/lib/date";
 import { PrintButton } from "@/components/PrintButton";
 import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
 
@@ -50,12 +50,13 @@ export default async function AdminCombinedReceipt(props: {
   // 수령 방식(직접 픽업/배송) — 발주 1건 전체에 동일, 배송이면 매장 주소로 갖다줘야 함.
   const fulfillment = active.find((o) => o.fulfillment)?.fulfillment ?? null;
 
-  // 관리자 발주 수정 — 계산서 발행분(user+date DAILY ISSUED/PAID)은 잠금(정합)
+  // 관리자 발주 수정 — 계산서 발행분은 잠금(정합).
+  // combined의 date = '발주일'(createdAt 기준)인데 Invoice.date = '출고일'이라, 출고일로 매칭.
   const issuedInv = await prisma.invoice.findFirst({
     where: {
       userId,
       kind: "DAILY",
-      date,
+      date: shipmentDayOf(date),
       status: { in: ["ISSUED", "PAID"] },
     },
     select: { id: true },

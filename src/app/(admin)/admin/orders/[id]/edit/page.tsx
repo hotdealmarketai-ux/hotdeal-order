@@ -11,7 +11,7 @@ import {
   type Fulfillment,
   type Role,
 } from "@/lib/constants";
-import { kstDateOf } from "@/lib/date";
+import { kstDateOf, shipmentDayOf } from "@/lib/date";
 import { EditOrderForm } from "@/components/EditOrderForm";
 import { adminUpdateOrderAction } from "@/app/actions/order";
 
@@ -35,11 +35,12 @@ export default async function AdminEditOrderPage(props: {
   if (order.status === "CANCELLED") redirect(backHref);
 
   // 계산서(입금요청서) 발행분은 잠금 — 발행 후 변경은 계산서 수정으로
+  // Invoice.date = 출고일 기준 → 발주의 출고일로 매칭(발주일로 찾으면 하루 어긋나 오작동)
   const issuedInv = await prisma.invoice.findFirst({
     where: {
       userId: order.userId,
       kind: "DAILY",
-      date: kstDateOf(order.createdAt),
+      date: shipmentDayOf(kstDateOf(order.createdAt)),
       status: { in: ["ISSUED", "PAID"] },
     },
     select: { id: true },

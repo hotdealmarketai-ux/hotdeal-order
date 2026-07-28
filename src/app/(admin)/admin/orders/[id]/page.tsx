@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, ROLE_LABEL, type Category, type Role } from "@/lib/constants";
 import { formatKDateTime } from "@/lib/format";
-import { kstDateOf } from "@/lib/date";
+import { kstDateOf, shipmentDayOf } from "@/lib/date";
 import { ReceiptCard } from "@/components/ReceiptCard";
 
 export default async function AdminOrderDetail(props: {
@@ -32,7 +32,8 @@ export default async function AdminOrderDetail(props: {
           where: {
             userId: order.userId,
             kind: "DAILY",
-            date: kstDateOf(order.createdAt),
+            // Invoice.date = 출고일 기준 → 발주의 출고일로 매칭(발주일로 찾으면 하루 어긋나 오작동)
+            date: shipmentDayOf(kstDateOf(order.createdAt)),
             status: { in: ["ISSUED", "PAID"] },
           },
           select: { id: true },

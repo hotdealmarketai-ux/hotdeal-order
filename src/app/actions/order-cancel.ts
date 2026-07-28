@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireMerchant, requireAdmin } from "@/lib/session";
 import { currentWindowStartUtc, currentDeadlineUtc } from "@/lib/schedule";
-import { kstDateOf } from "@/lib/date";
+import { kstDateOf, shipmentDayOf } from "@/lib/date";
 import { writeAudit } from "@/lib/audit";
 import {
   notifyAdminOrderCancelRequest,
@@ -13,8 +13,9 @@ import {
 } from "@/lib/push";
 import { restoreStockForOrder } from "@/lib/stock-hold";
 
-// 발행된 계산서(미수)가 있으면 취소 불가 — 해당 날짜(들)의 DAILY ISSUED/PAID 존재 여부.
+// 발행된 계산서(미수)가 있으면 취소 불가 — 해당 '출고일'(들)의 DAILY ISSUED/PAID 존재 여부.
 // (계산서가 발행되면 이미 청구/출고 기준이 잡힌 것 → 관리자가 먼저 계산서를 VOID해야 취소 가능)
+// ⚠ dates는 발주의 '출고일'(shipmentDayOf) 목록 — Invoice.date가 출고일 기준이라 발주일로 넘기면 오작동.
 async function hasIssuedInvoice(userId: string, dates: string[]): Promise<boolean> {
   if (dates.length === 0) return false;
   const inv = await prisma.invoice.findFirst({
@@ -46,7 +47,7 @@ export async function requestCancelOrderAction(formData: FormData) {
   });
   if (orders.length === 0) redirect("/order");
 
-  const dates = [...new Set(orders.map((o) => kstDateOf(o.createdAt)))];
+  const dates = [...new Set(orders.map((o) => shipmentDayOf(kstDateOf(o.createdAt))))];
   if (await hasIssuedInvoice(user.id, dates)) redirect("/order?cancelErr=invoiced");
 
   await prisma.order.updateMany({
@@ -69,7 +70,7 @@ export async function approveCancelRequestAction(formData: FormData) {
   });
   if (orders.length === 0) redirect("/admin/hotdeal");
 
-  const dates = [...new Set(orders.map((o) => kstDateOf(o.createdAt)))];
+  const dates = [...new Set(orders.map((o) => shipmentDayOf(kstDateOf(o.createdAt))))];
   if (await hasIssuedInvoice(userId, dates)) redirect("/admin/hotdeal?cancelErr=invoiced");
 
   // 삭제 전 — 공구(TOOL) 담기분 기준재고 복구(취소=출고 안 함). 재고조사가 최종 정합.
