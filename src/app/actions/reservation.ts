@@ -87,7 +87,11 @@ export async function saveReservationBatchAction(
     }
     if (!locked && reserveDate !== existing.reserveDate) {
       const dup = await prisma.reservationBatch.findUnique({ where: { reserveDate } });
-      if (dup && dup.id !== batchId) return { error: "그 예약일자는 이미 있어요." };
+      if (dup && dup.id !== batchId) {
+        if (dup.active) return { error: "그 예약일자는 이미 있어요." };
+        // 숨겨진(삭제된) 예약이 그 날짜를 점유 중 → 하드 삭제해 유니크 충돌 해소.
+        await prisma.reservationBatch.delete({ where: { id: dup.id } });
+      }
     }
     await prisma.reservationBatch.update({
       where: { id: batchId },
@@ -96,7 +100,11 @@ export async function saveReservationBatchAction(
   } else {
     const dup = await prisma.reservationBatch.findUnique({ where: { reserveDate } });
     if (dup) {
-      return { error: "그 예약일자는 이미 있어요. 기존 예약을 눌러 수정해 주세요." };
+      if (dup.active) {
+        return { error: "그 예약일자는 이미 있어요. 기존 예약을 눌러 수정해 주세요." };
+      }
+      // 숨겨진(삭제된) 예약이 그 날짜를 점유 중 → 하드 삭제하고 새로 만든다(유니크 충돌 해소).
+      await prisma.reservationBatch.delete({ where: { id: dup.id } });
     }
     const b = await prisma.reservationBatch.create({
       data: { reserveDate, pickupDate: batchPickup },
@@ -202,6 +210,35 @@ export async function deleteReservationBatchAction(formData: FormData) {
   revalidatePath("/admin/reservations");
   revalidatePath("/reservations");
   redirect("/admin/reservations");
+}
+
+// 숨겨진(삭제·active=false) 예약 배치를 '완전 삭제'(상품·주문·아이템 cascade). 유니크 날짜 점유 해소.
+// soft-delete는 집계 보존용이나, 같은 예약일자 재생성을 막는 부작용이 있어 관리자가 정리할 수 있게.
+export async function purgeHiddenReservationsAction(): Promise<{
+  ok: boolean;
+  count: number;
+}> {
+  const admin = await requireAdmin();
+  const hidden = await prisma.reservationBatch.findMany({
+    where: { active: false },
+    select: { id: true },
+  });
+  const ids = hidden.map((h) => h.id);
+  let count = 0;
+  if (ids.length > 0) {
+    const res = await prisma.reservationBatch.deleteMany({ where: { id: { in: ids } } });
+    count = res.count;
+  }
+  await writeAudit({
+    action: "reservation.purgeHidden",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "ReservationBatch",
+    targetId: "",
+    summary: `숨겨진 예약 ${count}개 완전삭제`,
+  });
+  revalidatePath("/admin/reservations");
+  return { ok: true, count };
 }
 
 // ── 점주(핫딜마켓) 예약 확정/수정 ─────────────────────────────

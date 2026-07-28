@@ -15,6 +15,11 @@ function distinctPickups(products: { pickupDate: string }[]): string[] {
   return [...new Set(products.map((p) => p.pickupDate).filter(Boolean))].sort();
 }
 
+// 숨겨진(삭제·active=false) 예약 배치 수 — 관리자 '숨겨진 예약 정리' 버튼 노출 판단용.
+export async function countHiddenReservationBatches(): Promise<number> {
+  return prisma.reservationBatch.count({ where: { active: false } });
+}
+
 // 관리자 목록 — 활성 배치 + 상품/예약 건수 + 픽업일 목록. 예약일자 내림차순.
 export async function getReservationBatchesAdmin(): Promise<ReservationBatchListItem[]> {
   const batches = await prisma.reservationBatch.findMany({

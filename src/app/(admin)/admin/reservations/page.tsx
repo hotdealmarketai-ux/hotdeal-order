@@ -1,13 +1,20 @@
 import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
-import { getReservationBatchesAdmin } from "@/lib/reservation-data";
+import {
+  getReservationBatchesAdmin,
+  countHiddenReservationBatches,
+} from "@/lib/reservation-data";
+import { PurgeHiddenReservationsButton } from "@/components/PurgeHiddenReservationsButton";
 import { labelDate } from "@/lib/date";
 import { isReservationClosed } from "@/lib/reservation";
 
 export default async function AdminReservationsPage() {
   await requireAdmin();
-  const batches = await getReservationBatchesAdmin();
+  const [batches, hiddenCount] = await Promise.all([
+    getReservationBatchesAdmin(),
+    countHiddenReservationBatches(),
+  ]);
 
   return (
     <>
@@ -53,6 +60,9 @@ export default async function AdminReservationsPage() {
         >
           + 새 예약일자 만들기
         </Link>
+
+        {/* 숨겨진(삭제된) 예약이 같은 날짜 재생성을 막을 때 완전 삭제 */}
+        <PurgeHiddenReservationsButton count={hiddenCount} />
       </div>
     </>
   );
