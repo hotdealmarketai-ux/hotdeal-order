@@ -154,13 +154,13 @@ export default async function AdminHotdeal(props: {
         <div className="pushcard" style={{ marginBottom: 12 }}>
           <div className="pushcard__main">
             <div className="pushcard__title">일반발주 임시 오픈</div>
-            <div className="pushcard__sub">
-              {naturalOpen
-                ? "지금은 발주 시간이에요."
-                : forceOpen
-                  ? "임시 오픈 중 — 지금 발주 가능"
-                  : "운영시간(낮12~밤8시)이 아니어도 열어요 (테스트용)"}
-            </div>
+            {(naturalOpen || forceOpen) && (
+              <div className="pushcard__sub">
+                {naturalOpen
+                  ? "지금은 발주 시간이에요."
+                  : "임시 오픈 중 — 지금 발주 가능"}
+              </div>
+            )}
           </div>
           <form action={setDailyForceOpenAction}>
             <input type="hidden" name="on" value={forceOpen ? "false" : "true"} />
