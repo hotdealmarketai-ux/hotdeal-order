@@ -12,6 +12,7 @@ import {
 } from "@/lib/constants";
 import { kstDayRange, labelDate } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
+import { sumQty } from "@/lib/qty";
 import { getReservationInvoiceItems } from "@/lib/reservation-data";
 import {
   InvoiceForm,
@@ -201,11 +202,14 @@ export default async function AdminInvoiceDetail(props: {
             <div className="invcat" key={c}>
               <div className="invcat__head">
                 <span className="chip">{CATEGORIES[c].label}</span>
-                <span className="invcat__sum">{fmt(sum)}원</span>
+                <span className="invcat__sum">
+                  총 {fmt(sumQty(items.map((it) => String(it.qty))))}개 · {fmt(sum)}원
+                </span>
               </div>
-              {items.map((it) => (
+              {items.map((it, i) => (
                 <div className="invline" key={it.id}>
                   <span>
+                    <span className="receipt-item__no">{i + 1}</span>
                     {it.name}
                     <span className="invline__meta">
                       {String(it.qty)} × {fmt(it.unitPrice)}

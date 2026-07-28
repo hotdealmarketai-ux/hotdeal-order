@@ -12,6 +12,8 @@ import { saveInvoiceAction, type InvoiceFormState } from "@/app/actions/invoice"
 import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
+import { sumQty } from "@/lib/qty";
+import { MoneyInput } from "./MoneyInput";
 
 type Row = { id: number; name: string; qty: string; unitPrice: string };
 
@@ -120,12 +122,13 @@ export function InvoiceForm({
   );
 
   const subtotals = useMemo(() => {
-    const m: Record<string, { count: number; sum: number }> = {};
+    const m: Record<string, { count: number; sum: number; qty: number }> = {};
     for (const c of categories) {
       const rows = (rowsByCat[c] ?? []).filter(isFilled);
       m[c] = {
         count: rows.length,
         sum: rows.reduce((n, r) => n + rowAmount(r), 0),
+        qty: sumQty(rows.map((r) => r.qty)),
       };
     }
     return m;
@@ -308,8 +311,12 @@ export function InvoiceForm({
             >
               <div className="invcat__head">
                 <span className="chip">{CATEGORIES[c].label}</span>
-                {sub.sum > 0 && (
-                  <span className="invcat__sum">{fmt(sub.sum)}원</span>
+                {(sub.qty > 0 || sub.sum > 0) && (
+                  <span className="invcat__sum">
+                    {sub.qty > 0 ? `총 ${fmt(sub.qty)}개` : ""}
+                    {sub.qty > 0 && sub.sum > 0 ? " · " : ""}
+                    {sub.sum > 0 ? `${fmt(sub.sum)}원` : ""}
+                  </span>
                 )}
                 <button
                   type="button"
@@ -346,14 +353,10 @@ export function InvoiceForm({
                       onChange={(e) => updateRow(c, r.id, "qty", e.target.value)}
                       placeholder="수량"
                     />
-                    <input
-                      className="input"
-                      inputMode="numeric"
+                    <MoneyInput
                       value={r.unitPrice}
                       disabled={locked}
-                      onChange={(e) =>
-                        updateRow(c, r.id, "unitPrice", e.target.value)
-                      }
+                      onChange={(raw) => updateRow(c, r.id, "unitPrice", raw)}
                       placeholder="단가"
                     />
                     <span className="invrow__amt">

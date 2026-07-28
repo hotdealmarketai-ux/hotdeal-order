@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { fulfillmentLabel } from "@/lib/constants";
+import { sumQty } from "@/lib/qty";
+
+const won = (n: number) => n.toLocaleString("ko-KR");
 
 export type ReceiptItem = { name: string; qty: string; note: string };
 export type ReceiptRawItem = { rawName: string; rawQty: string; rawNote: string };
@@ -96,11 +99,20 @@ export function ReceiptCard(props: {
             <div className="receipt__section">
               {props.items.map((it, i) => (
                 <div className="receipt-item" key={i}>
-                  <div className="receipt-item__name">{it.name || "-"}</div>
+                  <div className="receipt-item__name">
+                    <span className="receipt-item__no">{i + 1}</span>
+                    {it.name || "-"}
+                  </div>
                   <div className="receipt-item__qty">{it.qty}</div>
                   {it.note && <div className="receipt-item__note">※ {it.note}</div>}
                 </div>
               ))}
+              {props.items.length > 0 && (
+                <div className="receipt-total">
+                  <span>총 수량</span>
+                  <b>{won(sumQty(props.items.map((it) => it.qty)))}개</b>
+                </div>
+              )}
             </div>
             {props.reservedItems && props.reservedItems.length > 0 && (
               <div className="receipt__section">
@@ -109,10 +121,17 @@ export function ReceiptCard(props: {
                 </div>
                 {props.reservedItems.map((it, i) => (
                   <div className="receipt-item" key={`resv-${i}`}>
-                    <div className="receipt-item__name">{it.name || "-"}</div>
+                    <div className="receipt-item__name">
+                      <span className="receipt-item__no">{i + 1}</span>
+                      {it.name || "-"}
+                    </div>
                     <div className="receipt-item__qty">{it.qty}</div>
                   </div>
                 ))}
+                <div className="receipt-total">
+                  <span>총 수량</span>
+                  <b>{won(sumQty(props.reservedItems.map((it) => it.qty)))}개</b>
+                </div>
               </div>
             )}
             {props.aiSummary && (
@@ -131,7 +150,10 @@ export function ReceiptCard(props: {
             </div>
             {props.rawItems.map((it, i) => (
               <div className="receipt-item" key={i}>
-                <div className="receipt-item__name">{it.rawName || "-"}</div>
+                <div className="receipt-item__name">
+                  <span className="receipt-item__no">{i + 1}</span>
+                  {it.rawName || "-"}
+                </div>
                 <div className="receipt-item__qty">{it.rawQty}</div>
                 {it.rawNote && (
                   <div className="receipt-item__note">※ {it.rawNote}</div>

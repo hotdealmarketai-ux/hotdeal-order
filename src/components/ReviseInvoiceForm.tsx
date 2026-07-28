@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useRef, useState } from "react";
 import { reviseInvoiceAction, type InvoiceFormState } from "@/app/actions/invoice";
 import { SubmitButton } from "./SubmitButton";
+import { MoneyInput } from "./MoneyInput";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 
@@ -205,11 +206,9 @@ export function ReviseInvoiceForm({
                     onChange={(e) => updateRow(c, r.id, "qty", e.target.value)}
                     placeholder="수량"
                   />
-                  <input
-                    className="input"
-                    inputMode="numeric"
+                  <MoneyInput
                     value={r.unitPrice}
-                    onChange={(e) => updateRow(c, r.id, "unitPrice", e.target.value)}
+                    onChange={(raw) => updateRow(c, r.id, "unitPrice", raw)}
                     placeholder="단가"
                   />
                   <span className="invrow__amt">{amt > 0 ? fmt(amt) : ""}</span>

@@ -17,8 +17,11 @@ import {
   shiftDate,
 } from "@/lib/date";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { sumQty } from "@/lib/qty";
 import { PrintButton } from "@/components/PrintButton";
 import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
+
+const won = (n: number) => n.toLocaleString("ko-KR");
 
 export default async function AdminCombinedReceipt(props: {
   params: Promise<{ userId: string; date: string }>;
@@ -147,13 +150,20 @@ export default async function AdminCombinedReceipt(props: {
                 </div>
                 {s.items.map((it, i) => (
                   <div className="receipt-item" key={i}>
-                    <div className="receipt-item__name">{it.name || "-"}</div>
+                    <div className="receipt-item__name">
+                      <span className="receipt-item__no">{i + 1}</span>
+                      {it.name || "-"}
+                    </div>
                     <div className="receipt-item__qty">{it.qty}</div>
                     {it.note && (
                       <div className="receipt-item__note">※ {it.note}</div>
                     )}
                   </div>
                 ))}
+                <div className="receipt-total">
+                  <span>총 수량</span>
+                  <b>{won(sumQty(s.items.map((it) => it.qty)))}개</b>
+                </div>
               </div>
             );
           })}
@@ -169,10 +179,17 @@ export default async function AdminCombinedReceipt(props: {
               </div>
               {reservedTool.map((it, i) => (
                 <div className="receipt-item" key={`resv-${i}`}>
-                  <div className="receipt-item__name">{it.name}</div>
+                  <div className="receipt-item__name">
+                    <span className="receipt-item__no">{i + 1}</span>
+                    {it.name}
+                  </div>
                   <div className="receipt-item__qty">{it.qty}</div>
                 </div>
               ))}
+              <div className="receipt-total">
+                <span>총 수량</span>
+                <b>{won(sumQty(reservedTool.map((it) => String(it.qty))))}개</b>
+              </div>
             </div>
           )}
         </div>

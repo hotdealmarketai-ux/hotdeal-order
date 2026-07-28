@@ -6,6 +6,7 @@ import {
   type WeeklyProductState,
 } from "@/app/actions/weekly-invoice";
 import { SubmitButton } from "./SubmitButton";
+import { MoneyInput } from "./MoneyInput";
 import {
   WEEKLY_CATEGORIES,
   boxWord,
@@ -141,11 +142,9 @@ export function WeeklyProductForm({ initial }: { initial: WeeklyProductRow[] }) 
             </span>
             <span className="wprow__field">
               공급가{" "}
-              <input
-                className="input"
-                inputMode="numeric"
+              <MoneyInput
                 value={r.supplyPrice}
-                onChange={(e) => update(r.key, "supplyPrice", e.target.value)}
+                onChange={(raw) => update(r.key, "supplyPrice", raw)}
               />{" "}
               원
             </span>

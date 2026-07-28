@@ -1,4 +1,5 @@
 import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
+import { sumQty } from "@/lib/qty";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
@@ -32,11 +33,14 @@ export function WeeklyReceipt({
     <div className="invcat" key={key}>
       <div className="invcat__head">
         <span className="chip">{label}</span>
-        <span className="invcat__sum">{list.length}개</span>
+        <span className="invcat__sum">
+          총 {won(sumQty(list.map((it) => it.sub.split("×")[0])))}개
+        </span>
       </div>
       {list.map((it, i) => (
         <div className="invline" key={i}>
           <span>
+            <span className="receipt-item__no">{i + 1}</span>
             {it.name}
             <span className="invline__meta">{it.sub}</span>
           </span>
