@@ -9,7 +9,14 @@ import {
   fulfillmentLabel,
   type Category,
 } from "@/lib/constants";
-import { kstDayRange, labelDate, normalizeDateStr, shipmentDayOf } from "@/lib/date";
+import {
+  kstDayRange,
+  labelDate,
+  normalizeDateStr,
+  shipmentDayOf,
+  shiftDate,
+} from "@/lib/date";
+import { getReservationLoadForOrder } from "@/lib/reservation-data";
 import { PrintButton } from "@/components/PrintButton";
 import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
 
@@ -49,6 +56,14 @@ export default async function AdminCombinedReceipt(props: {
   const totalItems = sections.reduce((n, s) => n + s.items.length, 0);
   // 수령 방식(직접 픽업/배송) — 발주 1건 전체에 동일, 배송이면 매장 주소로 갖다줘야 함.
   const fulfillment = active.find((o) => o.fulfillment)?.fulfillment ?? null;
+
+  // 확정 예약분(픽업 = 발주일+1)을 합본 발주서에도 읽기전용으로 표시 — 창고 준비 누락 방지.
+  // (예약분은 실제 발주 Order에 복제되지 않아 별도 조회. 점주 발주화면 공구와 같은 소스·게이트)
+  const reservedTool =
+    merchant.role === "MERCHANT_HOTDEAL"
+      ? await getReservationLoadForOrder(userId, date)
+      : [];
+  const reservedPickup = shiftDate(date, 1);
 
   // 관리자 발주 수정 — 계산서 발행분은 잠금(정합).
   // combined의 date = '발주일'(createdAt 기준)인데 Invoice.date = '출고일'이라, 출고일로 매칭.
@@ -103,6 +118,11 @@ export default async function AdminCombinedReceipt(props: {
               <span className="badge badge--mute">
                 {sections.length}종 · {totalItems}건
               </span>
+              {reservedTool.length > 0 && (
+                <span className="badge badge--ai">
+                  예약분 {reservedTool.length}건
+                </span>
+              )}
             </div>
             {fulfillment === "DELIVERY" && merchant.address && (
               <div className="receipt__deliver">
@@ -131,6 +151,24 @@ export default async function AdminCombinedReceipt(props: {
               </div>
             );
           })}
+
+          {/* 확정 예약분(픽업 다음날) — 실제 발주엔 없지만 창고 준비용으로 함께 표시(읽기전용) */}
+          {reservedTool.length > 0 && (
+            <div className="receipt__section">
+              <div className="section-label" style={{ margin: "0 0 8px" }}>
+                공구 · 예약분{" "}
+                <span className="muted" style={{ fontWeight: 400 }}>
+                  (픽업 {labelDate(reservedPickup)})
+                </span>
+              </div>
+              {reservedTool.map((it, i) => (
+                <div className="receipt-item" key={`resv-${i}`}>
+                  <div className="receipt-item__name">{it.name}</div>
+                  <div className="receipt-item__qty">{it.qty}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div style={{ marginTop: 14 }}>
