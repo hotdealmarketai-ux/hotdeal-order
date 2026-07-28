@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { addInventoryAction } from "@/app/actions/admin";
 import { InventoryEditor } from "@/components/InventoryEditor";
 import { InventoryBulkImport } from "@/components/InventoryBulkImport";
+import { SheetImportButton } from "@/components/SheetImportButton";
 
 export default async function AdminInventory() {
   await requireAdmin();
@@ -17,6 +18,8 @@ export default async function AdminInventory() {
     <>
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
+        <SheetImportButton />
+
         <InventoryBulkImport currentNames={items.map((it) => it.name)} />
 
         <div className="card">

@@ -6,7 +6,11 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { kstDayRange, kstDateOf, normalizeExpiry } from "@/lib/date";
-import { safePushInventory, setInventoryPushPending } from "@/lib/inventory-sheet";
+import {
+  safePushInventory,
+  setInventoryPushPending,
+  readInventorySheet,
+} from "@/lib/inventory-sheet";
 import {
   currentWindowStartUtc,
   currentDeadlineUtc,
@@ -424,6 +428,117 @@ export async function bulkReplaceInventoryAction(
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
   return { ok: true, added, updated, deleted: deleteIds.length };
+}
+
+// ── 1회성 '시트 → 앱' 불러오기(명시적, 삭제 없음) ──
+// 시트연동은 평소 단방향(앱→시트)이지만, 시트에 미리 입력해둔 재고를 처음 한 번 앱으로 가져올 때 사용.
+// 이름 기준 upsert(신규 생성 + 기존 갱신)만 하고 '앱에만 있는 품목은 삭제하지 않는다'
+// (단방향 전환 R3의 데이터손실 사고 방지 지침). 반영 후 push 크론이 DB→시트를 미러링한다.
+export type SheetImportPreview =
+  | {
+      ok: true;
+      sheetItems: number;
+      willAdd: number;
+      willUpdate: number;
+      sample: { name: string; qty: number; supplyPrice: number; expiry: string }[];
+    }
+  | { ok: false; error: string };
+
+const dedupSheetRows = <T extends { name: string }>(rows: T[]): T[] => {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    const n = r.name.trim();
+    if (!n || seen.has(n)) return false;
+    seen.add(n);
+    return true;
+  });
+};
+
+export async function previewInventoryFromSheetAction(): Promise<SheetImportPreview> {
+  await requireAdmin();
+  const sheet = await readInventorySheet();
+  if (!Array.isArray(sheet)) return { ok: false, error: sheet.error };
+  const rows = dedupSheetRows(sheet);
+  if (rows.length === 0)
+    return { ok: false, error: "시트에서 품목을 못 읽었어요. (A열=품목명, 1행=헤더 확인)" };
+  const current = await prisma.inventoryItem.findMany({
+    where: { deletedAt: null },
+    select: { name: true },
+  });
+  const curNames = new Set(current.map((c) => c.name));
+  const willUpdate = rows.filter((r) => curNames.has(r.name.trim())).length;
+  return {
+    ok: true,
+    sheetItems: rows.length,
+    willAdd: rows.length - willUpdate,
+    willUpdate,
+    sample: rows.slice(0, 100).map((r) => ({
+      name: r.name,
+      qty: r.qty,
+      supplyPrice: r.supplyPrice,
+      expiry: normalizeExpiry(r.expiry) || r.expiry || "",
+    })),
+  };
+}
+
+export type SheetImportResult = { ok: boolean; added?: number; updated?: number; error?: string };
+
+export async function importInventoryFromSheetAction(): Promise<SheetImportResult> {
+  const admin = await requireAdmin();
+  const sheet = await readInventorySheet();
+  if (!Array.isArray(sheet)) return { ok: false, error: sheet.error };
+  const rows = dedupSheetRows(sheet);
+  if (rows.length === 0) return { ok: false, error: "시트에서 품목을 못 읽었어요." };
+
+  const current = await prisma.inventoryItem.findMany({
+    where: { deletedAt: null },
+    select: { id: true, name: true },
+  });
+  const nameToId = new Map(current.map((c) => [c.name, c.id]));
+  const maxAgg = await prisma.inventoryItem.aggregate({ _max: { sortOrder: true } });
+  let sort = (maxAgg._max.sortOrder ?? 0) + 1;
+  let added = 0;
+  let updated = 0;
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        for (const r of rows) {
+          const name = r.name.trim();
+          const exp = normalizeExpiry(r.expiry); // 형식 맞으면 정규화, 아니면 "" (기존 유지)
+          const id = nameToId.get(name);
+          if (id) {
+            await tx.inventoryItem.update({
+              where: { id },
+              data: { qty: r.qty, supplyPrice: r.supplyPrice, ...(exp ? { expiry: exp } : {}) },
+            });
+            updated++;
+          } else {
+            await tx.inventoryItem.create({
+              data: { name, qty: r.qty, supplyPrice: r.supplyPrice, expiry: exp, sortOrder: sort++ },
+            });
+            added++;
+          }
+        }
+      },
+      { timeout: 20000 },
+    );
+  } catch (err) {
+    console.error("[inventory] import from sheet failed:", err);
+    return { ok: false, error: "불러오기 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+
+  await setInventoryPushPending(); // 다음 push 크론이 DB→시트 미러링
+  await writeAudit({
+    action: "inventory.importFromSheet",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "inventory",
+    targetId: "",
+    summary: `시트→앱 재고 불러오기: 신규 ${added} · 갱신 ${updated}(삭제 없음)`,
+  });
+  revalidatePath("/admin/inventory");
+  revalidatePath("/inventory");
+  return { ok: true, added, updated };
 }
 
 // R4 재고 자동저장 — 편집기 입력을 디바운스로 계속 저장. 현재 목록으로 DB를 맞춘다(이름/수량/공급가
