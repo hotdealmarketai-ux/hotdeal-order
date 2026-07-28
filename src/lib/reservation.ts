@@ -56,16 +56,21 @@ export function reservationDeadlineLabel(reserveDate: string): string {
 // - 마감 후: 무조건 잠금.
 // - 마감 전 + 확정: 잠금(수정 누르면 해제).
 // - 마감 전 + 미확정: 열림(입력 가능).
+// reservedQty = 내가 예약한 총 수량(연동+수기). 0이면 '예약 중'이 아니라 '예약 가능'으로 표시.
 export function reservationStatusOf(
   order: { confirmed: boolean } | null,
   reserveDate: string,
   now: number = Date.now(),
+  reservedQty: number = 0,
 ): { label: string; cls: string; locked: boolean } {
+  const has = reservedQty > 0;
   if (isReservationClosed(reserveDate, now)) {
-    return order?.confirmed
+    return order?.confirmed && has
       ? { label: "예약 확정", cls: "badge--ok", locked: true }
       : { label: "예약 마감", cls: "badge--mute", locked: true };
   }
-  if (order?.confirmed) return { label: "확정됨", cls: "badge--ai", locked: true };
+  if (order?.confirmed && has) return { label: "확정됨", cls: "badge--ai", locked: true };
+  // 담은 게 없으면 '예약 중'이 아니라 '예약 가능'(사용자 요청 — 다 0이면 예약 중 풀림).
+  if (!has) return { label: "예약 가능", cls: "badge--mute", locked: false };
   return { label: "예약 중", cls: "badge--wait", locked: false };
 }

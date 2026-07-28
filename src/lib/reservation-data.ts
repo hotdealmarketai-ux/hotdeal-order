@@ -226,9 +226,8 @@ export async function getReservationInvoiceItems(
     where: {
       pickupDate,
       qty: { gt: 0 },
-      order: { userId, batch: { active: true } },
-      // 수기분은 확정(confirmed)돼야, 연동분은 즉시 담기(홀드)라 confirmed 무관하게 로드.
-      OR: [{ order: { confirmed: true } }, { inventoryItemId: { not: "" } }],
+      // 확정(예약 확정)한 예약분만 공구/계산서에 로드 — 연동·수기 모두 동일 게이트.
+      order: { userId, confirmed: true, batch: { active: true } },
     },
     select: { name: true, qty: true, supplyPrice: true },
     orderBy: { sortOrder: "asc" },
@@ -256,9 +255,8 @@ export async function getReservationLoadForOrder(
     where: {
       pickupDate,
       qty: { gt: 0 },
-      order: { userId, batch: { active: true } },
-      // 수기분은 확정돼야, 연동분은 즉시 담기라 confirmed 무관하게 로드.
-      OR: [{ order: { confirmed: true } }, { inventoryItemId: { not: "" } }],
+      // 확정한 예약분만 공구에 자동 로드 — 연동·수기 모두 동일 게이트(예약 확정 시 로드·잠금).
+      order: { userId, confirmed: true, batch: { active: true } },
     },
     select: { name: true, qty: true },
     orderBy: { sortOrder: "asc" },

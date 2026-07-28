@@ -28,11 +28,12 @@ export function ReservationOrderForm({
   closed: boolean;
   availableByProduct?: Record<string, number>;
 }) {
-  // 연동(재고현황) 상품 = 실시간 담기 / 수기 상품 = 기존 입력+확정
+  // 연동(재고현황) 상품 = 실시간 담기 스테퍼 / 수기 상품 = 입력. '예약 확정'이 둘 다 잠근다.
   const linked = products.filter((p) => p.inventoryItemId);
   const manual = products.filter((p) => !p.inventoryItemId);
 
   const live = useLiveReservationStock(batchId);
+  const locked = closed || confirmed; // 확정 or 마감 → 연동·수기 모두 잠금
 
   const [qty, setQty] = useState<Record<string, string>>(() => {
     const m: Record<string, string> = {};
@@ -51,18 +52,25 @@ export function ReservationOrderForm({
         .filter((i) => i.qty > 0),
     [manual, qty],
   );
-  const totalQty = items.reduce((s, i) => s + i.qty, 0);
-  const manualLocked = closed || confirmed;
+  const manualTotal = items.reduce((s, i) => s + i.qty, 0);
+  // 연동 담긴 수량(실시간 mine, 없으면 SSR). 확정 가능 여부 판단용.
+  const linkedTotal = linked.reduce(
+    (s, p) => s + live.mineOf(p.id, qtyByProduct[p.id] ?? 0),
+    0,
+  );
+  const totalReserved = manualTotal + linkedTotal;
 
   return (
     <>
-      {/* 재고현황 연동 상품 — 담는 즉시 예약(실시간 남은재고 안에서 −/+) */}
+      {/* 재고현황 연동 상품 — 담는 즉시 예약(실시간 남은재고 안에서 −/+). 확정 시 잠김 */}
       {linked.length > 0 && (
         <>
           <div className={`resv-lock${closed ? " resv-lock--closed" : ""}`}>
             {closed
               ? "예약이 마감되었어요."
-              : "재고에서 담는 즉시 예약됩니다. 남은 재고 안에서 −/+ 하세요."}
+              : confirmed
+                ? "예약이 확정되어 잠겼어요. 수정하려면 아래 ‘수정’을 누르세요."
+                : "재고에서 담는 즉시 예약됩니다. 남은 재고 안에서 −/+ 하세요."}
           </div>
           <div className="itemshead">
             <span className="itemshead__label">재고 연동 상품</span>
@@ -82,48 +90,31 @@ export function ReservationOrderForm({
                     남은 수량 {avail}개 · 공급가 {won(p.supplyPrice)}원
                   </div>
                 </div>
-                <ReservationStockStepper
-                  batchId={batchId}
-                  productId={p.id}
-                  available={avail}
-                  mine={mineQ}
-                  disabled={closed}
-                  onChanged={live.refresh}
-                />
+                {locked ? (
+                  <div className="resv-item__fixed">{mineQ > 0 ? `${mineQ}개` : "-"}</div>
+                ) : (
+                  <ReservationStockStepper
+                    batchId={batchId}
+                    productId={p.id}
+                    available={avail}
+                    mine={mineQ}
+                    disabled={locked}
+                    onChanged={live.refresh}
+                  />
+                )}
               </div>
             );
           })}
         </>
       )}
 
-      {/* 수기 입력 상품 — 기존 흐름(수량 입력 → 예약 확정) */}
+      {/* 수기 입력 상품 — 수량 입력(확정 시 잠김) */}
       {manual.length > 0 && (
-        <form
-          action={confirmReservationAction}
-          style={{ marginTop: linked.length > 0 ? 22 : 0 }}
-        >
-          <input type="hidden" name="batchId" value={batchId} />
-          <input type="hidden" name="items" value={JSON.stringify(items)} />
-
-          {closed ? (
-            <div className="resv-lock resv-lock--closed">
-              예약일자가 지났습니다 · 예약이 마감되었어요
-            </div>
-          ) : confirmed ? (
-            <div className="resv-lock">
-              예약이 확정되어 잠겨 있어요. 수정하려면 아래 ‘수정’을 누르세요.
-            </div>
-          ) : (
-            <div className="resv-lock">
-              필요한 수량을 적고 ‘예약 확정’을 누르면 예약됩니다.
-            </div>
-          )}
-
+        <div style={{ marginTop: linked.length > 0 ? 22 : 0 }}>
           <div className="itemshead">
             <span className="itemshead__label">예약 상품</span>
             <span className="itemshead__count">{manual.length}개</span>
           </div>
-
           {manual.map((p) => {
             const shownQty = qtyByProduct[p.id] ?? 0;
             return (
@@ -137,7 +128,7 @@ export function ReservationOrderForm({
                     공급가 {won(p.supplyPrice)}원
                   </div>
                 </div>
-                {manualLocked ? (
+                {locked ? (
                   <div className="resv-item__fixed">{shownQty > 0 ? `${shownQty}개` : "-"}</div>
                 ) : (
                   <div className="resv-item__qty">
@@ -155,27 +146,37 @@ export function ReservationOrderForm({
               </div>
             );
           })}
-
-          {!manualLocked && (
-            <div className="ctabar">
-              <SubmitButton
-                className="btn btn--primary btn--block"
-                pendingText="확정 중…"
-                disabled={totalQty === 0}
-              >
-                예약 확정 {totalQty > 0 ? `(${totalQty}개)` : ""}
-              </SubmitButton>
-            </div>
-          )}
-        </form>
+        </div>
       )}
 
-      {confirmed && !closed && manual.length > 0 && (
-        <form action={unlockReservationAction} style={{ marginTop: 12 }}>
+      {/* 하단 액션 — 예약 확정(연동·수기 전체 잠금) / 수정(잠금 풀기) */}
+      {closed ? (
+        <div className="resv-lock resv-lock--closed" style={{ marginTop: 16 }}>
+          예약일자가 지났습니다 · 예약이 마감되었어요
+        </div>
+      ) : confirmed ? (
+        <form action={unlockReservationAction} style={{ marginTop: 16 }}>
           <input type="hidden" name="batchId" value={batchId} />
           <SubmitButton className="btn btn--soft btn--block" pendingText="여는 중…">
             수정 (잠금 풀기)
           </SubmitButton>
+        </form>
+      ) : (
+        <form action={confirmReservationAction} style={{ marginTop: 16 }}>
+          <input type="hidden" name="batchId" value={batchId} />
+          <input type="hidden" name="items" value={JSON.stringify(items)} />
+          <div className="resv-lock">
+            예약 확정을 누르면 예약이 확정되고 잠깁니다. (재고 연동 상품도 함께 잠겨요)
+          </div>
+          <div className="ctabar">
+            <SubmitButton
+              className="btn btn--primary btn--block"
+              pendingText="확정 중…"
+              disabled={totalReserved === 0}
+            >
+              예약 확정 {totalReserved > 0 ? `(${totalReserved}개)` : ""}
+            </SubmitButton>
+          </div>
         </form>
       )}
     </>

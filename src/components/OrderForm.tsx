@@ -241,6 +241,12 @@ export function OrderForm({
     for (const g of payload) m[g.category] = g.items.length;
     return m;
   }, [payload]);
+  // 화면 표시용 건수 — 공구는 담은재고 + 예약분(읽기전용)까지 합쳐서 과일·야채처럼 건수 표시.
+  const displayCountByCat = useMemo(() => {
+    const m = { ...countByCat };
+    if (reservedTool.length > 0) m.TOOL = (m.TOOL ?? 0) + reservedTool.length;
+    return m;
+  }, [countByCat, reservedTool.length]);
 
   const multi = categories.length > 1;
 
@@ -393,7 +399,7 @@ export function OrderForm({
         {multi && (
           <div className="cattabs cattabs--seg">
             {categories.map((c) => {
-              const n = countByCat[c] ?? 0;
+              const n = displayCountByCat[c] ?? 0;
               return (
                 <button
                   type="button"
@@ -429,8 +435,8 @@ export function OrderForm({
           <span className="itemshead__label">
             {multi ? "발주 품목" : receiverLabel(active, role)}
           </span>
-          {(countByCat[active] ?? 0) > 0 && (
-            <span className="itemshead__count">{countByCat[active]}건</span>
+          {(displayCountByCat[active] ?? 0) > 0 && (
+            <span className="itemshead__count">{displayCountByCat[active]}건</span>
           )}
         </div>
 

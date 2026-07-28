@@ -25,7 +25,12 @@ export default async function ReservationsPage() {
         ) : (
           <div className="stack">
             {batches.map((b) => {
-              const st = reservationStatusOf({ confirmed: b.confirmed }, b.reserveDate);
+              const st = reservationStatusOf(
+                { confirmed: b.confirmed },
+                b.reserveDate,
+                Date.now(),
+                b.reservedQty,
+              );
               return (
                 <Link
                   key={b.id}
