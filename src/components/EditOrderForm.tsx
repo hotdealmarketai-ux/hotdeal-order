@@ -1,7 +1,11 @@
 "use client";
 
 import { useActionState, useMemo, useRef, useState } from "react";
-import { updateOrderAction, type OrderFormState } from "@/app/actions/order";
+import {
+  updateOrderAction,
+  adminUpdateOrderAction,
+  type OrderFormState,
+} from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { FulfillmentPicker } from "./FulfillmentPicker";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
@@ -23,7 +27,7 @@ export function EditOrderForm({
   needsFulfillment = false,
   initialFulfillment = "",
   address = "",
-  action = updateOrderAction,
+  admin = false,
 }: {
   orderId: string;
   category: Category;
@@ -34,9 +38,12 @@ export function EditOrderForm({
   needsFulfillment?: boolean;
   initialFulfillment?: "" | Fulfillment;
   address?: string;
-  // 저장 액션 — 점주=updateOrderAction(기본), 관리자=adminUpdateOrderAction.
-  action?: (prev: OrderFormState, formData: FormData) => Promise<OrderFormState>;
+  // 저장 주체 — false=점주(updateOrderAction), true=관리자(adminUpdateOrderAction).
+  // ⚠ 서버 액션을 prop 함수로 넘기면 제출이 서버까지 안 가는 케이스가 있어(관리자 수정 무반응 버그),
+  //   boolean으로만 받고 두 액션을 여기서 직접 import·선택한다.
+  admin?: boolean;
 }) {
+  const saveAction = admin ? adminUpdateOrderAction : updateOrderAction;
   const isTofu = category === "TOFU";
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
@@ -66,7 +73,7 @@ export function EditOrderForm({
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState("");
   const [state, formAction] = useActionState<OrderFormState, FormData>(
-    updateOrderAction,
+    saveAction,
     {},
   );
 

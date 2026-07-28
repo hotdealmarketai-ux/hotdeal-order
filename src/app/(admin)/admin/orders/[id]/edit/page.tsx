@@ -13,7 +13,6 @@ import {
 } from "@/lib/constants";
 import { kstDateOf, shipmentDayOf } from "@/lib/date";
 import { EditOrderForm } from "@/components/EditOrderForm";
-import { adminUpdateOrderAction } from "@/app/actions/order";
 
 // 관리자(새롭) 발주 수정 — 아무 지점 발주나. 발주창 제한 없음.
 // 취소분·계산서 발행분은 진입 차단(정합). 저장 시 점주+업체에 '발주 수정' 알림.
@@ -72,7 +71,7 @@ export default async function AdminEditOrderPage(props: {
           needsFulfillment={needsFulfillment(ownerRole)}
           initialFulfillment={(order.fulfillment as Fulfillment | null) ?? ""}
           address={order.user.address ?? ""}
-          action={adminUpdateOrderAction}
+          admin
         />
       </div>
     </>
