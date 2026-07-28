@@ -62,7 +62,7 @@ export function ReservationOrderForm({
           <div className={`resv-lock${closed ? " resv-lock--closed" : ""}`}>
             {closed
               ? "예약이 마감되었어요."
-              : "재고에서 담는 즉시 예약돼요. 남은 재고 안에서 −/+ 하세요."}
+              : "재고에서 담는 즉시 예약됩니다. 남은 재고 안에서 −/+ 하세요."}
           </div>
           <div className="itemshead">
             <span className="itemshead__label">재고 연동 상품</span>
