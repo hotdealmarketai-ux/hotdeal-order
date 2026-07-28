@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { orderOpenNow } from "@/lib/order-open";
 import { windowKeyAt } from "@/lib/schedule";
+import { isItemReservationLocked } from "@/lib/reservation-stock";
 import { logError } from "@/lib/log";
 
 export type HoldResult = { ok: boolean; error?: string; available?: number };
@@ -26,6 +27,10 @@ export async function holdStockAction(input: {
   const qty = Math.max(0, Math.floor(Number(input.qty) || 0));
   const windowDate = windowKeyAt();
   if (!itemId) return { ok: false, error: "품목을 찾을 수 없어요." };
+  // 예약발주에 잡힌 품목은 재고현황에서 담을 수 없음(오직 예약발주에서만).
+  if (await isItemReservationLocked(itemId)) {
+    return { ok: false, error: "예약발주 진행 중인 품목이에요. 예약발주에서 담아 주세요." };
+  }
 
   try {
     const res = await prisma.$transaction(async (tx) => {

@@ -1039,6 +1039,37 @@ a {
 .wprow__name {
   margin-bottom: 8px;
 }
+/* 연동(재고현황) 상품 행 — 이름 고정 + '재고연동' 배지 */
+.wprow__name--linked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.wprow__linkedname { font-size: 15px; font-weight: 700; color: var(--fg); }
+.wprow__linktag { flex-shrink: 0; }
+/* 재고 불러오기 피커 행 */
+.pickrow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 6px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.pickrow:last-child { border-bottom: 0; }
+.pickrow:active { background: var(--chip-mute-bg); }
+.pickrow__name { font-size: 15px; font-weight: 700; color: var(--fg); }
+.pickrow__price {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--muted); white-space: nowrap;
+}
+.pickrow__add { font-weight: 800; color: var(--green-700); }
 .wprow__nums {
   display: flex;
   align-items: center;
@@ -2949,6 +2980,9 @@ body {
 .stockmeta__qty.is-out { color: var(--danger); }
 .stockmeta__exp.is-warn { color: var(--danger); font-weight: 600; }
 .stockmeta__mine { color: var(--green-700); font-weight: 700; }
+/* 예약발주 연동 잠금 행 — 담기 불가, '예약발주 진행 중' */
+.row--locked { opacity: 0.9; }
+.stockmeta__resv { color: var(--green-700); font-weight: 800; }
 /* 재고현황 카테고리 그룹(대분류 → 중분류) */
 .invcatsec { margin-top: 20px; }
 .invcatsec:first-of-type { margin-top: 10px; }

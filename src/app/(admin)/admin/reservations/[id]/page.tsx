@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
-import { getReservationBatch, getBatchConfirmations } from "@/lib/reservation-data";
+import {
+  getReservationBatch,
+  getBatchConfirmations,
+  getInventoryPickList,
+} from "@/lib/reservation-data";
 import {
   ReservationBatchEditor,
   ReservationBatchDeleteButton,
@@ -18,13 +22,16 @@ export default async function EditReservationBatchPage(props: {
   const batch = await getReservationBatch(id);
   // 삭제/숨김된 배치면 404 대신 목록으로
   if (!batch) redirect("/admin/reservations");
-  const confirmations = await getBatchConfirmations(batch.id);
+  const [confirmations, inventoryItems] = await Promise.all([
+    getBatchConfirmations(batch.id),
+    getInventoryPickList(),
+  ]);
 
   return (
     <>
       <Topbar backHref="/admin/reservations" title={`예약 ${labelDate(batch.reserveDate)}`} />
       <div className="page">
-        <ReservationBatchEditor batch={batch} />
+        <ReservationBatchEditor batch={batch} inventoryItems={inventoryItems} />
 
         {/* 확정한 점주 — 예약분은 픽업일 전날 발주·계산서 공구에 자동 반영(별도 발행 없음) */}
         <div className="itemshead" style={{ marginTop: 26 }}>

@@ -234,6 +234,9 @@ model ReservationProduct {
   // 기존 데이터는 마이그레이션에서 배치 pickupDate로 백필. 신규는 항상 검증된 날짜 저장.
   pickupDate  String           @default("")
   supplyPrice Int              @default(0) // 점주 공급가(원) — 지금은 표시·집계용
+  // 재고현황 연동 — 이 값이 있으면 InventoryItem.id를 참조(실물 재고로 진행하는 예약).
+  // 빈값 = 수기 입력 상품(재고와 무관, 자유 수량). 연동이면 재고현황에서 잠기고 수량은 남은재고 캡.
+  inventoryItemId String        @default("")
   sortOrder   Int              @default(0)
   active      Boolean          @default(true) // false = 소프트삭제
   createdAt   DateTime         @default(now())
@@ -270,10 +273,14 @@ model ReservationOrderItem {
   supplyPrice Int              @default(0) // 스냅샷
   // 픽업일자 스냅샷 KST YYYY-MM-DD — 확정 시 상품에서 복사. 자동로드가 이 값(==발주일+1)으로 필터.
   pickupDate  String           @default("")
+  // 재고현황 연동 스냅샷 — 값이 있으면 재고연동 상품(실시간 담기). 빈값이면 수기 상품(확정 흐름).
+  // 연동 아이템은 즉시 담기(홀드)라 confirmed 무관하게 유효 → 자동로드·재고홀드 판정에 사용.
+  inventoryItemId String        @default("")
   qty         Int              @default(0)
 
   @@unique([orderId, productId]) // 주문 내 상품 1행
   @@index([pickupDate]) // 픽업 전날 공구 자동로드 필터용
+  @@index([inventoryItemId]) // 재고 홀드 합계(품목별) 집계용
 }
 
 // 재고 담기원장 — 점주가 재고현황에서 '담기'한 순간의 실시간 보류(HELD).

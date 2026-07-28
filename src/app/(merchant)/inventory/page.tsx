@@ -7,6 +7,7 @@ import { orderOpenNow } from "@/lib/order-open";
 import { prisma } from "@/lib/prisma";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
+import { lockedInventoryItemIds } from "@/lib/reservation-stock";
 import { MerchantInventoryList } from "@/components/MerchantInventoryList";
 
 // 재고현황 — 앱 기준(단방향 시트 미러, R3). '담기'로 오늘 발주(공구)에 자동 임시저장(#6).
@@ -35,6 +36,8 @@ export default async function InventoryPage() {
   const mineRows = await myHolds(user.id, holdKey);
   const mine: Record<string, number> = {};
   for (const h of mineRows) mine[h.itemId] = h.qty;
+  // 예약발주에 잡힌(연동) 품목은 재고현황에서 잠금 — 담기 불가, '예약발주 진행 중' 표시.
+  const lockedIds = await lockedInventoryItemIds();
 
   return (
     <>
@@ -55,6 +58,7 @@ export default async function InventoryPage() {
               expiry: it.expiry ?? "",
               majorCat: it.majorCat ?? "",
               minorCat: it.minorCat ?? "",
+              locked: lockedIds.has(it.id),
             }))}
             canAdd={canAdd}
             hint={

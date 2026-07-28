@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { getMerchantReservation } from "@/lib/reservation-data";
+import { availableForReservationProducts } from "@/lib/reservation-stock";
 import { ReservationOrderForm } from "@/components/ReservationOrderForm";
 import { ReservationDeadlineCountdown } from "@/components/ReservationDeadlineCountdown";
 import { ReservationDates } from "@/components/ReservationDates";
@@ -19,6 +20,8 @@ export default async function ReservationDetailPage(props: {
   if (!detail) redirect("/reservations");
 
   const closed = isReservationClosed(detail.reserveDate);
+  // 연동 상품의 실시간 남은수량 SSR 초기값(이후 클라 폴링이 갱신)
+  const availableByProduct = await availableForReservationProducts(detail.products);
 
   return (
     <>
@@ -41,6 +44,7 @@ export default async function ReservationDetailPage(props: {
           confirmed={detail.confirmed}
           qtyByProduct={detail.qtyByProduct}
           closed={closed}
+          availableByProduct={availableByProduct}
         />
       </div>
     </>

@@ -3,9 +3,15 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, requireMerchant } from "@/lib/session";
+import { requireAdmin, requireMerchant, getCurrentUser } from "@/lib/session";
 import { writeAudit } from "@/lib/audit";
 import { validateBatchDates, isReservationClosed } from "@/lib/reservation";
+import {
+  reservationLockActiveAt,
+  minLockedPickupDate,
+} from "@/lib/reservation-stock";
+import { windowKeyAt } from "@/lib/schedule";
+import { logError } from "@/lib/log";
 
 export type ReservationBatchState = { ok?: boolean; error?: string };
 
@@ -14,6 +20,7 @@ type ProductInput = {
   name?: string;
   supplyPrice?: string | number;
   pickupDate?: string; // 상품별 픽업일자 KST YYYY-MM-DD
+  inventoryItemId?: string; // 재고현황 연동(빈값=수기)
   deleted?: boolean;
 };
 type BatchPayload = {
@@ -126,11 +133,12 @@ export async function saveReservationBatchAction(
     if (!name) continue; // 이름 없는 빈 추가행 무시
     const supplyPrice = toInt(p.supplyPrice, 0);
     const pk = String(p.pickupDate ?? "").trim(); // 위에서 검증됨(예약+2 이상)
+    const invId = String(p.inventoryItemId ?? "").trim(); // 연동 재고 품목(빈값=수기)
     if (pid) {
       ops.push(
         prisma.reservationProduct.updateMany({
           where: { id: pid, batchId: targetId },
-          data: { name, supplyPrice, pickupDate: pk, active: true },
+          data: { name, supplyPrice, pickupDate: pk, inventoryItemId: invId, active: true },
         }),
       );
     } else {
@@ -141,6 +149,7 @@ export async function saveReservationBatchAction(
             name,
             supplyPrice,
             pickupDate: pk,
+            inventoryItemId: invId,
             sortOrder: nextSort++,
             active: true,
           },
@@ -215,17 +224,21 @@ export async function confirmReservationAction(formData: FormData) {
       reserveDate: true,
       products: {
         where: { active: true },
-        select: { id: true, name: true, supplyPrice: true, pickupDate: true },
+        select: { id: true, name: true, supplyPrice: true, pickupDate: true, inventoryItemId: true },
       },
     },
   });
   if (!batch) redirect("/reservations");
   if (isReservationClosed(batch.reserveDate)) redirect(`/reservations/${batchId}`); // 마감 후 확정 불가
 
+  // 확정 흐름은 '수기 상품'만 다룬다 — 연동(재고) 상품은 실시간 담기(holdReservationAction)가 관리.
   const pmap = new Map(batch.products.map((p) => [p.id, p]));
   const clean = (Array.isArray(raw) ? raw : [])
     .map((i) => ({ productId: String(i.productId ?? ""), qty: toInt(i.qty, 0) }))
-    .filter((i) => pmap.has(i.productId) && i.qty > 0);
+    .filter((i) => {
+      const p = pmap.get(i.productId);
+      return !!p && !p.inventoryItemId && i.qty > 0; // 연동 상품은 제외
+    });
 
   const order = await prisma.reservationOrder.upsert({
     where: { userId_batchId: { userId: user.id, batchId } },
@@ -234,7 +247,8 @@ export async function confirmReservationAction(formData: FormData) {
     select: { id: true },
   });
   await prisma.$transaction([
-    prisma.reservationOrderItem.deleteMany({ where: { orderId: order.id } }),
+    // 수기 상품행만 삭제/재생성 — 연동 상품행(inventoryItemId 있음)은 그대로 보존.
+    prisma.reservationOrderItem.deleteMany({ where: { orderId: order.id, inventoryItemId: "" } }),
     ...clean.map((i, idx) => {
       const p = pmap.get(i.productId)!;
       return prisma.reservationOrderItem.create({
@@ -244,6 +258,7 @@ export async function confirmReservationAction(formData: FormData) {
           name: p.name,
           supplyPrice: p.supplyPrice,
           pickupDate: p.pickupDate, // 픽업일 스냅샷 — 확정 후 카탈로그 변경돼도 이 값으로 자동로드
+          inventoryItemId: "", // 수기 상품
           qty: i.qty,
           sortOrder: idx,
         },
@@ -274,4 +289,144 @@ export async function unlockReservationAction(formData: FormData) {
   }
   revalidatePath(`/reservations/${batchId}`);
   redirect(`/reservations/${batchId}`);
+}
+
+// ── 연동(재고현황) 예약 상품 실시간 담기 ──────────────────────
+// 재고에서 불러온 연동 상품은 일일 담기처럼 −/+ 하는 즉시 예약수량=홀드로 저장(공유·초과차단).
+// confirmed 는 건드리지 않는다(수기 상품의 확정상태 보존). qty 0 이면 그 상품 예약행만 삭제.
+export type ResvHoldResult = { ok: boolean; error?: string; available?: number };
+
+export async function holdReservationAction(input: {
+  batchId: string;
+  productId: string;
+  qty: number;
+}): Promise<ResvHoldResult> {
+  const user = await getCurrentUser();
+  if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
+    return { ok: false, error: "권한이 없어요." };
+  }
+  const batchId = String(input.batchId ?? "");
+  const productId = String(input.productId ?? "");
+  const qty = Math.max(0, Math.floor(Number(input.qty) || 0));
+
+  const product = await prisma.reservationProduct.findFirst({
+    where: {
+      id: productId,
+      batchId,
+      active: true,
+      inventoryItemId: { not: "" },
+      batch: { active: true },
+    },
+    select: {
+      name: true,
+      supplyPrice: true,
+      pickupDate: true,
+      inventoryItemId: true,
+      batch: { select: { reserveDate: true } },
+    },
+  });
+  if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
+  if (isReservationClosed(product.batch.reserveDate)) {
+    return { ok: false, error: "예약이 마감됐어요." };
+  }
+  if (!reservationLockActiveAt(product.pickupDate)) {
+    return { ok: false, error: "픽업일이 지나 담을 수 없어요." };
+  }
+
+  const itemId = product.inventoryItemId;
+  const gte = minLockedPickupDate();
+
+  try {
+    const res = await prisma.$transaction(async (tx) => {
+      // 일일 담기와 같은 락으로 이 품목 담기를 직렬화(동시 초과 방지)
+      await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${itemId} FOR UPDATE`;
+      const item = await tx.inventoryItem.findUnique({
+        where: { id: itemId },
+        select: { qty: true, deletedAt: true },
+      });
+      if (!item || item.deletedAt) {
+        return { ok: false, error: "재고 품목을 찾을 수 없어요." };
+      }
+
+      // 전체 예약홀드(연동·픽업 10시 전·활성 배치) − 내 이 상품 현재 수량
+      const resvRows = await tx.reservationOrderItem.findMany({
+        where: {
+          inventoryItemId: itemId,
+          pickupDate: { gte },
+          qty: { gt: 0 },
+          order: { batch: { active: true } },
+        },
+        select: { qty: true, productId: true, order: { select: { userId: true } } },
+      });
+      let resvHeld = 0;
+      let myThis = 0;
+      for (const r of resvRows) {
+        resvHeld += r.qty;
+        if (r.order.userId === user.id && r.productId === productId) myThis += r.qty;
+      }
+      // 일일 담기 홀드(연동 잠긴 품목이면 보통 0이나, 잠금 직전 담긴 게 있을 수 있어 함께 차감)
+      const dayAgg = await tx.stockHold.aggregate({
+        where: { itemId, windowDate: windowKeyAt() },
+        _sum: { qty: true },
+      });
+      const availableForMe = item.qty - (resvHeld - myThis) - (dayAgg._sum.qty ?? 0);
+
+      const order = await tx.reservationOrder.findUnique({
+        where: { userId_batchId: { userId: user.id, batchId } },
+        select: { id: true },
+      });
+
+      if (qty <= 0) {
+        if (order) {
+          await tx.reservationOrderItem.deleteMany({
+            where: { orderId: order.id, productId },
+          });
+        }
+        return { ok: true, available: Math.max(0, availableForMe) };
+      }
+      if (qty > availableForMe) {
+        return {
+          ok: false,
+          error: `남은 수량이 부족해요. (담을 수 있는 최대 ${Math.max(0, availableForMe)}개)`,
+          available: Math.max(0, availableForMe),
+        };
+      }
+      // 주문 보장(confirmed 는 건드리지 않음 — 수기분 확정상태 유지)
+      const oid =
+        order?.id ??
+        (
+          await tx.reservationOrder.create({
+            data: { userId: user.id, batchId, confirmed: false },
+            select: { id: true },
+          })
+        ).id;
+      await tx.reservationOrderItem.upsert({
+        where: { orderId_productId: { orderId: oid, productId } },
+        create: {
+          orderId: oid,
+          productId,
+          name: product.name,
+          supplyPrice: product.supplyPrice,
+          pickupDate: product.pickupDate,
+          inventoryItemId: itemId,
+          qty,
+        },
+        update: {
+          qty,
+          name: product.name,
+          supplyPrice: product.supplyPrice,
+          pickupDate: product.pickupDate,
+          inventoryItemId: itemId,
+        },
+      });
+      return { ok: true, available: Math.max(0, availableForMe - qty) };
+    });
+    revalidatePath(`/reservations/${batchId}`);
+    revalidatePath("/inventory");
+    revalidatePath("/order");
+    return res;
+  } catch (err) {
+    logError("reservation.hold", err, { batchId, productId, userId: user.id });
+    return { ok: false, error: "담기에 실패했어요. 다시 시도해 주세요." };
+  }
 }

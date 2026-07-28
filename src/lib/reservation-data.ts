@@ -41,7 +41,19 @@ export type ReservationProductRow = {
   name: string;
   supplyPrice: number;
   pickupDate: string;
+  inventoryItemId: string; // 값 있으면 재고현황 연동 상품(실시간 담기), 빈값=수기
 };
+
+// 관리자 예약 등록 '재고현황에서 불러오기' 피커용 — 활성 재고 품목.
+export async function getInventoryPickList(): Promise<
+  { id: string; name: string; supplyPrice: number }[]
+> {
+  return prisma.inventoryItem.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, supplyPrice: true },
+  });
+}
 
 export type ReservationBatchDetail = {
   id: string;
@@ -60,7 +72,7 @@ export async function getReservationBatch(id: string): Promise<ReservationBatchD
       products: {
         where: { active: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-        select: { id: true, name: true, supplyPrice: true, pickupDate: true },
+        select: { id: true, name: true, supplyPrice: true, pickupDate: true, inventoryItemId: true },
       },
       _count: { select: { orders: true } },
     },
@@ -140,7 +152,7 @@ export async function getMerchantReservation(
       products: {
         where: { active: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-        select: { id: true, name: true, supplyPrice: true, pickupDate: true },
+        select: { id: true, name: true, supplyPrice: true, pickupDate: true, inventoryItemId: true },
       },
       orders: {
         where: { userId },
@@ -200,7 +212,9 @@ export async function getReservationInvoiceItems(
     where: {
       pickupDate,
       qty: { gt: 0 },
-      order: { userId, confirmed: true, batch: { active: true } },
+      order: { userId, batch: { active: true } },
+      // 수기분은 확정(confirmed)돼야, 연동분은 즉시 담기(홀드)라 confirmed 무관하게 로드.
+      OR: [{ order: { confirmed: true } }, { inventoryItemId: { not: "" } }],
     },
     select: { name: true, qty: true, supplyPrice: true },
     orderBy: { sortOrder: "asc" },
@@ -228,7 +242,9 @@ export async function getReservationLoadForOrder(
     where: {
       pickupDate,
       qty: { gt: 0 },
-      order: { userId, confirmed: true, batch: { active: true } },
+      order: { userId, batch: { active: true } },
+      // 수기분은 확정돼야, 연동분은 즉시 담기라 confirmed 무관하게 로드.
+      OR: [{ order: { confirmed: true } }, { inventoryItemId: { not: "" } }],
     },
     select: { name: true, qty: true },
     orderBy: { sortOrder: "asc" },
