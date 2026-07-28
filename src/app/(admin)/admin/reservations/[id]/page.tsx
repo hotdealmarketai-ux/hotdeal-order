@@ -10,9 +10,8 @@ import {
   ReservationBatchEditor,
   ReservationBatchDeleteButton,
 } from "@/components/ReservationBatchEditor";
+import { ConfirmedMerchants } from "@/components/ConfirmedMerchants";
 import { labelDate } from "@/lib/date";
-
-const won = (n: number) => n.toLocaleString("ko-KR");
 
 export default async function EditReservationBatchPage(props: {
   params: Promise<{ id: string }>;
@@ -33,28 +32,12 @@ export default async function EditReservationBatchPage(props: {
       <div className="page">
         <ReservationBatchEditor batch={batch} inventoryItems={inventoryItems} />
 
-        {/* 확정한 점주 — 예약분은 픽업일 전날 발주·계산서 공구에 자동 반영(별도 발행 없음) */}
+        {/* 확정한 점주 — 점주를 누르면 상품별 예약 수량이 펼쳐진다 */}
         <div className="itemshead" style={{ marginTop: 26 }}>
           <span className="itemshead__label">확정한 점주</span>
           <span className="itemshead__count">{confirmations.length}곳</span>
         </div>
-        {confirmations.length === 0 ? (
-          <div className="empty">아직 확정한 점주가 없어요.</div>
-        ) : (
-          <div className="stack">
-            {confirmations.map((c) => (
-              <div className="resv-conf" key={c.userId}>
-                <span className="resv-conf__name">{c.storeName}</span>
-                <span className="resv-conf__meta">
-                  {c.qty}개 · {won(c.total)}원
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <p className="resv-note" style={{ marginTop: 10 }}>
-          예약분은 픽업 전날 발주와 계산서 <b>공구</b>에 자동으로 들어갑니다.
-        </p>
+        <ConfirmedMerchants confirmations={confirmations} />
 
         <ReservationBatchDeleteButton batchId={batch.id} />
       </div>

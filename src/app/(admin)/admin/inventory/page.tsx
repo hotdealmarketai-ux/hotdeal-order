@@ -7,12 +7,16 @@ import { InventoryBulkImport } from "@/components/InventoryBulkImport";
 import { SheetImportButton } from "@/components/SheetImportButton";
 import { SheetSyncDiagnose } from "@/components/SheetSyncDiagnose";
 import { CategoryAutoAssign } from "@/components/CategoryAutoAssign";
+import { Collapsible } from "@/components/Collapsible";
+import { reservationHeldByItem } from "@/lib/reservation-stock";
 
 export default async function AdminInventory() {
   await requireAdmin();
   const items = await prisma.inventoryItem.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
+  // 실재고(base) vs 예약재고 구분 — 예약 확정으로 잡힌 수량(품목별). base는 창고 실물 그대로.
+  const reservedByItem = await reservationHeldByItem();
   // 품목 추가/삭제로 목록 구성이 바뀌면 편집기를 새로 그린다(입력 중에는 유지).
   const idsKey = items.map((i) => i.id).join(",");
 
@@ -20,13 +24,13 @@ export default async function AdminInventory() {
     <>
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
-        <CategoryAutoAssign />
-
-        <SheetSyncDiagnose />
-
-        <SheetImportButton />
-
-        <InventoryBulkImport currentNames={items.map((it) => it.name)} />
+        {/* 잘 안 쓰는 기능은 '기능' 토글 안에 숨겨 스크롤을 줄인다(기본 닫힘) */}
+        <Collapsible title="기능" hint="카테고리 · 시트 · 엑셀">
+          <CategoryAutoAssign />
+          <SheetSyncDiagnose />
+          <SheetImportButton />
+          <InventoryBulkImport currentNames={items.map((it) => it.name)} />
+        </Collapsible>
 
         <div className="card">
           <div className="section-label" style={{ margin: "0 0 10px" }}>
@@ -76,6 +80,7 @@ export default async function AdminInventory() {
             expiry: it.expiry ?? "",
             majorCat: it.majorCat ?? "",
             minorCat: it.minorCat ?? "",
+            reserved: reservedByItem[it.id] ?? 0,
           }))}
         />
       </div>

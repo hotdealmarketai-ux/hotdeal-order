@@ -188,12 +188,13 @@ export async function getMerchantReservation(
   };
 }
 
-// 관리자: 이 배치에서 확정한 점주별 요약(수량·금액) — 배치 페이지 정보 표시용.
+// 관리자: 이 배치에서 확정한 점주별 요약(수량·금액 + 상품별 내역) — 배치 페이지 표시용.
 export type BatchConfirmation = {
   userId: string;
   storeName: string;
   qty: number;
   total: number;
+  items: { name: string; qty: number }[]; // 어떤 상품을 몇 개(펼쳐 보기용)
 };
 export async function getBatchConfirmations(batchId: string): Promise<BatchConfirmation[]> {
   const orders = await prisma.reservationOrder.findMany({
@@ -201,7 +202,11 @@ export async function getBatchConfirmations(batchId: string): Promise<BatchConfi
     select: {
       userId: true,
       user: { select: { storeName: true } },
-      items: { select: { qty: true, supplyPrice: true } },
+      items: {
+        where: { qty: { gt: 0 } },
+        orderBy: { sortOrder: "asc" },
+        select: { name: true, qty: true, supplyPrice: true },
+      },
     },
   });
   return orders
@@ -210,6 +215,7 @@ export async function getBatchConfirmations(batchId: string): Promise<BatchConfi
       storeName: o.user.storeName,
       qty: o.items.reduce((s, i) => s + i.qty, 0),
       total: o.items.reduce((s, i) => s + i.qty * i.supplyPrice, 0),
+      items: o.items.map((i) => ({ name: i.name, qty: i.qty })),
     }))
     .filter((o) => o.qty > 0)
     .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
