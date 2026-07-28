@@ -279,6 +279,9 @@ model ReservationOrderItem {
   // 연동 아이템은 즉시 담기(홀드)라 confirmed 무관하게 유효 → 자동로드·재고홀드 판정에 사용.
   inventoryItemId String        @default("")
   qty         Int              @default(0)
+  // 픽업 시점(픽업일 오전10시)에 기준재고(InventoryItem.qty)에서 이 수량을 실제로 차감했는지.
+  // null=미차감. tick 크론이 픽업 지난 연동 예약분을 1회 차감하고 이 값을 채운다(멱등).
+  stockDeductedAt DateTime?
 
   @@unique([orderId, productId]) // 주문 내 상품 1행
   @@index([pickupDate]) // 픽업 전날 공구 자동로드 필터용

@@ -393,12 +393,12 @@ export function WarehouseBoard({
           <div className="whintro__card" onClick={(e) => e.stopPropagation()}>
             <div className="whintro__logo">📦 창고관리</div>
             <div className="whintro__count">
-              오늘의 발주는 <b>{todayCount}</b>건입니다
+              오늘 출고할 발주 <b>{todayCount}</b>건
             </div>
             {todayStores.length > 0 ? (
               <div className="whintro__stores">
                 <div className="whintro__storeshd">
-                  오늘 발주 넣은 지점 · {todayStores.length}곳
+                  오늘 출고하는 지점 · {todayStores.length}곳
                 </div>
                 <div className="whintro__storelist">
                   {todayStores.map((s) => (
@@ -409,7 +409,7 @@ export function WarehouseBoard({
                 </div>
               </div>
             ) : (
-              <div className="whintro__none">아직 오늘 들어온 발주가 없어요.</div>
+              <div className="whintro__none">오늘 출고할 발주가 없어요.</div>
             )}
             <button
               type="button"

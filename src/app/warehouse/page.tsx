@@ -1,6 +1,6 @@
 import { requireWarehouse } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { kstToday, kstDayRange } from "@/lib/date";
+import { kstToday, orderRangeForShipment } from "@/lib/date";
 import { heldByItem } from "@/lib/stock-hold";
 import { reservationHeldByItem } from "@/lib/reservation-stock";
 import { windowKeyAt } from "@/lib/schedule";
@@ -27,8 +27,9 @@ export default async function WarehousePage() {
     reservationHeldByItem(),
   ]);
 
-  // 오늘 들어온 발주(#12 인트로/글로우) — 건수·지점·품목명(정규화). 취소 제외.
-  const { start, end } = kstDayRange(kstToday());
+  // 인트로/글로우 — '오늘 출고할 발주' = 전날 발주(발주=전날, 출고=다음날 공식).
+  // 그래서 오늘(kstToday) 출고에 실리는 발주 범위(orderRangeForShipment)로 조회한다(취소 제외).
+  const { start, end } = orderRangeForShipment(kstToday());
   const todayOrders = await prisma.order.findMany({
     where: { createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     select: {
@@ -37,7 +38,7 @@ export default async function WarehousePage() {
     },
   });
   const todayStores = [...new Set(todayOrders.map((o) => o.user.storeName))];
-  // '오늘의 발주 N건' = 발주 넣은 지점 수(지점 8곳이면 8건). 발주 row 수가 아님.
+  // '오늘 출고 발주 N건' = 오늘 출고할 발주를 넣은 지점 수(지점 8곳이면 8건).
   const todayCount = todayStores.length;
   const todayItemNames = [
     ...new Set(

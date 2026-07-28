@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/log";
 import { releaseStaleHolds } from "@/lib/stock-hold";
+import { deductDuePickupStock } from "@/lib/reservation-stock";
 
 // 정시 크론 디스패처 — 외부 크론(cron-job.org 등)이 '1분마다' 이 엔드포인트를 호출하면,
 // 각 잡을 정해진 KST 시각에 정확히 1회 실행한다. 한 분을 놓쳐도 다음 호출에서 캐치업.
@@ -115,6 +116,14 @@ export async function GET(request: Request) {
     if (released > 0) ran.push(`tick:holds(${released})`);
   } catch (e) {
     logError("tick.holds", e, {});
+  }
+
+  // 예약분 픽업(픽업일 오전 10시 지남) → 기준재고 실제 차감(1회·멱등). 대부분 no-op.
+  try {
+    const deducted = await deductDuePickupStock(now);
+    if (deducted > 0) ran.push(`tick:resv-deduct(${deducted})`);
+  } catch (e) {
+    logError("tick.resvDeduct", e, {});
   }
 
   return Response.json({

@@ -113,3 +113,51 @@ export async function availableForReservationProducts(
   }
   return out;
 }
+
+// 픽업 시점(픽업일 오전 10시 지남) 연동 예약분을 기준재고(InventoryItem.qty)에서 실제 차감(1회·멱등).
+// 예약홀드는 픽업 10시에 판매가능에서 풀리는데, 그 순간 실물도 출고돼 나가므로 base를 함께 줄여
+// 숫자가 다시 튀지 않게 한다(사용자 요청). 실제 출고량이 다르면 관리자가 재고현황에서 수기 보정.
+// stockDeductedAt 플래그로 중복 차감 방지 → tick 크론이 매분 호출해도 최초 1회만 차감, 이후 no-op.
+export async function deductDuePickupStock(
+  now: number = Date.now(),
+): Promise<number> {
+  const gte = minLockedPickupDate(now); // pickupDate < gte = 픽업일 오전 10시 지남
+  const dueItems = await prisma.reservationOrderItem.findMany({
+    where: {
+      inventoryItemId: { not: "" },
+      qty: { gt: 0 },
+      stockDeductedAt: null,
+      pickupDate: { lt: gte, not: "" },
+      order: { confirmed: true, batch: { active: true } },
+    },
+    select: { id: true, inventoryItemId: true, qty: true },
+  });
+  if (dueItems.length === 0) return 0;
+
+  // 품목별 차감량 합산
+  const byItem = new Map<string, number>();
+  for (const it of dueItems)
+    byItem.set(it.inventoryItemId, (byItem.get(it.inventoryItemId) ?? 0) + it.qty);
+
+  const ids = [...byItem.keys()];
+  const invs = await prisma.inventoryItem.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, qty: true },
+  });
+  const at = new Date(now);
+  await prisma.$transaction(async (tx) => {
+    for (const inv of invs) {
+      const dec = byItem.get(inv.id) ?? 0;
+      // 음수 방지 — max(0, base − 차감). 실제 출고량 차이는 관리자가 수기 보정.
+      await tx.inventoryItem.update({
+        where: { id: inv.id },
+        data: { qty: Math.max(0, inv.qty - dec) },
+      });
+    }
+    await tx.reservationOrderItem.updateMany({
+      where: { id: { in: dueItems.map((i) => i.id) } },
+      data: { stockDeductedAt: at },
+    });
+  });
+  return dueItems.length;
+}
