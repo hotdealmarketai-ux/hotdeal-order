@@ -33,6 +33,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
     return NextResponse.json(jsonResponse);
   } catch (err) {
+    // 원인 진단용 — Vercel 런타임 로그에 남긴다(토큰/OIDC 문제 파악).
+    console.error("[chat/upload] handleUpload failed:", err);
     return NextResponse.json(
       { error: (err as Error).message || "업로드에 실패했어요." },
       { status: 400 },
