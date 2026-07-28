@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { autosaveInventoryAction } from "@/app/actions/admin";
 import { expiryInfo } from "@/lib/date";
 import { InvSearch } from "./InvSearch";
+import { CategoryMoveButton } from "./CategoryMoveButton";
 
 type Item = {
   id: string;
@@ -66,6 +67,17 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
   const visible = query
     ? items.filter((it) => it.name.toLowerCase().includes(query))
     : items;
+
+  // 카테고리 이동 시 제안할 기존 대분류/중분류 목록(현재 재고에서 도출)
+  const allMajors = [...new Set(items.map((i) => i.majorCat).filter(Boolean))].sort(
+    (a, b) => a.localeCompare(b, "ko"),
+  );
+  const minorsByMajor: Record<string, string[]> = {};
+  for (const it of items) {
+    if (!it.majorCat) continue;
+    const arr = (minorsByMajor[it.majorCat] ??= []);
+    if (it.minorCat && !arr.includes(it.minorCat)) arr.push(it.minorCat);
+  }
 
   return (
     <>
@@ -132,13 +144,17 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
                   ✕
                 </button>
               </div>
-              {/* 카테고리(AI 자동분류) — 표시용. 붙은 경우만 노출 */}
-              {it.majorCat && (
-                <div className="invitem__cat">
-                  {it.majorCat}
-                  {it.minorCat ? ` · ${it.minorCat}` : ""}
-                </div>
-              )}
+              {/* 카테고리 — 누르면 대분류/중분류를 바꿀 수 있다(AI 자동분류 수정) */}
+              <div className="invitem__cat">
+                <CategoryMoveButton
+                  itemId={it.id}
+                  name={it.name}
+                  major={it.majorCat}
+                  minor={it.minorCat}
+                  allMajors={allMajors}
+                  minorsByMajor={minorsByMajor}
+                />
+              </div>
               {/* #9 입력한 유통기한을 '0000년 00월 00일 0요일'로 눈에 보이게 확인 표시 */}
               {exp && (
                 <div className={`invitem__exp invitem__exp--${exp.level}`}>

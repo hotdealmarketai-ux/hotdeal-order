@@ -630,6 +630,28 @@ export async function applyInventoryCategoriesAction(
   return { ok: true, updated };
 }
 
+// 품목 1개의 카테고리 이동(수동 수정) — AI 자동분류가 틀린 건 여기서 옮긴다.
+export async function setItemCategoryAction(
+  itemId: string,
+  major: string,
+  minor: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireAdmin();
+  const id = String(itemId ?? "");
+  if (!id) return { ok: false, error: "잘못된 요청이에요." };
+  const majorCat = String(major ?? "").trim().slice(0, 40);
+  const minorCat = String(minor ?? "").trim().slice(0, 40);
+  const upd = await prisma.inventoryItem.updateMany({
+    where: { id, deletedAt: null },
+    data: { majorCat, minorCat },
+  });
+  if (upd.count === 0) return { ok: false, error: "품목을 찾을 수 없어요." };
+  await setInventoryPushPending(); // 다음 push 크론이 시트 E/F열에 반영
+  revalidatePath("/admin/inventory");
+  revalidatePath("/inventory");
+  return { ok: true };
+}
+
 // R4 재고 자동저장 — 편집기 입력을 디바운스로 계속 저장. 현재 목록으로 DB를 맞춘다(이름/수량/공급가
 // 갱신 + 목록에서 빠진 항목 삭제). 시트 반영은 push하지 않고 'pending' 표시만 → 다음 크론이 반영(단방향).
 export async function autosaveInventoryAction(payloadJson: string) {

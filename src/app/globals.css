@@ -2895,8 +2895,26 @@ body {
 .invitem__exp b { color: var(--fg); font-weight: 700; }
 .invitem__exp--soon b,
 .invitem__exp--expired b { color: var(--danger); }
-/* 편집기 행 카테고리 칩(대분류·중분류) */
-.invitem__cat { padding: 2px 12px 4px; font-size: 11.5px; font-weight: 700; color: var(--green-700); }
+/* 편집기 행 카테고리 이동 버튼 */
+.invitem__cat { padding: 2px 12px 6px; }
+.catmove {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
+  padding: 3px 6px 3px 10px; font-size: 11.5px; font-weight: 700; color: var(--green-700);
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; max-width: 100%;
+}
+.catmove--none { color: var(--muted); font-weight: 600; }
+.catmove__edit { font-size: 10px; font-weight: 700; color: var(--muted); border-left: 1px solid var(--line); padding-left: 6px; flex-shrink: 0; }
+/* 분류 이동 바텀시트 */
+.catsheet { padding-bottom: 8px; }
+.catsheet__title { font-size: 16px; font-weight: 800; color: var(--fg); margin: 4px 0 14px; text-align: center; }
+.catsheet__label { font-size: 12.5px; font-weight: 800; color: var(--fg); }
+.catsheet__opt { font-size: 11px; font-weight: 600; color: var(--muted); }
+.catsheet__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.catchip {
+  border: 1.5px solid var(--line); background: var(--bg); border-radius: 999px;
+  padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--fg); cursor: pointer;
+}
+.catchip.is-on { border-color: var(--green-700); background: var(--green-100); color: var(--green-700); }
 /* #9 점주 재고목록 한 줄 메타(남은수량 · 공급가 · 유통기한 · 담음) — 배지 남발 대신 깔끔한 텍스트.
    색은 긴급 상태(품절/저재고/유통임박)에만 써서 눈이 편하게. */
 .stockmeta {
