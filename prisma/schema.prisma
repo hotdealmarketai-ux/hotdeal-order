@@ -73,6 +73,8 @@ model ChatMessage {
   senderId  String
   fromAdmin Boolean // true=관리자 발신, false=가맹점주 발신
   body      String
+  mediaUrl  String? // 첨부 사진·영상 URL(Vercel Blob). 없으면 텍스트 메시지
+  mediaType String? // "image" | "video"
   readAt    DateTime? // 수신자가 읽은 시각
   createdAt DateTime   @default(now())
 

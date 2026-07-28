@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import {
   chatBootstrap,
   chatUnread,
@@ -16,6 +17,9 @@ import {
   type ChatThreadItem,
 } from "@/app/actions/chat";
 import { AiAssistant } from "@/components/AiAssistant";
+import { BroadcastModal } from "@/components/BroadcastModal";
+
+const MAX_MEDIA_BYTES = 100 * 1024 * 1024; // 100MB
 
 const fmtTime = (iso: string) =>
   new Date(iso).toLocaleTimeString("ko-KR", {
@@ -43,6 +47,9 @@ export function ChatWidget() {
   const [err, setErr] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [uploading, setUploading] = useState(false); // 첨부 업로드 중
+  const [broadcastOpen, setBroadcastOpen] = useState(false); // 전체공지 모달
+  const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingChatParam = useRef<string | null>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -283,7 +290,15 @@ export function ChatWidget() {
     const tmpId = `tmp-${Date.now()}`;
     setMessages((m) => [
       ...m,
-      { id: tmpId, mine: true, body: text, at: new Date().toISOString(), readAt: null },
+      {
+        id: tmpId,
+        mine: true,
+        body: text,
+        mediaUrl: null,
+        mediaType: null,
+        at: new Date().toISOString(),
+        readAt: null,
+      },
     ]);
     scrollDown();
     const res = await sendChat(text, role === "admin" ? threadId ?? undefined : undefined);
@@ -295,6 +310,68 @@ export function ChatWidget() {
       return;
     }
     // 성공: 낙관적 버블 유지 → 다음 폴링(≤3.5s)이 서버 메시지로 조용히 정합(깜빡임 방지)
+  };
+
+  // 사진·영상 첨부(#2) — Vercel Blob 클라 직접 업로드 후 sendChat로 메시지 생성.
+  const onPickFile = () => {
+    if (role === "admin" && !threadId) {
+      setErr("보낼 대화를 먼저 선택하세요.");
+      return;
+    }
+    fileRef.current?.click();
+  };
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 같은 파일 재선택 가능하게 초기화
+    if (!file) return;
+    if (role === "admin" && !threadId) return;
+    if (file.size > MAX_MEDIA_BYTES) {
+      setErr("100MB 이하 파일만 보낼 수 있어요.");
+      return;
+    }
+    const type: "image" | "video" = file.type.startsWith("video")
+      ? "video"
+      : "image";
+    const caption = input.trim();
+    setUploading(true);
+    setErr("");
+    try {
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/chat/upload",
+        contentType: file.type || undefined,
+      });
+      setInput("");
+      const tmpId = `tmp-${Date.now()}`;
+      setMessages((m) => [
+        ...m,
+        {
+          id: tmpId,
+          mine: true,
+          body: caption,
+          mediaUrl: blob.url,
+          mediaType: type,
+          at: new Date().toISOString(),
+          readAt: null,
+        },
+      ]);
+      scrollDown();
+      const res = await sendChat(
+        caption,
+        role === "admin" ? threadId ?? undefined : undefined,
+        { url: blob.url, type },
+      );
+      if (!res?.ok) {
+        setMessages((m) => m.filter((x) => x.id !== tmpId));
+        setErr(res?.error || "첨부 전송에 실패했어요.");
+      }
+    } catch {
+      setErr(
+        "첨부 전송에 실패했어요. 사진·영상 저장소 설정을 확인해 주세요.",
+      );
+    } finally {
+      setUploading(false);
+    }
   };
 
   const doClear = async () => {
@@ -461,6 +538,16 @@ export function ChatWidget() {
 
           {/* 관리자 목록 */}
           {role === "admin" && view === "list" ? (
+            <>
+            <div className="chatbcast-bar">
+              <button
+                type="button"
+                className="chatbcast-btn"
+                onClick={() => setBroadcastOpen(true)}
+              >
+                📢 전체공지 보내기
+              </button>
+            </div>
             <div className="chatlist" ref={scrollRef}>
               {threads.length === 0 ? (
                 <div className="chatempty">가입된 가맹점이 없어요.</div>
@@ -490,6 +577,7 @@ export function ChatWidget() {
                 ))
               )}
             </div>
+            </>
           ) : role === "merchant" && mMode === "ai" ? (
             <AiAssistant />
           ) : (
@@ -521,7 +609,31 @@ export function ChatWidget() {
                           {!m.mine && startGroup && (
                             <div className="msg__name">{otherName}</div>
                           )}
-                          <div className="msg__bubble">{m.body}</div>
+                          <div
+                            className={`msg__bubble${m.mediaUrl ? " msg__bubble--media" : ""}`}
+                          >
+                            {m.mediaUrl && m.mediaType === "image" && (
+                              <a
+                                href={m.mediaUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="msg__media"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={m.mediaUrl} alt="첨부 이미지" loading="lazy" />
+                              </a>
+                            )}
+                            {m.mediaUrl && m.mediaType === "video" && (
+                              <video
+                                className="msg__media"
+                                src={m.mediaUrl}
+                                controls
+                                preload="metadata"
+                                playsInline
+                              />
+                            )}
+                            {m.body && <span className="msg__text">{m.body}</span>}
+                          </div>
                           <div className="msg__meta">
                             {fmtTime(m.at)}
                             {m.mine && m === lastMine && (
@@ -538,6 +650,9 @@ export function ChatWidget() {
               </div>
 
               {err && <div className="chaterr">{err}</div>}
+              {uploading && (
+                <div className="chatuploading">첨부 업로드 중…</div>
+              )}
               <form
                 className="chatinput"
                 onSubmit={(e) => {
@@ -545,6 +660,26 @@ export function ChatWidget() {
                   send();
                 }}
               >
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  hidden
+                  onChange={onFileChange}
+                />
+                <button
+                  type="button"
+                  className="chatinput__attach"
+                  onClick={onPickFile}
+                  disabled={uploading}
+                  aria-label="사진·영상 첨부"
+                >
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2.5" />
+                    <circle cx="8.5" cy="9.5" r="1.6" />
+                    <path d="M21 16l-5-5-9 9" />
+                  </svg>
+                </button>
                 <input
                   className="chatinput__field"
                   value={input}
@@ -565,6 +700,10 @@ export function ChatWidget() {
             </>
           )}
         </div>
+      )}
+
+      {broadcastOpen && role === "admin" && (
+        <BroadcastModal onClose={() => setBroadcastOpen(false)} />
       )}
     </>
   );
