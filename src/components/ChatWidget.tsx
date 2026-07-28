@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   chatBootstrap,
   chatUnread,
@@ -25,7 +26,9 @@ const fmtTime = (iso: string) =>
 
 // #9 1:1 문의 채팅 — 우하단 플로팅 버튼 + 팝업. 가맹점주=관리자와 1:1, 관리자=지점 목록(DM식).
 export function ChatWidget() {
+  const pathname = usePathname();
   const [role, setRole] = useState<ChatRole | null>(null);
+  const prevRole = useRef<ChatRole | null>(null);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"list" | "thread">("thread");
@@ -80,13 +83,29 @@ export function ChatWidget() {
   }, []);
   useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
-  // 부트스트랩 + 푸시로 들어온 ?chat= 파라미터 감지
+  // 부트스트랩 + 푸시로 들어온 ?chat= 파라미터 감지.
+  // ⚠️ 위젯은 루트 레이아웃에 있어 앱 수명 내내 '한 번' 마운트된다 → 로그인/로그아웃/계정전환은
+  // 소프트 내비게이션이라 레이아웃이 리마운트되지 않아, 예전엔 처음 켠 역할(예: 관리자)로 굳어
+  // 점주로 바꿔도 관리자 채팅 화면이 떴다. 그래서 '경로가 바뀔 때마다' 역할을 다시 받아
+  // 지금 세션에 맞추고, 역할이 바뀌면 위젯 상태를 초기화한다.
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       const b = await chatBootstrap().catch(() => null);
-      if (!b) return;
-      setRole(b.role);
-      setUnread(b.unread);
+      if (cancelled) return;
+      const next = b ? b.role : null;
+      if (prevRole.current !== next) {
+        // 세션(역할)이 바뀜 → 옛 역할 화면이 남지 않게 위젯 상태 리셋
+        prevRole.current = next;
+        setOpen(false);
+        setMenuOpen(false);
+        setView("thread");
+        setMMode("ai");
+        setThreads([]);
+        setMessages([]);
+      }
+      setRole(next);
+      setUnread(b ? b.unread : 0);
       try {
         const p = new URLSearchParams(window.location.search).get("chat");
         if (p) pendingChatParam.current = p;
@@ -94,7 +113,10 @@ export function ChatWidget() {
         /* noop */
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   // 닫혀있을 때 미읽음 폴링
   useEffect(() => {

@@ -125,44 +125,22 @@ export function MerchantInventoryList({
           <div className="row" key={it.id}>
             <div className="row__main">
               <div className="row__title">{it.name}</div>
-              <div
-                className="row__sub"
-                style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 3, flexWrap: "wrap" }}
-              >
+              {/* 한 줄 정리 — 배지 남발 대신 muted 텍스트, 색은 긴급(품절/유통임박)에만 */}
+              <div className="stockmeta">
                 <span
-                  className={`badge ${
-                    avail <= 0
-                      ? "badge--danger"
-                      : avail < 5
-                        ? "badge--wait"
-                        : "badge--ok"
+                  className={`stockmeta__qty${
+                    avail <= 0 ? " is-out" : avail < 5 ? " is-low" : ""
                   }`}
                 >
-                  {avail <= 0 ? "품절" : `${avail}개`}
+                  {avail <= 0 ? "품절" : `남은 ${avail}개`}
                 </span>
-                {mineQ > 0 && <span className="badge badge--ai">담음 {mineQ}개</span>}
                 {it.supplyPrice > 0 && <span>공급가 {won(it.supplyPrice)}원</span>}
                 {exp && (
-                  <>
-                    <span
-                      className={`badge ${
-                        exp.level === "expired"
-                          ? "badge--danger"
-                          : exp.level === "soon"
-                            ? "badge--wait"
-                            : "badge--mute"
-                      }`}
-                    >
-                      유통 {exp.dday}
-                    </span>
-                    {/* 전체 날짜(0000년 00월 00일 0요일)도 눈에 보이게 — 툴팁만이 아님 */}
-                    <span
-                      className={`stockexp__full${exp.level === "expired" || exp.level === "soon" ? " stockexp__full--warn" : ""}`}
-                    >
-                      {exp.full}
-                    </span>
-                  </>
+                  <span className={`stockmeta__exp${exp.level !== "ok" ? " is-warn" : ""}`}>
+                    유통기한 {exp.full} · {exp.dday}
+                  </span>
                 )}
+                {mineQ > 0 && <span className="stockmeta__mine">담음 {mineQ}개</span>}
               </div>
             </div>
             <StockCartButton

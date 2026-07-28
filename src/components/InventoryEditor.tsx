@@ -115,19 +115,12 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
                   placeholder="0"
                   onChange={(e) => setField(it.id, "supplyPrice", e.target.value)}
                 />
-                <span className="invcol--expiry invexp">
-                  <input
-                    className="invin invexp__in"
-                    value={it.expiry}
-                    placeholder="26-07-27"
-                    onChange={(e) => setField(it.id, "expiry", e.target.value)}
-                  />
-                  {exp && (
-                    <span className={`invexp__dday invexp__dday--${exp.level}`}>
-                      {exp.dday}
-                    </span>
-                  )}
-                </span>
+                <input
+                  className="invin invcol--expiry"
+                  value={it.expiry}
+                  placeholder="26-07-27"
+                  onChange={(e) => setField(it.id, "expiry", e.target.value)}
+                />{/* D-N·전체날짜는 행 아래 확인줄(.invitem__exp)에서 한 줄로 — 칸 안엔 날짜만 */}
                 <button
                   type="button"
                   className="invrow__del invcol--del"
