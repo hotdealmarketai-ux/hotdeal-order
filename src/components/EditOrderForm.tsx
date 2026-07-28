@@ -23,6 +23,7 @@ export function EditOrderForm({
   needsFulfillment = false,
   initialFulfillment = "",
   address = "",
+  action = updateOrderAction,
 }: {
   orderId: string;
   category: Category;
@@ -33,6 +34,8 @@ export function EditOrderForm({
   needsFulfillment?: boolean;
   initialFulfillment?: "" | Fulfillment;
   address?: string;
+  // 저장 액션 — 점주=updateOrderAction(기본), 관리자=adminUpdateOrderAction.
+  action?: (prev: OrderFormState, formData: FormData) => Promise<OrderFormState>;
 }) {
   const isTofu = category === "TOFU";
   const uid = useRef(0);

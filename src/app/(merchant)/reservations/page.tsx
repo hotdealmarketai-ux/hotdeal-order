@@ -13,7 +13,14 @@ export default async function ReservationsPage() {
 
   return (
     <>
-      <Topbar brand="핫딜오더 · 예약발주" />
+      <Topbar
+        brand="핫딜오더 · 예약발주"
+        right={
+          <Link href="/reservations/past" className="tbar__chip">
+            지난 예약발주
+          </Link>
+        }
+      />
       <div className="page">
         <div className="itemshead">
           <span className="itemshead__label">예약 가능한 날짜</span>

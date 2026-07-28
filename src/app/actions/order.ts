@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { requireMerchant } from "@/lib/session";
+import { requireMerchant, requireAdmin } from "@/lib/session";
+import { writeAudit } from "@/lib/audit";
 import {
   allowedCategoriesFor,
   vendorRoleForCategory,
@@ -34,6 +35,7 @@ import {
   notifyMerchantOrderPlaced,
   notifyVendorOrderEdited,
   notifyAdminOrderEdited,
+  notifyMerchantOrderEdited,
   sendPushToRole,
 } from "@/lib/push";
 
@@ -682,4 +684,153 @@ export async function updateOrderAction(
     redirect(`/order/day/${orderDate}?edited=1`);
   }
   redirect(`/order/${orderId}?edited=1`);
+}
+
+// ============================================================
+//  관리자(새롭) 발주 수정 — 아무 지점 발주나. 발주창 제한 없음(마감 후·지난 발주도).
+//  계산서 발행분·취소분은 차단(정합). 저장 후 점주+받는 업체에 알림.
+// ============================================================
+export async function adminUpdateOrderAction(
+  _prev: OrderFormState,
+  formData: FormData,
+): Promise<OrderFormState> {
+  const admin = await requireAdmin();
+  const orderId = String(formData.get("orderId") ?? "");
+  if (!orderId) return { error: "잘못된 요청이에요." };
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      userId: true,
+      category: true,
+      createdAt: true,
+      status: true,
+      user: { select: { role: true, storeName: true } },
+    },
+  });
+  if (!order) return { error: "발주를 찾을 수 없어요." };
+  if (order.status === "CANCELLED") {
+    return { error: "취소된 발주는 수정할 수 없어요." };
+  }
+
+  // 계산서 발행분은 잠금(청구액↔발주 정합) — 관리자도 동일. 발행 후 변경은 계산서 수정으로.
+  const issuedInv = await prisma.invoice.findFirst({
+    where: {
+      userId: order.userId,
+      kind: "DAILY",
+      date: kstDateOf(order.createdAt),
+      status: { in: ["ISSUED", "PAID"] },
+    },
+    select: { id: true },
+  });
+  if (issuedInv) {
+    return { error: "입금요청서가 발행된 발주예요. 계산서를 수정해 주세요." };
+  }
+
+  const ownerRole = order.user.role as Role;
+  const category = order.category as Category;
+
+  let parsed: RawRow[] = [];
+  try {
+    parsed = JSON.parse(String(formData.get("items") ?? "[]"));
+  } catch {
+    parsed = [];
+  }
+  const items = cleanItems(parsed);
+  if (items.length === 0) return { error: "발주할 품목을 한 개 이상 입력하세요." };
+  if (!items.some((r) => r.name)) return { error: "품목명을 입력하세요." };
+  const badQtyItem = findBadQtyItem(items);
+  if (badQtyItem) return { error: `‘${badQtyItem}’ 수량을 입력해 주세요.` };
+
+  const orderDate = kstDateOf(order.createdAt);
+  // 픽업/수령방식은 발주 owner(점주) 역할 기준으로 처리(관리자 역할 아님)
+  const pickupTime = await buildPickup(ownerRole, formData, orderDate);
+  const ful = readFulfillment(ownerRole, formData);
+  if (ful.error) return { error: ful.error };
+
+  const result =
+    category === "TOFU"
+      ? {
+          engine: "rule" as const,
+          items,
+          summary: `채움채 발주 ${items.length}건`,
+        }
+      : await normalizeOrder({
+          categoryLabel: CATEGORIES[category].label,
+          items,
+          pickupTime: pickupTime || undefined,
+        });
+  const aligned = result.items.length === items.length;
+  const clean = aligned ? result.items : items;
+  const engine = aligned ? result.engine : "rule";
+  const rawText = items
+    .map((r, i) => `${i + 1}. ${[r.name, r.qty, r.note].filter(Boolean).join(" ")}`)
+    .join("\n");
+
+  try {
+    await prisma.$transaction([
+      prisma.orderItem.deleteMany({ where: { orderId } }),
+      prisma.order.update({
+        where: { id: orderId },
+        data: {
+          pickupTime: pickupTime || null,
+          fulfillment: ful.value,
+          rawText,
+          aiSummary: result.summary,
+          aiProcessed: true,
+          aiEngine: engine,
+          edited: true,
+          editedAt: new Date(),
+          confirmed: false,
+          confirmedAt: null,
+          items: {
+            create: items.map((r, i) => ({
+              sortOrder: i,
+              rawName: r.name,
+              rawQty: r.qty,
+              rawNote: r.note,
+              name: clean[i]?.name ?? r.name,
+              qty: displayQty(clean[i]?.qty ?? r.qty),
+              note: clean[i]?.note ?? r.note,
+            })),
+          },
+        },
+      }),
+    ]);
+  } catch (err) {
+    console.error("[order] admin update failed:", err);
+    return { error: "수정 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+
+  // 수령 방식은 그날 그 점주 발주 전체에 동일 적용
+  if (needsFulfillment(ownerRole)) {
+    try {
+      const { start, end } = kstDayRange(orderDate);
+      await prisma.order.updateMany({
+        where: {
+          userId: order.userId,
+          id: { not: orderId },
+          createdAt: { gte: start, lt: end },
+          status: { not: "CANCELLED" },
+        },
+        data: { fulfillment: ful.value },
+      });
+    } catch (e) {
+      logError("order.adminFulfillmentSync", e, { userId: order.userId, orderId });
+    }
+  }
+
+  await writeAudit({
+    action: "order.adminEdit",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "Order",
+    targetId: orderId,
+    summary: `${order.user.storeName} · ${CATEGORIES[category].label} 발주 수정(관리자)`,
+  });
+  // 점주 + 받는 업체에 '발주 수정' 알림
+  await notifyMerchantOrderEdited(order.userId);
+  await notifyVendorOrderEdited(vendorRoleForCategory(category), order.user.storeName);
+
+  redirect(`/admin/orders/${orderId}?edited=1`);
 }

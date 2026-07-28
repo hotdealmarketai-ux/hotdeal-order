@@ -152,6 +152,44 @@ export async function getMerchantReservationBatches(
   return list;
 }
 
+// 점주 '지난 예약발주' — 내가 예약했고 픽업이 모두 지난(현재 목록엔 안 뜨는) 배치. 최근 예약일 먼저.
+// current(getMerchantReservationBatches)와 겹치지 않게: 앞으로 픽업할 상품이 하나도 없는 배치만.
+export async function getMerchantPastReservationBatches(
+  userId: string,
+): Promise<MerchantReservationListItem[]> {
+  const today = kstToday();
+  const batches = await prisma.reservationBatch.findMany({
+    where: {
+      active: true,
+      orders: { some: { userId, items: { some: {} } } }, // 내가 실제로 예약한 것만
+      products: { none: { active: true, pickupDate: { gte: today } } }, // 픽업이 모두 지남
+    },
+    orderBy: { reserveDate: "desc" },
+    select: {
+      id: true,
+      reserveDate: true,
+      products: { where: { active: true }, select: { pickupDate: true } },
+      orders: {
+        where: { userId },
+        select: { confirmed: true, items: { select: { qty: true } } },
+      },
+    },
+  });
+  return batches
+    .map((b) => {
+      const order = b.orders[0] ?? null;
+      return {
+        id: b.id,
+        reserveDate: b.reserveDate,
+        pickupDates: distinctPickups(b.products),
+        productCount: b.products.length,
+        confirmed: order?.confirmed ?? false,
+        reservedQty: order ? order.items.reduce((s, i) => s + i.qty, 0) : 0,
+      };
+    })
+    .filter((b) => b.reservedQty > 0);
+}
+
 export type MerchantReservationDetail = {
   id: string;
   reserveDate: string;

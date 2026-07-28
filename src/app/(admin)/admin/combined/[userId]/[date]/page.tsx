@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/session";
@@ -48,6 +49,24 @@ export default async function AdminCombinedReceipt(props: {
   const totalItems = sections.reduce((n, s) => n + s.items.length, 0);
   // 수령 방식(직접 픽업/배송) — 발주 1건 전체에 동일, 배송이면 매장 주소로 갖다줘야 함.
   const fulfillment = active.find((o) => o.fulfillment)?.fulfillment ?? null;
+
+  // 관리자 발주 수정 — 계산서 발행분(user+date DAILY ISSUED/PAID)은 잠금(정합)
+  const issuedInv = await prisma.invoice.findFirst({
+    where: {
+      userId,
+      kind: "DAILY",
+      date,
+      status: { in: ["ISSUED", "PAID"] },
+    },
+    select: { id: true },
+  });
+  const editLocked = !!issuedInv;
+  // 카테고리별로 수정 진입점 — 활성 발주 1건씩(보통 종류당 1건)
+  const editable = active.map((o) => ({
+    id: o.id,
+    label: CATEGORIES[o.category as Category].label,
+    count: o.items.length,
+  }));
 
   return (
     <>
@@ -115,6 +134,37 @@ export default async function AdminCombinedReceipt(props: {
 
         <div style={{ marginTop: 14 }}>
           <PrintButton />
+        </div>
+
+        {/* 관리자 발주 수정 — 프린트 영역 밖. 종류별로 해당 발주를 고칠 수 있어요. */}
+        <div className="card card--flat" style={{ marginTop: 18 }}>
+          <div className="section-label" style={{ marginBottom: 10 }}>
+            발주 수정
+          </div>
+          {editLocked ? (
+            <div className="muted" style={{ fontSize: 13 }}>
+              입금요청서가 발행된 발주라 수정이 잠겨 있어요. 계산서를 수정해 주세요.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {editable.map((e) => (
+                <div className="spread" key={e.id}>
+                  <span style={{ fontSize: 14 }}>
+                    <b>{e.label}</b>
+                    <span className="muted" style={{ marginLeft: 6 }}>
+                      {e.count}건
+                    </span>
+                  </span>
+                  <Link
+                    href={`/admin/orders/${e.id}/edit`}
+                    className="btn btn--xs btn--soft"
+                  >
+                    수정
+                  </Link>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </>

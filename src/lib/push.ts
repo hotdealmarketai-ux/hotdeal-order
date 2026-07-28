@@ -109,6 +109,19 @@ export async function notifyMerchantOrderConfirmed(
   }
 }
 
+// 관리자(새롭)가 지점 발주를 수정 → 점주에게 알림.
+export async function notifyMerchantOrderEdited(userId: string) {
+  try {
+    await sendPushToUser(userId, {
+      title: "본사가 발주를 수정했어요.",
+      body: "",
+      url: "/mypage",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantOrderEdited failed:", err);
+  }
+}
+
 // 특정 업자 역할(서부일광/조은팜/채움채/새롭)에게 새 발주 알림.
 // fromStoreName = 발주를 넣은 점주(가맹점/소매) 상호.
 export async function notifyVendorNewOrder(role: Role, fromStoreName: string) {
