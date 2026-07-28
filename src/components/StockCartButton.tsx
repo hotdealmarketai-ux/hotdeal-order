@@ -19,6 +19,8 @@ export function StockCartButton({
   mine,
   supplyPrice,
   expiry = "",
+  major = "",
+  minor = "",
 }: {
   itemId: string;
   name: string;
@@ -27,6 +29,8 @@ export function StockCartButton({
   mine: number;
   supplyPrice: number;
   expiry?: string; // #9 유통기한 "YYYY-MM-DD"(빈값=없음)
+  major?: string;
+  minor?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -93,7 +97,15 @@ export function StockCartButton({
                 <span className="stockrow__thumb-v">{available}개</span>
               </div>
               <div className="stockrow__info">
-                <div className="stockrow__name">{name}</div>
+                <div className="stockrow__name">
+                  {name}
+                  {major && (
+                    <span className="stockcat">
+                      {major}
+                      {minor ? ` · ${minor}` : ""}
+                    </span>
+                  )}
+                </div>
                 {supplyPrice > 0 && (
                   <div className="stockrow__price">{won(supplyPrice)}원</div>
                 )}

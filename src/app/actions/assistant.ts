@@ -35,7 +35,14 @@ async function findStock(
 
   const items = await prisma.inventoryItem.findMany({
     where: { deletedAt: null },
-    select: { id: true, name: true, qty: true, supplyPrice: true },
+    select: {
+      id: true,
+      name: true,
+      qty: true,
+      supplyPrice: true,
+      majorCat: true,
+      minorCat: true,
+    },
   });
   if (items.length === 0) return null;
 
@@ -72,6 +79,8 @@ async function findStock(
       available: Math.max(0, it.qty - (held[it.id] ?? 0)),
       mine: mineMap[it.id] ?? 0,
       supplyPrice: it.supplyPrice,
+      major: it.majorCat || "",
+      minor: it.minorCat || "",
     };
   });
   return { matches, canAdd, found: true };

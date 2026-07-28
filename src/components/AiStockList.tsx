@@ -25,7 +25,15 @@ export function AiStockList({
         return (
           <div className="aistock__row" key={it.itemId}>
             <div className="aistock__main">
-              <div className="aistock__name">{it.name}</div>
+              <div className="aistock__name">
+                {it.name}
+                {it.major && (
+                  <span className="stockcat">
+                    {it.major}
+                    {it.minor ? ` · ${it.minor}` : ""}
+                  </span>
+                )}
+              </div>
               <div className="aistock__sub">
                 <span
                   className={`badge ${
@@ -51,6 +59,8 @@ export function AiStockList({
               available={avail}
               mine={mineQ}
               supplyPrice={it.supplyPrice}
+              major={it.major || ""}
+              minor={it.minor || ""}
             />
           </div>
         );

@@ -98,7 +98,14 @@ export default async function OrderPage(props: {
             heldByItem(holdKey),
             prisma.inventoryItem.findMany({
               where: { deletedAt: null },
-              select: { id: true, qty: true, supplyPrice: true, expiry: true },
+              select: {
+                id: true,
+                qty: true,
+                supplyPrice: true,
+                expiry: true,
+                majorCat: true,
+                minorCat: true,
+              },
             }),
           ]);
           const invById = new Map(invItems.map((i) => [i.id, i]));
@@ -113,6 +120,8 @@ export default async function OrderPage(props: {
               available: Math.max(0, base - (held[h.itemId] ?? 0)),
               supplyPrice: inv?.supplyPrice ?? 0,
               expiry: inv?.expiry ?? "",
+              majorCat: inv?.majorCat ?? "",
+              minorCat: inv?.minorCat ?? "",
             };
           });
         })()

@@ -48,6 +48,8 @@ export type ToolHold = {
   available: number;
   supplyPrice: number;
   expiry?: string; // #9 유통기한 "YYYY-MM-DD"(빈값=없음)
+  majorCat?: string;
+  minorCat?: string;
 };
 
 function isFilled(r: Row) {
@@ -487,7 +489,15 @@ export function OrderForm({
                   return (
                     <div className="stockline" key={t.itemId}>
                       <div className="stockline__info">
-                        <span className="stockline__name">{t.name}</span>
+                        <span className="stockline__name">
+                          {t.name}
+                          {t.majorCat && (
+                            <span className="stockcat">
+                              {t.majorCat}
+                              {t.minorCat ? ` · ${t.minorCat}` : ""}
+                            </span>
+                          )}
+                        </span>
                         <span className="stockmeta">
                           <span className="stockmeta__qty">남은 수량 {avail}개</span>
                           {exp && (

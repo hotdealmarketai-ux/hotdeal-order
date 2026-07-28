@@ -8,6 +8,8 @@ export type StockMatch = {
   available: number; // 실시간 남은수량(기준재고 − 전체 담기)
   mine: number; // 내가 담은 수량
   supplyPrice: number;
+  major?: string; // 대분류(빈값=미분류)
+  minor?: string; // 중분류(빈값=없음)
 };
 
 const norm = (s: string) => (s ?? "").replace(/\s+/g, "").toLowerCase();
