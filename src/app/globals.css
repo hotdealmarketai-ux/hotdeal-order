@@ -424,10 +424,16 @@ a {
   transform: scale(0.99);
   box-shadow: 0 2px 8px rgba(40, 34, 24, 0.05);
 }
-/* 작성중 계산서 강조 — 브랜드(헤더) 컬러 바탕 + 흰 글씨 반전 */
-.row--draft { background: var(--header, var(--green-800)); }
-.row--draft .row__title { color: #fff; }
-.row--draft .row__sub { color: rgba(255, 255, 255, 0.82); }
+/* 작성중 계산서 강조 — 브랜드(헤더) 컬러 바탕 + 흰 글씨 반전.
+   .list .row(뒤쪽에서 background:transparent) 를 이기도록 특이도 확보(.list .row.row--draft). */
+.row--draft,
+.list .row.row--draft { background: var(--header, var(--green-800)); }
+.row--draft .row__title,
+.list .row.row--draft .row__title { color: #fff; }
+.row--draft .row__sub,
+.list .row.row--draft .row__sub { color: rgba(255, 255, 255, 0.82); }
+.row--draft .row__chev,
+.list .row.row--draft .row__chev { color: rgba(255, 255, 255, 0.72); }
 .badge--onbrand { background: #fff; color: var(--green-800); font-weight: 800; }
 /* 본사 출고 지점목록 — 핑퐁(지브라) 배경으로 지점 구분 */
 .vstorelist .row:nth-child(even) { background: var(--green-100); }
@@ -578,8 +584,13 @@ a {
   font-size: 11px; font-weight: 800; vertical-align: middle; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-/* 통합 발주서 예약분 태그 */
-.receipt-tag { margin-left: 6px; font-size: 10.5px; padding: 1px 7px; vertical-align: middle; }
+/* 통합 발주서 예약분 태그 — 줄무늬(초록/흰) 어느 배경에서도 안 묻히게 solid 초록+흰글씨(반전) */
+.receipt-tag {
+  display: inline-flex; align-items: center; margin-left: 6px;
+  padding: 1px 8px; border-radius: 999px;
+  background: var(--green-700); color: #fff;
+  font-size: 10.5px; font-weight: 800; vertical-align: middle; line-height: 1.5;
+}
 /* 카테고리 총 수량(박스 세기) — 품목 목록 아래 */
 .receipt-total {
   display: flex; justify-content: space-between; align-items: center;

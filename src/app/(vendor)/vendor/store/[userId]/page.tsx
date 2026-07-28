@@ -28,7 +28,7 @@ function Section({ label, lines }: { label: string; lines: Line[] }) {
           <span>
             <span className="receipt-item__no">{i + 1}</span>
             {l.name}
-            {l.tag ? <span className="badge badge--ai receipt-tag">{l.tag}</span> : null}
+            {l.tag ? <span className="receipt-tag">{l.tag}</span> : null}
             {l.note ? <span className="invline__meta">{l.note}</span> : null}
           </span>
           <span className="invline__amt">{l.qty}</span>
@@ -153,7 +153,7 @@ export default async function VendorStorePage(props: {
           </div>
         </div>
 
-        <Section label="공구 (새롭 본사)" lines={toolLines} />
+        <Section label="공구" lines={toolLines} />
         <Section label="채움채" lines={tofuLines} />
       </div>
     </>
