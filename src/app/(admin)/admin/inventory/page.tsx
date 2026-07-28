@@ -46,6 +46,12 @@ export default async function AdminInventory() {
                 style={{ flex: 1, minWidth: 0 }}
               />
             </div>
+            {/* #9 유통기한 — 비워도 됨. "26-07-27"처럼 적으면 "2026년 07월 27일"로 저장·표시 */}
+            <input
+              name="expiry"
+              className="input input--compact"
+              placeholder="유통기한 (예: 26-07-27, 없으면 비워두세요)"
+            />
             <button className="btn btn--primary btn--sm">추가하기</button>
           </form>
         </div>

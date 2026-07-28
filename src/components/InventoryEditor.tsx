@@ -93,48 +93,56 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
           {visible.map((it) => {
             const exp = expiryInfo(it.expiry);
             return (
-            <div className="invrow" key={it.id}>
-              <input
-                className="invin invcol--name"
-                value={it.name}
-                placeholder="품목명"
-                onChange={(e) => setField(it.id, "name", e.target.value)}
-              />
-              <input
-                className="invin invcol--qty"
-                inputMode="numeric"
-                value={it.qty}
-                placeholder="0"
-                onChange={(e) => setField(it.id, "qty", e.target.value)}
-              />
-              <input
-                className="invin invcol--price"
-                inputMode="numeric"
-                value={it.supplyPrice}
-                placeholder="0"
-                onChange={(e) => setField(it.id, "supplyPrice", e.target.value)}
-              />
-              <span className="invcol--expiry invexp">
+            <div className="invitem" key={it.id}>
+              <div className="invrow">
                 <input
-                  className="invin invexp__in"
-                  value={it.expiry}
-                  placeholder="26-07-27"
-                  onChange={(e) => setField(it.id, "expiry", e.target.value)}
+                  className="invin invcol--name"
+                  value={it.name}
+                  placeholder="품목명"
+                  onChange={(e) => setField(it.id, "name", e.target.value)}
                 />
-                {exp && (
-                  <span className={`invexp__dday invexp__dday--${exp.level}`}>
-                    {exp.dday}
-                  </span>
-                )}
-              </span>
-              <button
-                type="button"
-                className="invrow__del invcol--del"
-                onClick={() => remove(it.id)}
-                aria-label="삭제"
-              >
-                ✕
-              </button>
+                <input
+                  className="invin invcol--qty"
+                  inputMode="numeric"
+                  value={it.qty}
+                  placeholder="0"
+                  onChange={(e) => setField(it.id, "qty", e.target.value)}
+                />
+                <input
+                  className="invin invcol--price"
+                  inputMode="numeric"
+                  value={it.supplyPrice}
+                  placeholder="0"
+                  onChange={(e) => setField(it.id, "supplyPrice", e.target.value)}
+                />
+                <span className="invcol--expiry invexp">
+                  <input
+                    className="invin invexp__in"
+                    value={it.expiry}
+                    placeholder="26-07-27"
+                    onChange={(e) => setField(it.id, "expiry", e.target.value)}
+                  />
+                  {exp && (
+                    <span className={`invexp__dday invexp__dday--${exp.level}`}>
+                      {exp.dday}
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="invrow__del invcol--del"
+                  onClick={() => remove(it.id)}
+                  aria-label="삭제"
+                >
+                  ✕
+                </button>
+              </div>
+              {/* #9 입력한 유통기한을 '0000년 00월 00일 0요일'로 눈에 보이게 확인 표시 */}
+              {exp && (
+                <div className={`invitem__exp invitem__exp--${exp.level}`}>
+                  유통기한 <b>{exp.full}</b> · {exp.dday}
+                </div>
+              )}
             </div>
             );
           })}

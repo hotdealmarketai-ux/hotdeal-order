@@ -2512,6 +2512,7 @@ a {
 .bulkprev__row:nth-child(even) { background: var(--chip-mute-bg); }
 .bulkprev__name { min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
 .bulkprev__tag { flex: 0 0 auto; font-size: 10.5px; font-weight: 800; color: var(--green-700); background: var(--green-100); border-radius: 999px; padding: 1px 6px; }
+.bulkprev__exp { flex: 0 0 auto; font-size: 10.5px; font-weight: 700; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; }
 .bulkprev__qty { text-align: right; font-variant-numeric: tabular-nums; color: var(--fg); min-width: 0; }
 .bulkprev__price { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -2860,15 +2861,30 @@ body {
   box-shadow: 0 2px 8px rgba(40, 34, 24, 0.03);
 }
 /* 재고 편집 테이블 행 — .invtable 안으로 스코프(계산서 폼의 .invrow 그리드와 클래스명 충돌 방지) */
-.invtable > .invrow {
+.invtable > .invrow,
+.invtable .invitem > .invrow {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 0 12px;
 }
-.invtable > .invrow:not(.invrow--head) + .invrow {
+/* 데이터 행은 .invitem(입력 행 + 유통기한 확인줄)로 감싼다 — 행 사이 구분선 */
+.invtable > .invitem + .invitem {
   border-top: 1px solid var(--line);
 }
+/* #9 입력한 유통기한 전체표기(0000년 00월 00일 0요일) 확인줄 — 행 아래 전체폭 */
+.invitem__exp {
+  padding: 1px 12px 9px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.invitem__exp b { color: var(--fg); font-weight: 700; }
+.invitem__exp--soon b,
+.invitem__exp--expired b { color: var(--danger); }
+/* #9 점주 재고목록 유통기한 전체표기(0000년 00월 00일 0요일) — 배지 옆 가시 텍스트 */
+.stockexp__full { font-size: 11.5px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.stockexp__full--warn { color: var(--danger); }
 .invrow--head {
   height: 36px;
   background: var(--green-100);

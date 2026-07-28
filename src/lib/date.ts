@@ -155,9 +155,12 @@ export function daysUntilKst(dateStr: string): number {
 export function expiryInfo(
   dateStr: string,
 ): { full: string; dday: string; days: number; level: "expired" | "soon" | "ok" } | null {
-  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
-  const days = daysUntilKst(dateStr);
+  // 저장된 정식값("2026-07-27")은 그대로, 그 외("26-07-27"·"2026.7.27" 등 입력 중/구형식)는
+  // 정규화해서 판정 → 어떤 형식이든 D-N·전체날짜가 뜨게(예전엔 정식값만 통과해 배지가 사라졌음).
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr : normalizeExpiry(dateStr);
+  if (!iso) return null;
+  const days = daysUntilKst(iso);
   const dday = days === 0 ? "D-DAY" : days > 0 ? `D-${days}` : `만료 ${-days}일`;
   const level = days < 0 ? "expired" : days <= 30 ? "soon" : "ok";
-  return { full: labelExpiryFull(dateStr), dday, days, level };
+  return { full: labelExpiryFull(iso), dday, days, level };
 }

@@ -498,9 +498,8 @@ export function OrderForm({
                                   ? undefined
                                   : { color: "var(--danger)", fontWeight: 700 }
                               }
-                              title={`유통기한 ${exp.full}`}
                             >
-                              {" "}· 유통 {exp.dday}
+                              {" "}· 유통 {exp.dday} ({exp.full})
                             </span>
                           )}
                         </span>

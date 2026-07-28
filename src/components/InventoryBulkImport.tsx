@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { bulkReplaceInventoryAction } from "@/app/actions/admin";
 
-type Row = { name: string; qty: number; supplyPrice: number };
+type Row = { name: string; qty: number; supplyPrice: number; expiry: string };
 
 function toInt(v: string): number {
   const n = parseInt(String(v ?? "").replace(/[^0-9-]/g, ""), 10);
@@ -35,8 +35,9 @@ function parseRows(text: string): ParseResult {
     if (!name) continue;
     const c1 = (cells[1] ?? "").trim();
     const c2 = (cells[2] ?? "").trim();
-    // 헤더줄 추정 시 스킵(품목/상품/이름 + 수량/재고/공급/단가/가격)
-    if (/품목|상품|이름/.test(name) && /수량|재고|공급|단가|가격/.test(c1 + c2)) {
+    const c3 = (cells[3] ?? "").trim(); // #9 유통기한(선택, 4번째 열)
+    // 헤더줄 추정 시 스킵(품목/상품/이름 + 수량/재고/공급/단가/가격/유통)
+    if (/품목|상품|이름/.test(name) && /수량|재고|공급|단가|가격|유통/.test(c1 + c2 + c3)) {
       skippedHeader = true;
       continue;
     }
@@ -46,7 +47,7 @@ function parseRows(text: string): ParseResult {
       continue;
     }
     seen.add(name);
-    rows.push({ name, qty: toInt(c1), supplyPrice: toInt(c2) });
+    rows.push({ name, qty: toInt(c1), supplyPrice: toInt(c2), expiry: c3 });
   }
   return { rows, dupNames: [...dup], dataLines, skippedHeader };
 }
@@ -100,12 +101,13 @@ export function InventoryBulkImport({ currentNames }: { currentNames: string[] }
         엑셀에서 한번에 붙여넣기
       </div>
       <p className="hint" style={{ marginBottom: 10 }}>
-        엑셀에서 <b>품목명 · 수량 · 공급가</b> 3열을 복사해 아래에 붙여넣으세요.
+        엑셀에서 <b>품목명 · 수량 · 공급가</b>를 복사해 아래에 붙여넣으세요.{" "}
+        <b>유통기한</b>은 4번째 칸에 <b>26-07-27</b>처럼 적으면 함께 반영돼요(없으면 비워도 됨).
       </p>
       <textarea
         className="input"
         style={{ minHeight: 116, fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 13, lineHeight: 1.5 }}
-        placeholder={"사과\t20\t3000\n대파\t5\t1500\n양배추\t8\t2200"}
+        placeholder={"사과\t20\t3000\t26-07-30\n대파\t5\t1500\n양배추\t8\t2200\t26-08-02"}
         value={text}
         onChange={(e) => {
           setText(e.target.value);
@@ -157,6 +159,9 @@ export function InventoryBulkImport({ currentNames }: { currentNames: string[] }
                   <span className="bulkprev__name">
                     {p.name}
                     {isNew && <span className="bulkprev__tag">신규</span>}
+                    {p.expiry && (
+                      <span className="bulkprev__exp">유통 {p.expiry}</span>
+                    )}
                   </span>
                   <span className="bulkprev__qty">{p.qty}</span>
                   <span className="bulkprev__price">

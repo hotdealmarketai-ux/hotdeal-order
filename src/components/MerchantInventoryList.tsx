@@ -143,18 +143,25 @@ export function MerchantInventoryList({
                 {mineQ > 0 && <span className="badge badge--ai">담음 {mineQ}개</span>}
                 {it.supplyPrice > 0 && <span>공급가 {won(it.supplyPrice)}원</span>}
                 {exp && (
-                  <span
-                    className={`badge ${
-                      exp.level === "expired"
-                        ? "badge--danger"
-                        : exp.level === "soon"
-                          ? "badge--wait"
-                          : "badge--mute"
-                    }`}
-                    title={`유통기한 ${exp.full}`}
-                  >
-                    유통 {exp.dday}
-                  </span>
+                  <>
+                    <span
+                      className={`badge ${
+                        exp.level === "expired"
+                          ? "badge--danger"
+                          : exp.level === "soon"
+                            ? "badge--wait"
+                            : "badge--mute"
+                      }`}
+                    >
+                      유통 {exp.dday}
+                    </span>
+                    {/* 전체 날짜(0000년 00월 00일 0요일)도 눈에 보이게 — 툴팁만이 아님 */}
+                    <span
+                      className={`stockexp__full${exp.level === "expired" || exp.level === "soon" ? " stockexp__full--warn" : ""}`}
+                    >
+                      {exp.full}
+                    </span>
+                  </>
                 )}
               </div>
             </div>

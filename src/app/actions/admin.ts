@@ -253,6 +253,8 @@ export async function addInventoryAction(formData: FormData) {
   const qty = toInt(formData.get("qty"));
   const supplyPrice = toInt(formData.get("supplyPrice"));
   const memo = String(formData.get("memo") ?? "").trim();
+  // #9 유통기한 — "26-07-27"·"2026.7.27" 등을 "2026-07-27"로 정규화(형식 아니면 "" = 없음)
+  const expiry = normalizeExpiry(String(formData.get("expiry") ?? ""));
   // 시트 동기화는 '품목명'을 키로 쓰므로 이름이 유일해야 한다. 같은 이름이 이미 있으면
   // 중복 생성 대신 그 품목을 갱신(재추가 = 수정). #22 리뷰(중복명 데이터 손실 방지)
   const dup = await prisma.inventoryItem.findFirst({
@@ -262,12 +264,12 @@ export async function addInventoryAction(formData: FormData) {
   if (dup) {
     await prisma.inventoryItem.update({
       where: { id: dup.id },
-      data: { qty, supplyPrice, ...(memo ? { memo } : {}) },
+      data: { qty, supplyPrice, ...(memo ? { memo } : {}), ...(expiry ? { expiry } : {}) },
     });
   } else {
     const max = await prisma.inventoryItem.aggregate({ _max: { sortOrder: true } });
     await prisma.inventoryItem.create({
-      data: { name, qty, supplyPrice, memo, sortOrder: (max._max.sortOrder ?? 0) + 1 },
+      data: { name, qty, supplyPrice, memo, expiry, sortOrder: (max._max.sortOrder ?? 0) + 1 },
     });
   }
   await setInventoryPushPending(); // R3 변경 표시 → 다음 크론이 시트로 push(단방향)
@@ -318,7 +320,7 @@ export async function bulkReplaceInventoryAction(
 ): Promise<BulkInventoryResult> {
   const admin = await requireAdmin();
 
-  let rows: { name?: string; qty?: unknown; supplyPrice?: unknown }[];
+  let rows: { name?: string; qty?: unknown; supplyPrice?: unknown; expiry?: unknown }[];
   try {
     rows = JSON.parse(String(payloadJson ?? "[]"));
   } catch {
@@ -330,13 +332,19 @@ export async function bulkReplaceInventoryAction(
   const numOf = (v: unknown) => toInt(v == null ? null : String(v));
   // 정제 + 이름 기준 dedupe(첫 번째만 채택 — 이름이 동기화 키)
   const seen = new Set<string>();
-  const clean: { name: string; qty: number; supplyPrice: number }[] = [];
+  const clean: { name: string; qty: number; supplyPrice: number; expiry: string }[] = [];
   for (const r of rows) {
     const name = String(r.name ?? "").trim();
     if (!name) continue;
     if (seen.has(name)) continue;
     seen.add(name);
-    clean.push({ name, qty: numOf(r.qty), supplyPrice: numOf(r.supplyPrice) });
+    // #9 유통기한(선택 4열) — 정규화. 빈/형식오류면 ""(기존값 유지: 아래 update에서 미포함)
+    clean.push({
+      name,
+      qty: numOf(r.qty),
+      supplyPrice: numOf(r.supplyPrice),
+      expiry: normalizeExpiry(String(r.expiry ?? "")),
+    });
   }
   // 전량 삭제 사고 방지 — 빈 목록이면 거부(실수로 전체가 지워지는 것 차단)
   if (clean.length === 0) {
@@ -372,12 +380,24 @@ export async function bulkReplaceInventoryAction(
         if (id) {
           await tx.inventoryItem.update({
             where: { id },
-            data: { qty: c.qty, supplyPrice: c.supplyPrice, sortOrder: i },
+            // 유통기한은 유효값이 있을 때만 갱신 — 3열만 붙여넣어도 기존 유통기한이 지워지지 않게.
+            data: {
+              qty: c.qty,
+              supplyPrice: c.supplyPrice,
+              sortOrder: i,
+              ...(c.expiry ? { expiry: c.expiry } : {}),
+            },
           });
           updated++;
         } else {
           await tx.inventoryItem.create({
-            data: { name: c.name, qty: c.qty, supplyPrice: c.supplyPrice, sortOrder: i },
+            data: {
+              name: c.name,
+              qty: c.qty,
+              supplyPrice: c.supplyPrice,
+              sortOrder: i,
+              expiry: c.expiry,
+            },
           });
           added++;
         }
