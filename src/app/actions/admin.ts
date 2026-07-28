@@ -10,7 +10,10 @@ import {
   safePushInventory,
   setInventoryPushPending,
   readInventorySheet,
+  lastInventoryPushAt,
+  inventoryPushPending,
 } from "@/lib/inventory-sheet";
+import { getServiceAccount } from "@/lib/google-auth";
 import { categorizeInventory, type CatGroup } from "@/lib/inventory-category";
 import {
   currentWindowStartUtc,
@@ -650,6 +653,78 @@ export async function setItemCategoryAction(
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
   return { ok: true };
+}
+
+// 구글시트 연동 점검 + 지금 강제로 시트 반영. 프로덕션 env/공유를 로컬에서 볼 수 없어,
+// 관리자가 눌러 서버에서 진단하게 한다. 결과로 원인을 특정하고(자격증명 없음/인증실패/권한없음),
+// 동시에 push 자체가 최신 재고+카테고리를 시트에 즉시 반영(자격증명이 정상이면 이 한 번으로 해결).
+export type SheetSyncDiag = {
+  configured: boolean; // GOOGLE_SERVICE_ACCOUNT_* 존재+파싱 성공
+  clientEmail: string | null; // 이 이메일이 시트에 '편집자'로 공유돼 있어야 함
+  sheetId: string;
+  itemCount: number; // 시트에 올라갈 재고 수
+  categorized: number; // 대분류가 붙은 재고 수(0이면 아직 분류 미적용)
+  lastPushAt: string | null; // 마지막 성공 push 시각(없으면 한 번도 성공 못 함)
+  pendingBefore: boolean; // 직전에 반영 대기 상태였는지
+  push: { ok: boolean; error?: string }; // 방금 시도한 push 결과
+  hint: string; // 사람이 읽을 진단 문구
+};
+
+export async function diagnoseSheetSyncAction(): Promise<SheetSyncDiag> {
+  const admin = await requireAdmin();
+  const sa = getServiceAccount();
+  const configured = !!sa;
+  const [itemCount, categorized, lastPush, pendingBefore] = await Promise.all([
+    prisma.inventoryItem.count({ where: { deletedAt: null } }),
+    prisma.inventoryItem.count({ where: { deletedAt: null, NOT: { majorCat: "" } } }),
+    lastInventoryPushAt(),
+    inventoryPushPending(),
+  ]);
+  // 실제 push 1회 — 진단이자 강제 반영. safePush가 pending 플래그도 정리.
+  const push = configured
+    ? await safePushInventory(2)
+    : { ok: false, error: "no-credentials" };
+
+  let hint: string;
+  if (!configured) {
+    hint =
+      "서비스계정 자격증명(GOOGLE_SERVICE_ACCOUNT_B64)이 서버에 없습니다. Vercel 환경변수에 값이 비었거나 삭제됐어요. 값을 넣고 재배포하면 매 분 자동 반영됩니다.";
+  } else if (push.ok) {
+    hint =
+      "정상입니다. 방금 최신 재고와 카테고리를 시트에 반영했어요. 이후에는 매 분 자동 반영됩니다.";
+  } else if (push.error === "empty-db") {
+    hint = "앱에 재고가 0건이라 시트를 보호하려 건너뛰었어요(비어있음).";
+  } else if (push.error === "auth") {
+    hint =
+      "자격증명은 있으나 구글 토큰 발급에 실패했어요(개인키가 잘못됐거나 만료). 서비스계정 키를 다시 발급해 GOOGLE_SERVICE_ACCOUNT_B64를 갱신하세요.";
+  } else if (String(push.error).includes("403") || String(push.error).includes("PERMISSION")) {
+    hint = `시트 접근 권한이 없어요(403). 스프레드시트를 위 서비스계정 이메일(${sa?.client_email ?? ""})에 '편집자'로 공유했는지 확인하세요.`;
+  } else {
+    hint = `시트 반영에 실패했어요(${push.error ?? "알 수 없음"}). 시트ID·공유·네트워크를 확인하세요.`;
+  }
+
+  await writeAudit({
+    action: "inventory.sheetDiagnose",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "inventory",
+    targetId: "",
+    summary: `시트 연동 점검: configured=${configured} push=${push.ok ? "ok" : push.error}`,
+  });
+
+  return {
+    configured,
+    clientEmail: sa?.client_email ?? null,
+    sheetId:
+      process.env.INVENTORY_SHEET_ID ||
+      "1LlMirhN-ChqWKmzilH1_EX7yeDLK26SI-H61bvgGEG0",
+    itemCount,
+    categorized,
+    lastPushAt: lastPush ? lastPush.toISOString() : null,
+    pendingBefore,
+    push,
+    hint,
+  };
 }
 
 // R4 재고 자동저장 — 편집기 입력을 디바운스로 계속 저장. 현재 목록으로 DB를 맞춘다(이름/수량/공급가

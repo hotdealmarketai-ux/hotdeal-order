@@ -132,12 +132,11 @@ export function normalizeExpiry(input: string): string {
   return iso;
 }
 
-/** 유통기한 풀 표기: "2026-07-27" → "2026년 07월 27일 월요일" */
+/** 유통기한 풀 표기: "2026-07-27" → "2026년 07월 27일" (요일 없이) */
 export function labelExpiryFull(dateStr: string): string {
   const [y, mo, d] = dateStr.split("-");
   if (!y || !mo || !d) return dateStr;
-  const wd = ["일", "월", "화", "수", "목", "금", "토"][dowOf(dateStr)];
-  return `${y}년 ${mo}월 ${d}일 ${wd}요일`;
+  return `${y}년 ${mo}월 ${d}일`;
 }
 
 /** 오늘(KST) 기준 남은 일수. "2026-07-27" → 정수(양수=남음, 0=오늘, 음수=지남) */

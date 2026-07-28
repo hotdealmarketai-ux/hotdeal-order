@@ -5,6 +5,7 @@ import { addInventoryAction } from "@/app/actions/admin";
 import { InventoryEditor } from "@/components/InventoryEditor";
 import { InventoryBulkImport } from "@/components/InventoryBulkImport";
 import { SheetImportButton } from "@/components/SheetImportButton";
+import { SheetSyncDiagnose } from "@/components/SheetSyncDiagnose";
 import { CategoryAutoAssign } from "@/components/CategoryAutoAssign";
 
 export default async function AdminInventory() {
@@ -20,6 +21,8 @@ export default async function AdminInventory() {
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
         <CategoryAutoAssign />
+
+        <SheetSyncDiagnose />
 
         <SheetImportButton />
 

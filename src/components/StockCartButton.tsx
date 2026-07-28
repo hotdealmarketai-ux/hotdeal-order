@@ -91,12 +91,14 @@ export function StockCartButton({
         <Sheet onClose={() => setOpen(false)}>
           <div className="sheet__panel stocksheet" style={{ maxWidth: 480 }}>
             <div className="stocksheet__grip" aria-hidden="true" />
-            <div className="stockrow">
+
+            {/* 상품 정보 — 남은수량·이름·분류·공급가·유통기한을 한 묶음으로 */}
+            <div className="stocksheet__head">
               <div className="stockrow__thumb">
                 <span className="stockrow__thumb-k">남은 수량</span>
                 <span className="stockrow__thumb-v">{available}개</span>
               </div>
-              <div className="stockrow__info">
+              <div className="stocksheet__headinfo">
                 <div className="stockrow__name">
                   {name}
                   {major && (
@@ -106,10 +108,26 @@ export function StockCartButton({
                     </span>
                   )}
                 </div>
-                {supplyPrice > 0 && (
-                  <div className="stockrow__price">{won(supplyPrice)}원</div>
+                {(supplyPrice > 0 || exp) && (
+                  <div className="stocksheet__meta">
+                    {supplyPrice > 0 && (
+                      <span className="stocksheet__price">{won(supplyPrice)}원</span>
+                    )}
+                    {exp && (
+                      <span
+                        className={`stocksheet__expv${exp.level !== "ok" ? " is-warn" : ""}`}
+                      >
+                        유통기한 {exp.full} · {exp.dday}
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
+            </div>
+
+            {/* 수량 — 별도 행으로 분리(제품정보·버튼과 딱 붙지 않게) */}
+            <div className="stocksheet__qty">
+              <span className="stocksheet__qtylabel">수량</span>
               <div className="stepper" role="group" aria-label="수량">
                 <button
                   type="button"
@@ -132,15 +150,6 @@ export function StockCartButton({
                 </button>
               </div>
             </div>
-
-            {/* #9 유통기한 — 전체 폭 한 줄(좁은 칸에 넣으면 'D-' / 숫자로 줄바꿈돼 가독성 나빠짐) */}
-            {exp && (
-              <div
-                className={`stocksheet__exp${exp.level !== "ok" ? " is-warn" : ""}`}
-              >
-                유통기한 {exp.full} · {exp.dday}
-              </div>
-            )}
 
             {err && <div className="chaterr">{err}</div>}
 
