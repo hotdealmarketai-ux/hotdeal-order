@@ -1,6 +1,8 @@
 import { requireWarehouse } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { kstToday, kstDayRange } from "@/lib/date";
+import { heldByItem } from "@/lib/stock-hold";
+import { windowKeyAt } from "@/lib/schedule";
 import { WarehouseBoard } from "@/components/warehouse/WarehouseBoard";
 import type { BoxDTO } from "@/app/actions/warehouse";
 
@@ -18,6 +20,8 @@ export default async function WarehousePage() {
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: { id: true, name: true, qty: true, expiry: true },
   });
+  // 초기 남은수량 = 재고현황과 동일: max(0, 기준재고 − Σ담기(현재 발주창)). 폴링 전 첫 렌더도 맞춘다.
+  const held = await heldByItem(windowKeyAt());
 
   // 오늘 들어온 발주(#12 인트로/글로우) — 건수·지점·품목명(정규화). 취소 제외.
   const { start, end } = kstDayRange(kstToday());
@@ -63,7 +67,7 @@ export default async function WarehousePage() {
       items={items.map((it) => ({
         id: it.id,
         name: it.name,
-        qty: it.qty,
+        qty: Math.max(0, it.qty - (held[it.id] ?? 0)), // 재고현황과 동일한 남은수량
         expiry: it.expiry ?? "",
       }))}
       initialLocation="FLOOR1"
