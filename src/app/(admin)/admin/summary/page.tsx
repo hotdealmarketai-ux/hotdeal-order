@@ -10,9 +10,16 @@ import {
   orderRangeForShipment,
 } from "@/lib/date";
 import { aggregateOrders, type AggregateMode } from "@/lib/ai";
+import { getReservationLinesForPickup } from "@/lib/reservation-data";
 import { displayQty } from "@/lib/qty";
 
-type ScopeDef = { label: string; where: Prisma.OrderWhereInput; mode: AggregateMode };
+type ScopeDef = {
+  label: string;
+  where: Prisma.OrderWhereInput;
+  mode: AggregateMode;
+  // 공구(예약분이 있는 종류)면 true — 확정 예약분도 취합에 합류.
+  reservation?: boolean;
+};
 const HOTDEAL = { user: { role: "MERCHANT_HOTDEAL" } } as const;
 
 function resolve(ctx: string, scope: string) {
@@ -21,7 +28,7 @@ function resolve(ctx: string, scope: string) {
     fruit: { label: "과일발주", where: { ...HOTDEAL, category: "FRUIT" }, mode: "produce" },
     veg: { label: "야채발주", where: { ...HOTDEAL, category: "VEG" }, mode: "produce" },
     tofu: { label: "채움채", where: { ...HOTDEAL, category: "TOFU" }, mode: "simple" },
-    tool: { label: "공구발주", where: { ...HOTDEAL, category: "TOOL" }, mode: "simple" },
+    tool: { label: "공구발주", where: { ...HOTDEAL, category: "TOOL" }, mode: "simple", reservation: true },
   };
   const orders: Record<string, ScopeDef> = {
     all: { label: "전체", where: {}, mode: "produce" },
@@ -29,7 +36,7 @@ function resolve(ctx: string, scope: string) {
     seobu: { label: "서부일광", where: { vendorRole: "VENDOR_SEOBU" }, mode: "produce" },
     jangheung: { label: "조은팜", where: { vendorRole: "VENDOR_JANGHEUNG" }, mode: "produce" },
     chaeumchae: { label: "채움채", where: { vendorRole: "VENDOR_CHAEUMCHAE" }, mode: "simple" },
-    saerop: { label: "주식회사 새롭", where: { vendorRole: "ADMIN_SAEROP" }, mode: "simple" },
+    saerop: { label: "주식회사 새롭", where: { vendorRole: "ADMIN_SAEROP" }, mode: "simple", reservation: true },
   };
   const map = ctx === "hotdeal" ? hotdeal : orders;
   const sel = map[scope] ?? map.all;
@@ -54,7 +61,13 @@ export default async function AdminSummary(props: {
           {date === kstToday() ? " (오늘)" : ""}
         </p>
         <Suspense fallback={<AggLoading />}>
-          <AggSection date={date} where={sel.where} label={sel.label} mode={sel.mode} />
+          <AggSection
+            date={date}
+            where={sel.where}
+            label={sel.label}
+            mode={sel.mode}
+            reservation={sel.reservation ?? false}
+          />
         </Suspense>
       </div>
     </>
@@ -79,11 +92,13 @@ async function AggSection({
   where,
   label,
   mode,
+  reservation,
 }: {
   date: string;
   where: Prisma.OrderWhereInput;
   label: string;
   mode: AggregateMode;
+  reservation: boolean;
 }) {
   // date = 출고일 → 그 출고일에 실린 발주(전날/주말) 범위로 집계.
   const { start, end } = orderRangeForShipment(date);
@@ -101,6 +116,17 @@ async function AggSection({
       note: it.note || it.rawNote,
     })),
   );
+
+  // 공구 취합엔 확정 예약분(픽업=출고일)도 합류 — '예약' 표시로 구분.
+  let reservedCount = 0;
+  if (reservation) {
+    const resv = await getReservationLinesForPickup(date);
+    reservedCount = resv.length;
+    for (const r of resv) {
+      lines.push({ store: r.store, name: r.name, qty: String(r.qty), note: "예약" });
+    }
+  }
+
   const agg = await aggregateOrders({ categoryLabel: label, lines }, mode);
 
   if (agg.fruits.length === 0) {
@@ -114,7 +140,9 @@ async function AggSection({
   return (
     <>
       <div className="notice notice--ai" style={{ marginBottom: 14 }}>
-        지점 발주 {orders.length}건을 품목 {agg.fruits.length}종으로 묶었어요.
+        지점 발주 {orders.length}건
+        {reservedCount > 0 ? ` + 예약분 ${reservedCount}건` : ""}을 품목{" "}
+        {agg.fruits.length}종으로 묶었어요.
       </div>
       <div className="stack">
         {agg.fruits.map((f, i) => (

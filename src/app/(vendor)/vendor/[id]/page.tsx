@@ -4,6 +4,8 @@ import { requireVendor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { formatKDateTime } from "@/lib/format";
+import { kstDateOf } from "@/lib/date";
+import { getReservationLoadForOrder } from "@/lib/reservation-data";
 import { ReceiptCard } from "@/components/ReceiptCard";
 import { confirmOrderAction } from "@/app/actions/vendor";
 
@@ -20,6 +22,17 @@ export default async function VendorOrderDetail(props: {
   if (!order || order.vendorRole !== user.role) notFound();
 
   const cat = CATEGORIES[order.category as Category];
+
+  // 공구(TOOL) 발주서엔 그 지점의 확정 예약분(픽업=이 발주 출고일)도 함께 — 창고 준비 누락 방지.
+  const reservedItems =
+    order.category === "TOOL"
+      ? (
+          await getReservationLoadForOrder(
+            order.userId,
+            kstDateOf(order.createdAt),
+          )
+        ).map((r) => ({ name: r.name, qty: String(r.qty) }))
+      : [];
 
   return (
     <>
@@ -98,6 +111,7 @@ export default async function VendorOrderDetail(props: {
             rawNote: it.rawNote,
           }))}
           rawText={order.rawText}
+          reservedItems={reservedItems}
         />
       </div>
     </>

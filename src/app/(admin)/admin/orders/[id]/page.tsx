@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { CATEGORIES, ROLE_LABEL, type Category, type Role } from "@/lib/constants";
 import { formatKDateTime } from "@/lib/format";
 import { kstDateOf, shipmentDayOf } from "@/lib/date";
+import { getReservationLoadForOrder } from "@/lib/reservation-data";
 import { ReceiptCard } from "@/components/ReceiptCard";
 
 export default async function AdminOrderDetail(props: {
@@ -23,6 +24,17 @@ export default async function AdminOrderDetail(props: {
   if (!order) notFound();
 
   const cat = CATEGORIES[order.category as Category];
+
+  // 공구(TOOL) 발주서엔 그 지점의 확정 예약분(픽업=이 발주 출고일)도 함께 표시.
+  const reservedItems =
+    order.category === "TOOL"
+      ? (
+          await getReservationLoadForOrder(
+            order.userId,
+            kstDateOf(order.createdAt),
+          )
+        ).map((r) => ({ name: r.name, qty: String(r.qty) }))
+      : [];
 
   // 관리자 수정 가능 여부 — 취소분·계산서 발행분은 잠금(정합)
   const issuedInv =
@@ -112,6 +124,7 @@ export default async function AdminOrderDetail(props: {
             rawNote: it.rawNote,
           }))}
           rawText={order.rawText}
+          reservedItems={reservedItems}
         />
       </div>
     </>

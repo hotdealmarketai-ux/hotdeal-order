@@ -3029,6 +3029,11 @@ body {
 /* 중분류(2단계) 필터 — 대분류 칩 바로 아래, 조금 작게 */
 .catfilter--minor { margin-top: 0; }
 .catfilter--minor .catfilter__chip { font-size: 12px; padding: 5px 11px; }
+/* PC(마우스) — 가로 스크롤바가 숨겨져 있고 휠은 세로라 뒤 칩을 못 보던 문제.
+   마우스 환경에선 가로 스크롤 대신 줄바꿈으로 전부 보이게 한다(모바일은 기존 스크롤 유지). */
+@media (hover: hover) and (pointer: fine) {
+  .catfilter { flex-wrap: wrap; overflow-x: visible; }
+}
 /* 품목 옆 카테고리 라벨(공구 발주·담기 팝업 등) */
 .stockcat {
   display: inline-block; margin-left: 7px; padding: 1px 8px;
@@ -3542,6 +3547,9 @@ a.resv-card:active { transform: scale(0.995); }
   padding: 8px 0; font-size: 14px; color: var(--fg); border-bottom: 1px dashed var(--line); }
 .confmerch__item:last-child { border-bottom: 0; }
 .confmerch__itemqty { font-weight: 800; color: var(--green-700); }
+/* 총 발주 — 확정 점주 아래 전 지점 취합. 브랜드 컬러로 구분 */
+.confmerch--total { border-color: var(--green-700); background: var(--green-50, var(--chip-mute-bg)); }
+.confmerch--total .resv-conf__name { font-weight: 800; color: var(--green-700); }
 
 /* 점주 예약(수량 입력) — 안내 스트립 */
 .resv-lock { margin: 2px 0 16px; padding: 12px 15px; border-radius: 12px;

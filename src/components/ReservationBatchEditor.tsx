@@ -146,12 +146,9 @@ export function ReservationBatchEditor({
             required
           />
         </label>
-        {datesLocked && (
-          <div className="resv-note">예약이 접수되어 예약일자는 고정됐어요. 상품·픽업일은 수정할 수 있어요.</div>
-        )}
         {reserveValid && (
           <div className="resv-note">
-            예약 마감 <b>{reservationDeadlineLabel(reserveDate)}</b> · 픽업일은 상품마다 지정해요(예약 다음날부터 가능).
+            예약 마감 <b>{reservationDeadlineLabel(reserveDate)}</b>
           </div>
         )}
         {anyBadPickup && (
@@ -236,9 +233,6 @@ export function ReservationBatchEditor({
         >
           재고현황에서 불러오기
         </button>
-      </div>
-      <div className="resv-note" style={{ marginTop: 8 }}>
-        재고현황에서 불러온 상품은 그 품목이 재고현황에서 잠기고, 예약에서만 남은재고 안에서 담을 수 있어요.
       </div>
 
       <div className="ctabar">

@@ -19,6 +19,8 @@ export function ReceiptCard(props: {
   items: ReceiptItem[];
   rawItems: ReceiptRawItem[];
   rawText?: string;
+  // 확정 예약분(공구) — 실제 발주엔 없지만 같은 발주서에 함께 표시(창고 준비용).
+  reservedItems?: { name: string; qty: string }[];
   isNew?: boolean;
   showStore?: boolean;
   showOriginalButton?: boolean;
@@ -100,6 +102,19 @@ export function ReceiptCard(props: {
                 </div>
               ))}
             </div>
+            {props.reservedItems && props.reservedItems.length > 0 && (
+              <div className="receipt__section">
+                <div className="section-label" style={{ margin: "0 0 8px" }}>
+                  예약분
+                </div>
+                {props.reservedItems.map((it, i) => (
+                  <div className="receipt-item" key={`resv-${i}`}>
+                    <div className="receipt-item__name">{it.name || "-"}</div>
+                    <div className="receipt-item__qty">{it.qty}</div>
+                  </div>
+                ))}
+              </div>
+            )}
             {props.aiSummary && (
               <div className="receipt__section">
                 <div className="kv">

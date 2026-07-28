@@ -14,7 +14,6 @@ import {
 } from "@/lib/date";
 import { LogoutButton } from "@/components/LogoutButton";
 import { VendorDateBar } from "@/components/VendorDateBar";
-import { getReservationLinesForPickup } from "@/lib/reservation-data";
 
 export default async function VendorPage(props: {
   searchParams: Promise<{ date?: string }>;
@@ -33,11 +32,6 @@ export default async function VendorPage(props: {
     orderBy: { createdAt: "desc" },
   });
 
-  // 공구 벤더(새롭)만: 확정 예약분(픽업=출고일)도 함께 준비하도록 읽기전용 표시.
-  // 예약분은 실제 발주(Order)에 없어 별도 조회. 발주 목록엔 안 뜨니 이 날 누락 방지.
-  const reserved =
-    user.role === "ADMIN_SAEROP" ? await getReservationLinesForPickup(date) : [];
-
   return (
     <>
       <Topbar
@@ -49,9 +43,6 @@ export default async function VendorPage(props: {
         <p className="lead" style={{ marginBottom: 2 }}>
           출고 {labelDate(date)}
           {isToday ? " (오늘)" : ""} · {orders.length}건
-        </p>
-        <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--muted)" }}>
-          이 날 출고할 발주예요 · 발주일은 전날(월요일 출고 = 토·일 발주)
         </p>
 
         <VendorDateBar
@@ -99,26 +90,6 @@ export default async function VendorPage(props: {
                 </Link>
               );
             })}
-          </div>
-        )}
-
-        {reserved.length > 0 && (
-          <div className="card" style={{ marginTop: 18 }}>
-            <div className="spread" style={{ marginBottom: 6 }}>
-              <span className="section-label">예약 출고분</span>
-              <span className="badge badge--ai">{reserved.length}건</span>
-            </div>
-            <p style={{ margin: "0 0 10px", fontSize: 12, color: "var(--muted)" }}>
-              확정 예약분(픽업 {labelDate(date)}) — 발주 목록엔 없지만 이 날 함께 준비해요.
-            </p>
-            {reserved.map((r, i) => (
-              <div className="aggline" key={i}>
-                <span className="aggline__store">
-                  {r.store} · {r.name}
-                </span>
-                <span className="aggline__qty">{r.qty}</span>
-              </div>
-            ))}
           </div>
         )}
 

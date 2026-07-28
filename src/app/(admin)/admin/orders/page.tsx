@@ -111,9 +111,6 @@ export default async function AdminOrders(props: {
           출고 {labelDate(date)}
           {isToday ? " (오늘)" : ""} · {orders.length}건
         </p>
-        <p style={{ margin: "0 0 8px", fontSize: 12, color: "var(--muted)" }}>
-          이 날 출고할 발주예요 · 발주일은 전날(월요일 출고 = 토·일 발주)
-        </p>
         <DateBar
           date={date}
           basePath="/admin/orders"
