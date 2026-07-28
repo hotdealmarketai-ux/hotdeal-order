@@ -1,6 +1,7 @@
 // 예약발주 서버 데이터 접근(prisma) — 서버 컴포넌트/액션에서 사용. 순수계산은 lib/reservation.ts.
 import { prisma } from "@/lib/prisma";
 import { kstToday, shiftDate } from "@/lib/date";
+import { isReservationClosed } from "@/lib/reservation";
 
 export type ReservationBatchListItem = {
   id: string;
@@ -123,7 +124,7 @@ export async function getMerchantReservationBatches(
       },
     },
   });
-  return batches.map((b) => {
+  const list = batches.map((b) => {
     const order = b.orders[0] ?? null;
     return {
       id: b.id,
@@ -134,6 +135,14 @@ export async function getMerchantReservationBatches(
       reservedQty: order ? order.items.reduce((s, i) => s + i.qty, 0) : 0,
     };
   });
+  // 예약일이 얼마 안 남은 순(예약일 빠른 순) → 멀수록 아래. 단 이미 마감된 예약은 맨 아래로.
+  list.sort((a, b) => {
+    const ca = isReservationClosed(a.reserveDate) ? 1 : 0;
+    const cb = isReservationClosed(b.reserveDate) ? 1 : 0;
+    if (ca !== cb) return ca - cb; // 열린 예약을 위로
+    return a.reserveDate.localeCompare(b.reserveDate); // 예약일 빠른 순
+  });
+  return list;
 }
 
 export type MerchantReservationDetail = {
