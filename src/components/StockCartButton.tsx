@@ -36,6 +36,7 @@ export function StockCartButton({
 
   const maxForMe = available + mine; // 내가 담을 수 있는 최대(남은 + 내가 이미 담은 것)
   const soldOut = maxForMe <= 0;
+  const exp = expiryInfo(expiry); // #9 유통기한(빈값/오류면 null)
 
   // 실시간으로 남은수량이 줄면(다른 점주가 담음) 열려있는 스테퍼 값도 상한에 맞춰 내림
   useEffect(() => {
@@ -96,16 +97,6 @@ export function StockCartButton({
                 {supplyPrice > 0 && (
                   <div className="stockrow__price">{won(supplyPrice)}원</div>
                 )}
-                {(() => {
-                  const exp = expiryInfo(expiry);
-                  return exp ? (
-                    <div
-                      className={`stockrow__exp${exp.level !== "ok" ? " is-warn" : ""}`}
-                    >
-                      유통기한 {exp.full} · {exp.dday}
-                    </div>
-                  ) : null;
-                })()}
               </div>
               <div className="stepper" role="group" aria-label="수량">
                 <button
@@ -129,6 +120,15 @@ export function StockCartButton({
                 </button>
               </div>
             </div>
+
+            {/* #9 유통기한 — 전체 폭 한 줄(좁은 칸에 넣으면 'D-' / 숫자로 줄바꿈돼 가독성 나빠짐) */}
+            {exp && (
+              <div
+                className={`stocksheet__exp${exp.level !== "ok" ? " is-warn" : ""}`}
+              >
+                유통기한 {exp.full} · {exp.dday}
+              </div>
+            )}
 
             {err && <div className="chaterr">{err}</div>}
 

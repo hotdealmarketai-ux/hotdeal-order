@@ -2841,9 +2841,16 @@ body {
 /* 공구 발주 인라인 스테퍼(행에 바로) — 바텀시트보다 작게 */
 .stepper--inline .stepper__btn { width: 34px; height: 34px; font-size: 19px; }
 .stepper--inline .stepper__val { min-width: 28px; font-size: 15.5px; }
-/* #9 담기 바텀시트 유통기한 표기 */
-.stockrow__exp { margin-top: 5px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
-.stockrow__exp.is-warn { color: var(--danger); }
+/* #9 담기 바텀시트 유통기한 — 전체 폭 한 줄(줄바꿈 방지, 가운데) */
+.stocksheet__exp {
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.45;
+}
+.stocksheet__exp.is-warn { color: var(--danger); }
 .stocksheet__add {
   min-height: 58px;
   font-size: 18px;
