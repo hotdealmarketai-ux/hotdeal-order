@@ -77,8 +77,13 @@ async function AggregateSection({
 }) {
   // date = 출고일 → 그 출고일에 실린 발주(전날/주말) 범위로 집계.
   const { start, end } = orderRangeForShipment(date);
+  // 새롭 본사 출고 집계 = 공구 + 채움채. 다른 벤더는 본인 것만.
+  const vendorRoles =
+    vendorRole === "ADMIN_SAEROP"
+      ? ["ADMIN_SAEROP", "VENDOR_CHAEUMCHAE"]
+      : [vendorRole];
   const orders = await prisma.order.findMany({
-    where: { vendorRole, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
+    where: { vendorRole: { in: vendorRoles }, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     include: { user: true, items: { orderBy: { sortOrder: "asc" } } },
     orderBy: { createdAt: "asc" },
   });

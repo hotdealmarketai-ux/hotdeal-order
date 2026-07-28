@@ -19,9 +19,13 @@ export default async function AdminReservationsPage() {
     <>
       <Topbar brand="새롭 · 예약발주" />
       <div className="page">
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-          <Link href="/admin/reservations/past" className="btn btn--sm btn--soft">
-            지난 예약발주
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 2 }}>
+          <Link
+            href="/admin/reservations/past"
+            className="linkbtn"
+            style={{ color: "var(--green-700)", textDecoration: "none" }}
+          >
+            지난 예약발주 ›
           </Link>
         </div>
         <div className="itemshead">

@@ -19,7 +19,12 @@ export default async function VendorOrderDetail(props: {
     where: { id },
     include: { items: { orderBy: { sortOrder: "asc" } }, user: true },
   });
-  if (!order || order.vendorRole !== user.role) notFound();
+  // 새롭 본사 출고는 공구 + 채움채 발주를 함께 본다. 다른 벤더는 본인 것만.
+  const allowedRoles =
+    user.role === "ADMIN_SAEROP"
+      ? ["ADMIN_SAEROP", "VENDOR_CHAEUMCHAE"]
+      : [user.role];
+  if (!order || !allowedRoles.includes(order.vendorRole)) notFound();
 
   const cat = CATEGORIES[order.category as Category];
 

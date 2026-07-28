@@ -39,7 +39,12 @@ export default async function MyPage(props: {
         : Promise.resolve([]),
       isHotdeal
         ? prisma.reservationOrder.findMany({
-            where: { userId: user.id },
+            // 실제로 예약한 것만(확정 + 품목 1개↑). 미확정·0건 행은 '지난 발주'에 안 뜨게.
+            where: {
+              userId: user.id,
+              confirmed: true,
+              items: { some: { qty: { gt: 0 } } },
+            },
             include: {
               _count: { select: { items: true } },
               batch: { select: { pickupDate: true } },

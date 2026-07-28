@@ -12,12 +12,21 @@ export async function confirmOrderAction(formData: FormData) {
   const next = String(formData.get("next") ?? "true") === "true";
   if (!orderId) return;
 
-  // 본인(업자)에게 온 발주만 확인 가능
+  // 본인(업자)에게 온 발주만 확인 가능. 새롭 본사는 공구+채움채(본사 출고분) 확인 가능.
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     select: { vendorRole: true, userId: true, status: true },
   });
-  if (!order || order.vendorRole !== user.role || order.status === "CANCELLED") return;
+  const allowedRoles =
+    user.role === "ADMIN_SAEROP"
+      ? ["ADMIN_SAEROP", "VENDOR_CHAEUMCHAE"]
+      : [user.role];
+  if (
+    !order ||
+    !allowedRoles.includes(order.vendorRole) ||
+    order.status === "CANCELLED"
+  )
+    return;
 
   await prisma.order.update({
     where: { id: orderId },

@@ -27,8 +27,14 @@ export default async function VendorPage(props: {
   const { start, end } = orderRangeForShipment(date);
   const isToday = date === kstToday();
 
+  // 새롭 본사 출고 = 공구(ADMIN_SAEROP) + 채움채(VENDOR_CHAEUMCHAE) 발주를 함께. 다른 벤더는 본인 것만.
+  const vendorRoles =
+    user.role === "ADMIN_SAEROP"
+      ? ["ADMIN_SAEROP", "VENDOR_CHAEUMCHAE"]
+      : [user.role];
+
   const orders = await prisma.order.findMany({
-    where: { vendorRole: user.role, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
+    where: { vendorRole: { in: vendorRoles }, createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
     include: { user: true, _count: { select: { items: true } } },
     orderBy: { createdAt: "desc" },
   });
