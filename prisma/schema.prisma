@@ -309,6 +309,10 @@ model InventoryItem {
   qty       Int      @default(0) // #6/#12 남은수량(시트 B열)
   supplyPrice Int    @default(0) // #6/#12 개당 공급가(시트 C열)
   expiry    String   @default("") // #9 유통기한 YYYY-MM-DD(빈값=없음, 시트 D열)
+  // 카테고리 — 대분류(필수급)/중분류(선택). 빈값이면 그 계층 없음(예: 계란=대분류만).
+  // 카테고리 목록은 '품목에 붙은 값'에서 도출 → 상품 없는 카테고리는 자동 미노출. 시트 E/F열.
+  majorCat  String   @default("")
+  minorCat  String   @default("")
   memo      String   @default("")
   sortOrder Int      @default(0)
   // #12 시트 삭제 전파용 소프트삭제 마커(선택) — 현재는 미사용, 향후 tombstone

@@ -11,6 +11,7 @@ import {
   setInventoryPushPending,
   readInventorySheet,
 } from "@/lib/inventory-sheet";
+import { categorizeInventory, type CatGroup } from "@/lib/inventory-category";
 import {
   currentWindowStartUtc,
   currentDeadlineUtc,
@@ -539,6 +540,94 @@ export async function importInventoryFromSheetAction(): Promise<SheetImportResul
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
   return { ok: true, added, updated };
+}
+
+// ── 재고 카테고리 AI 자동 분류 ──
+// 제안(propose): 재고 전체 이름을 AI(Claude)가 대분류/중분류로 나눠 미리보기용으로 반환. DB 무변경.
+// 적용(apply): 관리자가 미리보기에서 확인한 매핑(mapJson)을 그대로 각 품목에 저장. 삭제 없음.
+export type CategoryProposal =
+  | {
+      ok: true;
+      groups: CatGroup[];
+      mapJson: string;
+      itemCount: number;
+      majorCount: number;
+    }
+  | { ok: false; error: string };
+
+export async function proposeInventoryCategoriesAction(): Promise<CategoryProposal> {
+  await requireAdmin();
+  const items = await prisma.inventoryItem.findMany({
+    where: { deletedAt: null },
+    select: { name: true },
+  });
+  const names = items.map((i) => i.name).filter(Boolean);
+  if (names.length === 0) return { ok: false, error: "등록된 재고가 없어요." };
+  const res = await categorizeInventory(names);
+  if (!res.ok) return { ok: false, error: res.error };
+  const majors = new Set(res.groups.map((g) => g.major));
+  return {
+    ok: true,
+    groups: res.groups,
+    mapJson: JSON.stringify(res.map),
+    itemCount: names.length,
+    majorCount: majors.size,
+  };
+}
+
+export type CategoryApplyResult = { ok: boolean; updated?: number; error?: string };
+
+export async function applyInventoryCategoriesAction(
+  mapJson: string,
+): Promise<CategoryApplyResult> {
+  const admin = await requireAdmin();
+  let map: Record<string, { major?: string; minor?: string }>;
+  try {
+    map = JSON.parse(String(mapJson ?? "{}"));
+  } catch {
+    return { ok: false, error: "적용할 분류를 읽지 못했어요." };
+  }
+  if (!map || typeof map !== "object" || Array.isArray(map)) {
+    return { ok: false, error: "형식이 올바르지 않아요." };
+  }
+  const items = await prisma.inventoryItem.findMany({
+    where: { deletedAt: null },
+    select: { id: true, name: true },
+  });
+  let updated = 0;
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        for (const it of items) {
+          const c = map[it.name];
+          if (!c) continue;
+          const major = String(c.major ?? "").trim().slice(0, 40);
+          const minor = String(c.minor ?? "").trim().slice(0, 40);
+          await tx.inventoryItem.update({
+            where: { id: it.id },
+            data: { majorCat: major, minorCat: minor },
+          });
+          updated++;
+        }
+      },
+      { timeout: 30000 },
+    );
+  } catch (err) {
+    console.error("[inventory] apply categories failed:", err);
+    return { ok: false, error: "카테고리 적용에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+  await setInventoryPushPending(); // 다음 push 크론이 DB→시트(E/F열)에 반영
+  await writeAudit({
+    action: "inventory.categorize",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "inventory",
+    targetId: "",
+    summary: `재고 카테고리 적용: ${updated}개 품목`,
+  });
+  revalidatePath("/admin/inventory");
+  revalidatePath("/inventory");
+  return { ok: true, updated };
 }
 
 // R4 재고 자동저장 — 편집기 입력을 디바운스로 계속 저장. 현재 목록으로 DB를 맞춘다(이름/수량/공급가

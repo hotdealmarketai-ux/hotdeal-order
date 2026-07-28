@@ -5,6 +5,7 @@ import { addInventoryAction } from "@/app/actions/admin";
 import { InventoryEditor } from "@/components/InventoryEditor";
 import { InventoryBulkImport } from "@/components/InventoryBulkImport";
 import { SheetImportButton } from "@/components/SheetImportButton";
+import { CategoryAutoAssign } from "@/components/CategoryAutoAssign";
 
 export default async function AdminInventory() {
   await requireAdmin();
@@ -18,6 +19,8 @@ export default async function AdminInventory() {
     <>
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
+        <CategoryAutoAssign />
+
         <SheetImportButton />
 
         <InventoryBulkImport currentNames={items.map((it) => it.name)} />
@@ -68,6 +71,8 @@ export default async function AdminInventory() {
             qty: it.qty ? String(it.qty) : "",
             supplyPrice: it.supplyPrice ? String(it.supplyPrice) : "",
             expiry: it.expiry ?? "",
+            majorCat: it.majorCat ?? "",
+            minorCat: it.minorCat ?? "",
           }))}
         />
       </div>

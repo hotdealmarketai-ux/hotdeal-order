@@ -11,6 +11,8 @@ type Item = {
   qty: string;
   supplyPrice: string;
   expiry: string; // #9 유통기한 "YYYY-MM-DD"(빈값=없음)
+  majorCat: string; // 대분류(AI 자동분류 결과, 표시용 — 자동저장 대상 아님)
+  minorCat: string; // 중분류
 };
 
 // R4 재고 자동저장 — 입력하는 족족(디바운스 0.8s) DB에 저장. 시트는 크론이 주기적으로 반영(단방향).
@@ -130,6 +132,13 @@ export function InventoryEditor({ initial }: { initial: Item[] }) {
                   ✕
                 </button>
               </div>
+              {/* 카테고리(AI 자동분류) — 표시용. 붙은 경우만 노출 */}
+              {it.majorCat && (
+                <div className="invitem__cat">
+                  {it.majorCat}
+                  {it.minorCat ? ` · ${it.minorCat}` : ""}
+                </div>
+              )}
               {/* #9 입력한 유통기한을 '0000년 00월 00일 0요일'로 눈에 보이게 확인 표시 */}
               {exp && (
                 <div className={`invitem__exp invitem__exp--${exp.level}`}>

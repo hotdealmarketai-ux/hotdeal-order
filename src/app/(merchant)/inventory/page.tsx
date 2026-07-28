@@ -53,6 +53,8 @@ export default async function InventoryPage() {
               mine: mine[it.id] ?? 0,
               supplyPrice: it.supplyPrice,
               expiry: it.expiry ?? "",
+              majorCat: it.majorCat ?? "",
+              minorCat: it.minorCat ?? "",
             }))}
             canAdd={canAdd}
             hint={

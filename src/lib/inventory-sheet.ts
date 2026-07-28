@@ -20,7 +20,7 @@ const SHEET_ID =
 const GID = process.env.INVENTORY_SHEET_GID || "0";
 const SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 const API = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`;
-const HEADER = ["품목명", "남은 수량", "공급가", "유통기한"];
+const HEADER = ["품목명", "남은 수량", "공급가", "유통기한", "대분류", "중분류"];
 const PENDING_KEY = "inventory_push_pending";
 
 // A1 표기에서 탭 이름은 작은따옴표로 감싸고 내부 '는 ''로 이스케이프(공백·특수문자 대비).
@@ -304,7 +304,14 @@ export async function pushInventoryToSheet(): Promise<{
   const dbItems = await prisma.inventoryItem.findMany({
     where: { deletedAt: null },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    select: { name: true, qty: true, supplyPrice: true, expiry: true },
+    select: {
+      name: true,
+      qty: true,
+      supplyPrice: true,
+      expiry: true,
+      majorCat: true,
+      minorCat: true,
+    },
   });
   // 빈 DB 가드 — 재고가 0행일 때(마이그레이션·초기화 중 등) push하면 시트를 정상인 것처럼
   // 통째로 비워버린다. pull과 대칭으로, 비어 있으면 시트를 건드리지 않고 보존한다.
@@ -320,13 +327,15 @@ export async function pushInventoryToSheet(): Promise<{
       String(it.qty),
       String(it.supplyPrice),
       it.expiry ?? "", // #9 유통기한(D열)
+      it.majorCat ?? "", // 대분류(E열)
+      it.minorCat ?? "", // 중분류(F열)
     ]),
   ];
 
   try {
     // 1) 먼저 헤더 + 전체 품목을 쓴다(write 우선). write가 실패하면 시트는 그대로 남는다.
     //    (기존엔 clear→write라 clear 후 write가 실패하면 시트가 헤더만 남고 통째로 비었다.)
-    const updRange = encodeURIComponent(a1(title, `A1:D${values.length}`));
+    const updRange = encodeURIComponent(a1(title, `A1:F${values.length}`));
     const upd = await gfetch(
       `${API}/values/${updRange}?valueInputOption=RAW`,
       token,
@@ -343,7 +352,7 @@ export async function pushInventoryToSheet(): Promise<{
     }
     // 2) write 성공 후에만, 새 데이터 '아래'에 남은 옛 행을 비운다(품목이 줄어든 경우 잔여 제거).
     //    이 clear가 실패해도 최신 데이터는 이미 써졌으니 시트가 비지 않는다(옛 행만 잠깐 남음).
-    const trimRange = encodeURIComponent(a1(title, `A${values.length + 1}:D`));
+    const trimRange = encodeURIComponent(a1(title, `A${values.length + 1}:F`));
     const clr = await gfetch(`${API}/values/${trimRange}:clear`, token, {
       method: "POST",
     });
