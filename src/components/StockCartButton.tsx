@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { holdStockAction } from "@/app/actions/stock";
 import { refreshLiveStock } from "@/lib/useLiveStock";
+import { expiryInfo } from "@/lib/date";
 import { Sheet } from "./Sheet";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -17,6 +18,7 @@ export function StockCartButton({
   available,
   mine,
   supplyPrice,
+  expiry = "",
 }: {
   itemId: string;
   name: string;
@@ -24,6 +26,7 @@ export function StockCartButton({
   available: number;
   mine: number;
   supplyPrice: number;
+  expiry?: string; // #9 유통기한 "YYYY-MM-DD"(빈값=없음)
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -93,6 +96,16 @@ export function StockCartButton({
                 {supplyPrice > 0 && (
                   <div className="stockrow__price">{won(supplyPrice)}원</div>
                 )}
+                {(() => {
+                  const exp = expiryInfo(expiry);
+                  return exp ? (
+                    <div
+                      className={`stockrow__exp${exp.level !== "ok" ? " is-warn" : ""}`}
+                    >
+                      유통기한 {exp.full} · {exp.dday}
+                    </div>
+                  ) : null;
+                })()}
               </div>
               <div className="stepper" role="group" aria-label="수량">
                 <button

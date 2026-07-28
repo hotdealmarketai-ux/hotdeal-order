@@ -26,7 +26,7 @@ import {
 import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
 import { FulfillmentPicker } from "./FulfillmentPicker";
-import { StockCartButton } from "./StockCartButton";
+import { InlineStockStepper } from "./InlineStockStepper";
 import { useLiveStock } from "@/lib/useLiveStock";
 import { expiryInfo } from "@/lib/date";
 import {
@@ -479,7 +479,6 @@ export function OrderForm({
               <div className="toolro__group">
                 <div className="toolro__head">
                   <span className="chip">담은 재고</span>
-                  <span className="toolro__hint">남은 수량 보며 담기 / 빼기</span>
                 </div>
                 {toolCart.map((t) => {
                   const avail = live.availableOf(t.itemId, t.available);
@@ -489,28 +488,22 @@ export function OrderForm({
                     <div className="stockline" key={t.itemId}>
                       <div className="stockline__info">
                         <span className="stockline__name">{t.name}</span>
-                        <span className="stockline__meta">
-                          남은 {avail}개 · 담음 {mineQ}개
+                        <span className="stockmeta">
+                          <span className="stockmeta__qty">남은 수량 {avail}개</span>
                           {exp && (
                             <span
-                              style={
-                                exp.level === "ok"
-                                  ? undefined
-                                  : { color: "var(--danger)", fontWeight: 700 }
-                              }
+                              className={`stockmeta__exp${exp.level !== "ok" ? " is-warn" : ""}`}
                             >
-                              {" "}· 유통 {exp.dday} ({exp.full})
+                              유통기한 {exp.full} · {exp.dday}
                             </span>
                           )}
                         </span>
                       </div>
-                      <StockCartButton
+                      <InlineStockStepper
                         itemId={t.itemId}
-                        name={t.name}
-                        disabled={locked}
                         available={avail}
                         mine={mineQ}
-                        supplyPrice={t.supplyPrice}
+                        disabled={locked}
                       />
                     </div>
                   );

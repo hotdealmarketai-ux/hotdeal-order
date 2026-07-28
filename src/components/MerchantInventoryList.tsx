@@ -21,6 +21,8 @@ const SORTS = [
   { key: "name", label: "가나다순" },
   { key: "qtyDesc", label: "재고 많은순" },
   { key: "qtyAsc", label: "재고 적은순" },
+  { key: "expAsc", label: "유통기한 짧은순" },
+  { key: "expDesc", label: "유통기한 긴순" },
   { key: "priceAsc", label: "공급가 낮은순" },
   { key: "priceDesc", label: "공급가 높은순" },
 ] as const;
@@ -46,12 +48,25 @@ export function MerchantInventoryList({
     ? items.filter((it) => it.name.toLowerCase().includes(query))
     : items;
 
+  // 유통기한까지 남은 일수(없거나 형식오류면 null → 정렬 시 맨 뒤로)
+  const expDaysOf = (it: Item) => expiryInfo(it.expiry)?.days ?? null;
   const sorted = [...filtered].sort((a, b) => {
     switch (sort) {
       case "qtyDesc":
         return b.available - a.available || a.name.localeCompare(b.name, "ko");
       case "qtyAsc":
         return a.available - b.available || a.name.localeCompare(b.name, "ko");
+      case "expAsc":
+      case "expDesc": {
+        const da = expDaysOf(a);
+        const db = expDaysOf(b);
+        // 유통기한 없는 제품은 항상 뒤로(둘 다 없으면 가나다순)
+        if (da == null && db == null) return a.name.localeCompare(b.name, "ko");
+        if (da == null) return 1;
+        if (db == null) return -1;
+        const diff = sort === "expAsc" ? da - db : db - da;
+        return diff || a.name.localeCompare(b.name, "ko");
+      }
       case "priceAsc":
         return a.supplyPrice - b.supplyPrice || a.name.localeCompare(b.name, "ko");
       case "priceDesc":
@@ -132,7 +147,7 @@ export function MerchantInventoryList({
                     avail <= 0 ? " is-out" : avail < 5 ? " is-low" : ""
                   }`}
                 >
-                  {avail <= 0 ? "품절" : `남은 ${avail}개`}
+                  {avail <= 0 ? "품절" : `남은 수량 ${avail}개`}
                 </span>
                 {it.supplyPrice > 0 && <span>공급가 {won(it.supplyPrice)}원</span>}
                 {exp && (
@@ -150,6 +165,7 @@ export function MerchantInventoryList({
               available={avail}
               mine={mineQ}
               supplyPrice={it.supplyPrice}
+              expiry={it.expiry}
             />
           </div>
           );
