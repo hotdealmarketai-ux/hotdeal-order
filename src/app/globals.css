@@ -1104,6 +1104,13 @@ a {
   text-align: center;
   font-size: 15px;
 }
+/* 날짜 입력은 YYYY-MM-DD + 달력 아이콘이 다 보이게 넓게(72px면 잘림). 좁은 화면은 wrap. */
+.wprow__field .input[type="date"] {
+  width: auto;
+  min-width: 148px;
+  text-align: left;
+  padding-right: 6px;
+}
 /* 주간 입금요청서 — 품목명(읽기전용) */
 .wlname {
   align-self: center;
