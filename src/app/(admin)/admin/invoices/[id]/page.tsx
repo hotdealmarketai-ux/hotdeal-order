@@ -20,6 +20,10 @@ import {
 } from "@/components/InvoiceForm";
 import { InvoiceAdminActions } from "@/components/InvoiceAdminActions";
 import { DeleteDraftButton } from "@/components/DeleteDraftButton";
+import {
+  ReviseInvoiceForm,
+  type ReviseInitialItem,
+} from "@/components/ReviseInvoiceForm";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -32,11 +36,11 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 
 export default async function AdminInvoiceDetail(props: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ issued?: string; saved?: string }>;
+  searchParams: Promise<{ issued?: string; saved?: string; revised?: string }>;
 }) {
   await requireAdmin();
   const { id } = await props.params;
-  const { issued, saved } = await props.searchParams;
+  const { issued, saved, revised } = await props.searchParams;
 
   const inv = await prisma.invoice.findUnique({
     where: { id },
@@ -130,6 +134,19 @@ export default async function AdminInvoiceDetail(props: {
     inv.items.some((it) => it.category === c),
   );
 
+  // 입금대기(ISSUED)·일반발주(DAILY)면 제자리 수정 폼을 붙인다(같은 계산서 갱신·재발송).
+  const canRevise = inv.status === "ISSUED" && inv.kind === "DAILY";
+  const reviseItems: ReviseInitialItem[] = inv.items.map((it) => ({
+    category: it.category as Category,
+    name: it.name,
+    qty: String(it.qty),
+    unitPrice: String(it.unitPrice),
+  }));
+  const reviseAllowed = allowedCategoriesFor(inv.user.role as Role);
+  const reviseCategories = reviseAllowed.length
+    ? reviseAllowed
+    : [...CATEGORY_ORDER];
+
   return (
     <>
       <Topbar backHref="/admin/invoices" title="계산서" />
@@ -137,6 +154,12 @@ export default async function AdminInvoiceDetail(props: {
         {issued === "1" && (
           <div className="notice notice--ok" style={{ marginBottom: 14 }}>
             ✓ 계산서가 발행되었어요. 점주에게 입금요청 알림을 보냈어요.
+          </div>
+        )}
+        {revised === "1" && (
+          <div className="notice notice--ok" style={{ marginBottom: 14 }}>
+            ✓ 계산서를 수정해서 다시 보냈어요. 점주에게 &lsquo;계산서가
+            수정되었습니다&rsquo; 알림을 보냈어요.
           </div>
         )}
         {inv.status === "VOID" && (
@@ -164,6 +187,7 @@ export default async function AdminInvoiceDetail(props: {
               <div className="receipt__meta" style={{ marginTop: 4 }}>
                 {labelDate(inv.date)} 출고분
                 {inv.issuedAt ? ` · ${formatKDateTime(inv.issuedAt)} 발행` : ""}
+                {inv.revisedAt ? ` · ${formatKDateTime(inv.revisedAt)} 수정` : ""}
               </div>
             </div>
             <span className={`badge ${badge.cls}`}>{badge.label}</span>
@@ -204,6 +228,15 @@ export default async function AdminInvoiceDetail(props: {
           status={inv.status}
           total={inv.total}
         />
+
+        {canRevise && (
+          <ReviseInvoiceForm
+            invoiceId={inv.id}
+            date={inv.date}
+            categories={reviseCategories}
+            initialItems={reviseItems}
+          />
+        )}
       </div>
     </>
   );

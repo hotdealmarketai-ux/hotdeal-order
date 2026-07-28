@@ -198,6 +198,25 @@ export async function notifyMerchantInvoiceIssued(userId: string, invoiceId: str
   }
 }
 
+// 점주에게 '계산서(입금요청서) 수정 재발송' 알림 — 같은 계산서로 이동, 바뀐 금액 포함
+export async function notifyMerchantInvoiceRevised(
+  userId: string,
+  invoiceId: string,
+  total: number,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: `계산서가 수정되었습니다. 변경된 금액 ${total.toLocaleString("ko-KR")}원`,
+      body: "",
+      // 기존 계산서를 제자리에서 고쳤으므로 같은 계산서로 이동(중복·404 없음).
+      url: `/invoices/${invoiceId}`,
+      type: "invoice",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantInvoiceRevised failed:", err);
+  }
+}
+
 // 점주에게 '입금 확인 완료' 알림 — 건수·금액 포함
 export async function notifyMerchantInvoicePaid(
   userId: string,

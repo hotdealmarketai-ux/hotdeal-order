@@ -13,6 +13,7 @@ import {
 } from "@/lib/constants";
 import {
   notifyMerchantInvoiceIssued,
+  notifyMerchantInvoiceRevised,
   notifyMerchantInvoicePaid,
   notifyMerchantSplitApproved,
   notifyMerchantSplitRejected,
@@ -251,6 +252,88 @@ export async function saveInvoiceAction(
   revalidatePath(`/admin/combined/${userId}/${date}`);
   revalidatePath("/admin");
   redirect(`/admin/invoices/${id}?saved=1`);
+}
+
+// 발행된(입금대기 ISSUED) 계산서를 제자리에서 수정·재발송한다.
+// 기존 계산서를 지우거나 새로 만들지 않고 '같은 계산서(같은 id)'의 품목/합계만 교체한다 →
+//  · 점주의 기존 알림·링크가 그대로 유효(404·중복 없음)
+//  · '발행된 계산서' 목록에 중복이 안 생김
+//  · issuedAt(최초 발행)·입금매칭 이력 보존, revisedAt만 새로 찍음
+// PAID(입금완료)/VOID(취소)/DRAFT(작성중)는 수정 불가.
+export async function reviseInvoiceAction(
+  _prev: InvoiceFormState,
+  formData: FormData,
+): Promise<InvoiceFormState> {
+  const admin = await requireAdmin();
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+  if (!invoiceId) return { error: "잘못된 요청이에요." };
+
+  const inv = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { userId: true, date: true, status: true, kind: true },
+  });
+  if (!inv) return { error: "계산서를 찾을 수 없어요." };
+  if (inv.status !== "ISSUED") {
+    return { error: "입금대기 중인 계산서만 수정할 수 있어요." };
+  }
+  // 주간발주 계산서는 발행 후 잠금(기존 규칙) — 일반발주(DAILY)만 제자리 수정 허용.
+  if (inv.kind !== "DAILY") {
+    return { error: "주간발주 계산서는 수정할 수 없어요." };
+  }
+
+  // 발행(재발송)이므로 엄격 검증(돈 원칙) — 한 줄이라도 형식 오류면 거부.
+  let raw: RawItem[] = [];
+  try {
+    raw = JSON.parse(String(formData.get("payload") ?? "[]"));
+  } catch {
+    raw = [];
+  }
+  const cleaned = cleanItems(Array.isArray(raw) ? raw : [], true);
+  if ("error" in cleaned) return cleaned;
+  const items = cleaned;
+  if (items.length === 0) return { error: "품목을 한 개 이상 입력하세요." };
+  const total = items.reduce((n, it) => n + it.amount, 0);
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      // 상태 가드를 쓰기 자체에 — 수정 도중 입금확인/취소로 전이되면 count 0 → 중단(레이스 차단).
+      const upd = await tx.invoice.updateMany({
+        where: { id: invoiceId, status: "ISSUED" },
+        data: { total, revisedAt: new Date() },
+      });
+      if (upd.count === 0) throw new Error("INVOICE_NOT_ISSUED");
+      // 품목 통째 교체(제출된 전체 payload가 최종본) — 부분 병합 아님.
+      await tx.invoiceItem.deleteMany({ where: { invoiceId } });
+      await tx.invoiceItem.createMany({
+        data: items.map((it, i) => ({ ...it, sortOrder: i, invoiceId })),
+      });
+    });
+  } catch (err) {
+    if ((err as Error)?.message === "INVOICE_NOT_ISSUED") {
+      return { error: "입금대기 중인 계산서만 수정할 수 있어요. (이미 입금확인/취소됨)" };
+    }
+    console.error("[invoice] revise failed:", err);
+    return { error: "수정에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+
+  await writeAudit({
+    action: "invoice.revise",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "invoice",
+    targetId: invoiceId,
+    summary: `계산서 수정·재발송 · ${inv.date} · ${total.toLocaleString("ko-KR")}원`,
+  });
+  // 점주에게 '계산서가 수정되었습니다 + 바뀐 금액' 재발송(같은 계산서로 이동).
+  await notifyMerchantInvoiceRevised(inv.userId, invoiceId, total);
+  revalidatePath("/admin/invoices");
+  revalidatePath(`/admin/invoices/${invoiceId}`);
+  revalidatePath("/admin/deposits");
+  revalidatePath(`/admin/combined/${inv.userId}/${inv.date}`);
+  revalidatePath(`/order/day/${inv.date}`);
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/admin");
+  redirect(`/admin/invoices/${invoiceId}?revised=1`);
 }
 
 // 발행된 계산서 취소(VOID) — 되돌릴 수 없음, 재작성은 합본 발주서에서

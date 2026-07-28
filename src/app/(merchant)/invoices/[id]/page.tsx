@@ -9,6 +9,7 @@ import {
   CATEGORY_ORDER,
 } from "@/lib/constants";
 import { labelDateLong } from "@/lib/date";
+import { formatKDateTime } from "@/lib/format";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { PrintButton } from "@/components/PrintButton";
 
@@ -60,6 +61,12 @@ export default async function MerchantInvoiceDetailPage({
         <p className="lead">
           {labelDateLong(inv.date)} · {KIND[inv.kind] ?? "계산서"}
         </p>
+        {inv.revisedAt && (
+          <div className="notice notice--ai" style={{ marginBottom: 12 }}>
+            이 계산서는 {formatKDateTime(inv.revisedAt)}에 수정되었어요. 아래 내용을
+            다시 확인해 주세요.
+          </div>
+        )}
 
         <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" cats={invCats} />
 
