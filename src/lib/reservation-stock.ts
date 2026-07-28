@@ -4,7 +4,7 @@
 //  · 예약에서 담는 수량이 곧 '홀드' → 남은재고 = base − Σ예약홀드 − Σ일일홀드.
 //  · 픽업일 오전 10시가 지나면 파생 조건이 자동으로 풀린다(별도 삭제 크론 불필요). base는 수기 재조정.
 import { prisma } from "@/lib/prisma";
-import { kstToday, shiftDate } from "@/lib/date";
+import { shiftDate } from "@/lib/date";
 import { heldByItem } from "@/lib/stock-hold";
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -16,7 +16,7 @@ export const RESERVATION_UNLOCK_HOUR = 10; // 픽업일 오전 10시에 잠금 �
 export function minLockedPickupDate(now: number = Date.now()): string {
   const kst = new Date(now + KST_OFFSET_MS);
   const hour = kst.getUTCHours();
-  const today = kstToday();
+  const today = kst.toISOString().slice(0, 10); // now 기준 KST 날짜(hour와 일관)
   return hour >= RESERVATION_UNLOCK_HOUR ? shiftDate(today, 1) : today;
 }
 

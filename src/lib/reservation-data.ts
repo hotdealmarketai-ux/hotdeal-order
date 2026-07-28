@@ -22,9 +22,16 @@ export async function countHiddenReservationBatches(): Promise<number> {
 }
 
 // 관리자 목록 — 활성 배치 + 상품/예약 건수 + 픽업일 목록. 예약일자 내림차순.
-export async function getReservationBatchesAdmin(): Promise<ReservationBatchListItem[]> {
+// scope: current=예약일이 오늘 이후(진행/예정), past=예약일이 지난 것('지난 예약발주' 페이지).
+export async function getReservationBatchesAdmin(
+  scope: "current" | "past" = "current",
+): Promise<ReservationBatchListItem[]> {
+  const today = kstToday();
   const batches = await prisma.reservationBatch.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      reserveDate: scope === "past" ? { lt: today } : { gte: today },
+    },
     orderBy: { reserveDate: "desc" },
     select: {
       id: true,
