@@ -59,6 +59,9 @@ export function ReservationOrderForm({
     0,
   );
   const totalReserved = manualTotal + linkedTotal;
+  // DB에 이미 담긴 예약이 있나(수량 다 지웠을 때 '비우기'로 해제할 수 있게).
+  const hasExisting =
+    confirmed || Object.values(qtyByProduct).some((q) => q > 0);
 
   return (
     <>
@@ -166,15 +169,17 @@ export function ReservationOrderForm({
           <input type="hidden" name="batchId" value={batchId} />
           <input type="hidden" name="items" value={JSON.stringify(items)} />
           <div className="resv-lock">
-            예약 확정을 누르면 예약이 확정되고 잠깁니다. (재고 연동 상품도 함께 잠겨요)
+            {totalReserved > 0
+              ? "예약 확정을 누르면 예약이 확정되고 잠깁니다. (재고 연동 상품도 함께 잠겨요)"
+              : "수량을 모두 비우고 ‘예약 비우기’를 누르면 예약이 해제됩니다."}
           </div>
           <div className="ctabar">
             <SubmitButton
               className="btn btn--primary btn--block"
-              pendingText="확정 중…"
-              disabled={totalReserved === 0}
+              pendingText={totalReserved > 0 ? "확정 중…" : "비우는 중…"}
+              disabled={totalReserved === 0 && !hasExisting}
             >
-              예약 확정 {totalReserved > 0 ? `(${totalReserved}개)` : ""}
+              {totalReserved > 0 ? `예약 확정 (${totalReserved}개)` : "예약 비우기"}
             </SubmitButton>
           </div>
         </form>

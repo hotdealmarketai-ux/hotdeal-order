@@ -168,6 +168,9 @@ export function OrderForm({
           DRAFT_KEY,
           JSON.stringify({ windowKey, rowsByCat, pickup, fulfillment, tofuQty }),
         );
+      } else {
+        // 전부 비우면 초안도 삭제 — 안 그러면 지운 값(예: 채움채 수량)이 옛 초안으로 되살아난다.
+        localStorage.removeItem(DRAFT_KEY);
       }
     } catch {
       /* noop */

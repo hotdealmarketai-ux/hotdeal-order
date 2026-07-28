@@ -303,6 +303,16 @@ export async function confirmReservationAction(formData: FormData) {
     }),
   ]);
 
+  // 남은 아이템(방금 수기 + 연동 홀드)이 0이면 '확정'이 아니라 '없음'으로 → 목록 '예약 중' 풀림.
+  // (점주가 수량을 다 지워 '예약 비우기'를 눌렀을 때 예약이 깔끔히 해제되게)
+  const remaining = await prisma.reservationOrderItem.count({ where: { orderId: order.id } });
+  if (remaining === 0) {
+    await prisma.reservationOrder.update({
+      where: { id: order.id },
+      data: { confirmed: false, confirmedAt: null },
+    });
+  }
+
   revalidatePath("/reservations");
   revalidatePath(`/reservations/${batchId}`);
   redirect(`/reservations/${batchId}`);
