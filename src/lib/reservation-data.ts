@@ -317,3 +317,30 @@ export async function getReservationLoadForOrder(
   return [...merged.entries()].map(([name, qty]) => ({ name, qty }));
 }
 
+// 공구 벤더(=새롭 본사)의 '공동구매 발주'(/vendor) 집계용 — 픽업일(=출고일)의 확정 예약분을
+// 전 지점 라인으로. 예약분은 실제 발주(Order)에 없으므로 여기서 별도 조회해 합류시킨다.
+// 점주 발주화면 공구·계산서와 같은 게이트(confirmed=true·batch active).
+export type VendorReservationLine = { store: string; name: string; qty: number };
+export async function getReservationLinesForPickup(
+  pickupDate: string,
+): Promise<VendorReservationLine[]> {
+  const items = await prisma.reservationOrderItem.findMany({
+    where: {
+      pickupDate,
+      qty: { gt: 0 },
+      order: { confirmed: true, batch: { active: true } },
+    },
+    select: {
+      name: true,
+      qty: true,
+      order: { select: { user: { select: { storeName: true } } } },
+    },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  return items.map((it) => ({
+    store: it.order.user.storeName,
+    name: it.name,
+    qty: it.qty,
+  }));
+}
+

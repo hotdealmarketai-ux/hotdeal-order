@@ -11,6 +11,7 @@ import {
   orderRangeForShipment,
 } from "@/lib/date";
 import { aggregateOrders } from "@/lib/ai";
+import { getReservationLinesForPickup } from "@/lib/reservation-data";
 import { displayQty } from "@/lib/qty";
 
 export default async function VendorSummary(props: {
@@ -92,6 +93,17 @@ async function AggregateSection({
     })),
   );
 
+  // 공구 벤더(새롭)만: 확정 예약분(픽업=출고일)도 집계에 합류 — 창고가 총 준비량을 한 번에.
+  // 예약분은 실제 발주(Order)에 없어 별도 조회. 라인에 '예약' 표시로 구분.
+  let reservedCount = 0;
+  if (vendorRole === "ADMIN_SAEROP") {
+    const resv = await getReservationLinesForPickup(date);
+    reservedCount = resv.length;
+    for (const r of resv) {
+      lines.push({ store: r.store, name: r.name, qty: String(r.qty), note: "예약" });
+    }
+  }
+
   // 과일·야채는 상세 분류(produce), 공구·두부류는 같으면 묶기(simple)
   const mode =
     vendorRole === "VENDOR_SEOBU" || vendorRole === "VENDOR_JANGHEUNG"
@@ -110,7 +122,9 @@ async function AggregateSection({
   return (
     <>
       <div className="notice notice--ai" style={{ marginBottom: 14 }}>
-        지점 발주 {orders.length}건을 품목 {agg.fruits.length}종으로 묶었어요.
+        지점 발주 {orders.length}건
+        {reservedCount > 0 ? ` + 예약분 ${reservedCount}건` : ""}을 품목{" "}
+        {agg.fruits.length}종으로 묶었어요.
       </div>
       <div className="stack">
         {agg.fruits.map((f, i) => (
