@@ -33,15 +33,20 @@ export default async function VendorPage(props: {
     orderBy: { createdAt: "desc" },
   });
 
-  // 공구 벤더(새롭)만: 이 출고일 확정 예약분이 있는 점포 중, 공구 담기 발주가 '없는' 점포도
-  // 목록에 띄운다(예약분은 실제 Order가 없어 원래 안 뜸 → 창고 준비 누락 방지).
+  // 공구 벤더(새롭)만: 이 출고일 확정 예약분. 발주 있는 점포는 그 행에 예약분을 함께 표시하고,
+  // 발주가 '없는'(예약전용) 점포는 별도 행으로 목록에 띄운다(창고 준비 누락 방지).
   const orderUserIds = new Set(orders.map((o) => o.userId));
-  const resvOnly =
-    user.role === "ADMIN_SAEROP"
-      ? (await getReservationStoresForPickup(date)).filter(
-          (s) => !orderUserIds.has(s.userId),
-        )
-      : [];
+  const resvStores =
+    user.role === "ADMIN_SAEROP" ? await getReservationStoresForPickup(date) : [];
+  const resvByUser = new Map(resvStores.map((s) => [s.userId, s]));
+  const resvOnly = resvStores.filter((s) => !orderUserIds.has(s.userId));
+  // 같은 점포에 발주가 여러 건이어도 예약분은 첫 행에만 한 번 표시(중복/합산 오해 방지).
+  const resvRowIds = new Set<string>();
+  const seenResv = new Set<string>();
+  for (const o of orders) {
+    if (!seenResv.has(o.userId) && resvByUser.has(o.userId)) resvRowIds.add(o.id);
+    seenResv.add(o.userId);
+  }
   const nothing = orders.length === 0 && resvOnly.length === 0;
 
   return (
@@ -90,15 +95,23 @@ export default async function VendorPage(props: {
                     <div className="row__sub">
                       {formatKDateTime(o.createdAt)} · {cat.label} {o._count.items}건
                       {o.pickupTime ? ` · 픽업 ${o.pickupTime}` : ""}
+                      {resvRowIds.has(o.id)
+                        ? ` · 예약분 ${resvByUser.get(o.userId)!.count}건`
+                        : ""}
                     </div>
                   </div>
-                  {o.edited && !o.confirmed ? (
-                    <span className="badge badge--edit">발주 수정</span>
-                  ) : o.confirmed ? (
-                    <span className="badge badge--ok">발주 확인</span>
-                  ) : (
-                    <span className="row__chev">›</span>
-                  )}
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    {resvRowIds.has(o.id) && (
+                      <span className="badge badge--ai">예약</span>
+                    )}
+                    {o.edited && !o.confirmed ? (
+                      <span className="badge badge--edit">발주 수정</span>
+                    ) : o.confirmed ? (
+                      <span className="badge badge--ok">발주 확인</span>
+                    ) : (
+                      <span className="row__chev">›</span>
+                    )}
+                  </div>
                 </Link>
               );
             })}
