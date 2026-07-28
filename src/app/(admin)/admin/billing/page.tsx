@@ -27,6 +27,14 @@ export default async function AdminBillingPage() {
     <>
       <Topbar backHref="/admin" title="계산서 발행" />
       <div className="page">
+        <Link
+          href="/admin/billing/by-date"
+          className="btn btn--soft"
+          style={{ marginBottom: 12 }}
+        >
+          📅 날짜별 계산서 보기
+        </Link>
+
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="row__sub">전체 미수 (발행 후 미입금)</div>
           <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--green-700)" }}>

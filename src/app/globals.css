@@ -1608,6 +1608,16 @@ a {
   color: var(--fg-2);
   line-height: 1.7;
 }
+/* 날짜별 계산서(#7) — 계산서 카드 링크(색 상속·밑줄 제거·탭 피드백) */
+.invcard {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.08s ease, box-shadow 0.12s ease;
+}
+.invcard:active { transform: scale(0.995); }
+.invcard .invgrand { margin-bottom: 0; }
+
 .invcat {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -3303,6 +3313,7 @@ body {
   font-size: 13.5px; color: var(--muted); margin-top: 2px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+.chatlist__last--empty { color: var(--muted-2); font-style: italic; }
 .chatlist__badge {
   flex-shrink: 0; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
   background: var(--danger); color: #fff; font-size: 11.5px; font-weight: 800;

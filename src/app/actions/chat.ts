@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-import { isMerchant, type Role } from "@/lib/constants";
+import { ASSIGNABLE_MERCHANT_ROLES, isMerchant, type Role } from "@/lib/constants";
 import { notifyChatToAdmin, notifyChatToMerchant } from "@/lib/push";
 import { logError } from "@/lib/log";
 
@@ -17,10 +17,11 @@ export type ChatMsg = {
   readAt: string | null; // 수신자가 읽은 시각
 };
 export type ChatThreadItem = {
-  threadId: string;
+  threadId: string; // 아직 대화가 없으면 "" (merchantId로 연다)
+  merchantId: string;
   storeName: string;
   last: string;
-  lastAt: string;
+  lastAt: string; // 대화 없으면 "" — 목록에서 '새 대화'로 표시
   unread: number;
 };
 
@@ -141,42 +142,86 @@ export async function merchantLoadChat(): Promise<{
 }
 
 // ── 관리자: 대화 목록(인스타 DM식) ──
+// 메시지 유무와 무관하게 '가입된 모든 승인 가맹점'을 노출한다(#3). 대화가 있는 지점은
+// 최근 메시지·미읽음을, 아직 없는 지점은 '새 대화'로 목록에 띄운다. 정렬은 최근 대화 우선,
+// 나머지는 상호명 가나다순.
 export async function adminLoadThreads(): Promise<ChatThreadItem[] | null> {
   const v = await getViewer();
   if (!v || v.kind !== "admin") return null;
-  const threads = await prisma.chatThread.findMany({
-    orderBy: { lastMessageAt: "desc" },
-    include: { merchant: { select: { storeName: true } } },
-  });
+  const [merchants, threads] = await Promise.all([
+    prisma.user.findMany({
+      where: { status: "APPROVED", role: { in: ASSIGNABLE_MERCHANT_ROLES } },
+      select: { id: true, storeName: true },
+    }),
+    prisma.chatThread.findMany({
+      select: { id: true, merchantId: true, adminClearedAt: true },
+    }),
+  ]);
+  const threadByMerchant = new Map(threads.map((t) => [t.merchantId, t]));
   const out: ChatThreadItem[] = [];
-  for (const t of threads) {
-    // 관리자가 비운 이후 메시지만 목록의 last/미리보기로 — 대화창(adminLoadThread)과 일치.
-    const last = await prisma.chatMessage.findFirst({
-      where: {
-        threadId: t.id,
-        ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
-      },
-      orderBy: { createdAt: "desc" },
-      select: { body: true, createdAt: true, fromAdmin: true },
-    });
-    if (!last) continue; // 비운 뒤 남은 메시지 없으면 목록에서 제외
-    const unread = await prisma.chatMessage.count({
-      where: {
-        threadId: t.id,
-        fromAdmin: false,
-        readAt: null,
-        ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
-      },
-    });
+  for (const m of merchants) {
+    const t = threadByMerchant.get(m.id);
+    if (t) {
+      // 관리자가 비운 이후 메시지만 목록의 last/미리보기로 — 대화창(adminLoadThread)과 일치.
+      const last = await prisma.chatMessage.findFirst({
+        where: {
+          threadId: t.id,
+          ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
+        },
+        orderBy: { createdAt: "desc" },
+        select: { body: true, createdAt: true, fromAdmin: true },
+      });
+      if (last) {
+        const unread = await prisma.chatMessage.count({
+          where: {
+            threadId: t.id,
+            fromAdmin: false,
+            readAt: null,
+            ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
+          },
+        });
+        out.push({
+          threadId: t.id,
+          merchantId: m.id,
+          storeName: m.storeName,
+          last: (last.fromAdmin ? "나: " : "") + last.body,
+          lastAt: last.createdAt.toISOString(),
+          unread,
+        });
+        continue;
+      }
+    }
+    // 대화가 없거나 비운 뒤 메시지 없음 → '새 대화'로 노출
     out.push({
-      threadId: t.id,
-      storeName: t.merchant.storeName,
-      last: (last.fromAdmin ? "나: " : "") + last.body,
-      lastAt: last.createdAt.toISOString(),
-      unread,
+      threadId: t?.id ?? "",
+      merchantId: m.id,
+      storeName: m.storeName,
+      last: "",
+      lastAt: "",
+      unread: 0,
     });
   }
+  out.sort((a, b) => {
+    const am = a.lastAt ? 1 : 0;
+    const bm = b.lastAt ? 1 : 0;
+    if (am !== bm) return bm - am; // 대화 있는 지점 먼저
+    if (am && bm) return b.lastAt.localeCompare(a.lastAt); // 최근 대화 우선
+    return a.storeName.localeCompare(b.storeName, "ko"); // 나머지 가나다순
+  });
   return out;
+}
+
+// ── 관리자: 가맹점 id로 대화 열기(스레드 없으면 생성) ── #3
+// 메시지 없는 지점을 목록에서 눌렀을 때 사용. 생성 후 adminLoadThread로 위임.
+export async function adminOpenThreadByMerchant(merchantId: string): Promise<{
+  threadId: string;
+  storeName: string;
+  messages: ChatMsg[];
+} | null> {
+  const v = await getViewer();
+  if (!v || v.kind !== "admin") return null;
+  const t = await getOrCreateThread(merchantId);
+  return adminLoadThread(t.id);
 }
 
 // ── 관리자: 특정 대화 열기(+ 가맹점 메시지 읽음) ──

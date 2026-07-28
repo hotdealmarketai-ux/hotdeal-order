@@ -8,6 +8,7 @@ import {
   merchantLoadChat,
   adminLoadThreads,
   adminLoadThread,
+  adminOpenThreadByMerchant,
   sendChat,
   clearChat,
   type ChatRole,
@@ -185,6 +186,18 @@ export function ChatWidget() {
     setThreadId(null);
     const list = await adminLoadThreads();
     if (list) setThreads(list);
+  }, []);
+
+  // 관리자: 목록에서 지점을 눌러 대화 열기(스레드 없으면 생성) — #3
+  const openAdminThreadByMerchant = useCallback(async (merchantId: string) => {
+    setView("thread");
+    const res = await adminOpenThreadByMerchant(merchantId);
+    if (!res) return;
+    setStoreName(res.storeName);
+    setThreadId(res.threadId);
+    setMessages(res.messages);
+    setUnread(await chatUnread().catch(() => 0));
+    scrollDown();
   }, []);
 
   const openPanel = useCallback(async () => {
@@ -450,16 +463,13 @@ export function ChatWidget() {
           {role === "admin" && view === "list" ? (
             <div className="chatlist" ref={scrollRef}>
               {threads.length === 0 ? (
-                <div className="chatempty">아직 문의가 없어요.</div>
+                <div className="chatempty">가입된 가맹점이 없어요.</div>
               ) : (
                 threads.map((t) => (
                   <button
-                    key={t.threadId}
+                    key={t.merchantId}
                     className="chatlist__item"
-                    onClick={() => {
-                      setView("thread");
-                      loadThreadMessages(t.threadId, true);
-                    }}
+                    onClick={() => openAdminThreadByMerchant(t.merchantId)}
                   >
                     <div className="chatlist__av" aria-hidden="true">
                       {t.storeName.slice(0, 1)}
@@ -467,9 +477,13 @@ export function ChatWidget() {
                     <div className="chatlist__main">
                       <div className="chatlist__top">
                         <span className="chatlist__name">{t.storeName}</span>
-                        <span className="chatlist__time">{fmtTime(t.lastAt)}</span>
+                        {t.lastAt && (
+                          <span className="chatlist__time">{fmtTime(t.lastAt)}</span>
+                        )}
                       </div>
-                      <div className="chatlist__last">{t.last}</div>
+                      <div className={`chatlist__last${t.last ? "" : " chatlist__last--empty"}`}>
+                        {t.last || "새 대화 시작하기"}
+                      </div>
                     </div>
                     {t.unread > 0 && <span className="chatlist__badge">{t.unread}</span>}
                   </button>
