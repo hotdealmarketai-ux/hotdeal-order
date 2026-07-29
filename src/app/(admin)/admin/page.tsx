@@ -75,6 +75,7 @@ export default async function AdminHome() {
       badge: weeklyCount > 0 ? weeklyCount : undefined,
     },
     { href: "/admin/billing", title: "계산서 발행" },
+    { href: "/admin/calendar", title: "예약 달력" },
     { href: "/admin/deposits", title: "입금 관리" },
     { href: "/admin/inventory", title: "재고" },
     { href: "/admin/stock-reconcile", title: "재고 정산" },
