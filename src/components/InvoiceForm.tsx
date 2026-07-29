@@ -523,11 +523,7 @@ export function InvoiceForm({
                 </button>
               </div>
             </div>
-            {!weeklyOn ? (
-              <div className="invcat__loadnote">
-                이 출고일 주간발주를 계산서에 합산하려면 켜세요. 켜면 불러온 뒤 수량·단가를 고칠 수 있어요.
-              </div>
-            ) : (
+            {!weeklyOn ? null : (
               <>
                 <div className="invcols">
                   <span>품목</span>

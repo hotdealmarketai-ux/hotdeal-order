@@ -23,6 +23,8 @@ import { clearOrderUnlockIfSettled } from "@/lib/bank";
 import {
   clearWeeklyUnlockIfSettled,
   getWeeklyItemsForStoreShipment,
+  weeklyKeyForShipmentDay,
+  weeklyShipDow,
 } from "@/lib/weekly";
 import { boxWord } from "@/lib/weekly-catalog";
 import { orderRangeForShipment } from "@/lib/date";
@@ -753,8 +755,22 @@ export async function loadWeeklyIntoInvoiceAction(formData: FormData) {
   const merchant = await prisma.user.findUnique({ where: { id: userId } });
   if (!merchant || !isMerchant(merchant.role as Role)) return;
 
-  const weekly = await getWeeklyItemsForStoreShipment(userId, date);
+  // 발주 확인 전이라도 불러오기 허용(requireConfirmed:false).
+  const weekly = await getWeeklyItemsForStoreShipment(userId, date, {
+    requireConfirmed: false,
+  });
   if (weekly.length === 0) return;
+
+  // 불러오는 순간 그 주간발주를 자동 '발주 확인' 처리 — 발주서(출고 sheet, 확정분만 표시)에도 함께 실리도록.
+  const weekKey = weeklyKeyForShipmentDay(date, await weeklyShipDow());
+  if (weekKey) {
+    await prisma.weeklyOrder.updateMany({
+      where: { userId, weekKey, confirmed: false },
+      data: { confirmed: true, confirmedAt: new Date() },
+    });
+    revalidatePath("/admin/weekly");
+    revalidatePath(`/admin/weekly/${userId}`);
+  }
 
   // 대상 DRAFT 계산서 확보 — 없으면 생성.
   let id = invoiceId;

@@ -86,9 +86,10 @@ export default async function NewInvoicePage(props: {
       unitPrice: String(r.supplyPrice),
     }));
 
-  // 이 출고일(=date)에 불러올 확정 주간발주가 있으면 주간발주 토글 노출.
+  // 이 출고일(=date)에 그 점포 주간발주가 있으면(발주 확인 전이라도) 주간발주 토글 노출.
   const weeklyLoadable =
-    (await getWeeklyItemsForStoreShipment(userId, date)).length > 0;
+    (await getWeeklyItemsForStoreShipment(userId, date, { requireConfirmed: false }))
+      .length > 0;
 
   return (
     <>

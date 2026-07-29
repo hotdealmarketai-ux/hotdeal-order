@@ -220,19 +220,24 @@ export type WeeklyShipItem = {
   amount: number; // qty × unitPrice
 };
 
-// 한 점포의 '그 출고일' 주간발주 품목(확정분). 발주서 표시·계산서 불러오기 공용.
-// 출고일이 설정 요일(기본 수)이 아니거나, 확정된 주간발주가 없으면 빈 배열.
+// 한 점포의 '그 출고일' 주간발주 품목. 발주서 표시·계산서 불러오기 공용.
+// 출고일이 설정 요일(기본 수)이 아니면 빈 배열.
+// requireConfirmed(기본 true): 발주서는 확정분만. 계산서 토글/불러오기는 false로 호출해
+// 발주 확인 전이라도 표시·불러오기 허용(불러올 때 자동 확인 처리 → 발주서에도 실림).
 export async function getWeeklyItemsForStoreShipment(
   userId: string,
   shipmentDay: string,
+  opts?: { requireConfirmed?: boolean },
 ): Promise<WeeklyShipItem[]> {
+  const requireConfirmed = opts?.requireConfirmed ?? true;
   const weekKey = weeklyKeyForShipmentDay(shipmentDay, await weeklyShipDow());
   if (!weekKey) return [];
   const order = await prisma.weeklyOrder.findUnique({
     where: { userId_weekKey: { userId, weekKey } },
     include: { items: { where: { qty: { gt: 0 } }, orderBy: { sortOrder: "asc" } } },
   });
-  if (!order || !order.confirmed) return [];
+  if (!order) return [];
+  if (requireConfirmed && !order.confirmed) return [];
   return order.items.map((it) => ({
     code: it.code,
     category: it.category,

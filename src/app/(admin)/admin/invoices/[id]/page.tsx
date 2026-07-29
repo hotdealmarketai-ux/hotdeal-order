@@ -116,7 +116,11 @@ export default async function AdminInvoiceDetail(props: {
         unit: it.unit,
       }));
     const weeklyLoadable =
-      (await getWeeklyItemsForStoreShipment(inv.userId, inv.date)).length > 0;
+      (
+        await getWeeklyItemsForStoreShipment(inv.userId, inv.date, {
+          requireConfirmed: false,
+        })
+      ).length > 0;
 
     return (
       <>

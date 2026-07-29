@@ -120,9 +120,7 @@ export default async function AdminWeeklyStorePage({
           <>
             <WeeklyReceipt items={orderReceipt} totalLabel="확인된 주간발주 금액" />
             <div className="notice notice--ai" style={{ marginTop: 14 }}>
-              이 주간발주는 <b>출고일 계산서에 합산</b>해 청구돼요. 관리자 홈 →
-              계산서 발행에서 이 점포 계산서를 열고 <b>주간발주</b> 토글을 켜면
-              불러와집니다.
+              이 주간발주는 <b>출고일 계산서에 합산</b>해 청구됩니다.
             </div>
           </>
         )}
