@@ -65,16 +65,15 @@ export async function isItemReservationLocked(
 }
 
 // 품목별 예약 홀드 합계(전 점주). = Σ ReservationOrderItem.qty
-//  (연동 아이템 · 픽업 10시 전 · 활성 배치). 연동은 즉시 담기(홀드)라 confirmed 무관 전부 집계.
+//  (연동 아이템 · 아직 재고 차감 안 됨(stockDeductedAt null) · 활성 배치). 연동은 즉시 담기(홀드)라 confirmed 무관 전부 집계.
+// ⚠ 예전엔 '픽업 10시 전'으로 릴리스했으나, 10시 자동차감을 없애고 '재고 정산(다음날) 차감' 방식으로 바꿈에 따라
+//   홀드도 그 시점(stockDeductedAt 설정)에 풀린다 → 판매가능이 base 차감과 어긋나지 않음.
 // groupBy 는 관계필터를 못 받아 findMany + JS 합산(예약 아이템 수는 소규모).
-export async function reservationHeldByItem(
-  now: number = Date.now(),
-): Promise<Record<string, number>> {
-  const gte = minLockedPickupDate(now);
+export async function reservationHeldByItem(): Promise<Record<string, number>> {
   const rows = await prisma.reservationOrderItem.findMany({
     where: {
       inventoryItemId: { not: "" },
-      pickupDate: { gte },
+      stockDeductedAt: null,
       qty: { gt: 0 },
       order: { batch: { active: true } },
     },
@@ -89,13 +88,12 @@ export async function reservationHeldByItem(
 // (SSR 초기값 — 클라 폴링 useLiveReservationStock 이 이후 실시간 갱신)
 export async function availableForReservationProducts(
   products: { id: string; inventoryItemId: string }[],
-  now: number = Date.now(),
 ): Promise<Record<string, number>> {
   const linked = products.filter((p) => p.inventoryItemId);
   if (linked.length === 0) return {};
   const itemIds = [...new Set(linked.map((p) => p.inventoryItemId))];
   const [resvHeld, dailyHeld, items] = await Promise.all([
-    reservationHeldByItem(now),
+    reservationHeldByItem(),
     heldByItem(),
     prisma.inventoryItem.findMany({
       where: { id: { in: itemIds } },
