@@ -52,9 +52,8 @@ export function StockReconcileForm({
       <div className="rectable rectable--edit">
         <div className="rectable__head">
           <span className="rectable__name">품목</span>
-          <span className="rectable__num">발주</span>
+          <span className="rectable__num">발주(수정)</span>
           <span className="rectable__num">현재</span>
-          <span className="rectable__num">차감량</span>
           <span className="rectable__num">→제안</span>
         </div>
         {rows.map((r) => {
@@ -72,19 +71,18 @@ export function StockReconcileForm({
                 )}
                 {!r.matched && <span className="rectable__warn">재고없음</span>}
               </span>
-              <span className="rectable__num">{fmt(r.ordered)}</span>
-              <span className="rectable__num">{r.matched ? fmt(r.base) : "—"}</span>
               {r.matched ? (
                 <input
                   className={`rectable__input${over ? " is-over" : ""}`}
                   inputMode="numeric"
                   value={amt[r.name] ?? ""}
                   onChange={(e) => set(r.name, e.target.value)}
-                  aria-label={`${r.name} 차감량`}
+                  aria-label={`${r.name} 발주(차감)량`}
                 />
               ) : (
-                <span className="rectable__num">—</span>
+                <span className="rectable__num">{fmt(r.ordered)}</span>
               )}
+              <span className="rectable__num">{r.matched ? fmt(r.base) : "—"}</span>
               <span className="rectable__num rectable__num--to">
                 {r.matched ? fmt(proposed) : "—"}
               </span>
@@ -93,7 +91,8 @@ export function StockReconcileForm({
         })}
       </div>
       <p className="row__sub" style={{ margin: "8px 2px 0" }}>
-        차감량은 실제 나간 만큼 수정할 수 있어요(추가 불출 시 발주보다 크게). 파란 값 = 발주보다 많이 차감.
+        <b>발주</b> 칸의 숫자만큼 재고에서 빠집니다. 실제 나간 만큼 수정하세요(추가 불출 시 크게 —
+        파란 값 = 원래 발주보다 많음). 빠지는 건 이 숫자 <b>하나뿐</b>이에요.
       </p>
 
       {done === null &&

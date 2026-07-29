@@ -25,7 +25,7 @@ export default async function StockReconcilePage(props: {
       <div className="page">
         <p className="lead" style={{ marginBottom: 10 }}>
           <b>출고 {labelDate(date)}</b> 에 나갈 <b>공구(상시)</b> + <b>예약(연동)</b> 발주분을
-          기준재고에서 정산합니다. 차감량을 확인·수정하고 승인하면 적용돼요.
+          기준재고에서 정산합니다. <b>발주량</b>을 확인·수정하고 승인하면 그만큼만 빠집니다.
         </p>
         <div className="notice notice--mute" style={{ marginBottom: 14 }}>
           ⚠ ‘제안재고’가 실제와 맞는지 확인하고 승인하세요. 이미 빠진 품목이 섞이면 이중 차감될 수
