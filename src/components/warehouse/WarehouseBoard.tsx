@@ -140,8 +140,8 @@ export function WarehouseBoard({
   initialLocation: string;
   initialBoxes: BoxDTO[];
   todayCount: number;
-  // 오늘 나갈 발주가 있는 지점별 재고 id 집합(담기 + 예약연동). 지점 필터 버튼의 소스.
-  storeFilters: { storeName: string; itemIds: string[] }[];
+  // 오늘 나갈 발주가 있는 지점별 재고 품목(itemId)+발주수량. 지점 필터 버튼·팔레트 필터 소스.
+  storeFilters: { storeName: string; items: { itemId: string; qty: number }[] }[];
 }) {
   const [location, setLocation] = useState<string>(initialLocation);
   const [boxes, setBoxes] = useState<BoxDTO[]>(initialBoxes);
@@ -211,15 +211,25 @@ export function WarehouseBoard({
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
   // 오늘 나갈 재고 id 집합 — 전체(모든 지점 합집합) 또는 선택 지점 하나. 박스 itemId로 반짝 판정.
   const allGlowIds = useMemo(
-    () => new Set(storeFilters.flatMap((f) => f.itemIds)),
+    () => new Set(storeFilters.flatMap((f) => f.items.map((i) => i.itemId))),
     [storeFilters],
   );
   const glowIds = useMemo(() => {
     if (!activeStore) return allGlowIds;
     return new Set(
-      storeFilters.find((f) => f.storeName === activeStore)?.itemIds ?? [],
+      (storeFilters.find((f) => f.storeName === activeStore)?.items ?? []).map(
+        (i) => i.itemId,
+      ),
     );
   }, [activeStore, storeFilters, allGlowIds]);
+  // 선택 지점의 품목별 '발주 들어온 수량' 맵 — 지점 필터 시 팔레트가 남은수량 대신 이 수량을 보인다.
+  const storeQty = useMemo(() => {
+    if (!activeStore) return null;
+    const m = new Map<string, number>();
+    for (const i of storeFilters.find((f) => f.storeName === activeStore)?.items ?? [])
+      m.set(i.itemId, i.qty);
+    return m;
+  }, [activeStore, storeFilters]);
   // 박스의 품목이 유통기한 임박(≤30일)/만료인지 — itemId로 재고 조회 후 expiryInfo.
   const isExpiryBox = (b: BoxDTO) => {
     if (!b.itemId) return false;
@@ -382,9 +392,13 @@ export function WarehouseBoard({
   }, []);
 
   const placedItemIds = new Set(boxes.map((b) => b.itemId).filter(Boolean));
-  const filtered = q.trim()
+  const searched = q.trim()
     ? items.filter((it) => it.name.replace(/\s/g, "").includes(q.trim().replace(/\s/g, "")))
     : items;
+  // 지점 필터가 켜지면 그 지점에 발주가 들어온 품목만 팔레트에 보인다. 전체면 전 품목.
+  const filtered = storeQty
+    ? searched.filter((it) => storeQty.has(it.id))
+    : searched;
 
   return (
     <div className="whwrap">
@@ -403,7 +417,7 @@ export function WarehouseBoard({
                 <div className="whintro__storelist">
                   {storeFilters.map((f) => (
                     <span key={f.storeName} className="whintro__store">
-                      {f.storeName} <b>{f.itemIds.length}</b>
+                      {f.storeName} <b>{f.items.length}</b>
                     </span>
                   ))}
                 </div>
@@ -477,7 +491,7 @@ export function WarehouseBoard({
                   setActiveStore((s) => (s === f.storeName ? null : f.storeName))
                 }
               >
-                {f.storeName} <b>{f.itemIds.length}</b>
+                {f.storeName} <b>{f.items.length}</b>
               </button>
             ))}
           </div>
@@ -496,8 +510,10 @@ export function WarehouseBoard({
           <div className="whpal">
             {filtered.length === 0 && <div className="whpal__empty">품목이 없어요.</div>}
             {filtered.map((it) => {
-              const qv = qtyOf(it.id) ?? it.qty;
-              const soldOut = qv <= 0;
+              // 지점 필터 시 = 그 지점 '발주 들어온 수량', 전체 시 = 남은수량(실시간).
+              const ordered = storeQty ? storeQty.get(it.id) ?? 0 : null;
+              const qv = ordered != null ? ordered : qtyOf(it.id) ?? it.qty;
+              const soldOut = ordered == null && qv <= 0; // 발주수량 모드에선 품절 표시 안 함
               const expSoon = expiryOn && isExpirySoonItem(it);
               return (
                 <button

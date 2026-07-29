@@ -20,7 +20,7 @@ export default async function AdminAudit() {
 
   return (
     <>
-      <Topbar backHref="/admin" title="로그 내역" />
+      <Topbar backHref="/admin" title="로그" />
       <div className="page">
         {logs.length === 0 ? (
           <div className="empty">

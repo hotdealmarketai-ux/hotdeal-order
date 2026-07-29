@@ -121,11 +121,6 @@ export default async function AdminDeposits() {
         >
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 800 }}>전체 잠금해제</div>
-            <div className="hint" style={{ margin: "3px 0 0" }}>
-              {lockOverride
-                ? "지금은 미수가 있어도 모든 지점이 발주할 수 있어요. 끄면 다시 잠깁니다."
-                : "켜면 끌 때까지 모든 지점이 미수 있어도 발주할 수 있어요."}
-            </div>
           </div>
           <form action={setOrderLockOverrideAction} style={{ flexShrink: 0 }}>
             <input type="hidden" name="on" value={lockOverride ? "false" : "true"} />

@@ -47,7 +47,7 @@ export default async function WarehousePage() {
       },
       select: {
         user: { select: { storeName: true } },
-        items: { select: { name: true, rawName: true } },
+        items: { select: { name: true, rawName: true, qty: true } },
       },
     }),
     prisma.reservationOrderItem.findMany({
@@ -59,15 +59,21 @@ export default async function WarehousePage() {
       },
       select: {
         inventoryItemId: true,
+        qty: true,
         order: { select: { user: { select: { storeName: true } } } },
       },
     }),
   ]);
-  const byStore = new Map<string, Set<string>>();
+  // 지점별 '발주 들어온 수량'을 재고 품목(itemId)별로 집계. (담기 TOOL 발주 수량[문자열 파싱] + 예약연동 수량[정수])
+  const parseQty = (s: string) => {
+    const n = parseInt(String(s ?? "").replace(/[^\d]/g, ""), 10);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const byStore = new Map<string, Map<string, number>>();
   const ensureStore = (s: string) => {
     let v = byStore.get(s);
     if (!v) {
-      v = new Set();
+      v = new Map();
       byStore.set(s, v);
     }
     return v;
@@ -75,14 +81,22 @@ export default async function WarehousePage() {
   for (const o of toolOrders)
     for (const it of o.items) {
       const id = invByNorm.get(norm(it.name || it.rawName || ""));
-      if (id) ensureStore(o.user.storeName).add(id);
+      if (!id) continue;
+      const m = ensureStore(o.user.storeName);
+      m.set(id, (m.get(id) ?? 0) + parseQty(it.qty));
     }
   for (const r of resvItems)
-    if (r.inventoryItemId) ensureStore(r.order.user.storeName).add(r.inventoryItemId);
+    if (r.inventoryItemId) {
+      const m = ensureStore(r.order.user.storeName);
+      m.set(r.inventoryItemId, (m.get(r.inventoryItemId) ?? 0) + r.qty);
+    }
 
   const storeFilters = [...byStore.entries()]
-    .filter(([, ids]) => ids.size > 0)
-    .map(([storeName, ids]) => ({ storeName, itemIds: [...ids] }))
+    .filter(([, m]) => m.size > 0)
+    .map(([storeName, m]) => ({
+      storeName,
+      items: [...m.entries()].map(([itemId, qty]) => ({ itemId, qty })),
+    }))
     .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
   const todayCount = storeFilters.length; // 나갈 발주가 있는 지점 수
 

@@ -15,11 +15,6 @@ export default async function AdminHoldsPage() {
     <>
       <Topbar backHref="/admin" title="담기 현황" />
       <div className="page">
-        <p className="hint" style={{ margin: "0 0 12px", lineHeight: 1.5 }}>
-          지금 각 점포가 담아둔 <b>재고현황 담기</b>·<b>예약발주 재고연동</b> 수량이에요.
-          품목별로 남은수량이 적은 순으로 보여요. <b>− / +</b> 로 특정 점포 수량을 바로
-          조정하면 다른 점포가 담을 수 있어요.
-        </p>
         <HoldsBoard initial={initial} />
       </div>
     </>

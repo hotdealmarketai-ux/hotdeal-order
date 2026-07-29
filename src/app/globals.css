@@ -1389,8 +1389,19 @@ a {
   .notice,
   .hint,
   .linkbtn,
+  .no-print,
   .section-label {
     display: none !important;
+  }
+
+  /* 전체 발주서 인쇄 — 지점별로 한 장씩 끊어 영수증 프린터에서 연속 출력(자동 컷) */
+  .print-store {
+    break-after: page;
+    page-break-after: always;
+  }
+  .print-store:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 
   .app {

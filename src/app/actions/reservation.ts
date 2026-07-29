@@ -149,6 +149,16 @@ export async function saveReservationBatchAction(
           data: { name, supplyPrice, pickupDate: pk, inventoryItemId: invId, active: true },
         }),
       );
+      // 픽업일자가 바뀌면 이미 확정/담긴 아이템 스냅샷(pickupDate)도 함께 옮긴다 —
+      // 발주서·출고서·계산서·본사출고는 전부 ReservationOrderItem.pickupDate(스냅샷)로 거르므로,
+      // 이걸 안 바꾸면 옛 출고일 발주서에 그대로 남는다(신고된 버그).
+      // 단 이미 재고 실차감된(stockDeductedAt) 아이템은 옮기지 않는다(정산 정합 보호).
+      ops.push(
+        prisma.reservationOrderItem.updateMany({
+          where: { productId: pid, stockDeductedAt: null },
+          data: { pickupDate: pk, name },
+        }),
+      );
     } else {
       ops.push(
         prisma.reservationProduct.create({
@@ -179,6 +189,13 @@ export async function saveReservationBatchAction(
   revalidatePath("/admin/reservations");
   revalidatePath("/reservations");
   revalidatePath(`/admin/reservations/${targetId}`);
+  // 픽업일자가 바뀌면 발주서·출고서·달력 등 스냅샷을 읽는 소비 화면도 무효화(옛 날짜에서 빠지고 새 날짜에 뜨게).
+  revalidatePath("/admin/calendar");
+  revalidatePath("/admin/hotdeal");
+  revalidatePath("/admin/orders");
+  revalidatePath("/vendor");
+  revalidatePath("/vendor/summary");
+  revalidatePath("/order");
 
   // 저장 후 항상 '목록'으로 이동 — 서버 리다이렉트라 최신 목록이 그려져 방금 저장한 예약이
   // 바로 보인다(예전엔 신규는 편집페이지로 갔는데, 그러면 목록 클라 캐시가 오래돼 '목록에 안

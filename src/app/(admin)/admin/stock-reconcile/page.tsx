@@ -21,7 +21,7 @@ export default async function StockReconcilePage(props: {
 
   return (
     <>
-      <Topbar backHref="/admin" title="재고 정산" />
+      <Topbar backHref="/admin" title="재고 마감" />
       <div className="page">
         <form
           method="get"

@@ -93,6 +93,17 @@ export default async function VendorPage(props: {
           {isSaerop ? "집계" : isToday ? "오늘 전체주문 집계 보기" : "이 날짜 전체주문 집계"}
         </Link>
 
+        {/* 전체 발주서 인쇄 — 들어온 모든 지점 발주서를 영수증 프린터에 지점별로 끊어 연속 출력 */}
+        {isSaerop && storeRows.length > 0 && (
+          <Link
+            href={`/vendor/print-all?date=${date}`}
+            className="btn btn--soft"
+            style={{ marginBottom: 16 }}
+          >
+            전체 발주서 인쇄
+          </Link>
+        )}
+
         {nothing ? (
           <div className="empty">
             <p>
