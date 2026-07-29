@@ -78,6 +78,7 @@ export default async function AdminHome() {
     { href: "/admin/calendar", title: "예약 달력" },
     { href: "/admin/deposits", title: "입금 관리" },
     { href: "/admin/inventory", title: "재고" },
+    { href: "/admin/holds", title: "담기 현황" },
     { href: "/admin/stock-reconcile", title: "재고 정산" },
     { href: "/admin/audit", title: "로그 내역" },
   ];
