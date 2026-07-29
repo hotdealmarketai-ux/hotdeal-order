@@ -27,26 +27,64 @@ export default async function WarehousePage() {
     reservationHeldByItem(),
   ]);
 
-  // 인트로/글로우 — '오늘 출고할 발주' = 전날 발주(발주=전날, 출고=다음날 공식).
-  // 그래서 오늘(kstToday) 출고에 실리는 발주 범위(orderRangeForShipment)로 조회한다(취소 제외).
-  const { start, end } = orderRangeForShipment(kstToday());
-  const todayOrders = await prisma.order.findMany({
-    where: { createdAt: { gte: start, lt: end }, status: { not: "CANCELLED" } },
-    select: {
-      user: { select: { storeName: true } },
-      items: { select: { name: true, rawName: true } },
-    },
-  });
-  const todayStores = [...new Set(todayOrders.map((o) => o.user.storeName))];
-  // '오늘 출고 발주 N건' = 오늘 출고할 발주를 넣은 지점 수(지점 8곳이면 8건).
-  const todayCount = todayStores.length;
-  const todayItemNames = [
-    ...new Set(
-      todayOrders.flatMap((o) =>
-        o.items.map((it) => norm(it.name || it.rawName || "")).filter((n) => n.length >= 2),
-      ),
-    ),
-  ];
+  // 인트로/글로우/지점필터 — '오늘 출고할 발주'를 지점별 '나갈 재고(InventoryItem) id 집합'으로.
+  //  · 재고현황 담기 = 공구(TOOL) 발주(오늘 출고 = 전날 발주, orderRangeForShipment). 이름→재고 id 매칭.
+  //  · 예약 재고연동 = ReservationOrderItem(픽업일 = 오늘, 재고연동).
+  // 담기·예약연동이 있는 지점만 싣는다(그 외 지점은 창고와 무관 → 제외). 지점 필터 버튼의 소스.
+  const today = kstToday();
+  const { start, end } = orderRangeForShipment(today);
+  const invByNorm = new Map<string, string>(); // 정규화 이름 → 재고 id(담기 발주 이름매칭)
+  for (const it of items) {
+    const k = norm(it.name);
+    if (k && !invByNorm.has(k)) invByNorm.set(k, it.id);
+  }
+  const [toolOrders, resvItems] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        category: "TOOL",
+        status: { not: "CANCELLED" },
+        createdAt: { gte: start, lt: end },
+      },
+      select: {
+        user: { select: { storeName: true } },
+        items: { select: { name: true, rawName: true } },
+      },
+    }),
+    prisma.reservationOrderItem.findMany({
+      where: {
+        pickupDate: today,
+        inventoryItemId: { not: "" },
+        qty: { gt: 0 },
+        order: { batch: { active: true } },
+      },
+      select: {
+        inventoryItemId: true,
+        order: { select: { user: { select: { storeName: true } } } },
+      },
+    }),
+  ]);
+  const byStore = new Map<string, Set<string>>();
+  const ensureStore = (s: string) => {
+    let v = byStore.get(s);
+    if (!v) {
+      v = new Set();
+      byStore.set(s, v);
+    }
+    return v;
+  };
+  for (const o of toolOrders)
+    for (const it of o.items) {
+      const id = invByNorm.get(norm(it.name || it.rawName || ""));
+      if (id) ensureStore(o.user.storeName).add(id);
+    }
+  for (const r of resvItems)
+    if (r.inventoryItemId) ensureStore(r.order.user.storeName).add(r.inventoryItemId);
+
+  const storeFilters = [...byStore.entries()]
+    .filter(([, ids]) => ids.size > 0)
+    .map(([storeName, ids]) => ({ storeName, itemIds: [...ids] }))
+    .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
+  const todayCount = storeFilters.length; // 나갈 발주가 있는 지점 수
 
   // 초기 위치(1층) 박스만 서버에서 로드 — 나머지는 탭 전환 시 클라이언트가 불러온다.
   const rows = await prisma.warehouseBox.findMany({
@@ -78,8 +116,7 @@ export default async function WarehousePage() {
       initialLocation="FLOOR1"
       initialBoxes={initialBoxes}
       todayCount={todayCount}
-      todayStores={todayStores}
-      todayItemNames={todayItemNames}
+      storeFilters={storeFilters}
     />
   );
 }

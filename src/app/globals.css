@@ -4009,6 +4009,37 @@ a.resv-card:active { transform: scale(0.995); }
 }
 .whtop__logout:hover { background: #1a2740; }
 
+/* 지점 필터 바 — 오늘 나갈 발주(담기·예약연동)가 있는 지점만. 누르면 그 지점 품목만 반짝 + 나머지 흐리게. */
+.whfilter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 18px;
+  background: #0c1420;
+  border-bottom: 1px solid #22304a;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.whfilter__hd { flex-shrink: 0; color: #8ea0bd; font-size: 12.5px; font-weight: 700; }
+.whfilter__btns { display: flex; gap: 6px; min-width: 0; }
+.whfilter__btn {
+  flex-shrink: 0;
+  border: 1px solid #2c3b57;
+  background: transparent;
+  color: #b8c6de;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.whfilter__btn b { color: #f0c453; margin-left: 3px; font-weight: 800; }
+.whfilter__btn:hover { background: #1a2740; }
+.whfilter__btn.is-on { background: #2563eb; border-color: #2563eb; color: #fff; }
+.whfilter__btn.is-on b { color: #fff; }
+
 /* 본문 = 사이드바 + 캔버스 */
 .whmain { flex: 1; display: flex; min-height: 0; }
 .whside {

@@ -13,8 +13,6 @@ import {
 
 type Item = { id: string; name: string; qty: number; expiry: string };
 
-const norm = (s: string) => s.replace(/\s/g, "");
-
 const LOCATIONS = [
   { key: "FLOOR1", label: "1층" },
   { key: "FREEZER", label: "냉동고" },
@@ -135,16 +133,15 @@ export function WarehouseBoard({
   initialLocation,
   initialBoxes,
   todayCount,
-  todayStores,
-  todayItemNames,
+  storeFilters,
 }: {
   storeName: string;
   items: Item[];
   initialLocation: string;
   initialBoxes: BoxDTO[];
   todayCount: number;
-  todayStores: string[];
-  todayItemNames: string[];
+  // 오늘 나갈 발주가 있는 지점별 재고 id 집합(담기 + 예약연동). 지점 필터 버튼의 소스.
+  storeFilters: { storeName: string; itemIds: string[] }[];
 }) {
   const [location, setLocation] = useState<string>(initialLocation);
   const [boxes, setBoxes] = useState<BoxDTO[]>(initialBoxes);
@@ -153,6 +150,7 @@ export function WarehouseBoard({
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [q, setQ] = useState("");
   const [showIntro, setShowIntro] = useState(true); // #12 로그인 인트로(오늘 발주 요약)
+  const [activeStore, setActiveStore] = useState<string | null>(null); // 지점 필터(null=전체)
   const [expiryOn, setExpiryOn] = useState(false); // #12 유통기한 임박(-30일) 하이라이트 토글
   const [canvas, setCanvas] = useState(CANVAS_DEFAULT); // #12 자유 리사이즈 캔버스
   const [formEdit, setFormEdit] = useState(false); // #12 폼박스(창문/문/계단) 편집모드 — OFF면 클릭 안 됨
@@ -211,15 +209,17 @@ export function WarehouseBoard({
 
   // 품목 id → 정보(유통기한 임박 판정용). 오늘 발주 품목명(정규화) 집합.
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
-  const todaySet = useMemo(() => new Set(todayItemNames), [todayItemNames]);
-  // 박스가 '오늘 발주 품목'인지 — 라벨 정규화 후 오늘 품목명과 포함관계(느슨 매칭, 반짝 힌트용).
-  const isTodayBox = (label: string) => {
-    const n = norm(label);
-    if (n.length < 2) return false;
-    if (todaySet.has(n)) return true;
-    for (const t of todaySet) if (t.includes(n) || n.includes(t)) return true;
-    return false;
-  };
+  // 오늘 나갈 재고 id 집합 — 전체(모든 지점 합집합) 또는 선택 지점 하나. 박스 itemId로 반짝 판정.
+  const allGlowIds = useMemo(
+    () => new Set(storeFilters.flatMap((f) => f.itemIds)),
+    [storeFilters],
+  );
+  const glowIds = useMemo(() => {
+    if (!activeStore) return allGlowIds;
+    return new Set(
+      storeFilters.find((f) => f.storeName === activeStore)?.itemIds ?? [],
+    );
+  }, [activeStore, storeFilters, allGlowIds]);
   // 박스의 품목이 유통기한 임박(≤30일)/만료인지 — itemId로 재고 조회 후 expiryInfo.
   const isExpiryBox = (b: BoxDTO) => {
     if (!b.itemId) return false;
@@ -395,15 +395,15 @@ export function WarehouseBoard({
             <div className="whintro__count">
               오늘 출고할 발주 <b>{todayCount}</b>건
             </div>
-            {todayStores.length > 0 ? (
+            {storeFilters.length > 0 ? (
               <div className="whintro__stores">
                 <div className="whintro__storeshd">
-                  오늘 출고하는 지점 · {todayStores.length}곳
+                  오늘 출고하는 지점 · {storeFilters.length}곳
                 </div>
                 <div className="whintro__storelist">
-                  {todayStores.map((s) => (
-                    <span key={s} className="whintro__store">
-                      {s}
+                  {storeFilters.map((f) => (
+                    <span key={f.storeName} className="whintro__store">
+                      {f.storeName} <b>{f.itemIds.length}</b>
                     </span>
                   ))}
                 </div>
@@ -455,6 +455,34 @@ export function WarehouseBoard({
           </form>
         </div>
       </header>
+
+      {/* 지점 필터 — 오늘 나갈 발주(담기·예약연동)가 있는 지점만. 누르면 그 지점 품목만 반짝. */}
+      {storeFilters.length > 0 && (
+        <div className="whfilter">
+          <span className="whfilter__hd">오늘 출고 지점</span>
+          <div className="whfilter__btns">
+            <button
+              type="button"
+              className={`whfilter__btn ${activeStore === null ? "is-on" : ""}`}
+              onClick={() => setActiveStore(null)}
+            >
+              전체 <b>{storeFilters.length}</b>
+            </button>
+            {storeFilters.map((f) => (
+              <button
+                key={f.storeName}
+                type="button"
+                className={`whfilter__btn ${activeStore === f.storeName ? "is-on" : ""}`}
+                onClick={() =>
+                  setActiveStore((s) => (s === f.storeName ? null : f.storeName))
+                }
+              >
+                {f.storeName} <b>{f.itemIds.length}</b>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="whmain">
         <aside className="whside">
@@ -539,10 +567,12 @@ export function WarehouseBoard({
             {boxes.map((b) => {
               const sel = b.id === selected;
               const isForm = b.color === "form"; // 폼박스(구조물)
-              const today = !isForm && isTodayBox(b.label); // 오늘 발주 품목 → 반짝
+              const today = !isForm && !!b.itemId && glowIds.has(b.itemId); // 오늘 나갈 품목 → 반짝
               const expSoon = !isForm && expiryOn && isExpiryBox(b); // 유통기한 임박 토글 ON + 임박
-              // 유통기한 필터 ON일 때 임박 아닌 재고 박스는 흐리게(임박만 도드라지게 필터 효과)
-              const dim = !isForm && expiryOn && !expSoon;
+              // 흐리게(필터 효과): 유통기한 모드면 임박 아닌 것 / 특정 지점 필터면 그 지점 품목 아닌 것.
+              const dim =
+                !isForm &&
+                (expiryOn ? !expSoon : activeStore != null ? !today : false);
               const qv = qtyOf(b.itemId); // 남은수량(재고 박스만)
               // 폼박스는 편집모드 아니면 클릭 안 됨(배경 고정). z: 폼박스는 뒤, 재고는 앞, 호버/선택은 최상.
               const clickable = !isForm || formEdit;
