@@ -8,7 +8,7 @@ import { isMerchant, type Role } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { notifyMerchantWeeklyInvoiceIssued } from "@/lib/push";
 import { writeAudit } from "@/lib/audit";
-import { setWeeklyForceOpen } from "@/lib/weekly";
+import { setWeeklyForceOpen, setWeeklyShipDow } from "@/lib/weekly";
 
 export type WeeklyInvoiceState = { error?: string };
 
@@ -205,6 +205,27 @@ export async function setWeeklyForceOpenAction(formData: FormData) {
   });
   revalidatePath("/admin/weekly");
   revalidatePath("/weekly");
+}
+
+// 주간발주 출고 요일 변경(기본 수요일) — 월~금(1~5)만. 그 요일의 발주서에 주간발주가 함께 실린다.
+export async function setWeeklyShipDowAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const dow = parseInt(String(formData.get("dow") ?? ""), 10);
+  if (!Number.isInteger(dow) || dow < 1 || dow > 5) return;
+  await setWeeklyShipDow(dow);
+  const names = ["일", "월", "화", "수", "목", "금", "토"];
+  await writeAudit({
+    action: "weekly.shipDow",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "weekly",
+    targetId: "global",
+    summary: `주간발주 출고 요일 → ${names[dow]}요일`,
+  });
+  revalidatePath("/admin/weekly");
+  revalidatePath("/vendor");
+  revalidatePath("/admin/hotdeal");
+  revalidatePath("/admin/orders");
 }
 
 // 관리자 '발주 확인' — 점주 주간발주(발주 요청)를 확인 처리. 이후 계산서 발행 단계로.

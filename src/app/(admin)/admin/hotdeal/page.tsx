@@ -17,6 +17,7 @@ import {
   dowOf,
 } from "@/lib/date";
 import { getReservationStoresForPickup } from "@/lib/reservation-data";
+import { getWeeklyStoresForShipment } from "@/lib/weekly";
 import { DateBar } from "@/components/DateBar";
 import { CancelRequestActions } from "@/components/CancelRequestActions";
 import { dailyForceOpen } from "@/lib/order-open";
@@ -58,6 +59,8 @@ export default async function AdminHotdeal(props: {
   // 공구 예약분(픽업=출고일) — 전체발주(combined)·공구발주(tool)에서 발주에 합류.
   const resvStores =
     combined || isToolTab ? await getReservationStoresForPickup(date) : [];
+  // 주간발주 출고분(출고 요일이면) — 전체발주(combined)에서 발주 목록에 합류.
+  const weeklyStores = combined ? await getWeeklyStoresForShipment(date) : [];
   const groups: {
     userId: string;
     store: string;
@@ -69,6 +72,7 @@ export default async function AdminHotdeal(props: {
     cancelReq: boolean;
     edited: boolean;
     resvCount: number; // 이 출고일 확정 공구 예약분 건수(발주 없이 예약만 있어도 표시)
+    weeklyCount: number; // 이 출고일 주간발주 품목 수(발주 없이 주간발주만 있어도 표시)
   }[] = [];
   if (combined) {
     const map = new Map<string, (typeof groups)[number]>();
@@ -88,6 +92,7 @@ export default async function AdminHotdeal(props: {
           cancelReq: false,
           edited: false,
           resvCount: 0,
+          weeklyCount: 0,
         };
         map.set(key, g);
         groups.push(g);
@@ -121,6 +126,32 @@ export default async function AdminHotdeal(props: {
           cancelReq: false,
           edited: false,
           resvCount: s.count,
+          weeklyCount: 0,
+        };
+        groups.push(ng);
+        byUser.set(s.userId, ng);
+      }
+    }
+
+    // 주간발주 출고분 합류 — 발주/예약 있는 점포엔 주간발주 건수 추가,
+    // 주간발주만 있는 점포는 합본 그룹을 새로 만든다(발주일=출고일−1로 링크).
+    for (const s of weeklyStores) {
+      const g = byUser.get(s.userId);
+      if (g) {
+        g.weeklyCount += s.count;
+      } else {
+        const ng = {
+          userId: s.userId,
+          store: s.storeName,
+          date: shiftDate(date, -1),
+          cats: [] as Category[],
+          items: 0,
+          total: 0,
+          cancelledCount: 0,
+          cancelReq: false,
+          edited: false,
+          resvCount: 0,
+          weeklyCount: s.count,
         };
         groups.push(ng);
         byUser.set(s.userId, ng);
@@ -253,10 +284,13 @@ export default async function AdminHotdeal(props: {
                       ) : null}
                     </div>
                     <div className="row__sub">
-                      발주 {labelDate(g.date)} ·{" "}
-                      {g.cats.map((c) => CATEGORIES[c].label).join("·")}
+                      발주 {labelDate(g.date)}
+                      {g.cats.length > 0
+                        ? ` · ${g.cats.map((c) => CATEGORIES[c].label).join("·")}`
+                        : ""}
                       {g.items > 0 ? ` · 총 ${g.items}건` : ""}
                       {g.resvCount > 0 ? ` · 공구예약 ${g.resvCount}건` : ""}
+                      {g.weeklyCount > 0 ? ` · 주간발주 ${g.weeklyCount}건` : ""}
                     </div>
                   </Link>
                   {g.cancelReq && (

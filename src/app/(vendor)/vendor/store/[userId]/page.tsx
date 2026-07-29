@@ -9,6 +9,8 @@ import {
   orderRangeForShipment,
 } from "@/lib/date";
 import { getReservationItemsForStorePickup } from "@/lib/reservation-data";
+import { getWeeklyItemsForStoreShipment } from "@/lib/weekly";
+import { boxWord } from "@/lib/weekly-catalog";
 import { confirmStoreShipmentAction } from "@/app/actions/vendor";
 
 type Line = { name: string; qty: string; note: string; tag?: string };
@@ -52,7 +54,7 @@ export default async function VendorStorePage(props: {
   const date = normalizeDateStr(dateParam);
   const { start, end } = orderRangeForShipment(date);
 
-  const [merchant, orders, reserved] = await Promise.all([
+  const [merchant, orders, reserved, weekly] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { storeName: true, phone: true, address: true },
@@ -68,9 +70,11 @@ export default async function VendorStorePage(props: {
       orderBy: { createdAt: "asc" },
     }),
     getReservationItemsForStorePickup(userId, date),
+    // date = 출고일. 그 출고일이 주간발주 출고 요일(기본 수)이면 이 점포 주간발주도 함께.
+    getWeeklyItemsForStoreShipment(userId, date),
   ]);
   if (!merchant) notFound();
-  if (orders.length === 0 && reserved.length === 0) notFound();
+  if (orders.length === 0 && reserved.length === 0 && weekly.length === 0) notFound();
 
   const toLine = (it: {
     name: string;
@@ -155,6 +159,28 @@ export default async function VendorStorePage(props: {
 
         <Section label="공구" lines={toolLines} />
         <Section label="채움채" lines={tofuLines} />
+
+        {/* 주간발주 — 그 출고일에 함께 나가는 주간발주(박스/판 단위). 단위 혼합이라 품목수만 집계 */}
+        {weekly.length > 0 && (
+          <div className="invcat">
+            <div className="invcat__head">
+              <span className="chip">주간발주</span>
+              <span className="invcat__sum">{weekly.length}개 품목</span>
+            </div>
+            {weekly.map((w, i) => (
+              <div className="invline" key={i}>
+                <span>
+                  <span className="receipt-item__no">{i + 1}</span>
+                  {w.name}
+                </span>
+                <span className="invline__amt">
+                  {w.qty}
+                  {boxWord(w.category)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

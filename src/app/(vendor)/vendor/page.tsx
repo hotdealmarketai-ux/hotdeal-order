@@ -15,6 +15,7 @@ import {
 import { LogoutButton } from "@/components/LogoutButton";
 import { VendorDateBar } from "@/components/VendorDateBar";
 import { getReservationStoresForPickup } from "@/lib/reservation-data";
+import { getWeeklyStoresForShipment } from "@/lib/weekly";
 
 export default async function VendorPage(props: {
   searchParams: Promise<{ date?: string }>;
@@ -39,15 +40,17 @@ export default async function VendorPage(props: {
     orderBy: { createdAt: "desc" },
   });
 
-  // 공구 벤더(새롭)만: 이 출고일 확정 예약분(픽업=출고일).
+  // 공구 벤더(새롭)만: 이 출고일 확정 예약분(픽업=출고일) + 주간발주 출고분(출고 요일이면).
   const resvStores = isSaerop ? await getReservationStoresForPickup(date) : [];
+  const weeklyStores = isSaerop ? await getWeeklyStoresForShipment(date) : [];
 
-  // ── 본사 출고: 지점별로 1행(공구+채움채+예약분 통합). 딱 지점명만. ──
+  // ── 본사 출고: 지점별로 1행(공구+채움채+예약분+주간발주 통합). 딱 지점명만. ──
   const storeRows = (() => {
     if (!isSaerop) return [];
     const m = new Map<string, string>(); // userId -> storeName
     for (const o of orders) m.set(o.userId, o.user.storeName);
     for (const s of resvStores) if (!m.has(s.userId)) m.set(s.userId, s.storeName);
+    for (const s of weeklyStores) if (!m.has(s.userId)) m.set(s.userId, s.storeName);
     return [...m.entries()]
       .map(([userId, storeName]) => ({ userId, storeName }))
       .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));

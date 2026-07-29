@@ -17,6 +17,8 @@ import {
   shiftDate,
 } from "@/lib/date";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { getWeeklyItemsForStoreShipment } from "@/lib/weekly";
+import { boxWord } from "@/lib/weekly-catalog";
 import { sumQty } from "@/lib/qty";
 import { PrintButton } from "@/components/PrintButton";
 import { CancelStoreOrdersButton } from "@/components/CancelStoreOrdersButton";
@@ -49,9 +51,14 @@ export default async function AdminCombinedReceipt(props: {
       : [];
   const reservedPickup = shiftDate(date, 1);
 
-  // #9 발주취소로 전량 삭제되면(orders 0)/잔존 CANCELLED만 → 목록으로. 단 예약분만 있는
-  // 점포(발주 없이 확정 예약분만)는 예약분을 보여줘야 하므로 리다이렉트하지 않는다.
-  if (active.length === 0 && reservedTool.length === 0) redirect("/admin/hotdeal");
+  // 주간발주 출고분 — 이 발주일의 출고일이 주간발주 출고 요일(기본 수)이면, 그 점포 주간발주도 함께 표시.
+  const weeklyShipDay = shipmentDayOf(date);
+  const weeklyItems = await getWeeklyItemsForStoreShipment(userId, weeklyShipDay);
+
+  // #9 발주취소로 전량 삭제되면(orders 0)/잔존 CANCELLED만 → 목록으로. 단 예약분·주간발주만 있는
+  // 점포(발주 없이 확정 예약분/주간발주만)는 그 내역을 보여줘야 하므로 리다이렉트하지 않는다.
+  if (active.length === 0 && reservedTool.length === 0 && weeklyItems.length === 0)
+    redirect("/admin/hotdeal");
 
   // 같은 종류(과일/야채/공구/두부)는 한 섹션으로 병합 — 4종이 합쳐진 하나의 발주서
   type Item = { name: string; qty: string; note: string };
@@ -132,6 +139,11 @@ export default async function AdminCombinedReceipt(props: {
                   예약분 {reservedTool.length}건
                 </span>
               )}
+              {weeklyItems.length > 0 && (
+                <span className="badge badge--ai">
+                  주간발주 {weeklyItems.length}건
+                </span>
+              )}
             </div>
             {fulfillment === "DELIVERY" && merchant.address && (
               <div className="receipt__deliver">
@@ -189,6 +201,34 @@ export default async function AdminCombinedReceipt(props: {
               <div className="receipt-total">
                 <span>총 수량</span>
                 <b>{won(sumQty(reservedTool.map((it) => String(it.qty))))}개</b>
+              </div>
+            </div>
+          )}
+
+          {/* 주간발주 출고분 — 그 출고일에 함께 나가는 주간발주(박스/판 단위, 읽기전용) */}
+          {weeklyItems.length > 0 && (
+            <div className="receipt__section">
+              <div className="section-label" style={{ margin: "0 0 8px" }}>
+                주간발주{" "}
+                <span className="muted" style={{ fontWeight: 400 }}>
+                  (출고 {labelDate(weeklyShipDay)})
+                </span>
+              </div>
+              {weeklyItems.map((it, i) => (
+                <div className="receipt-item" key={`weekly-${i}`}>
+                  <div className="receipt-item__name">
+                    <span className="receipt-item__no">{i + 1}</span>
+                    {it.name}
+                  </div>
+                  <div className="receipt-item__qty">
+                    {it.qty}
+                    {boxWord(it.category)}
+                  </div>
+                </div>
+              ))}
+              <div className="receipt-total">
+                <span>총 품목</span>
+                <b>{weeklyItems.length}개</b>
               </div>
             </div>
           )}

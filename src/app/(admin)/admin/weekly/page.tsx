@@ -7,10 +7,15 @@ import {
   weeklyKeyAt,
   weeklyForceOpen,
   weeklyStatusOf,
+  weeklyShipDow,
+  weeklyShipmentDayForKey,
 } from "@/lib/weekly";
 import { isWeeklyOpen } from "@/lib/schedule";
-import { setWeeklyForceOpenAction } from "@/app/actions/weekly-invoice";
-import { labelDateLong, shiftDate } from "@/lib/date";
+import {
+  setWeeklyForceOpenAction,
+  setWeeklyShipDowAction,
+} from "@/app/actions/weekly-invoice";
+import { labelDateLong, labelDate, shiftDate } from "@/lib/date";
 import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -25,6 +30,8 @@ export default async function AdminWeeklyPage({
   const weekKey = /^\d{4}-\d{2}-\d{2}$/.test(sp.week ?? "") ? sp.week! : weeklyKeyAt();
   const forceOpen = await weeklyForceOpen();
   const inWindow = isWeeklyOpen();
+  const shipDow = await weeklyShipDow();
+  const shipDay = weeklyShipmentDayForKey(weekKey, shipDow);
 
   const orders = await prisma.weeklyOrder.findMany({
     where: { weekKey },
@@ -123,6 +130,33 @@ export default async function AdminWeeklyPage({
           >
             상품 관리
           </Link>
+        </div>
+
+        {/* 주간발주 출고 요일 — 토요일에 넣은 주간발주가 이 요일에 출고되고, 그 날 발주서(본사출고·핫딜마켓·전체)에 함께 실린다 */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}
+          >
+            <div style={{ fontWeight: 700 }}>주간발주 출고 요일</div>
+            <span className="hint">이번 주 출고 {labelDate(shipDay)}</span>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+            {[1, 2, 3, 4, 5].map((d) => (
+              <form action={setWeeklyShipDowAction} key={d} style={{ flex: 1 }}>
+                <input type="hidden" name="dow" value={d} />
+                <button
+                  type="submit"
+                  className={`btn btn--xs ${d === shipDow ? "btn--primary" : "btn--soft"}`}
+                  style={{ width: "100%" }}
+                >
+                  {["", "월", "화", "수", "목", "금"][d]}
+                </button>
+              </form>
+            ))}
+          </div>
+          <div className="hint" style={{ marginTop: 8 }}>
+            토요일에 넣은 주간발주가 이 요일에 출고돼요. 그 날 발주서에 함께 표시됩니다.
+          </div>
         </div>
 
         {totalStores === 0 ? (
