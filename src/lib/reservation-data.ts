@@ -266,13 +266,14 @@ export async function getBatchConfirmations(batchId: string): Promise<BatchConfi
     .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
 }
 
-// 계산서용 — 이 발주일(orderDay)에 로드되는 확정 예약분(이름·수량·점주공급가). 일반 계산서 공구에 자동 채움.
-// 픽업이 상품별이므로 배치가 아닌 '아이템 픽업일'(스냅샷)이 발주일+1인 확정 아이템만 모은다.
+// 계산서용 — 이 '출고일'(=예약 픽업일)에 로드되는 확정 예약분(이름·수량·점주공급가). 일반 계산서 공구에 자동 채움.
+// 계산서 date는 출고일이고 예약 픽업일 == 출고일이므로, 픽업일이 '출고일과 같은' 확정 아이템만 모은다.
+// (예전엔 orderDay+1로 잡아 하루 밀렸음 — 출고일 계산서엔 안 맞아 바로잡음. '불러오기' 버튼과 동일 규칙.)
 export async function getReservationInvoiceItems(
   userId: string,
-  orderDayKst: string,
+  shipmentDateKst: string,
 ): Promise<{ name: string; qty: number; supplyPrice: number }[]> {
-  const pickupDate = shiftDate(orderDayKst, 1);
+  const pickupDate = shipmentDateKst; // 출고일 그대로(예약 픽업일 == 출고일)
   const items = await prisma.reservationOrderItem.findMany({
     where: {
       pickupDate,
