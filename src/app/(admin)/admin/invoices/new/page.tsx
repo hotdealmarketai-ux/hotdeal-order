@@ -91,7 +91,7 @@ export default async function NewInvoicePage(props: {
       <div className="page">
         <h1 className="h1">{merchant.storeName}</h1>
         <p className="lead" style={{ marginTop: 4 }}>
-          {labelDate(date)} 출고분 계산서
+          {labelDate(date)} 계산서
         </p>
         {initialItems.length > 0 && (
           <div className="notice notice--ai" style={{ marginBottom: 14 }}>

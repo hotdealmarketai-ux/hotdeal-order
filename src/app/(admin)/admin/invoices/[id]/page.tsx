@@ -112,7 +112,7 @@ export default async function AdminInvoiceDetail(props: {
           )}
           <h1 className="h1">{inv.user.storeName}</h1>
           <p className="lead" style={{ marginTop: 4 }}>
-            {labelDate(inv.date)} 출고분 계산서
+            {labelDate(inv.date)} 계산서
           </p>
           <InvoiceForm
             invoiceId={inv.id}

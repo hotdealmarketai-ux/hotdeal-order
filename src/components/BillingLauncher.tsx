@@ -14,7 +14,7 @@ export function BillingLauncher({ userId }: { userId: string }) {
     <div className="stack">
       <div className="card">
         <div className="resv-dates__field">
-          <span>일반발주 계산서 · 출고 기준일</span>
+          <span>출고 기준일</span>
           <input
             className="input"
             type="date"
@@ -29,7 +29,7 @@ export function BillingLauncher({ userId }: { userId: string }) {
           disabled={!/^\d{4}-\d{2}-\d{2}$/.test(date)}
           onClick={() => router.push(`/admin/invoices/new?user=${userId}&date=${date}`)}
         >
-          일반발주 계산서 발행
+          계산서 발행
         </button>
       </div>
     </div>

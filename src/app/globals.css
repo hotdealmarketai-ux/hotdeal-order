@@ -1654,10 +1654,19 @@ a {
   margin-bottom: 4px;
 }
 .invcat__sum {
+  margin-left: 9px; /* 카테고리 칩과 너무 붙지 않게 여백 */
   font-size: 14px;
   font-weight: 800;
   color: var(--green-700);
   font-variant-numeric: tabular-nums;
+}
+/* 카테고리 헤더 오른쪽 액션 묶음(불러오기 + 확정) */
+.invcat__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 /* 공구 '불러오기' — 배경 없는 작은 글씨 버튼(담기·예약 발주를 계산서로 로드) */
 .invcat__load {

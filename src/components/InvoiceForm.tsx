@@ -301,8 +301,6 @@ export function InvoiceForm({
     return true;
   }
 
-  const refCount = refGroups.reduce((n, g) => n + g.items.length, 0);
-
   return (
     <>
       <form
@@ -330,27 +328,6 @@ export function InvoiceForm({
           </div>
         )}
 
-        {refCount > 0 && (
-          <details className="invref">
-            <summary>이날 발주 내역 참고 ({refCount}건)</summary>
-            <div className="invref__body">
-              {refGroups.map((g) => (
-                <div key={g.category} className="invref__group">
-                  <span className="chip">{CATEGORIES[g.category].label}</span>
-                  <ul>
-                    {g.items.map((it, i) => (
-                      <li key={i}>
-                        {it.name} <b>{it.qty}</b>
-                        {it.note ? ` · ${it.note}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
-
         {categories.map((c) => {
           const sub = subtotals[c] ?? { count: 0, sum: 0 };
           return (
@@ -360,17 +337,6 @@ export function InvoiceForm({
             >
               <div className="invcat__head">
                 <span className="chip">{CATEGORIES[c].label}</span>
-                {/* 공구만 — 오늘 출고할 담기·예약 발주를 계산서에 그대로 불러오는 버튼(배경 없는 작은 글씨) */}
-                {c === "TOOL" && !confirmed.has(c) && (
-                  <button
-                    type="button"
-                    className="invcat__load"
-                    onClick={() => loadToolItems(c)}
-                    disabled={loadingTool}
-                  >
-                    {loadingTool ? "불러오는 중…" : "불러오기"}
-                  </button>
-                )}
                 {(sub.qty > 0 || sub.sum > 0) && (
                   <span className="invcat__sum">
                     {sub.qty > 0 ? `총 ${fmt(sub.qty)}개` : ""}
@@ -378,14 +344,27 @@ export function InvoiceForm({
                     {sub.sum > 0 ? `${fmt(sub.sum)}원` : ""}
                   </span>
                 )}
-                <button
-                  type="button"
-                  className={`btn btn--xs ${confirmed.has(c) ? "btn--soft" : "btn--primary"}`}
-                  style={{ marginLeft: "auto", flexShrink: 0 }}
-                  onClick={() => toggleConfirm(c)}
-                >
-                  {confirmed.has(c) ? "수정" : "확정"}
-                </button>
+                {/* 오른쪽 액션 묶음 — 공구는 '불러오기'(담기·예약 발주 로드)를 확정 버튼 옆에 깔끔히 */}
+                <div className="invcat__actions">
+                  {c === "TOOL" && !confirmed.has(c) && (
+                    <button
+                      type="button"
+                      className="invcat__load"
+                      onClick={() => loadToolItems(c)}
+                      disabled={loadingTool}
+                    >
+                      {loadingTool ? "불러오는 중…" : "불러오기"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={`btn btn--xs ${confirmed.has(c) ? "btn--soft" : "btn--primary"}`}
+                    style={{ flexShrink: 0 }}
+                    onClick={() => toggleConfirm(c)}
+                  >
+                    {confirmed.has(c) ? "수정" : "확정"}
+                  </button>
+                </div>
               </div>
               {c === "TOOL" && loadNote && (
                 <div className="invcat__loadnote">{loadNote}</div>

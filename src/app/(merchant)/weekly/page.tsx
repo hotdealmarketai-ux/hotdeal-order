@@ -9,7 +9,6 @@ import { labelDateLong } from "@/lib/date";
 import {
   weeklyKeyAt,
   weeklyLockOf,
-  weeklyReceivableOf,
   weeklyOpenNow,
   weeklyForceOpen,
   getWeeklyProducts,
@@ -90,10 +89,9 @@ export default async function WeeklyOrderPage({
   const editMode = sp.edit === "1" && open && isCurrent;
   const needForm = editMode || (isCurrent && open && !order);
 
-  const [products, lock, receivable, invoice, historyRows] = await Promise.all([
+  const [products, lock, invoice, historyRows] = await Promise.all([
     needForm ? getWeeklyProducts() : Promise.resolve([]),
     weeklyLockOf(user.id, user.weeklyOrderUnlock, user.weeklyOrderUnlockAt),
-    weeklyReceivableOf(user.id),
     prisma.invoice.findFirst({
       where: { userId: user.id, kind: "WEEKLY", date: selWeek, status: { not: "VOID" } },
       select: { status: true },
@@ -139,36 +137,6 @@ export default async function WeeklyOrderPage({
           </div>
         )}
 
-        <Link
-          href="/invoices"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            margin: "0 0 16px",
-            padding: "17px 18px",
-            minHeight: 58,
-            background: "var(--green-800)",
-            borderRadius: "var(--radius)",
-            boxShadow: "var(--shadow-pill)",
-            textDecoration: "none",
-          }}
-        >
-          <span style={{ color: "#fff", fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>
-            주간발주 입금요청서{receivable.count > 0 ? ` · 미입금 ${receivable.count}건` : ""}
-          </span>
-          <span
-            style={{
-              fontWeight: 800,
-              fontSize: 15,
-              whiteSpace: "nowrap",
-              color: receivable.balance > 0 ? "#ffd98a" : "rgba(255,255,255,0.92)",
-            }}
-          >
-            {receivable.balance > 0 ? `${won(receivable.balance)}원 ›` : "보기 ›"}
-          </span>
-        </Link>
 
         {/* 주 선택(달력식 히스토리) */}
         {weeks.length > 1 && (

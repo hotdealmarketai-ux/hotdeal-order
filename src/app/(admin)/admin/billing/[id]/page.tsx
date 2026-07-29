@@ -7,7 +7,7 @@ import { labelDate } from "@/lib/date";
 import { BillingLauncher } from "@/components/BillingLauncher";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
-const KIND: Record<string, string> = { DAILY: "일반발주", WEEKLY: "주간발주" };
+const KIND: Record<string, string> = { DAILY: "발주", WEEKLY: "주간발주" };
 const STATUS: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: "작성중", cls: "badge--mute" },
   ISSUED: { label: "입금대기", cls: "badge--wait" },
