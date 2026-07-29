@@ -134,6 +134,10 @@ model Order {
   aiProcessed Boolean     @default(false)
   aiEngine    String      @default("none") // claude | rule | none
 
+  // 공구(TOOL) 발주분 기준재고 차감 시각(멱등). null=미차감. 매일 8시 마감 정산/미리보기 적용이 채운다.
+  // 취소 복구도 이 값이 있을 때만(=이미 차감된 발주만) base를 되돌린다.
+  stockDeductedAt DateTime?
+
   items       OrderItem[]
   createdAt   DateTime    @default(now())
 

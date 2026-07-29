@@ -3967,3 +3967,17 @@ a.resv-card:active { transform: scale(0.995); }
   border-bottom-right-radius: 6px;
 }
 .whcanvas__resize:hover { background: linear-gradient(135deg, transparent 45%, #1d4ed8 45%); }
+
+/* 재고 정산 미리보기 표(공구) */
+.rectable { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); }
+.rectable__head, .rectable__row {
+  display: grid; grid-template-columns: 1fr 60px 62px 74px; gap: 8px; align-items: center;
+  padding: 11px 13px;
+}
+.rectable__head { background: var(--green-100); font-size: 12px; font-weight: 700; color: var(--muted); }
+.rectable__row { border-top: 1px solid var(--line); font-size: 14px; }
+.rectable__name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rectable__num { text-align: right; font-variant-numeric: tabular-nums; }
+.rectable__num--to { font-weight: 800; color: var(--green-700); }
+.rectable__row--warn .rectable__name { color: var(--danger); }
+.rectable__warn { margin-left: 6px; font-size: 10.5px; color: var(--danger); font-weight: 700; }

@@ -23,7 +23,6 @@ import {
 import { kstToday, kstDateOf, kstDayRange, fullKLabel, shipmentDayOf } from "@/lib/date";
 import { currentWindowStartUtc } from "@/lib/schedule";
 import { displayQty } from "@/lib/qty";
-import { commitStockHolds } from "@/lib/stock-hold";
 import { orderOpenNow } from "@/lib/order-open";
 import { logError } from "@/lib/log";
 import { orderLockOf } from "@/lib/receivable";
@@ -36,7 +35,6 @@ import {
   notifyVendorOrderEdited,
   notifyAdminOrderEdited,
   notifyMerchantOrderEdited,
-  sendPushToRole,
 } from "@/lib/push";
 
 export type OrderFormState = { error?: string };
@@ -490,21 +488,9 @@ export async function createOrderAction(
     return { error: "발주 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
   }
 
-  // 재고 담기(공구) 확정 — 담기원장(HELD)만큼 기준재고 차감 + 홀드 삭제(출고 자동 반영, 재고조사 정합).
-  if (user.role === "MERCHANT_HOTDEAL") {
-    try {
-      await commitStockHolds(user.id);
-    } catch (e) {
-      logError("stock.commit", e, { userId: user.id });
-      // 커밋 실패 = 발주는 생성됐는데 기준재고 미차감 + 홀드 잔존 → 창 마감 후 과다판매 위험.
-      // 조용히 두지 않고 관리자에게 알려 수동 정합하게 한다(재고 드리프트 가시화).
-      await sendPushToRole("ADMIN_SAEROP", {
-        title: "재고 차감 실패 — 확인이 필요합니다.",
-        body: `${user.storeName} 발주의 재고 반영이 실패했어요. 재고를 확인해 주세요.`,
-        url: "/admin/inventory",
-      }).catch(() => {});
-    }
-  }
+  // 공구(TOOL) 기준재고 차감은 발주 시점이 아니라 '매일 오후 8시 마감 정산'에서 일괄 처리한다
+  // (개별 차감 누락 방지 — Order.stockDeductedAt 멱등). 담기(HELD)는 실시간 남은수량 표시용으로
+  // 유지되며, 마감에 발주분은 정산·미발주분은 자동 해제된다. → src/lib/stock-hold.ts deductToolOrders
 
   // 새 발주 알림(웹푸시) — 목적지 업자에게. 실패해도 발주에는 영향 없음.
   const vendorRoles = [

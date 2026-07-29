@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/log";
-import { releaseStaleHolds } from "@/lib/stock-hold";
+import { releaseStaleHolds, deductWindowToolOrders } from "@/lib/stock-hold";
 import { deductDuePickupStock } from "@/lib/reservation-stock";
 
 // 정시 크론 디스패처 — 외부 크론(cron-job.org 등)이 '1분마다' 이 엔드포인트를 호출하면,
@@ -124,6 +124,14 @@ export async function GET(request: Request) {
     if (deducted > 0) ran.push(`tick:resv-deduct(${deducted})`);
   } catch (e) {
     logError("tick.resvDeduct", e, {});
+  }
+
+  // 상시(공구) 발주 마감(오후 8시) 정산 — 그 창 확정 공구 발주분 기준재고 차감(멱등, 마감 후 1회).
+  try {
+    const reconciled = await deductWindowToolOrders(now);
+    if (reconciled > 0) ran.push(`tick:tool-reconcile(${reconciled})`);
+  } catch (e) {
+    logError("tick.toolReconcile", e, {});
   }
 
   return Response.json({

@@ -77,6 +77,7 @@ export default async function AdminHome() {
     { href: "/admin/billing", title: "계산서 발행" },
     { href: "/admin/deposits", title: "입금 관리" },
     { href: "/admin/inventory", title: "재고" },
+    { href: "/admin/stock-reconcile", title: "재고 정산" },
     { href: "/admin/audit", title: "로그 내역" },
   ];
 
