@@ -1661,7 +1661,7 @@ a {
 }
 .invcols {
   display: grid;
-  grid-template-columns: 2.1fr 0.7fr 0.95fr 52px 34px;
+  grid-template-columns: 2fr 0.68fr 0.92fr 66px 18px;
   gap: 6px;
   font-size: 12px;
   color: var(--muted-2);
@@ -1669,7 +1669,7 @@ a {
 }
 .invrow {
   display: grid;
-  grid-template-columns: 2.1fr 0.7fr 0.95fr 52px 34px;
+  grid-template-columns: 2fr 0.68fr 0.92fr 66px 18px;
   gap: 6px;
   align-items: center;
   padding: 5px 0;
@@ -1677,15 +1677,15 @@ a {
 }
 .invrow .input {
   min-width: 0; /* 그리드 칸이 내용보다 안 커지게 — 없으면 행이 넘쳐 금액칸이 화면 밖으로 잘림 */
-  min-height: 44px;
-  padding: 9px 8px;
-  font-size: 16px; /* 16px 미만이면 iOS가 포커스 시 자동 확대함 */
+  min-height: 42px;
+  padding: 8px 6px;
+  font-size: 14px; /* 좁은 칸에 품목·수량·단가가 잘리지 않게 살짝 축소 */
   box-shadow: none;
 }
 .invrow__amt {
   min-width: 0;
   text-align: right;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
   color: var(--green-700);
   font-variant-numeric: tabular-nums;
@@ -1693,26 +1693,24 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 항목 한 줄 통째로 지우는 버튼(맨 끝) — 백스페이스 없이 한 번에 삭제 */
+/* 항목 한 줄 통째로 지우는 버튼(맨 끝) — 배경 없이 작은 빨간 ✕. 공간 최소 차지. */
 .invrow__x {
   justify-self: center;
-  width: 34px;
+  width: 18px;
   height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--field);
-  color: var(--muted);
-  font-size: 16px;
+  border: none;
+  background: none;
+  color: var(--danger);
+  font-size: 13px;
   line-height: 1;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.invrow__x:hover { color: var(--danger); border-color: var(--danger); }
-.invrow__x:active { transform: scale(0.9); }
+.invrow__x:active { transform: scale(0.85); }
 .invtotal {
   display: flex;
   justify-content: space-between;
