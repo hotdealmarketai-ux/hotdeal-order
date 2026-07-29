@@ -8,9 +8,7 @@ import {
   weeklyKeyAt,
   weeklyReceivableOf,
   weeklyStatusOf,
-  getWeeklyProducts,
 } from "@/lib/weekly";
-import { WeeklyInvoiceForm } from "@/components/WeeklyInvoiceForm";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { ManualPayButton } from "@/components/ManualPayButton";
 import { VoidWeeklyButton } from "@/components/VoidWeeklyButton";
@@ -45,7 +43,6 @@ export default async function AdminWeeklyStorePage({
     }),
     weeklyReceivableOf(userId),
   ]);
-  const products = order && order.confirmed && !invoice ? await getWeeklyProducts() : [];
 
   const status = weeklyStatusOf(order, invoice);
 
@@ -60,12 +57,6 @@ export default async function AdminWeeklyStorePage({
     name: it.name,
     sub: `${it.qty} × ${won(it.unitPrice)}`,
     amount: it.amount,
-  }));
-  const initialItems = (order?.items ?? []).map((it) => ({
-    group: it.category,
-    name: it.name,
-    qty: String(it.qty),
-    unitPrice: String(it.unitPrice),
   }));
 
   return (
@@ -127,12 +118,12 @@ export default async function AdminWeeklyStorePage({
           </>
         ) : (
           <>
-            <WeeklyInvoiceForm
-              userId={userId}
-              date={weekKey}
-              initialItems={initialItems}
-              products={products}
-            />
+            <WeeklyReceipt items={orderReceipt} totalLabel="확인된 주간발주 금액" />
+            <div className="notice notice--ai" style={{ marginTop: 14 }}>
+              이 주간발주는 <b>출고일 계산서에 합산</b>해 청구돼요. 관리자 홈 →
+              계산서 발행에서 이 점포 계산서를 열고 <b>주간발주</b> 토글을 켜면
+              불러와집니다.
+            </div>
           </>
         )}
         {order && (

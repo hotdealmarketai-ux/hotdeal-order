@@ -14,10 +14,12 @@ import { kstDayRange, labelDate } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
 import { sumQty } from "@/lib/qty";
 import { getReservationInvoiceItems } from "@/lib/reservation-data";
+import { getWeeklyItemsForStoreShipment } from "@/lib/weekly";
 import {
   InvoiceForm,
   type InvoiceInitialItem,
   type InvoiceRefGroup,
+  type InvoiceWeeklyItem,
 } from "@/components/InvoiceForm";
 import { InvoiceAdminActions } from "@/components/InvoiceAdminActions";
 import { DeleteDraftButton } from "@/components/DeleteDraftButton";
@@ -76,12 +78,15 @@ export default async function AdminInvoiceDetail(props: {
       refMap.has(c),
     ).map((c) => ({ category: c, items: refMap.get(c)! }));
 
-    const initialItems: InvoiceInitialItem[] = inv.items.map((it) => ({
-      category: it.category as Category,
-      name: it.name,
-      qty: String(it.qty),
-      unitPrice: String(it.unitPrice),
-    }));
+    // 주간발주 합산분(WEEKLY)은 일반 카테고리 rows에서 제외 — 별도 주간발주 섹션에서 편집.
+    const initialItems: InvoiceInitialItem[] = inv.items
+      .filter((it) => it.category !== "WEEKLY")
+      .map((it) => ({
+        category: it.category as Category,
+        name: it.name,
+        qty: String(it.qty),
+        unitPrice: String(it.unitPrice),
+      }));
     // 예약분 자동채움 — 아직 이 계산서에 안 들어간 확정 예약분만 공구(TOOL)에 덧붙인다
     // (초안을 다시 열어도 예약분이 사라지지 않게).
     const billedTool = new Set(
@@ -100,6 +105,18 @@ export default async function AdminInvoiceDetail(props: {
     }
     const allowed = allowedCategoriesFor(inv.user.role as Role);
     const categories = allowed.length ? allowed : [...CATEGORY_ORDER];
+
+    // 주간발주 합산분 — 이미 이 계산서에 불러온 WEEKLY 품목 + 이 출고일에 불러올 확정 주간발주 유무.
+    const weeklyItems: InvoiceWeeklyItem[] = inv.items
+      .filter((it) => it.category === "WEEKLY")
+      .map((it) => ({
+        name: it.name,
+        qty: String(it.qty),
+        unitPrice: String(it.unitPrice),
+        unit: it.unit,
+      }));
+    const weeklyLoadable =
+      (await getWeeklyItemsForStoreShipment(inv.userId, inv.date)).length > 0;
 
     return (
       <>
@@ -122,6 +139,8 @@ export default async function AdminInvoiceDetail(props: {
             initialItems={initialItems}
             refGroups={refGroups}
             confirmedCats={inv.confirmedCats}
+            weeklyAvailable={weeklyLoadable || weeklyItems.length > 0}
+            weeklyItems={weeklyItems}
           />
           <DeleteDraftButton invoiceId={inv.id} />
         </div>
@@ -137,12 +156,16 @@ export default async function AdminInvoiceDetail(props: {
 
   // 입금대기(ISSUED)·일반발주(DAILY)면 제자리 수정 폼을 붙인다(같은 계산서 갱신·재발송).
   const canRevise = inv.status === "ISSUED" && inv.kind === "DAILY";
-  const reviseItems: ReviseInitialItem[] = inv.items.map((it) => ({
-    category: it.category as Category,
-    name: it.name,
-    qty: String(it.qty),
-    unitPrice: String(it.unitPrice),
-  }));
+  const reviseItems: ReviseInitialItem[] = inv.items
+    .filter((it) => it.category !== "WEEKLY")
+    .map((it) => ({
+      category: it.category as Category,
+      name: it.name,
+      qty: String(it.qty),
+      unitPrice: String(it.unitPrice),
+    }));
+  // 주간발주 합산분(읽기 전용 표시) — 발행된 계산서 영수증에 별도 섹션으로.
+  const weeklyBilled = inv.items.filter((it) => it.category === "WEEKLY");
   const reviseAllowed = allowedCategoriesFor(inv.user.role as Role);
   const reviseCategories = reviseAllowed.length
     ? reviseAllowed
@@ -221,6 +244,30 @@ export default async function AdminInvoiceDetail(props: {
             </div>
           );
         })}
+
+        {weeklyBilled.length > 0 && (
+          <div className="invcat">
+            <div className="invcat__head">
+              <span className="chip">주간발주</span>
+              <span className="invcat__sum">
+                {fmt(weeklyBilled.reduce((n, it) => n + it.amount, 0))}원
+              </span>
+            </div>
+            {weeklyBilled.map((it, i) => (
+              <div className="invline" key={it.id}>
+                <span>
+                  <span className="receipt-item__no">{i + 1}</span>
+                  {it.name}
+                  <span className="invline__meta">
+                    {String(it.qty)}
+                    {it.unit} × {fmt(it.unitPrice)}
+                  </span>
+                </span>
+                <span className="invline__amt">{fmt(it.amount)}원</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="invgrand">
           <span>총 결제요청 금액</span>

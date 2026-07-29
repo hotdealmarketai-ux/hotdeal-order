@@ -20,8 +20,13 @@ import {
 } from "@/lib/push";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { clearOrderUnlockIfSettled } from "@/lib/bank";
-import { clearWeeklyUnlockIfSettled } from "@/lib/weekly";
+import {
+  clearWeeklyUnlockIfSettled,
+  getWeeklyItemsForStoreShipment,
+} from "@/lib/weekly";
+import { boxWord } from "@/lib/weekly-catalog";
 import { orderRangeForShipment } from "@/lib/date";
+import { Prisma } from "@prisma/client";
 
 export type InvoiceFormState = { error?: string };
 
@@ -82,6 +87,42 @@ function cleanItems(
     });
   }
   return out;
+}
+
+// ── 주간발주 합산분 — 계산서에 별도 카테고리(WEEKLY)로 붙는다. 일반 4카테고리 확정/발행 흐름과 분리(안전).
+//    불러온 뒤 관리자가 수량·단가를 고칠 수 있고, 발행 시 총액에 그대로 합산된다.
+const WEEKLY_CAT = "WEEKLY";
+
+type WeeklyRaw = { name?: string; qty?: string; unitPrice?: string; unit?: string };
+function cleanWeeklyItems(
+  raw: WeeklyRaw[],
+): { name: string; qty: number; unitPrice: number; amount: number; unit: string }[] {
+  const out: { name: string; qty: number; unitPrice: number; amount: number; unit: string }[] = [];
+  for (const r of raw.slice(0, MAX_ITEMS)) {
+    const name = String(r.name ?? "").trim().slice(0, 100);
+    const qty = parseQtyStrict(String(r.qty ?? "").trim());
+    const unitPrice = parsePriceStrict(String(r.unitPrice ?? "").trim());
+    if (!name || qty == null || unitPrice == null) continue; // 자동저장이라 잘못된 줄은 조용히 건너뜀
+    out.push({
+      name,
+      qty,
+      unitPrice,
+      amount: Math.round(qty * unitPrice),
+      unit: String(r.unit ?? "").trim().slice(0, 8),
+    });
+  }
+  return out;
+}
+
+async function recomputeInvoiceTotal(tx: Prisma.TransactionClient, invoiceId: string) {
+  const all = await tx.invoiceItem.findMany({
+    where: { invoiceId },
+    select: { amount: true },
+  });
+  await tx.invoice.update({
+    where: { id: invoiceId },
+    data: { total: all.reduce((n, it) => n + it.amount, 0) },
+  });
 }
 
 // 계산서 저장(임시저장) / 발행 — invoiceId 없으면 생성, 있으면 DRAFT만 수정 가능
@@ -394,21 +435,24 @@ export async function reviseInvoiceAction(
   if ("error" in cleaned) return cleaned;
   const items = cleaned;
   if (items.length === 0) return { error: "품목을 한 개 이상 입력하세요." };
-  const total = items.reduce((n, it) => n + it.amount, 0);
 
   try {
     await prisma.$transaction(async (tx) => {
       // 상태 가드를 쓰기 자체에 — 수정 도중 입금확인/취소로 전이되면 count 0 → 중단(레이스 차단).
       const upd = await tx.invoice.updateMany({
         where: { id: invoiceId, status: "ISSUED" },
-        data: { total, revisedAt: new Date() },
+        data: { revisedAt: new Date() },
       });
       if (upd.count === 0) throw new Error("INVOICE_NOT_ISSUED");
-      // 품목 통째 교체(제출된 전체 payload가 최종본) — 부분 병합 아님.
-      await tx.invoiceItem.deleteMany({ where: { invoiceId } });
+      // 일반 품목만 통째 교체(제출된 payload가 최종본) — 주간발주 합산분(WEEKLY)은 보존.
+      await tx.invoiceItem.deleteMany({
+        where: { invoiceId, category: { not: WEEKLY_CAT } },
+      });
       await tx.invoiceItem.createMany({
         data: items.map((it, i) => ({ ...it, sortOrder: i, invoiceId })),
       });
+      // 총액은 주간발주 합산분까지 포함해 재계산.
+      await recomputeInvoiceTotal(tx, invoiceId);
     });
   } catch (err) {
     if ((err as Error)?.message === "INVOICE_NOT_ISSUED") {
@@ -418,16 +462,24 @@ export async function reviseInvoiceAction(
     return { error: "수정에 실패했어요. 잠시 후 다시 시도해 주세요." };
   }
 
+  // 최종 총액(주간발주 합산분 포함) — 감사/알림에 사용.
+  const finalTotal =
+    (
+      await prisma.invoice.findUnique({
+        where: { id: invoiceId },
+        select: { total: true },
+      })
+    )?.total ?? 0;
   await writeAudit({
     action: "invoice.revise",
     actorId: admin.id,
     actorName: admin.storeName,
     targetType: "invoice",
     targetId: invoiceId,
-    summary: `계산서 수정·재발송 · ${inv.date} · ${total.toLocaleString("ko-KR")}원`,
+    summary: `계산서 수정·재발송 · ${inv.date} · ${finalTotal.toLocaleString("ko-KR")}원`,
   });
   // 점주에게 '계산서가 수정되었습니다 + 바뀐 금액' 재발송(같은 계산서로 이동).
-  await notifyMerchantInvoiceRevised(inv.userId, invoiceId, total);
+  await notifyMerchantInvoiceRevised(inv.userId, invoiceId, finalTotal);
   revalidatePath("/admin/invoices");
   revalidatePath(`/admin/invoices/${invoiceId}`);
   revalidatePath("/admin/deposits");
@@ -688,4 +740,123 @@ export async function deleteInvoiceDraftAction(formData: FormData) {
     revalidatePath(`/admin/combined/${inv.userId}/${inv.date}`);
   }
   redirect("/admin/invoices");
+}
+
+// ── 주간발주 토글 ON — 그 출고일(date=출고 기준일)의 확정 주간발주를 이 계산서에 합산분(WEEKLY)으로 불러온다.
+//    출고일이 주간발주 출고 요일(기본 수)이 아니거나 확정 주간발주가 없으면 아무것도 안 함.
+export async function loadWeeklyIntoInvoiceAction(formData: FormData) {
+  await requireAdmin();
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+  const userId = String(formData.get("userId") ?? "");
+  const date = String(formData.get("date") ?? "");
+  if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  const merchant = await prisma.user.findUnique({ where: { id: userId } });
+  if (!merchant || !isMerchant(merchant.role as Role)) return;
+
+  const weekly = await getWeeklyItemsForStoreShipment(userId, date);
+  if (weekly.length === 0) return;
+
+  // 대상 DRAFT 계산서 확보 — 없으면 생성.
+  let id = invoiceId;
+  const existing = id
+    ? await prisma.invoice.findUnique({ where: { id } })
+    : await prisma.invoice.findFirst({
+        where: { userId, date, status: "DRAFT" },
+        orderBy: { updatedAt: "desc" },
+      });
+  if (existing) {
+    if (existing.status !== "DRAFT") return;
+    id = existing.id;
+  } else {
+    const created = await prisma.invoice.create({
+      data: { userId, date, status: "DRAFT" },
+    });
+    id = created.id;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.invoiceItem.deleteMany({ where: { invoiceId: id, category: WEEKLY_CAT } });
+    await tx.invoiceItem.createMany({
+      data: weekly.map((w, i) => ({
+        invoiceId: id,
+        category: WEEKLY_CAT,
+        sortOrder: i,
+        name: w.name,
+        qty: w.qty,
+        unitPrice: w.unitPrice,
+        amount: w.amount,
+        unit: boxWord(w.category),
+      })),
+    });
+    await recomputeInvoiceTotal(tx, id);
+  });
+  revalidatePath(`/admin/invoices/${id}`);
+  redirect(`/admin/invoices/${id}`);
+}
+
+// ── 주간발주 합산분 수정 저장(자동저장) — 관리자가 불러온 주간발주 품목/수량/단가를 고칠 때.
+export async function saveWeeklyItemsAction(
+  _prev: InvoiceFormState,
+  formData: FormData,
+): Promise<InvoiceFormState> {
+  await requireAdmin();
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+  if (!invoiceId) return { error: "계산서를 먼저 만들어 주세요." };
+  let raw: WeeklyRaw[] = [];
+  try {
+    raw = JSON.parse(String(formData.get("weekly") ?? "[]"));
+  } catch {
+    raw = [];
+  }
+  const items = cleanWeeklyItems(Array.isArray(raw) ? raw : []);
+  try {
+    await prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.findUnique({
+        where: { id: invoiceId },
+        select: { status: true },
+      });
+      if (!inv || inv.status !== "DRAFT") throw new Error("NOT_DRAFT");
+      await tx.invoiceItem.deleteMany({ where: { invoiceId, category: WEEKLY_CAT } });
+      if (items.length > 0) {
+        await tx.invoiceItem.createMany({
+          data: items.map((it, i) => ({
+            invoiceId,
+            category: WEEKLY_CAT,
+            sortOrder: i,
+            name: it.name,
+            qty: it.qty,
+            unitPrice: it.unitPrice,
+            amount: it.amount,
+            unit: it.unit,
+          })),
+        });
+      }
+      await recomputeInvoiceTotal(tx, invoiceId);
+    });
+  } catch (e) {
+    if ((e as Error)?.message === "NOT_DRAFT") {
+      return { error: "발행된 계산서는 수정할 수 없어요." };
+    }
+    return { error: "저장에 실패했어요." };
+  }
+  revalidatePath(`/admin/invoices/${invoiceId}`);
+  return {};
+}
+
+// ── 주간발주 토글 OFF — 이 계산서에서 주간발주 합산분을 뺀다.
+export async function clearWeeklyFromInvoiceAction(formData: FormData) {
+  await requireAdmin();
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+  if (!invoiceId) return;
+  await prisma.$transaction(async (tx) => {
+    const inv = await tx.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { status: true },
+    });
+    if (!inv || inv.status !== "DRAFT") return;
+    await tx.invoiceItem.deleteMany({ where: { invoiceId, category: WEEKLY_CAT } });
+    await recomputeInvoiceTotal(tx, invoiceId);
+  });
+  revalidatePath(`/admin/invoices/${invoiceId}`);
+  redirect(`/admin/invoices/${invoiceId}`);
 }

@@ -7,10 +7,14 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react";
 import {
   saveInvoiceAction,
   loadInvoiceToolItemsAction,
+  loadWeeklyIntoInvoiceAction,
+  saveWeeklyItemsAction,
+  clearWeeklyFromInvoiceAction,
   type InvoiceFormState,
 } from "@/app/actions/invoice";
 import { SubmitButton } from "./SubmitButton";
@@ -20,6 +24,14 @@ import { sumQty } from "@/lib/qty";
 import { MoneyInput } from "./MoneyInput";
 
 type Row = { id: number; name: string; qty: string; unitPrice: string };
+type WeeklyRow = { id: number; name: string; qty: string; unitPrice: string; unit: string };
+
+export type InvoiceWeeklyItem = {
+  name: string;
+  qty: string;
+  unitPrice: string;
+  unit: string;
+};
 
 export type InvoiceInitialItem = {
   category: Category;
@@ -55,6 +67,8 @@ export function InvoiceForm({
   initialItems = [],
   refGroups = [],
   confirmedCats = "",
+  weeklyAvailable = false,
+  weeklyItems = [],
 }: {
   invoiceId?: string;
   userId: string;
@@ -63,6 +77,8 @@ export function InvoiceForm({
   initialItems?: InvoiceInitialItem[];
   refGroups?: InvoiceRefGroup[];
   confirmedCats?: string;
+  weeklyAvailable?: boolean; // 이 출고일에 불러올 확정 주간발주가 있는가
+  weeklyItems?: InvoiceWeeklyItem[]; // 이미 이 계산서에 불러와진 주간발주 합산분
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({
@@ -95,6 +111,62 @@ export function InvoiceForm({
     saveInvoiceAction,
     {},
   );
+
+  // ── 주간발주 합산분 ── 불러오면(weeklyItems) 편집 가능(자동저장). 일반 4카테고리 확정 흐름과 분리.
+  // 토글 ON/OFF는 서버 액션(불러오기/빼기)이 리다이렉트로 다시 그리므로, 여기선 서버 기준으로만 판정.
+  const weeklyOn = weeklyItems.length > 0;
+  const [weeklyRows, setWeeklyRows] = useState<WeeklyRow[]>(() => {
+    const rows = weeklyItems.map((w) => ({ id: ++uid.current, ...w }));
+    rows.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "" });
+    return rows;
+  });
+  const [weeklySaving, startWeeklySave] = useTransition();
+
+  function updateWeekly(id: number, field: keyof WeeklyRow, value: string) {
+    setWeeklyRows((prev) => {
+      const list = prev.map((r) => (r.id === id ? { ...r, [field]: value } : r));
+      const kept = list.filter((r) => isFilled(r) || r.id === id);
+      const last = kept[kept.length - 1];
+      if (!last || isFilled(last))
+        kept.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "" });
+      return kept;
+    });
+  }
+  function removeWeekly(id: number) {
+    setWeeklyRows((prev) => {
+      const list = prev.filter((r) => r.id !== id);
+      const last = list[list.length - 1];
+      if (!last || isFilled(last))
+        list.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "" });
+      return list;
+    });
+  }
+
+  // 주간발주 편집 자동저장(디바운스 900ms). 첫 렌더는 건너뜀.
+  const weeklyDirty = useRef(false);
+  useEffect(() => {
+    if (!invoiceId || !weeklyOn) return;
+    if (!weeklyDirty.current) {
+      weeklyDirty.current = true;
+      return;
+    }
+    const t = setTimeout(() => {
+      const payload = weeklyRows
+        .filter(isFilled)
+        .map((r) => ({ name: r.name, qty: r.qty, unitPrice: r.unitPrice, unit: r.unit }));
+      const fd = new FormData();
+      fd.set("invoiceId", invoiceId);
+      fd.set("weekly", JSON.stringify(payload));
+      startWeeklySave(async () => {
+        await saveWeeklyItemsAction({}, fd);
+      });
+    }, 900);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weeklyRows]);
+
+  const weeklyTotal = weeklyRows.reduce((n, r) => n + rowAmount(r), 0);
+  const weeklyFilledCount = weeklyRows.filter(isFilled).length;
 
   function updateRow(cat: Category, id: number, field: keyof Row, value: string) {
     setConfirming(false);
@@ -183,11 +255,11 @@ export function InvoiceForm({
     return m;
   }, [categories, rowsByCat]);
 
-  const total = categories.reduce((n, c) => n + (subtotals[c]?.sum ?? 0), 0);
-  const totalCount = categories.reduce(
-    (n, c) => n + (subtotals[c]?.count ?? 0),
-    0,
-  );
+  const dailyTotal = categories.reduce((n, c) => n + (subtotals[c]?.sum ?? 0), 0);
+  const total = dailyTotal + weeklyTotal; // 주간발주 합산분 포함
+  const totalCount =
+    categories.reduce((n, c) => n + (subtotals[c]?.count ?? 0), 0) +
+    weeklyFilledCount;
 
   // #8 자동 임시저장 — 입력을 localStorage에 저장/복원(다른 페이지 갔다와도 유지). 임시저장 버튼 불필요.
   const draftKey = `invdraft:${userId}:${date}`;
@@ -422,6 +494,97 @@ export function InvoiceForm({
           );
         })}
 
+        {/* 주간발주 합산분 — 채움채 아래. 불러오면 편집 가능(자동저장), 발행 시 합계에 포함. */}
+        {(weeklyAvailable || weeklyOn) && (
+          <div className="invcat">
+            <div className="invcat__head">
+              <span className="chip">주간발주</span>
+              {weeklyOn && weeklyTotal > 0 && (
+                <span className="invcat__sum">{fmt(weeklyTotal)}원</span>
+              )}
+              <div className="invcat__actions">
+                {weeklySaving && (
+                  <span className="hint" style={{ fontSize: 11 }}>
+                    저장 중…
+                  </span>
+                )}
+                {/* 폼 제출로 서버 액션 호출(불러오기=ON / 빼기=OFF) — 폼의 userId·date·invoiceId hidden 사용. */}
+                <button
+                  type="submit"
+                  formAction={
+                    weeklyOn ? clearWeeklyFromInvoiceAction : loadWeeklyIntoInvoiceAction
+                  }
+                  role="switch"
+                  aria-checked={weeklyOn}
+                  aria-label="주간발주 합산"
+                  className={`switch ${weeklyOn ? "is-on" : ""}`}
+                >
+                  <span className="switch__knob" />
+                </button>
+              </div>
+            </div>
+            {!weeklyOn ? (
+              <div className="invcat__loadnote">
+                이 출고일 주간발주를 계산서에 합산하려면 켜세요. 켜면 불러온 뒤 수량·단가를 고칠 수 있어요.
+              </div>
+            ) : (
+              <>
+                <div className="invcols">
+                  <span>품목</span>
+                  <span>수량</span>
+                  <span>단가</span>
+                  <span style={{ textAlign: "right" }}>금액</span>
+                </div>
+                {weeklyRows.map((r) => {
+                  const amt = rowAmount(r);
+                  return (
+                    <div className="invrow" key={r.id}>
+                      <input
+                        className="input"
+                        value={r.name}
+                        onChange={(e) => updateWeekly(r.id, "name", e.target.value)}
+                        placeholder="품목"
+                      />
+                      <div style={{ display: "flex", alignItems: "center", gap: 3, minWidth: 0 }}>
+                        <input
+                          className="input"
+                          inputMode="decimal"
+                          value={r.qty}
+                          onChange={(e) => updateWeekly(r.id, "qty", e.target.value)}
+                          placeholder="수량"
+                          style={{ minWidth: 0 }}
+                        />
+                        {r.unit && (
+                          <span style={{ fontSize: 11, color: "var(--muted-2)", flexShrink: 0 }}>
+                            {r.unit}
+                          </span>
+                        )}
+                      </div>
+                      <MoneyInput
+                        value={r.unitPrice}
+                        onChange={(raw) => updateWeekly(r.id, "unitPrice", raw)}
+                        placeholder="단가"
+                      />
+                      <span className="invrow__amt">{amt > 0 ? fmt(amt) : ""}</span>
+                      {isFilled(r) && (
+                        <button
+                          type="button"
+                          className="invrow__x"
+                          onClick={() => removeWeekly(r.id)}
+                          aria-label="이 항목 지우기"
+                          title="이 항목 지우기"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        )}
+
         <div className="invtotal">
           <span>합계 · 자동 계산 ({totalCount}건)</span>
           <b>{fmt(total)}원</b>
@@ -441,12 +604,6 @@ export function InvoiceForm({
                 발행하기
               </button>
             </div>
-            {!allConfirmed && (
-              <p className="hint center" style={{ marginTop: 10 }}>
-                과일·야채·공구·채움채 <b>4개 모두 확정</b>해야 발행할 수 있어요.
-                없는 품목은 비운 채로 확정하면 돼요.
-              </p>
-            )}
           </>
         ) : (
           <div className="confirm">
@@ -480,6 +637,26 @@ export function InvoiceForm({
                   </div>
                 );
               })}
+            {weeklyOn && weeklyFilledCount > 0 && (
+              <div className="invcat">
+                <div className="invcat__head">
+                  <span className="chip">주간발주</span>
+                  <span className="invcat__sum">{fmt(weeklyTotal)}원</span>
+                </div>
+                {weeklyRows.filter(isFilled).map((r) => (
+                  <div className="invline" key={r.id}>
+                    <span>
+                      {r.name}
+                      <span className="invline__meta">
+                        {r.qty}
+                        {r.unit} × {r.unitPrice}
+                      </span>
+                    </span>
+                    <span className="invline__amt">{fmt(rowAmount(r))}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="invtotal" style={{ marginTop: 10 }}>
               <span>총 결제요청 금액</span>
               <b>{fmt(total)}원</b>

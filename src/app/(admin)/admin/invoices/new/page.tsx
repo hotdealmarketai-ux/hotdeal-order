@@ -11,6 +11,7 @@ import {
 } from "@/lib/constants";
 import { kstDayRange, labelDate, normalizeDateStr } from "@/lib/date";
 import { getReservationInvoiceItems } from "@/lib/reservation-data";
+import { getWeeklyItemsForStoreShipment } from "@/lib/weekly";
 import {
   InvoiceForm,
   type InvoiceRefGroup,
@@ -85,6 +86,10 @@ export default async function NewInvoicePage(props: {
       unitPrice: String(r.supplyPrice),
     }));
 
+  // 이 출고일(=date)에 불러올 확정 주간발주가 있으면 주간발주 토글 노출.
+  const weeklyLoadable =
+    (await getWeeklyItemsForStoreShipment(userId, date)).length > 0;
+
   return (
     <>
       <Topbar backHref={`/admin/combined/${userId}/${date}`} title="계산서 작성" />
@@ -105,6 +110,7 @@ export default async function NewInvoicePage(props: {
           categories={categories.length ? categories : [...CATEGORY_ORDER]}
           initialItems={initialItems}
           refGroups={refGroups}
+          weeklyAvailable={weeklyLoadable}
         />
       </div>
     </>

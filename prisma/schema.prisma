@@ -384,13 +384,15 @@ model InvoiceItem {
   id        String  @id @default(cuid())
   invoiceId String
   invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  category  String // FRUIT | VEG | TOOL | TOFU — 카테고리별 섹션 표기
+  category  String // FRUIT | VEG | TOOL | TOFU | WEEKLY(주간발주 합산분) — 카테고리별 섹션 표기
   sortOrder Int     @default(0)
 
   name      String // 품목
   qty       Float  @default(0) // 수량(소수 허용 — kg 등)
   unitPrice Int    @default(0) // 단가(원)
   amount    Int    @default(0) // 금액 = round(수량 × 단가), 서버 계산
+  // 표시 단위(주간발주 합산분만: "박스"/"판"). 일반 품목은 빈값.
+  unit      String @default("")
 }
 
 // 입금 내역 — 팝빌 계좌조회로 수집한 하나 법인계좌 입금 건(자동 매칭 대상)

@@ -154,9 +154,6 @@ export default async function AdminWeeklyPage({
               </form>
             ))}
           </div>
-          <div className="hint" style={{ marginTop: 8 }}>
-            토요일에 넣은 주간발주가 이 요일에 출고돼요. 그 날 발주서에 함께 표시됩니다.
-          </div>
         </div>
 
         {totalStores === 0 ? (
