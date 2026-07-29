@@ -8,7 +8,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { saveInvoiceAction, type InvoiceFormState } from "@/app/actions/invoice";
+import {
+  saveInvoiceAction,
+  loadInvoiceToolItemsAction,
+  type InvoiceFormState,
+} from "@/app/actions/invoice";
 import { SubmitButton } from "./SubmitButton";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
@@ -85,6 +89,8 @@ export function InvoiceForm({
   });
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState("");
+  const [loadingTool, setLoadingTool] = useState(false);
+  const [loadNote, setLoadNote] = useState("");
   const [state, formAction] = useActionState<InvoiceFormState, FormData>(
     saveInvoiceAction,
     {},
@@ -115,6 +121,37 @@ export function InvoiceForm({
       if (!last || isFilled(last)) list.push(newRow());
       return { ...prev, [cat]: list };
     });
+  }
+
+  // 공구 '불러오기' — 그 출고일에 청구할 공구 품목(담기 발주 + 예약 확정분)을 서버에서 받아
+  // 공구칸에 그대로 채운다. 일일이 손으로 안 쳐도 되게. 기존 공구 입력은 불러온 목록으로 교체.
+  async function loadToolItems(cat: Category) {
+    if (loadingTool) return;
+    setLoadingTool(true);
+    setLoadNote("");
+    try {
+      const { items } = await loadInvoiceToolItemsAction(userId, date);
+      setConfirming(false);
+      setRowsByCat((prev) => {
+        const rows: Row[] = items.map((it) => ({
+          id: ++uid.current,
+          name: it.name,
+          qty: it.qty,
+          unitPrice: it.unitPrice,
+        }));
+        rows.push(newRow());
+        return { ...prev, [cat]: rows };
+      });
+      setLoadNote(
+        items.length > 0
+          ? `${items.length}개 품목을 불러왔어요. 확인 후 확정해 주세요.`
+          : "불러올 공구 발주(담기·예약)가 없어요.",
+      );
+    } catch {
+      setLoadNote("불러오기에 실패했어요. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setLoadingTool(false);
+    }
   }
 
   // payload: 카테고리 순서 그대로, 채워진 줄만
@@ -323,6 +360,17 @@ export function InvoiceForm({
             >
               <div className="invcat__head">
                 <span className="chip">{CATEGORIES[c].label}</span>
+                {/* 공구만 — 오늘 출고할 담기·예약 발주를 계산서에 그대로 불러오는 버튼(배경 없는 작은 글씨) */}
+                {c === "TOOL" && !confirmed.has(c) && (
+                  <button
+                    type="button"
+                    className="invcat__load"
+                    onClick={() => loadToolItems(c)}
+                    disabled={loadingTool}
+                  >
+                    {loadingTool ? "불러오는 중…" : "불러오기"}
+                  </button>
+                )}
                 {(sub.qty > 0 || sub.sum > 0) && (
                   <span className="invcat__sum">
                     {sub.qty > 0 ? `총 ${fmt(sub.qty)}개` : ""}
@@ -339,6 +387,9 @@ export function InvoiceForm({
                   {confirmed.has(c) ? "수정" : "확정"}
                 </button>
               </div>
+              {c === "TOOL" && loadNote && (
+                <div className="invcat__loadnote">{loadNote}</div>
+              )}
               <div className="invcols">
                 <span>품목</span>
                 <span>수량</span>

@@ -21,6 +21,7 @@ import {
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { clearOrderUnlockIfSettled } from "@/lib/bank";
 import { clearWeeklyUnlockIfSettled } from "@/lib/weekly";
+import { orderRangeForShipment } from "@/lib/date";
 
 export type InvoiceFormState = { error?: string };
 
@@ -252,6 +253,107 @@ export async function saveInvoiceAction(
   revalidatePath(`/admin/combined/${userId}/${date}`);
   revalidatePath("/admin");
   redirect(`/admin/invoices/${id}?saved=1`);
+}
+
+// 공구(TOOL) 계산서 '불러오기' — 그 출고일(shipmentDate)에 청구할 공구 품목을 한 번에 로드.
+//  ① 재고현황 '담기' 발주(TOOL Order) — 출고일 기준 발주범위(orderRangeForShipment). 공급가는 재고현황 이름매칭.
+//  ② 예약(재고연동+수기) 확정분 — 픽업일 == 출고일(사용자 규칙). 공급가는 예약 스냅샷.
+// 같은 품목명은 수량 합산. 공급가는 처음 잡힌 값(없으면 빈칸 → 관리자가 채움). 계산서 공구칸에 그대로 채운다.
+export async function loadInvoiceToolItemsAction(
+  userId: string,
+  shipmentDate: string,
+): Promise<{ items: { name: string; qty: string; unitPrice: string }[] }> {
+  await requireAdmin();
+  if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(shipmentDate)) return { items: [] };
+
+  const { start, end } = orderRangeForShipment(shipmentDate);
+  const [toolOrders, resvItems, invItems] = await Promise.all([
+    // ① 담기 발주(공구) — 출고일에 실릴 발주(전날 등). 취소 제외.
+    prisma.order.findMany({
+      where: {
+        userId,
+        category: "TOOL",
+        status: { not: "CANCELLED" },
+        createdAt: { gte: start, lt: end },
+      },
+      select: {
+        items: {
+          select: { name: true, rawName: true, qty: true, rawQty: true },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    // ② 예약 확정분 — 픽업일==출고일(연동·수기 모두). 기존 자동로드와 동일 게이트(confirmed·batch active).
+    prisma.reservationOrderItem.findMany({
+      where: {
+        pickupDate: shipmentDate,
+        qty: { gt: 0 },
+        order: { userId, confirmed: true, batch: { active: true } },
+      },
+      select: { name: true, qty: true, supplyPrice: true },
+      orderBy: { sortOrder: "asc" },
+    }),
+    // 공급가 이름매칭용(담기 품목엔 가격이 없어 재고현황에서 가져온다)
+    prisma.inventoryItem.findMany({
+      where: { deletedAt: null },
+      select: { name: true, supplyPrice: true },
+    }),
+  ]);
+
+  const priceByName = new Map<string, number>();
+  for (const it of invItems) {
+    const k = it.name.trim();
+    if (k && !priceByName.has(k)) priceByName.set(k, it.supplyPrice);
+  }
+
+  const qtyToNum = (v: string | number): number => {
+    if (typeof v === "number") return v;
+    const n = parseFloat(String(v).replace(/[^0-9.]/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  type Agg = { name: string; qty: number; unitPrice: number; priced: boolean };
+  const orderKeys: string[] = [];
+  const agg = new Map<string, Agg>();
+  const add = (name: string, qty: number, price: number | null) => {
+    const key = name.trim();
+    if (!key || qty <= 0) return;
+    let a = agg.get(key);
+    if (!a) {
+      a = { name: key, qty: 0, unitPrice: 0, priced: false };
+      agg.set(key, a);
+      orderKeys.push(key);
+    }
+    a.qty += qty;
+    if (!a.priced && price != null && price > 0) {
+      a.unitPrice = price;
+      a.priced = true;
+    }
+  };
+
+  // ① 담기 발주(공구) — 공급가는 재고현황 이름매칭
+  for (const o of toolOrders) {
+    for (const it of o.items) {
+      const nm = (it.name || it.rawName || "").trim();
+      add(nm, qtyToNum(it.qty || it.rawQty), priceByName.get(nm) ?? null);
+    }
+  }
+  // ② 예약 확정분(픽업==출고일) — 공급가는 예약 스냅샷
+  for (const it of resvItems) {
+    add(it.name, qtyToNum(it.qty), it.supplyPrice);
+  }
+
+  const items = orderKeys.map((k) => {
+    const a = agg.get(k)!;
+    const qty = Math.round(a.qty * 100) / 100; // 부동소수 정리
+    return {
+      name: a.name,
+      qty: String(qty),
+      unitPrice: a.priced ? String(a.unitPrice) : "",
+    };
+  });
+  return { items };
 }
 
 // 발행된(입금대기 ISSUED) 계산서를 제자리에서 수정·재발송한다.

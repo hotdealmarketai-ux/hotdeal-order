@@ -1659,6 +1659,113 @@ a {
   color: var(--green-700);
   font-variant-numeric: tabular-nums;
 }
+/* 공구 '불러오기' — 배경 없는 작은 글씨 버튼(담기·예약 발주를 계산서로 로드) */
+.invcat__load {
+  border: none;
+  background: none;
+  padding: 2px 2px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--green-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.invcat__load:disabled {
+  color: var(--muted);
+  text-decoration: none;
+  cursor: default;
+}
+.invcat__loadnote {
+  margin: 2px 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--green-700);
+}
+
+/* ── 예약 픽업 달력(관리자 /admin/calendar) ───────────────────── */
+.calbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.calbar__title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--fg);
+}
+.cal {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.cal__dow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: var(--field);
+  border-bottom: 1px solid var(--line);
+}
+.cal__dowc {
+  text-align: center;
+  padding: 7px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.cal__dowc.is-sun { color: var(--danger); }
+.cal__dowc.is-sat { color: #2563eb; }
+.cal__week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+.cal__cell {
+  min-height: 66px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 4px 3px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--surface);
+  min-width: 0;
+}
+.cal__cell:nth-child(7n) { border-right: none; }
+.cal__week:last-child .cal__cell { border-bottom: none; }
+.cal__cell.is-out { background: var(--field); }
+.cal__cell.is-out .cal__day { opacity: 0.45; }
+.cal__cell.is-today { background: var(--green-100); }
+.cal__day {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg-soft);
+}
+.cal__day.is-sun { color: var(--danger); }
+.cal__day.is-sat { color: #2563eb; }
+.cal__cell.is-today .cal__day { color: var(--green-700); font-weight: 800; }
+.cal__items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cal__item {
+  font-size: 10.5px;
+  line-height: 1.25;
+  font-weight: 600;
+  color: var(--green-700);
+  background: var(--green-100);
+  border-radius: 4px;
+  padding: 1px 4px;
+  word-break: break-word;
+}
+.cal__cell.is-today .cal__item {
+  background: var(--surface);
+}
 .invcols {
   display: grid;
   grid-template-columns: 2fr 0.68fr 0.92fr 66px 18px;
