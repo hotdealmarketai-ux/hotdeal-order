@@ -85,6 +85,15 @@ export function ReviseInvoiceForm({
     });
   }
 
+  // 항목 한 줄 통째로 삭제(맨 끝 ✕) — 백스페이스 없이 즉시 제거.
+  function removeRow(cat: Category, id: number) {
+    setConfirming(false);
+    setRowsByCat((prev) => {
+      const list = prev[cat].filter((r) => r.id !== id);
+      return { ...prev, [cat]: normalizeRows(list) };
+    });
+  }
+
   const payload = useMemo(
     () =>
       categories.flatMap((c) =>
@@ -212,6 +221,17 @@ export function ReviseInvoiceForm({
                     placeholder="단가"
                   />
                   <span className="invrow__amt">{amt > 0 ? fmt(amt) : ""}</span>
+                  {isFilled(r) && (
+                    <button
+                      type="button"
+                      className="invrow__x"
+                      onClick={() => removeRow(c, r.id)}
+                      aria-label="이 항목 지우기"
+                      title="이 항목 지우기"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               );
             })}

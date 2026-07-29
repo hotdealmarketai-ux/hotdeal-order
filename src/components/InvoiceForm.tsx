@@ -105,6 +105,18 @@ export function InvoiceForm({
     });
   }
 
+  // 항목 한 줄 통째로 삭제(맨 끝 ✕) — 백스페이스로 하나씩 지울 필요 없이 즉시 제거.
+  function removeRow(cat: Category, id: number) {
+    setConfirming(false);
+    setRowsByCat((prev) => {
+      const list = prev[cat].filter((r) => r.id !== id);
+      // 끝에는 입력용 빈 줄 하나를 항상 유지.
+      const last = list[list.length - 1];
+      if (!last || isFilled(last)) list.push(newRow());
+      return { ...prev, [cat]: list };
+    });
+  }
+
   // payload: 카테고리 순서 그대로, 채워진 줄만
   const payload = useMemo(
     () =>
@@ -362,6 +374,17 @@ export function InvoiceForm({
                     <span className="invrow__amt">
                       {amt > 0 ? fmt(amt) : ""}
                     </span>
+                    {!locked && isFilled(r) && (
+                      <button
+                        type="button"
+                        className="invrow__x"
+                        onClick={() => removeRow(c, r.id)}
+                        aria-label="이 항목 지우기"
+                        title="이 항목 지우기"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 );
               })}

@@ -1661,7 +1661,7 @@ a {
 }
 .invcols {
   display: grid;
-  grid-template-columns: 2.3fr 0.7fr 1fr 60px;
+  grid-template-columns: 2.1fr 0.7fr 0.95fr 52px 34px;
   gap: 6px;
   font-size: 12px;
   color: var(--muted-2);
@@ -1669,7 +1669,7 @@ a {
 }
 .invrow {
   display: grid;
-  grid-template-columns: 2.3fr 0.7fr 1fr 60px;
+  grid-template-columns: 2.1fr 0.7fr 0.95fr 52px 34px;
   gap: 6px;
   align-items: center;
   padding: 5px 0;
@@ -1693,6 +1693,26 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 항목 한 줄 통째로 지우는 버튼(맨 끝) — 백스페이스 없이 한 번에 삭제 */
+.invrow__x {
+  justify-self: center;
+  width: 34px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--field);
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.invrow__x:hover { color: var(--danger); border-color: var(--danger); }
+.invrow__x:active { transform: scale(0.9); }
 .invtotal {
   display: flex;
   justify-content: space-between;
