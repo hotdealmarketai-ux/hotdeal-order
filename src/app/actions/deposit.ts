@@ -10,6 +10,7 @@ import {
   replaceManualPlaceholderWithReal,
   type CollectResult,
 } from "@/lib/bank";
+import { setOrderLockOverride } from "@/lib/order-open";
 
 export type CollectState = { result?: CollectResult; error?: string };
 
@@ -133,22 +134,40 @@ export async function ignoreDepositAction(formData: FormData) {
   revalidateDeposit();
 }
 
-// 발주 잠금 해제/재잠금 — 관리자가 임의 출고 시 미납이어도 발주 허용(orderUnlock).
-// 완납되면 자동으로 다시 잠긴다(clearOrderUnlockIfSettled).
+// 1회 잠금해제(통합) — 관리자가 임의 출고 시 미납이어도 발주 허용.
+// 이 한 번의 해제로 '일반발주 + 주간발주'가 함께 풀린다(주간 별도 해제는 없앰).
+// 완납되면 자동으로 다시 잠긴다(clearOrderUnlockIfSettled / clearWeeklyUnlockIfSettled).
 export async function setOrderUnlockAction(formData: FormData) {
   await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
   const unlock = formData.get("unlock") === "true";
   if (!userId) return;
-  // 1회성 해제: 해제 시각을 기록 → orderLockOf가 '현재 발주창'에서만 인정, 다음 창엔 재잠금.
+  const at = unlock ? new Date() : null;
+  // 1회성 해제: 해제 시각 기록 → orderLockOf/weeklyLockOf가 '그 창/그 주'에서만 인정, 이후 재잠금.
   await prisma.user.update({
     where: { id: userId },
-    data: { orderUnlock: unlock, orderUnlockAt: unlock ? new Date() : null },
+    data: {
+      orderUnlock: unlock,
+      orderUnlockAt: at,
+      weeklyOrderUnlock: unlock,
+      weeklyOrderUnlockAt: at,
+    },
   });
   revalidatePath("/admin/deposits");
   revalidatePath(`/admin/deposits/${userId}`);
   revalidatePath(`/admin/members/${userId}`);
   revalidatePath("/order");
+  revalidatePath("/weekly");
+}
+
+// 전체 잠금해제 토글 — ON이면 OFF할 때까지 모든 지점이 미수 있어도 일반/주간발주 가능(예약은 원래 미수잠금 없음).
+export async function setOrderLockOverrideAction(formData: FormData) {
+  await requireAdmin();
+  const on = formData.get("on") === "true";
+  await setOrderLockOverride(on);
+  revalidatePath("/admin/deposits");
+  revalidatePath("/order");
+  revalidatePath("/weekly");
 }
 
 // 무시/해제 되돌리기 → 미매칭

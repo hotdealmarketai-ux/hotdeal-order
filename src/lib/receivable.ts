@@ -6,6 +6,7 @@ import {
   isOrderOpen,
   nextOpenUtc,
 } from "@/lib/schedule";
+import { orderLockOverride } from "@/lib/order-open";
 
 // 어떤 시각(instant)이 '어느 발주창'에 속하는지 식별하는 키(그 창 시작일, KST).
 // 평일=그날 12시창, 주말(토12시~일20시)=토요일 하나의 창.
@@ -58,6 +59,8 @@ export async function orderLockOf(
   orderUnlock: boolean,
   orderUnlockAt?: Date | null,
 ): Promise<{ locked: boolean; unpaidDate: string | null; unpaidTotal: number }> {
+  // 전체 잠금해제 토글 ON → 미수 있어도 발주 허용.
+  if (await orderLockOverride()) return { locked: false, unpaidDate: null, unpaidTotal: 0 };
   const now = Date.now();
   const windowStart = new Date(currentWindowStartUtc(now));
   // 해제가 '이번 발주창'을 겨냥한 것일 때만 인정(1회성). 다음 창으로 넘어가면 stale → 다시 잠금.

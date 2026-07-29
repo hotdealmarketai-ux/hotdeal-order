@@ -7,7 +7,6 @@ import { labelDateLong } from "@/lib/date";
 import {
   weeklyKeyAt,
   weeklyReceivableOf,
-  isWeeklyUnlockActive,
   weeklyStatusOf,
   getWeeklyProducts,
 } from "@/lib/weekly";
@@ -16,10 +15,7 @@ import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { ManualPayButton } from "@/components/ManualPayButton";
 import { VoidWeeklyButton } from "@/components/VoidWeeklyButton";
 import { DeleteWeeklyOrderButton } from "@/components/DeleteWeeklyOrderButton";
-import {
-  setWeeklyOrderUnlockAction,
-  confirmWeeklyOrderAction,
-} from "@/app/actions/weekly-invoice";
+import { confirmWeeklyOrderAction } from "@/app/actions/weekly-invoice";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
@@ -51,10 +47,6 @@ export default async function AdminWeeklyStorePage({
   ]);
   const products = order && order.confirmed && !invoice ? await getWeeklyProducts() : [];
 
-  const unlockedThisWeek = isWeeklyUnlockActive(
-    store.weeklyOrderUnlock,
-    store.weeklyOrderUnlockAt,
-  );
   const status = weeklyStatusOf(order, invoice);
 
   const orderReceipt = (order?.items ?? []).map((it) => ({
@@ -95,20 +87,15 @@ export default async function AdminWeeklyStorePage({
         </div>
         <p className="lead">{labelDateLong(weekKey)} 주간발주</p>
 
-        {/* 주간발주 미수 + 잠금해제 */}
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ color: "var(--muted)" }}>주간발주 미수금액</span>
-            <b style={{ color: "var(--black)" }}>{won(receivable.balance)}원</b>
+        {/* 주간발주 미수(표시만) — 1회 잠금해제는 입금 관리로 통합(일반·주간 함께 해제) */}
+        {receivable.balance > 0 && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: "var(--muted)" }}>주간발주 미수금액</span>
+              <b style={{ color: "var(--black)" }}>{won(receivable.balance)}원</b>
+            </div>
           </div>
-          <form action={setWeeklyOrderUnlockAction} style={{ marginTop: 10 }}>
-            <input type="hidden" name="userId" value={userId} />
-            <input type="hidden" name="unlock" value={unlockedThisWeek ? "false" : "true"} />
-            <button className="btn btn--soft btn--block">
-              {unlockedThisWeek ? "잠금해제 취소" : "주간발주 1회 잠금해제"}
-            </button>
-          </form>
-        </div>
+        )}
 
         {!order ? (
           <div className="notice notice--mute">이 지점의 주간발주가 없습니다.</div>

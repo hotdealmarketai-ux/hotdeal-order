@@ -7,6 +7,7 @@ import {
   nextWeeklyOpenUtc,
   isWeeklyOpen,
 } from "@/lib/schedule";
+import { orderLockOverride } from "@/lib/order-open";
 // 주간발주 상품(DB 카탈로그) 한 줄
 export type WeeklyProductRow = {
   code: string;
@@ -124,6 +125,8 @@ export async function weeklyLockOf(
   weeklyOrderUnlock: boolean,
   weeklyOrderUnlockAt?: Date | null,
 ): Promise<{ locked: boolean; unpaidDate: string | null; unpaidTotal: number }> {
+  // 전체 잠금해제 토글 ON → 미수 있어도 주간발주 허용.
+  if (await orderLockOverride()) return { locked: false, unpaidDate: null, unpaidTotal: 0 };
   const now = Date.now();
   const windowStart = new Date(currentWeeklyWindowStartUtc(now));
   const unlockedThisWeek = isWeeklyUnlockActive(

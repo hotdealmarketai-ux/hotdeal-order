@@ -7,6 +7,8 @@ import { DepositMatchControl } from "@/components/DepositMatchControl";
 import { lastBankSyncAt } from "@/lib/bank";
 import { SubmitButton } from "@/components/SubmitButton";
 import { approveSplitAction, rejectSplitAction } from "@/app/actions/invoice";
+import { setOrderLockOverrideAction } from "@/app/actions/deposit";
+import { orderLockOverride } from "@/lib/order-open";
 import { suggestStoresForDeposits } from "@/lib/deposit-suggest";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
@@ -91,6 +93,9 @@ export default async function AdminDeposits() {
     unmatched.map((d) => ({ id: d.id, payerName: d.payerName, amount: d.amount })),
   );
 
+  // 전체 잠금해제 토글 상태(전역)
+  const lockOverride = await orderLockOverride();
+
   return (
     <>
       <Topbar backHref="/admin" title="입금 관리" />
@@ -101,6 +106,40 @@ export default async function AdminDeposits() {
         <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
           최신 계좌 동기화 : {syncedAt ? formatKDateTime(syncedAt) : "동기화 전"}
         </p>
+
+        {/* 전체 잠금해제 — ON이면 OFF할 때까지 모든 지점이 미수 있어도 일반/주간/예약 발주 가능 */}
+        <div
+          className={`card${lockOverride ? " card--flat" : ""}`}
+          style={{
+            marginBottom: 16,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            ...(lockOverride ? { background: "var(--green-100)", borderColor: "var(--green-700)" } : {}),
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 800 }}>전체 잠금해제</div>
+            <div className="hint" style={{ margin: "3px 0 0" }}>
+              {lockOverride
+                ? "지금은 미수가 있어도 모든 지점이 발주할 수 있어요. 끄면 다시 잠깁니다."
+                : "켜면 끌 때까지 모든 지점이 미수 있어도 발주할 수 있어요."}
+            </div>
+          </div>
+          <form action={setOrderLockOverrideAction} style={{ flexShrink: 0 }}>
+            <input type="hidden" name="on" value={lockOverride ? "false" : "true"} />
+            <button
+              type="submit"
+              role="switch"
+              aria-checked={lockOverride}
+              aria-label="전체 잠금해제"
+              className={`switch ${lockOverride ? "is-on" : ""}`}
+            >
+              <span className="switch__knob" />
+            </button>
+          </form>
+        </div>
 
         {pendingSplits.length > 0 && (
           <>

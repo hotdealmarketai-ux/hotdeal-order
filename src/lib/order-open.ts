@@ -35,3 +35,24 @@ export async function orderOpenNow(role: Role, now: number = Date.now()): Promis
   if (isOrderOpen(now)) return true;
   return dailyForceOpen();
 }
+
+// 전체 미수 잠금해제 토글 — ON이면 OFF할 때까지(자동 만료 없음) 미수가 있어도 모든 지점의
+// 일반·주간 발주 잠금을 무시(orderLockOf·weeklyLockOf가 참조). 예약은 원래 미수잠금 대상 아님.
+const LOCK_OVERRIDE_KEY = "order_lock_override";
+
+export async function orderLockOverride(): Promise<boolean> {
+  const m = await prisma.appMeta.findUnique({ where: { key: LOCK_OVERRIDE_KEY } });
+  return !!m;
+}
+
+export async function setOrderLockOverride(on: boolean): Promise<void> {
+  if (on) {
+    await prisma.appMeta.upsert({
+      where: { key: LOCK_OVERRIDE_KEY },
+      create: { key: LOCK_OVERRIDE_KEY },
+      update: { syncedAt: new Date() },
+    });
+  } else {
+    await prisma.appMeta.deleteMany({ where: { key: LOCK_OVERRIDE_KEY } });
+  }
+}
