@@ -3968,16 +3968,23 @@ a.resv-card:active { transform: scale(0.995); }
 }
 .whcanvas__resize:hover { background: linear-gradient(135deg, transparent 45%, #1d4ed8 45%); }
 
-/* 재고 정산 미리보기 표(공구) */
+/* 재고 정산 미리보기 표(공구) — 차감량 수정 가능(5열) */
 .rectable { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); }
 .rectable__head, .rectable__row {
-  display: grid; grid-template-columns: 1fr 60px 62px 74px; gap: 8px; align-items: center;
-  padding: 11px 13px;
+  display: grid; grid-template-columns: minmax(0,1fr) 38px 44px 58px 52px; gap: 6px;
+  align-items: center; padding: 9px 11px;
 }
-.rectable__head { background: var(--green-100); font-size: 12px; font-weight: 700; color: var(--muted); }
-.rectable__row { border-top: 1px solid var(--line); font-size: 14px; }
+.rectable__head { background: var(--green-100); font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.rectable__row { border-top: 1px solid var(--line); font-size: 13.5px; }
 .rectable__name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rectable__num { text-align: right; font-variant-numeric: tabular-nums; }
 .rectable__num--to { font-weight: 800; color: var(--green-700); }
 .rectable__row--warn .rectable__name { color: var(--danger); }
-.rectable__warn { margin-left: 6px; font-size: 10.5px; color: var(--danger); font-weight: 700; }
+.rectable__warn { margin-left: 5px; font-size: 10px; color: var(--danger); font-weight: 700; }
+.rectable__input {
+  width: 100%; min-width: 0; text-align: right; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line-strong); border-radius: 7px; padding: 5px 7px;
+  font-size: 13.5px; font-family: inherit; color: var(--fg); background: var(--bg); outline: none;
+}
+.rectable__input:focus { border-color: var(--green-700); }
+.rectable__input.is-over { color: #1d4ed8; font-weight: 800; border-color: #1d4ed8; }

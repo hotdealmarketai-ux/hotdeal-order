@@ -1,7 +1,7 @@
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { computeToolReconcile } from "@/app/actions/stock-reconcile";
-import { StockReconcileApply } from "@/components/StockReconcileApply";
+import { StockReconcileForm } from "@/components/StockReconcileForm";
 import { normalizeDateStr, labelDate } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
@@ -55,38 +55,13 @@ export default async function StockReconcilePage(props: {
           </div>
         ) : (
           <>
-            <div className="rectable">
-              <div className="rectable__head">
-                <span className="rectable__name">품목</span>
-                <span className="rectable__num">발주합계</span>
-                <span className="rectable__num">현재재고</span>
-                <span className="rectable__num">→ 제안재고</span>
-              </div>
-              {rows.map((r) => (
-                <div
-                  className={`rectable__row${!r.matched ? " rectable__row--warn" : ""}`}
-                  key={r.name}
-                >
-                  <span className="rectable__name">
-                    {r.name}
-                    {!r.matched && <span className="rectable__warn">재고에 없음</span>}
-                  </span>
-                  <span className="rectable__num">{fmt(r.ordered)}</span>
-                  <span className="rectable__num">{r.matched ? fmt(r.base) : "—"}</span>
-                  <span className="rectable__num rectable__num--to">
-                    {r.matched ? fmt(r.proposed) : "—"}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <StockReconcileForm date={date} rows={rows} orderCount={orderCount} />
 
             {unmatched.length > 0 && (
               <div className="notice notice--mute" style={{ marginTop: 12 }}>
-                ‘재고에 없음’ 품목은 재고현황에 같은 이름이 없어 차감되지 않아요(이름 확인 필요).
+                ‘재고없음’ 품목은 재고현황에 같은 이름이 없어 차감되지 않아요(이름 확인 필요).
               </div>
             )}
-
-            <StockReconcileApply date={date} count={orderCount} />
           </>
         )}
       </div>

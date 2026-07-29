@@ -70,22 +70,44 @@ export async function computeToolReconcile(
   return { date, rows, orderCount: orders.length };
 }
 
-export async function applyToolReconcile(
-  shipDate?: string,
+// 관리자가 차감량을 '수정'해서 적용(추가 불출 등 실제 나간 만큼). adjustments: [{name, qty}].
+// 실제 차감은 넘어온 수정값 기준(발주합계와 달라도 됨). 해당 출고일 공구 발주는 stockDeductedAt로 표시(재정산 방지).
+export async function applyToolReconcileAdjusted(
+  shipDate: string | undefined,
+  adjustments: { name: string; qty: number }[],
 ): Promise<{ ok: boolean; count: number }> {
   const admin = await requireAdmin();
   const date = validDate(shipDate);
   const orders = await toolOrdersForShipment(date);
   if (orders.length === 0) return { ok: true, count: 0 };
 
-  const count = await deductToolOrders(orders.map((o) => o.id));
+  // 검증 — 이름 트림, 수량 0 이상 정수. 같은 이름 여러 행이면 합산.
+  const byName = new Map<string, number>();
+  for (const a of adjustments ?? []) {
+    const name = String(a?.name ?? "").trim();
+    const qty = Math.max(0, Math.floor(Number(a?.qty) || 0));
+    if (name && qty > 0) byName.set(name, (byName.get(name) ?? 0) + qty);
+  }
+  const now = new Date();
+  await prisma.$transaction([
+    // GREATEST(0, …): 실물이 재고보다 많이 나가도 음수 저장 방지(차이는 수기 보정).
+    ...[...byName.entries()].map(
+      ([name, q]) =>
+        prisma.$executeRaw`UPDATE "InventoryItem" SET qty = GREATEST(0, qty - ${q}) WHERE name = ${name} AND "deletedAt" IS NULL`,
+    ),
+    prisma.order.updateMany({
+      where: { id: { in: orders.map((o) => o.id) } },
+      data: { stockDeductedAt: now },
+    }),
+  ]);
   await writeAudit({
     action: "stock.reconcileTool",
     actorId: admin.id,
     actorName: admin.storeName,
-    summary: `${date} 출고 공구발주 ${count}건 기준재고 정산(차감)`,
+    summary: `${date} 공구 재고 정산(수정 차감) — ${byName.size}품목, 발주 ${orders.length}건`,
+    snapshot: [...byName.entries()].map(([name, qty]) => ({ name, qty })),
   }).catch(() => {});
   revalidatePath("/admin/stock-reconcile");
   revalidatePath("/admin/inventory");
-  return { ok: true, count };
+  return { ok: true, count: orders.length };
 }
