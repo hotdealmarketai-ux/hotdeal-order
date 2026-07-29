@@ -43,7 +43,7 @@ export default async function StockReconcilePage(props: {
 
         {rows.length === 0 ? (
           <div className="empty">
-            <p>정산할 발주가 없어요. (이미 정산됐거나 발주 없음)</p>
+            <p>정산할 발주가 없어요.</p>
           </div>
         ) : (
           <>

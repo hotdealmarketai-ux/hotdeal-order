@@ -66,9 +66,6 @@ export default async function AdminCalendarPage(props: {
             다음 ›
           </Link>
         </div>
-        <p className="hint" style={{ margin: "0 0 10px" }}>
-          예약발주에 등록한 <b>예약상품(재고 연동 아님)</b>이 픽업일에 표시돼요.
-        </p>
 
         <div className="cal">
           <div className="cal__dow">

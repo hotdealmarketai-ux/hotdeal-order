@@ -9,12 +9,14 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { getCurrentUser } from "@/lib/session";
+import { isAdmin } from "@/lib/constants";
 import { NotificationBell } from "./NotificationBell";
 import { PushToggle } from "./PushToggle";
 import { BackButton } from "./BackButton";
 import { ZoomControls } from "./ZoomControls";
 
-export function Topbar({
+export async function Topbar({
   title,
   brand,
   backHref,
@@ -32,6 +34,9 @@ export function Topbar({
   /** 네이비 바 "아래"에 들어갈 히어로 (예: 발주 마감 카운트다운) */
   children?: ReactNode;
 }) {
+  // 글자 확대/축소는 '저시력 점주용' — 새롭(본사·관리자)에겐 숨긴다.
+  const user = await getCurrentUser();
+  const showZoom = !(user && isAdmin(user.role));
   return (
     <header className="tbar">
       <div className="tbar__row">
@@ -46,8 +51,8 @@ export function Topbar({
           </Link>
         ) : null}
         {title ? <span className="tbar__title">{title}</span> : null}
-        {/* 저시력 점주용 글자 확대/축소 — 로고(브랜드)와 상호명 칩 사이 */}
-        <ZoomControls />
+        {/* 저시력 점주용 글자 확대/축소 — 로고(브랜드)와 상호명 칩 사이. 관리자에겐 숨김. */}
+        {showZoom && <ZoomControls />}
         <span className="tbar__spacer" />
         {right}
         {/* 알림설정(푸시 켜기/끄기) — 전역(모든 역할·모든 페이지). 어느 페이지에서도 항상 노출 */}
