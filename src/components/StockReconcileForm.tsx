@@ -13,11 +13,9 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 export function StockReconcileForm({
   date,
   rows,
-  orderCount,
 }: {
   date: string;
   rows: ReconcileRow[];
-  orderCount: number;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -69,6 +67,9 @@ export function StockReconcileForm({
             >
               <span className="rectable__name">
                 {r.name}
+                {r.resv > 0 && (
+                  <span className="rectable__resv">예약 {fmt(r.resv)}</span>
+                )}
                 {!r.matched && <span className="rectable__warn">재고없음</span>}
               </span>
               <span className="rectable__num">{fmt(r.ordered)}</span>
@@ -103,7 +104,7 @@ export function StockReconcileForm({
             style={{ marginTop: 16 }}
             onClick={() => setConfirm(true)}
           >
-            이대로 기준재고 차감 적용 (발주 {orderCount}건)
+            이대로 기준재고 차감 적용 ({rows.filter((r) => r.matched).length}개 품목)
           </button>
         ) : (
           <div className="card" style={{ marginTop: 16 }}>

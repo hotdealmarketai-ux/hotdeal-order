@@ -3981,6 +3981,7 @@ a.resv-card:active { transform: scale(0.995); }
 .rectable__num--to { font-weight: 800; color: var(--green-700); }
 .rectable__row--warn .rectable__name { color: var(--danger); }
 .rectable__warn { margin-left: 5px; font-size: 10px; color: var(--danger); font-weight: 700; }
+.rectable__resv { margin-left: 5px; font-size: 10px; font-weight: 800; color: var(--green-700); background: var(--green-100); padding: 1px 5px; border-radius: 999px; }
 .rectable__input {
   width: 100%; min-width: 0; text-align: right; font-variant-numeric: tabular-nums;
   border: 1px solid var(--line-strong); border-radius: 7px; padding: 5px 7px;

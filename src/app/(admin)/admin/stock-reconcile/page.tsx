@@ -8,29 +8,29 @@ export const dynamic = "force-dynamic";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
-// 공구(상시) 발주분 재고 정산 — 미리보기 후 승인. 예약분은 픽업일 10시 자동차감이라 여기 미포함.
+// 재고 정산 — 그 출고일에 나갈 공구(상시 담기) + 예약(재고연동) 발주분을 미리보고 차감량 수정 후 승인.
 export default async function StockReconcilePage(props: {
   searchParams: Promise<{ date?: string }>;
 }) {
   await requireAdmin();
   const { date: dateParam } = await props.searchParams;
   const date = normalizeDateStr(dateParam);
-  const { rows, orderCount } = await computeToolReconcile(date);
+  const { rows, orderCount, resvCount } = await computeToolReconcile(date);
   const totalOrdered = rows.reduce((n, r) => n + r.ordered, 0);
   const unmatched = rows.filter((r) => !r.matched);
 
   return (
     <>
-      <Topbar backHref="/admin" title="재고 정산 (공구)" />
+      <Topbar backHref="/admin" title="재고 정산" />
       <div className="page">
         <p className="lead" style={{ marginBottom: 10 }}>
-          <b>출고 {labelDate(date)}</b> 에 나갈 공구(상시) 발주분을 기준재고에서 정산합니다.
-          아래를 확인하고 승인하면 적용돼요. (예약분은 픽업일 오전 10시에 자동 차감)
+          <b>출고 {labelDate(date)}</b> 에 나갈 <b>공구(상시)</b> + <b>예약(연동)</b> 발주분을
+          기준재고에서 정산합니다. 차감량을 확인·수정하고 승인하면 적용돼요.
         </p>
         <div className="notice notice--mute" style={{ marginBottom: 14 }}>
-          ⚠ ‘제안재고’가 실제와 맞는지 확인하고 승인하세요. 혹시 이미 재고가 빠진 품목이 섞여 있으면
-          그 품목은 이중 차감될 수 있어요(그 경우 재고현황에서 수기 보정). 앞으로는 매일 오후 8시 마감에
-          자동 정산됩니다.
+          ⚠ ‘제안재고’가 실제와 맞는지 확인하고 승인하세요. 이미 빠진 품목이 섞이면 이중 차감될 수
+          있어요(그 경우 재고현황에서 수기 보정). 예약분은 픽업일 10시 자동 차감과 중복되지 않게
+          처리되고, 공구는 매일 오후 8시 마감에 자동 정산됩니다.
         </div>
 
         <form
@@ -44,18 +44,20 @@ export default async function StockReconcilePage(props: {
 
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="spread">
-            <span className="row__sub">정산 대상(미차감) 공구 발주</span>
-            <b>{orderCount}건 · 총 {fmt(totalOrdered)}개</b>
+            <span className="row__sub">
+              정산 대상(미차감) — 공구 {orderCount}건 · 예약 {resvCount}건
+            </span>
+            <b>총 {fmt(totalOrdered)}개</b>
           </div>
         </div>
 
         {rows.length === 0 ? (
           <div className="empty">
-            <p>정산할 공구 발주가 없어요. (이미 정산됐거나 발주 없음)</p>
+            <p>정산할 발주가 없어요. (이미 정산됐거나 발주 없음)</p>
           </div>
         ) : (
           <>
-            <StockReconcileForm date={date} rows={rows} orderCount={orderCount} />
+            <StockReconcileForm date={date} rows={rows} />
 
             {unmatched.length > 0 && (
               <div className="notice notice--mute" style={{ marginTop: 12 }}>
