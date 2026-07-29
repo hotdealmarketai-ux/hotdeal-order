@@ -4028,6 +4028,25 @@ a.resv-card:active { transform: scale(0.995); }
   font-family: inherit; font-size: 13px; font-weight: 600;
 }
 .whtop__logout:hover { background: #1a2740; }
+.whtab--edit { border-style: dashed; }
+.whtab--edit.is-on { background: #334155; border-color: #64748b; color: #fff; }
+
+/* 창고 장소 관리 패널 — 추가/이름변경/삭제 */
+.wllocedit {
+  background: #16203a; border: 1px solid #2c3b57; border-radius: 12px;
+  padding: 14px 16px; margin: 0 16px 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.wllocedit__hd { font-weight: 800; color: #dbe6f5; font-size: 14px; }
+.wllocedit__row { display: flex; gap: 8px; align-items: center; }
+.wllocedit__rename { display: flex; gap: 6px; align-items: center; flex: 1; min-width: 0; }
+.wllocedit__rename .input,
+.wllocedit__add .input {
+  flex: 1; min-width: 0; background: #0e1626; border: 1px solid #2c3b57; color: #e6eef9;
+}
+.wllocedit__add {
+  display: flex; gap: 6px; align-items: center; margin-top: 4px;
+  border-top: 1px solid #2c3b57; padding-top: 10px;
+}
 
 /* 지점 필터 바 — 오늘 나갈 발주(담기·예약연동)가 있는 지점만. 누르면 그 지점 품목만 반짝 + 나머지 흐리게. */
 .whfilter {

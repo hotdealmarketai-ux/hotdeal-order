@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const user = await getCurrentUser();
-  if (!user || (user.role !== "WAREHOUSE" && user.role !== "ADMIN_SAEROP")) {
+  if (!user || user.role !== "ADMIN_SAEROP") {
     return NextResponse.json({ qty: {} }, { headers: { "Cache-Control": "no-store" } });
   }
   const holdKey = windowKeyAt();

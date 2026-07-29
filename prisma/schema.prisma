@@ -440,7 +440,7 @@ model AuditLog {
 // label(품목명 스냅샷)로 계속 표시. 발주/재고 등 기존 테이블과 완전히 독립(추가 전용).
 model WarehouseBox {
   id        String   @id @default(cuid())
-  location  String // FLOOR1 | FREEZER | FRIDGE
+  location  String // WarehouseLocation.id (느슨 참조). 초기값 FLOOR1|FREEZER|FRIDGE
   itemId    String? // InventoryItem.id 느슨 참조(관계 아님)
   label     String   @default("") // 표시 이름(품목명 스냅샷 또는 자유 입력)
   x         Int      @default(40)
@@ -453,4 +453,15 @@ model WarehouseBox {
   updatedAt DateTime @updatedAt
 
   @@index([location])
+}
+
+// 창고 장소(1층/냉동고/냉장고 …) — 관리자가 추가/이름변경/삭제. WarehouseBox.location이 이 id를 참조(느슨).
+// 기본 3개는 마이그레이션에서 기존 키(FLOOR1/FREEZER/FRIDGE)를 id로 시드 → 기존 박스 보존.
+model WarehouseLocation {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([sortOrder])
 }

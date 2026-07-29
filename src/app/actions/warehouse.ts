@@ -1,18 +1,27 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireWarehouse } from "@/lib/session";
+import { requireAdmin } from "@/lib/session";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { WAREHOUSE_UNLOCK_COOKIE } from "@/lib/warehouse-auth";
 
-// PC 창고관리 — 위치별 박스 CRUD. WAREHOUSE 계정 전용.
-// 발주/재고 등 기존 데이터는 읽기만(재고 품목 목록) 하고, 쓰기는 WarehouseBox에만 한다.
+// PC 창고관리 — 위치별 박스 CRUD + 장소(WarehouseLocation) 관리. 새롭 관리자(ADMIN_SAEROP) 전용 + 비밀번호 게이트.
+// 발주/재고 등 기존 데이터는 읽기만(재고 품목 목록) 하고, 쓰기는 WarehouseBox/WarehouseLocation에만 한다.
 
-// "use server" 파일은 async 함수만 export 가능 — 상수/타입은 내부(모듈 지역)로 둔다.
-const WAREHOUSE_LOCATIONS = ["FLOOR1", "FREEZER", "FRIDGE"] as const;
-type WarehouseLocation = (typeof WAREHOUSE_LOCATIONS)[number];
+// 창고관리 진입 비밀번호(관리자 계정으로 로그인 후 한 번 더). 쿠키 wh_unlock=1.
+const WAREHOUSE_PASSWORD = "1234";
 
-const isLoc = (v: unknown): v is WarehouseLocation =>
-  typeof v === "string" && (WAREHOUSE_LOCATIONS as readonly string[]).includes(v);
+// 위치는 WarehouseLocation(DB)에 실제 존재하는 id만 허용.
+async function locationExists(id: string): Promise<boolean> {
+  if (!id) return false;
+  const loc = await prisma.warehouseLocation.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  return !!loc;
+}
 
 // 좌표/크기 방어(음수·과대값 차단). 캔버스 논리좌표(px) 기준.
 const clampPos = (n: unknown) =>
@@ -34,8 +43,8 @@ export type BoxDTO = {
 };
 
 export async function listBoxes(location: string): Promise<BoxDTO[]> {
-  await requireWarehouse();
-  if (!isLoc(location)) return [];
+  await requireAdmin();
+  if (!(await locationExists(location))) return [];
   const rows = await prisma.warehouseBox.findMany({
     where: { location },
     orderBy: { z: "asc" },
@@ -64,8 +73,9 @@ export async function createBox(input: {
   h?: number;
   color?: string; // #12 "form" = 폼박스(창문/문/계단 등 구조물)
 }): Promise<{ ok: boolean; box?: BoxDTO; error?: string }> {
-  await requireWarehouse();
-  if (!isLoc(input.location)) return { ok: false, error: "잘못된 위치" };
+  await requireAdmin();
+  if (!(await locationExists(input.location)))
+    return { ok: false, error: "잘못된 위치" };
   const label = String(input.label ?? "").trim().slice(0, 80);
   if (!label) return { ok: false, error: "이름이 필요해요." };
   const color = input.color === "form" ? "form" : "";
@@ -116,7 +126,7 @@ export async function updateBox(input: {
   label?: string;
   z?: number;
 }): Promise<{ ok: boolean; error?: string }> {
-  await requireWarehouse();
+  await requireAdmin();
   const id = String(input.id ?? "");
   if (!id) return { ok: false, error: "id 없음" };
   const data: Record<string, number | string> = {};
@@ -139,10 +149,62 @@ export async function updateBox(input: {
 }
 
 export async function deleteBox(id: string): Promise<{ ok: boolean }> {
-  await requireWarehouse();
+  await requireAdmin();
   const boxId = String(id ?? "");
   if (!boxId) return { ok: false };
   await prisma.warehouseBox.deleteMany({ where: { id: boxId } });
   revalidatePath("/warehouse");
   return { ok: true };
+}
+
+// ── 창고 장소(WarehouseLocation) 관리 — 추가/이름변경/삭제 ──
+export async function addLocationAction(formData: FormData) {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim().slice(0, 40);
+  if (!name) return;
+  const max = await prisma.warehouseLocation.aggregate({
+    _max: { sortOrder: true },
+  });
+  await prisma.warehouseLocation.create({
+    data: { name, sortOrder: (max._max.sortOrder ?? 0) + 1 },
+  });
+  revalidatePath("/warehouse");
+}
+
+export async function renameLocationAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim().slice(0, 40);
+  if (!id || !name) return;
+  await prisma.warehouseLocation.updateMany({ where: { id }, data: { name } });
+  revalidatePath("/warehouse");
+}
+
+export async function deleteLocationAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  // 안전장치: 박스가 남아있는 장소·마지막 남은 장소는 삭제 불가.
+  const [boxCount, locCount] = await Promise.all([
+    prisma.warehouseBox.count({ where: { location: id } }),
+    prisma.warehouseLocation.count(),
+  ]);
+  if (boxCount > 0 || locCount <= 1) return;
+  await prisma.warehouseLocation.deleteMany({ where: { id } });
+  revalidatePath("/warehouse");
+}
+
+// ── 창고관리 진입 비밀번호 확인 → 통과 시 쿠키 세팅 ──
+export async function unlockWarehouseAction(formData: FormData) {
+  await requireAdmin();
+  const pw = String(formData.get("password") ?? "");
+  if (pw !== WAREHOUSE_PASSWORD) redirect("/warehouse?pw=bad");
+  const jar = await cookies();
+  jar.set(WAREHOUSE_UNLOCK_COOKIE, "1", {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    // 만료 없음 = 세션 쿠키(브라우저 닫으면 해제). 근무 중엔 한 번만 입력.
+  });
+  redirect("/warehouse");
 }

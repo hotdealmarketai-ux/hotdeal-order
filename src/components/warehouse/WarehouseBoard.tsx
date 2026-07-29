@@ -8,16 +8,14 @@ import {
   deleteBox,
   listBoxes,
   updateBox,
+  addLocationAction,
+  renameLocationAction,
+  deleteLocationAction,
   type BoxDTO,
 } from "@/app/actions/warehouse";
 
 type Item = { id: string; name: string; qty: number; expiry: string };
-
-const LOCATIONS = [
-  { key: "FLOOR1", label: "1층" },
-  { key: "FREEZER", label: "냉동고" },
-  { key: "FRIDGE", label: "냉장고" },
-] as const;
+type LocationDTO = { id: string; name: string; boxCount: number };
 
 // 캔버스 논리 크기(평면도) 기본값 — 사용자가 자유 리사이즈(#12) 가능, localStorage 유지.
 const CANVAS_DEFAULT = { w: 1600, h: 1000 };
@@ -134,6 +132,7 @@ export function WarehouseBoard({
   initialBoxes,
   todayCount,
   storeFilters,
+  locations,
 }: {
   storeName: string;
   items: Item[];
@@ -142,8 +141,11 @@ export function WarehouseBoard({
   todayCount: number;
   // 오늘 나갈 발주가 있는 지점별 재고 품목(itemId)+발주수량. 지점 필터 버튼·팔레트 필터 소스.
   storeFilters: { storeName: string; items: { itemId: string; qty: number }[] }[];
+  // 창고 장소(동적) — 관리자가 추가/이름변경/삭제. boxCount>0이면 삭제 불가.
+  locations: LocationDTO[];
 }) {
   const [location, setLocation] = useState<string>(initialLocation);
+  const [locEdit, setLocEdit] = useState(false); // 장소 편집(추가/이름변경/삭제) 패널 토글
   const [boxes, setBoxes] = useState<BoxDTO[]>(initialBoxes);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -442,16 +444,24 @@ export function WarehouseBoard({
           <span className="whtop__sub">{storeName}</span>
         </div>
         <div className="whtabs">
-          {LOCATIONS.map((l) => (
+          {locations.map((l) => (
             <button
-              key={l.key}
+              key={l.id}
               type="button"
-              className={`whtab ${location === l.key ? "is-on" : ""}`}
-              onClick={() => switchLocation(l.key)}
+              className={`whtab ${location === l.id ? "is-on" : ""}`}
+              onClick={() => switchLocation(l.id)}
             >
-              {l.label}
+              {l.name}
             </button>
           ))}
+          <button
+            type="button"
+            className={`whtab whtab--edit ${locEdit ? "is-on" : ""}`}
+            onClick={() => setLocEdit((v) => !v)}
+            title="장소 추가·이름변경·삭제"
+          >
+            {locEdit ? "완료" : "장소 편집"}
+          </button>
         </div>
         <div className="whtop__right">
           <button
@@ -469,6 +479,57 @@ export function WarehouseBoard({
           </form>
         </div>
       </header>
+
+      {/* 장소 편집 패널 — 추가/이름변경/삭제(박스 있는 장소는 삭제 불가) */}
+      {locEdit && (
+        <div className="wllocedit">
+          <div className="wllocedit__hd">창고 장소 관리</div>
+          {locations.map((l) => (
+            <div className="wllocedit__row" key={l.id}>
+              <form action={renameLocationAction} className="wllocedit__rename">
+                <input type="hidden" name="id" value={l.id} />
+                <input
+                  className="input"
+                  name="name"
+                  defaultValue={l.name}
+                  maxLength={40}
+                />
+                <button type="submit" className="btn btn--xs btn--soft">
+                  이름변경
+                </button>
+              </form>
+              <form action={deleteLocationAction}>
+                <input type="hidden" name="id" value={l.id} />
+                <button
+                  type="submit"
+                  className="btn btn--xs btn--ghost"
+                  disabled={l.boxCount > 0 || locations.length <= 1}
+                  title={
+                    l.boxCount > 0
+                      ? "박스가 있는 장소는 삭제할 수 없어요. 먼저 박스를 비워주세요."
+                      : locations.length <= 1
+                        ? "마지막 장소는 삭제할 수 없어요."
+                        : "장소 삭제"
+                  }
+                >
+                  삭제{l.boxCount > 0 ? ` (박스 ${l.boxCount})` : ""}
+                </button>
+              </form>
+            </div>
+          ))}
+          <form action={addLocationAction} className="wllocedit__add">
+            <input
+              className="input"
+              name="name"
+              placeholder="새 장소 이름 (예: 2층 창고)"
+              maxLength={40}
+            />
+            <button type="submit" className="btn btn--xs btn--primary">
+              ＋ 장소 추가
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* 지점 필터 — 오늘 나갈 발주(담기·예약연동)가 있는 지점만. 누르면 그 지점 품목만 반짝. */}
       {storeFilters.length > 0 && (

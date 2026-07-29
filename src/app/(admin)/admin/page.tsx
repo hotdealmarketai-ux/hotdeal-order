@@ -81,6 +81,7 @@ export default async function AdminHome() {
     { href: "/admin/holds", title: "담기 현황" },
     { href: "/admin/stock-reconcile", title: "재고 마감" },
     { href: "/admin/audit", title: "로그" },
+    { href: "/warehouse", title: "창고관리" },
   ];
 
   return (

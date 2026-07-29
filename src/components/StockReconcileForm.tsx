@@ -90,10 +90,6 @@ export function StockReconcileForm({
           );
         })}
       </div>
-      <p className="row__sub" style={{ margin: "8px 2px 0" }}>
-        <b>발주</b> 칸의 숫자만큼 재고에서 빠집니다. 실제 나간 만큼 수정하세요(추가 불출 시 크게 —
-        파란 값 = 원래 발주보다 많음). 빠지는 건 이 숫자 <b>하나뿐</b>이에요.
-      </p>
 
       {done === null &&
         (!confirm ? (
