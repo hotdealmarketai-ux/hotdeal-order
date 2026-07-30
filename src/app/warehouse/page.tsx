@@ -185,6 +185,13 @@ function WarehouseMobileBlock() {
       <div style={{ color: "var(--muted)", lineHeight: 1.6 }}>
         창고관리는 PC(데스크톱)에서만 이용할 수 있어요.
       </div>
+      <a
+        href="/admin"
+        className="btn btn--ghost"
+        style={{ marginTop: 10, textDecoration: "none" }}
+      >
+        ← 홈으로 돌아가기
+      </a>
     </div>
   );
 }
@@ -232,6 +239,13 @@ function WarehouseUnlock({ wrong }: { wrong: boolean }) {
         <SubmitButton className="btn btn--primary btn--block" pendingText="확인 중…">
           입력
         </SubmitButton>
+        <a
+          href="/admin"
+          className="btn btn--ghost btn--block"
+          style={{ textDecoration: "none" }}
+        >
+          ← 홈으로 돌아가기
+        </a>
       </form>
     </div>
   );

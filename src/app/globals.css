@@ -4028,6 +4028,13 @@ a.resv-card:active { transform: scale(0.995); }
   font-family: inherit; font-size: 13px; font-weight: 600;
 }
 .whtop__logout:hover { background: #1a2740; }
+.whtop__home {
+  border: 1px solid #2c3b57; background: transparent; color: #b8c6de;
+  padding: 7px 14px; border-radius: 9px; cursor: pointer; text-decoration: none;
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.whtop__home:hover { background: #1a2740; color: #fff; }
 .whtab--edit { border-style: dashed; }
 .whtab--edit.is-on { background: #334155; border-color: #64748b; color: #fff; }
 

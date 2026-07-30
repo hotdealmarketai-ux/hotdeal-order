@@ -464,6 +464,9 @@ export function WarehouseBoard({
           </button>
         </div>
         <div className="whtop__right">
+          <a href="/admin" className="whtop__home" title="관리자 홈으로">
+            🏠 홈으로
+          </a>
           <button
             type="button"
             className={`whtop__expiry ${expiryOn ? "is-on" : ""}`}
