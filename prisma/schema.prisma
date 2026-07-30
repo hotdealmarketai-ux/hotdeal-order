@@ -461,6 +461,9 @@ model WarehouseLocation {
   id        String   @id @default(cuid())
   name      String
   sortOrder Int      @default(0)
+  // 평면도(입면도) 논리 크기 — 저장하면 모든 컴퓨터에서 동일하게 보인다(예전엔 localStorage라 PC마다 달랐음).
+  w         Int      @default(1600)
+  h         Int      @default(1000)
   createdAt DateTime @default(now())
 
   @@index([sortOrder])

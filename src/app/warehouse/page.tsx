@@ -44,21 +44,27 @@ export default async function WarehousePage(props: {
 
   // 창고 장소(동적) — 관리자가 추가/이름변경/삭제. 박스가 있는 장소는 삭제 못 하게 boxCount도 전달.
   // placedRows: '미배치' 필터용 — 전 장소(모든 위치)에서 한 번이라도 박스로 배치된 재고 품목 id.
-  const [locationRows, boxCountRows, placedRows] = await Promise.all([
+  const [locationRows, boxCountRows, boxRefRows] = await Promise.all([
     prisma.warehouseLocation.findMany({
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true },
+      select: { id: true, name: true, w: true, h: true },
     }),
     prisma.warehouseBox.groupBy({ by: ["location"], _count: true }),
+    // 전 장소의 (장소,품목id) — 미배치 필터 + 지점 선택 시 '그 품목이 있는 장소 탭' 반짝용.
     prisma.warehouseBox.findMany({
       where: { itemId: { not: null } },
-      select: { itemId: true },
-      distinct: ["itemId"],
+      select: { location: true, itemId: true },
     }),
   ]);
-  const placedAllIds = placedRows
-    .map((r) => r.itemId)
-    .filter((v): v is string => !!v);
+  const placedAllIds = [
+    ...new Set(boxRefRows.map((r) => r.itemId).filter((v): v is string => !!v)),
+  ];
+  // 장소별 품목 id 집합 — 지점 선택 시 그 지점 품목이 담긴 장소 탭을 반짝이게 하기 위함.
+  const itemsByLocation: Record<string, string[]> = {};
+  for (const r of boxRefRows) {
+    if (!r.itemId) continue;
+    (itemsByLocation[r.location] ??= []).push(r.itemId);
+  }
   const boxCountByLoc = new Map(
     boxCountRows.map((r) => [r.location, r._count]),
   );
@@ -66,6 +72,8 @@ export default async function WarehousePage(props: {
     id: l.id,
     name: l.name,
     boxCount: boxCountByLoc.get(l.id) ?? 0,
+    w: l.w,
+    h: l.h,
   }));
   const initialLocation = locations[0]?.id ?? "FLOOR1";
 
@@ -171,6 +179,7 @@ export default async function WarehousePage(props: {
       storeFilters={storeFilters}
       locations={locations}
       placedAllIds={placedAllIds}
+      itemsByLocation={itemsByLocation}
     />
   );
 }

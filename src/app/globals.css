@@ -4035,6 +4035,22 @@ a.resv-card:active { transform: scale(0.995); }
   display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
 }
 .whtop__home:hover { background: #1a2740; color: #fff; }
+/* 잠금·저장 버튼(헤더) */
+.whtop__lock, .whtop__save {
+  border: 1px solid #2c3b57; background: transparent; color: #b8c6de;
+  padding: 7px 14px; border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 700; white-space: nowrap;
+}
+.whtop__lock:hover, .whtop__save:hover { background: #1a2740; color: #fff; }
+.whtop__lock.is-on { background: #b45309; border-color: #d97706; color: #fff; }
+.whtop__save { border-color: #2f6b45; color: #7ee0a0; }
+.whtop__save:hover { background: #16351f; color: #aef0c4; }
+.whtop__save:disabled { opacity: 0.55; cursor: default; }
+/* 지점 선택 시 그 품목이 있는 장소 탭 반짝임 */
+.whtab--glow { border-color: #f59e0b !important; color: #fde68a; animation: whGlowToday 1.2s ease-in-out infinite; }
+/* 장소 편집 — 순서 바꾸기 위/아래 */
+.wllocedit__ord { display: flex; flex-direction: column; gap: 2px; margin-right: 4px; }
+.wllocedit__ord form { display: block; }
 .whtab--edit { border-style: dashed; }
 .whtab--edit.is-on { background: #334155; border-color: #64748b; color: #fff; }
 

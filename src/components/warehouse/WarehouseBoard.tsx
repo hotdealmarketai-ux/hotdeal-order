@@ -11,18 +11,16 @@ import {
   addLocationAction,
   renameLocationAction,
   deleteLocationAction,
+  moveLocationAction,
+  saveBoardAction,
   type BoxDTO,
 } from "@/app/actions/warehouse";
 
 type Item = { id: string; name: string; qty: number; expiry: string };
-type LocationDTO = { id: string; name: string; boxCount: number };
+type LocationDTO = { id: string; name: string; boxCount: number; w: number; h: number };
 
-// 캔버스 논리 크기(평면도) 기본값 — 사용자가 자유 리사이즈(#12) 가능, localStorage 유지.
+// 캔버스 논리 크기(평면도) 기본값. 이제 크기는 DB(WarehouseLocation.w/h)에 저장 → 모든 컴퓨터 동일.
 const CANVAS_DEFAULT = { w: 1600, h: 1000 };
-const CANVAS_KEY = "wh_canvas";
-// 장소(위치)별 평면도 크기 — localStorage 키를 위치별로 분리(냉동고/냉장고 각각 다르게 저장).
-// 값이 없으면 예전 전역 키(CANVAS_KEY)로 폴백 → 기존에 정해둔 크기를 그대로 보존한다.
-const canvasKeyFor = (loc: string) => `${CANVAS_KEY}:${loc}`;
 // 우클릭 셀 배경색 6종. 어두운 보드 위에서 대비되는 파스텔(검정 텍스트 가독).
 const BOX_COLORS = ["#fecaca", "#fed7aa", "#fde68a", "#bbf7d0", "#bfdbfe", "#e9d5ff"];
 const SNAP = 6; // 스냅 임계(px)
@@ -148,11 +146,13 @@ function separate(boxes: BoxDTO[], activeIds: Set<string>): BoxDTO[] {
         any = true;
         const aAct = activeIds.has(a.id);
         const bAct = activeIds.has(b.id);
-        // 이동 배분(합=1): active는 안 움직이고 passive를 민다. 둘 다 같으면 반반.
+        // 배치된(passive) 셀은 절대 안 움직이고, 내가 잡은(active) 셀만 밀려서 비켜간다.
+        // 둘 다 active(그룹 리사이즈)면 서로 반반씩 벌어짐. 둘 다 배치된 셀이면 건드리지 않음(그대로 걸침).
         let wa: number, wb: number;
-        if (aAct && !bAct) { wa = 0; wb = 1; }
-        else if (!aAct && bAct) { wa = 1; wb = 0; }
-        else { wa = 0.5; wb = 0.5; }
+        if (aAct && !bAct) { wa = 1; wb = 0; }
+        else if (!aAct && bAct) { wa = 0; wb = 1; }
+        else if (aAct && bAct) { wa = 0.5; wb = 0.5; }
+        else continue;
         if (ox < oy) {
           // 가로로 분리 — 중심이 왼쪽인 박스를 왼(-)으로, 오른쪽 박스를 오른(+)으로.
           const aLeft = a.x + a.w / 2 <= b.x + b.w / 2;
@@ -193,6 +193,7 @@ export function WarehouseBoard({
   storeFilters,
   locations,
   placedAllIds,
+  itemsByLocation,
 }: {
   storeName: string;
   items: Item[];
@@ -201,10 +202,12 @@ export function WarehouseBoard({
   todayCount: number;
   // 오늘 나갈 발주가 있는 지점별 재고 품목(itemId)+발주수량. 지점 필터 버튼·팔레트 필터 소스.
   storeFilters: { storeName: string; items: { itemId: string; qty: number }[] }[];
-  // 창고 장소(동적) — 관리자가 추가/이름변경/삭제. boxCount>0이면 삭제 불가.
+  // 창고 장소(동적) — 관리자가 추가/이름변경/삭제. boxCount>0이면 삭제 불가. w/h=평면도 크기(DB).
   locations: LocationDTO[];
   // 미배치 필터용 — 전 장소(모든 위치)에서 한 번이라도 배치된 재고 품목 id(페이지 로드 스냅샷).
   placedAllIds: string[];
+  // 장소별 품목 id — 지점 선택 시 그 지점 품목이 담긴 장소 탭을 반짝이게(로드 스냅샷).
+  itemsByLocation: Record<string, string[]>;
 }) {
   const [location, setLocation] = useState<string>(initialLocation);
   const [locEdit, setLocEdit] = useState(false); // 장소 편집(추가/이름변경/삭제) 패널 토글
@@ -218,7 +221,12 @@ export function WarehouseBoard({
   const [showIntro, setShowIntro] = useState(true); // #12 로그인 인트로(오늘 발주 요약)
   const [activeStore, setActiveStore] = useState<string | null>(null); // 지점 필터(null=전체)
   const [expiryOn, setExpiryOn] = useState(false); // #12 유통기한 임박(-30일) 하이라이트 토글
-  const [canvas, setCanvas] = useState(CANVAS_DEFAULT); // #12 자유 리사이즈 캔버스
+  // 평면도 크기 — 이제 DB(WarehouseLocation.w/h) 기준. 현재 장소값으로 초기화(모든 컴퓨터 동일).
+  const [canvas, setCanvas] = useState(() => {
+    const l = locations.find((x) => x.id === initialLocation);
+    return l ? { w: l.w, h: l.h } : CANVAS_DEFAULT;
+  });
+  const [locked, setLocked] = useState(false); // 잠금 — 켜면 이동/수정/추가 불가(보기만). 장소별 저장.
   const [formEdit, setFormEdit] = useState(false); // #12 폼박스(창문/문/계단) 편집모드 — OFF면 클릭 안 됨
   const [hovered, setHovered] = useState<string | null>(null); // #12 겹침: 호버 박스를 앞으로
   const [liveQty, setLiveQty] = useState<Record<string, number>>({}); // 재고현황 실시간 남은수량
@@ -260,25 +268,17 @@ export function WarehouseBoard({
     };
   }, []);
 
-  // 캔버스 크기 복원 — 장소(위치)별 저장값. 없으면 예전 전역값(CANVAS_KEY)로 폴백해 기존 크기 보존.
-  // location이 바뀔 때마다 그 장소의 크기로 갱신 → 냉동고/냉장고 각각 다른 평면도 크기.
+  // 장소가 바뀔 때 그 장소의 평면도 크기(DB) + 잠금상태(localStorage)를 반영.
+  // 평면도 크기는 DB라 모든 컴퓨터에서 동일. 잠금은 이 컴퓨터에서만(실수 방지용).
   useEffect(() => {
+    const l = locations.find((x) => x.id === location);
+    if (l) setCanvas({ w: l.w, h: l.h });
     try {
-      const raw =
-        localStorage.getItem(canvasKeyFor(location)) ||
-        localStorage.getItem(CANVAS_KEY);
-      if (raw) {
-        const c = JSON.parse(raw);
-        if (c && c.w > 0 && c.h > 0) {
-          setCanvas({ w: c.w, h: c.h });
-          return;
-        }
-      }
-      setCanvas(CANVAS_DEFAULT);
+      setLocked(localStorage.getItem(`wh_lock:${location}`) === "1");
     } catch {
-      setCanvas(CANVAS_DEFAULT);
+      setLocked(false);
     }
-  }, [location]);
+  }, [location, locations]);
 
   // 품목 id → 정보(유통기한 임박 판정용). 오늘 발주 품목명(정규화) 집합.
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
@@ -295,6 +295,15 @@ export function WarehouseBoard({
       ),
     );
   }, [activeStore, storeFilters, allGlowIds]);
+  // 특정 지점 눌렀을 때, 그 지점 품목이 담긴 '장소'들 — 위 장소 탭을 반짝이게.
+  const glowLocs = useMemo(() => {
+    const s = new Set<string>();
+    if (!activeStore) return s; // 지점 선택했을 때만
+    for (const [loc, ids] of Object.entries(itemsByLocation)) {
+      if (ids.some((id) => glowIds.has(id))) s.add(loc);
+    }
+    return s;
+  }, [activeStore, itemsByLocation, glowIds]);
   // 선택 지점의 품목별 '발주 들어온 수량' 맵 — 지점 필터 시 팔레트가 남은수량 대신 이 수량을 보인다.
   const storeQty = useMemo(() => {
     if (!activeStore) return null;
@@ -344,8 +353,43 @@ export function WarehouseBoard({
     setLoading(false);
   };
 
+  // 저장 버튼 — 이 장소의 평면도 크기 + 모든 박스 위치/크기를 DB에 저장(모든 컴퓨터 동일).
+  const [saving, setSaving] = useState(false);
+  const saveBoard = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await saveBoardAction({
+        location: locationRef.current,
+        w: canvasRef.current.w,
+        h: canvasRef.current.h,
+        boxes: boxesRef.current.map((b) => ({ id: b.id, x: b.x, y: b.y, w: b.w, h: b.h })),
+      });
+      flashSavedRef.current();
+    } catch {
+      /* noop */
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 잠금 토글 — 켜면 이동/수정/추가 전부 막고 보기만(주문 반짝임은 유지). 이 컴퓨터에 저장.
+  const toggleLock = () => {
+    setLocked((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(`wh_lock:${locationRef.current}`, next ? "1" : "0");
+      } catch {
+        /* noop */
+      }
+      if (next) setSelectedIds([]);
+      return next;
+    });
+  };
+
   // 팔레트 품목 → 박스 추가(계단식 오프셋으로 겹침 방지)
   const addItem = async (it: Item) => {
+    if (locked) return;
     const n = boxesRef.current.length;
     const res = await createBox({
       location,
@@ -374,6 +418,7 @@ export function WarehouseBoard({
 
   // #12 폼박스(창문/문/계단 등 구조물) 추가 — 재고 아님. 편집모드를 켜 바로 배치.
   const addForm = async (label: string) => {
+    if (locked) return;
     const res = await createBox({
       location,
       itemId: null,
@@ -428,7 +473,7 @@ export function WarehouseBoard({
     liveBoxes.current = boxesRef.current.map((b) => ({ ...b }));
   };
   const startDrag = (e: React.PointerEvent, box: BoxDTO) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || locked) return; // 잠금 시 이동 불가
     e.preventDefault();
     const group = groupFor(box.id);
     if (!group) setSelectedIds([box.id]);
@@ -436,6 +481,7 @@ export function WarehouseBoard({
     active.current = { mode: "drag", id: box.id, sx: e.clientX, sy: e.clientY, box: { ...box }, group };
   };
   const startResize = (e: React.PointerEvent, box: BoxDTO, handle: Handle) => {
+    if (locked) return; // 잠금 시 리사이즈 불가
     e.preventDefault();
     e.stopPropagation();
     const group = groupFor(box.id);
@@ -596,14 +642,7 @@ export function WarehouseBoard({
           updateBox({ id: cur.id, x: cur.x, y: cur.y, w: cur.w, h: cur.h }).catch(() => {});
         }
       }
-      // 캔버스가 커졌으면 이 장소 크기로 저장.
-      if (grew) {
-        try {
-          localStorage.setItem(canvasKeyFor(locationRef.current), JSON.stringify(finalCanvas));
-        } catch {
-          /* noop */
-        }
-      }
+      // 평면도 크기는 '저장' 버튼으로 DB에 확정(모든 컴퓨터 동일). 여기선 화면 크기만 늘려둠.
       flashSavedRef.current();
     };
     window.addEventListener("pointermove", onMove);
@@ -692,8 +731,9 @@ export function WarehouseBoard({
             <button
               key={l.id}
               type="button"
-              className={`whtab ${location === l.id ? "is-on" : ""}`}
+              className={`whtab ${location === l.id ? "is-on" : ""} ${glowLocs.has(l.id) ? "whtab--glow" : ""}`}
               onClick={() => switchLocation(l.id)}
+              title={glowLocs.has(l.id) ? "이 지점 품목이 있는 장소" : undefined}
             >
               {l.name}
             </button>
@@ -711,6 +751,23 @@ export function WarehouseBoard({
           <a href="/admin" className="whtop__home" title="관리자 홈으로">
             🏠 홈으로
           </a>
+          <button
+            type="button"
+            className={`whtop__lock ${locked ? "is-on" : ""}`}
+            onClick={toggleLock}
+            title="잠그면 이동·수정·추가가 막혀 보기 전용이 됩니다(주문 반짝임은 유지). 다시 누르면 풀려요."
+          >
+            {locked ? "🔒 잠김" : "🔓 잠금"}
+          </button>
+          <button
+            type="button"
+            className="whtop__save"
+            onClick={saveBoard}
+            disabled={saving}
+            title="이 장소의 평면도 크기와 모든 셀 위치를 저장 — 다른 컴퓨터에서도 똑같이 보입니다."
+          >
+            {saving ? "저장 중…" : "💾 저장"}
+          </button>
           <button
             type="button"
             className={`whtop__expiry ${expiryOn ? "is-on" : ""}`}
@@ -731,8 +788,30 @@ export function WarehouseBoard({
       {locEdit && (
         <div className="wllocedit">
           <div className="wllocedit__hd">창고 장소 관리</div>
-          {locations.map((l) => (
+          {locations.map((l, li) => (
             <div className="wllocedit__row" key={l.id}>
+              {/* 순서 바꾸기 — 위/아래(배열 순서 = 탭 순서) */}
+              <div className="wllocedit__ord">
+                <form action={moveLocationAction}>
+                  <input type="hidden" name="id" value={l.id} />
+                  <input type="hidden" name="dir" value="up" />
+                  <button type="submit" className="btn btn--xs btn--soft" disabled={li === 0} title="위로">
+                    ↑
+                  </button>
+                </form>
+                <form action={moveLocationAction}>
+                  <input type="hidden" name="id" value={l.id} />
+                  <input type="hidden" name="dir" value="down" />
+                  <button
+                    type="submit"
+                    className="btn btn--xs btn--soft"
+                    disabled={li === locations.length - 1}
+                    title="아래로"
+                  >
+                    ↓
+                  </button>
+                </form>
+              </div>
               <form action={renameLocationAction} className="wllocedit__rename">
                 <input type="hidden" name="id" value={l.id} />
                 <input
@@ -884,6 +963,7 @@ export function WarehouseBoard({
           className="whcanvaswrap"
           onPointerDown={(e) => {
             // 빈 곳(박스/리사이즈 핸들 제외)에서 시작하면 드래그 선택(마퀴) 시작 — 안이든 밖이든.
+            if (locked) return; // 잠금 시 선택도 불가
             const t = e.target as HTMLElement;
             if (t.closest(".whbox") || t.closest(".whcanvas__resize")) return;
             const el = canvasElRef.current;
@@ -930,8 +1010,8 @@ export function WarehouseBoard({
                 !isForm &&
                 (expiryOn ? !expSoon : activeStore != null ? !today : false);
               const qv = qtyOf(b.itemId); // 남은수량(재고 박스만)
-              // 폼박스는 편집모드 아니면 클릭 안 됨(배경 고정). z: 폼박스는 뒤, 재고는 앞, 호버/선택은 최상.
-              const clickable = !isForm || formEdit;
+              // 폼박스는 편집모드 아니면 클릭 안 됨(배경 고정). 잠금 시엔 모든 박스 클릭·이동 불가(보기만).
+              const clickable = (!isForm || formEdit) && !locked;
               let zi = isForm ? b.z : 1000 + b.z;
               if (today || expSoon) zi = 1500 + b.z;
               if (hovered === b.id) zi = 2000;
@@ -994,8 +1074,10 @@ export function WarehouseBoard({
             {/* #12 평면도 자유 리사이즈 — 우하단 핸들 드래그 */}
             <div
               className="whcanvas__resize"
-              title="드래그해서 평면도 크기 조절"
+              title="드래그해서 평면도 크기 조절(저장 버튼을 눌러야 다른 컴퓨터에도 반영)"
+              style={{ display: locked ? "none" : undefined }}
               onPointerDown={(e) => {
+                if (locked) return;
                 e.preventDefault();
                 e.stopPropagation();
                 const el = e.currentTarget;
@@ -1013,12 +1095,7 @@ export function WarehouseBoard({
                 const up = () => {
                   el.removeEventListener("pointermove", move);
                   el.removeEventListener("pointerup", up);
-                  try {
-                    // 이 장소(위치)의 평면도 크기만 저장 — 다른 장소는 영향 없음.
-                    localStorage.setItem(canvasKeyFor(location), JSON.stringify(canvasRef.current));
-                  } catch {
-                    /* noop */
-                  }
+                  // 평면도 크기는 '저장' 버튼으로 DB에 확정(모든 컴퓨터 동일).
                 };
                 el.addEventListener("pointermove", move);
                 el.addEventListener("pointerup", up);

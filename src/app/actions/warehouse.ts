@@ -200,6 +200,57 @@ export async function deleteLocationAction(formData: FormData) {
   revalidatePath("/warehouse");
 }
 
+// 장소 순서 바꾸기(위/아래) — sortOrder를 재정렬해 저장.
+export async function moveLocationAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  const dir = String(formData.get("dir") ?? "");
+  if (!id || (dir !== "up" && dir !== "down")) return;
+  const locs = await prisma.warehouseLocation.findMany({
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    select: { id: true },
+  });
+  const i = locs.findIndex((l) => l.id === id);
+  if (i < 0) return;
+  const j = dir === "up" ? i - 1 : i + 1;
+  if (j < 0 || j >= locs.length) return;
+  const order = locs.map((l) => l.id);
+  [order[i], order[j]] = [order[j], order[i]];
+  await prisma.$transaction(
+    order.map((lid, idx) =>
+      prisma.warehouseLocation.update({ where: { id: lid }, data: { sortOrder: idx } }),
+    ),
+  );
+  revalidatePath("/warehouse");
+}
+
+// 보드 저장(저장 버튼) — 이 장소의 평면도 크기 + 모든 박스 위치/크기를 DB에 확정 저장.
+// 평면도 크기가 장소에 저장되므로 다른 컴퓨터에서도 동일하게 보인다.
+export async function saveBoardAction(input: {
+  location: string;
+  w: number;
+  h: number;
+  boxes: { id: string; x: number; y: number; w: number; h: number }[];
+}): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const loc = String(input.location ?? "");
+  if (!(await locationExists(loc))) return { ok: false };
+  const cw = Math.max(600, Math.min(20000, Math.round(Number(input.w) || 1600)));
+  const ch = Math.max(400, Math.min(20000, Math.round(Number(input.h) || 1000)));
+  const boxes = Array.isArray(input.boxes) ? input.boxes.slice(0, 3000) : [];
+  await prisma.$transaction([
+    prisma.warehouseLocation.update({ where: { id: loc }, data: { w: cw, h: ch } }),
+    ...boxes.map((b) =>
+      prisma.warehouseBox.updateMany({
+        where: { id: String(b.id), location: loc },
+        data: { x: clampPos(b.x), y: clampPos(b.y), w: clampSize(b.w), h: clampSize(b.h) },
+      }),
+    ),
+  ]);
+  revalidatePath("/warehouse");
+  return { ok: true };
+}
+
 // ── 창고관리 진입 비밀번호 확인 → 통과 시 쿠키 세팅 ──
 export async function unlockWarehouseAction(formData: FormData) {
   await requireAdmin();
