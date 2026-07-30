@@ -4116,6 +4116,29 @@ a.resv-card:active { transform: scale(0.995); }
   display: flex; flex-direction: column; min-height: 0;
 }
 .whside__head { padding: 14px 16px 8px; font-weight: 800; font-size: 13px; color: #8ea0bd; letter-spacing: 0.02em; }
+/* 물건 찾기 — 이름 쳐서 고르면 그 물건이 있는 장소로 이동 + 셀 반짝 */
+.whfind {
+  margin: 12px 14px 10px; padding: 10px; border-radius: 11px;
+  border: 1px solid #2f4a3a; background: #0d1a13;
+}
+.whfind__hd { font-size: 12.5px; font-weight: 800; color: #7fe0a8; margin-bottom: 7px; letter-spacing: -0.2px; }
+.whfind__input {
+  width: 100%; padding: 9px 11px; border-radius: 8px;
+  border: 1px solid #35563f; background: #08130d; color: #e7ecf3;
+  font-family: inherit; font-size: 14px; outline: none;
+}
+.whfind__input:focus { border-color: #3fbf6a; }
+.whfind__input::placeholder { color: #5f8070; }
+.whfind__list { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+.whfind__empty { color: #5f8070; font-size: 12.5px; padding: 6px 4px; }
+.whfind__item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 11px; border-radius: 8px; border: 1px solid #24402f; background: #0a1710;
+  color: #e7ecf3; cursor: pointer; font-family: inherit; font-size: 13.5px; text-align: left;
+}
+.whfind__item:hover { background: #123020; border-color: #3fbf6a; }
+.whfind__name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whfind__loc { flex-shrink: 0; font-size: 12px; font-weight: 700; color: #7fe0a8; }
 .whside__search {
   margin: 0 14px 10px; padding: 9px 12px; border-radius: 9px;
   border: 1px solid #2c3b57; background: #0c1420; color: #e7ecf3;
@@ -4235,6 +4258,15 @@ a.resv-card:active { transform: scale(0.995); }
 .whbox--out .whbox__label { color: #7f1d1d; }
 /* 유통기한 필터 ON — 임박 아닌 박스는 흐리게 */
 .whbox--dim { opacity: 0.3; filter: grayscale(0.45); }
+/* 물건 찾기로 지목된 셀 — 초록으로 강하게 반짝(6초) */
+.whbox--found {
+  border-color: #22c55e !important;
+  animation: whFound 0.9s ease-in-out infinite;
+}
+@keyframes whFound {
+  0%, 100% { box-shadow: 0 0 0 3px #22c55e88, 0 0 22px 4px #22c55e66; }
+  50% { box-shadow: 0 0 0 6px #22c55eff, 0 0 40px 12px #22c55eaa; }
+}
 .whbox__del {
   position: absolute; top: -10px; right: -10px; width: 20px; height: 20px;
   border-radius: 50%; border: none; background: #ff3b6b; color: #fff;

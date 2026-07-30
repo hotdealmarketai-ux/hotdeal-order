@@ -216,6 +216,9 @@ export function WarehouseBoard({
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]); // 다중 선택(드래그 셀 선택)
   const [showUnplaced, setShowUnplaced] = useState(false); // 미배치(전 장소 어디에도 없는 품목)만
+  const [findQ, setFindQ] = useState(""); // 물건 찾기 검색어
+  const [findHit, setFindHit] = useState<string | null>(null); // 찾은 품목 itemId(그 셀 반짝)
+  const findTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null); // 드래그 선택 사각형(캔버스 좌표)
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [q, setQ] = useState("");
@@ -325,6 +328,30 @@ export function WarehouseBoard({
     if (!itemId) return 0;
     return storeQty ? storeQty.get(itemId) ?? 0 : reservedAllByItem.get(itemId) ?? 0;
   };
+  // 물건 찾기 — 배치된(어느 장소에든) 품목 중 이름 매칭 + 그 장소명.
+  const findMatches = useMemo(() => {
+    const q = findQ.trim().replace(/\s/g, "");
+    if (!q) return [] as { id: string; name: string; loc: string }[];
+    const placed = new Set(placedAllIds);
+    const locOf = (id: string) => {
+      const e = Object.entries(itemsByLocation).find(([, ids]) => ids.includes(id));
+      return e ? locations.find((l) => l.id === e[0])?.name ?? "" : "";
+    };
+    return items
+      .filter((it) => placed.has(it.id) && it.name.replace(/\s/g, "").includes(q))
+      .slice(0, 8)
+      .map((it) => ({ id: it.id, name: it.name, loc: locOf(it.id) }));
+  }, [findQ, items, placedAllIds, itemsByLocation, locations]);
+  // 찾은 셀로 스크롤 — 장소 전환 후 렌더되면 화면 중앙으로.
+  useEffect(() => {
+    if (!findHit) return;
+    const t = setTimeout(() => {
+      document
+        .querySelector(".whbox--found")
+        ?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    }, 120);
+    return () => clearTimeout(t);
+  }, [findHit, boxes]);
   // 박스의 품목이 유통기한 임박(≤30일)/만료인지 — itemId로 재고 조회 후 expiryInfo.
   const isExpiryBox = (b: BoxDTO) => {
     if (!b.itemId) return false;
@@ -364,6 +391,21 @@ export function WarehouseBoard({
     const rows = await listBoxes(loc).catch(() => [] as BoxDTO[]);
     setBoxes(rows);
     setLoading(false);
+  };
+
+  // 물건 찾기 — 그 품목이 있는 장소로 전환하고, 그 셀을 반짝이게(6초).
+  const locateItem = async (itemId: string) => {
+    setFindQ("");
+    const here = boxesRef.current.some((b) => b.itemId === itemId);
+    if (!here) {
+      const loc = Object.entries(itemsByLocation).find(([, ids]) =>
+        ids.includes(itemId),
+      )?.[0];
+      if (loc) await switchLocation(loc);
+    }
+    setFindHit(itemId);
+    if (findTimer.current) clearTimeout(findTimer.current);
+    findTimer.current = setTimeout(() => setFindHit(null), 6000);
   };
 
   // 저장 버튼 — 이 장소의 평면도 크기 + 모든 박스 위치/크기를 DB에 저장(모든 컴퓨터 동일).
@@ -485,6 +527,7 @@ export function WarehouseBoard({
   };
 
   const renameBox = async (box: BoxDTO) => {
+    if (box.itemId) return; // 품목 셀은 이름 변경 불가 — 재고현황 품목명을 그대로 따른다.
     const next = window.prompt("이름 변경", box.label)?.trim();
     if (!next || next === box.label) return;
     setBoxes((b) => b.map((x) => (x.id === box.id ? { ...x, label: next } : x)));
@@ -929,6 +972,35 @@ export function WarehouseBoard({
 
       <div className="whmain">
         <aside className="whside">
+          {/* 물건 찾기 — 이름을 치고 고르면 그 물건이 놓인 장소로 이동하고 셀이 반짝인다(전 장소 통틀어 검색). */}
+          <div className="whfind">
+            <div className="whfind__hd">🔎 물건 찾기</div>
+            <input
+              className="whfind__input"
+              placeholder="물건 이름 입력…"
+              value={findQ}
+              onChange={(e) => setFindQ(e.target.value)}
+            />
+            {findQ.trim() && (
+              <div className="whfind__list">
+                {findMatches.length === 0 ? (
+                  <div className="whfind__empty">배치된 물건 중 없음</div>
+                ) : (
+                  findMatches.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="whfind__item"
+                      onClick={() => locateItem(m.id)}
+                    >
+                      <span className="whfind__name">{m.name}</span>
+                      <span className="whfind__loc">{m.loc || "—"}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <div className="whside__head">재고 품목</div>
           <input
             className="whside__search"
@@ -1045,10 +1117,16 @@ export function WarehouseBoard({
               const sel = selectedIds.includes(b.id);
               const isForm = !b.itemId; // 폼박스(구조물)=재고 품목 없는 박스. color는 배경색 용도로 자유롭게 씀.
               const custom = /^#[0-9a-fA-F]{6}$/.test(b.color) ? b.color : null; // 우클릭 지정 배경색
+              // 품목셀 이름 = 재고현황 품목명(동기화). 이름 없어졌으면 라벨 스냅샷. 구조물은 자체 라벨.
+              const label = isForm
+                ? b.label
+                : itemById.get(b.itemId as string)?.name ?? b.label;
+              const found = !!findHit && b.itemId === findHit; // 물건 찾기로 지목된 셀
               const today = !isForm && !!b.itemId && glowIds.has(b.itemId); // 오늘 나갈 품목 → 반짝
               const expSoon = !isForm && expiryOn && isExpiryBox(b); // 유통기한 임박 토글 ON + 임박
               // 흐리게(필터 효과): 유통기한 모드면 임박 아닌 것 / 특정 지점 필터면 그 지점 품목 아닌 것.
               const dim =
+                !found &&
                 !isForm &&
                 (expiryOn ? !expSoon : activeStore != null ? !today : false);
               const qv = qtyOf(b.itemId); // 남은수량(재고 박스만)
@@ -1058,10 +1136,11 @@ export function WarehouseBoard({
               if (today || expSoon) zi = 1500 + b.z;
               if (hovered === b.id) zi = 2000;
               if (sel) zi = 3000;
+              if (found) zi = 3500;
               return (
                 <div
                   key={b.id}
-                  className={`whbox ${isForm ? "whbox--form" : ""} ${sel ? "whbox--sel" : ""} ${today ? "whbox--today" : ""} ${expSoon ? "whbox--expiry" : ""} ${dim ? "whbox--dim" : ""} ${qv != null && qv <= 0 ? "whbox--out" : ""}`}
+                  className={`whbox ${isForm ? "whbox--form" : ""} ${sel ? "whbox--sel" : ""} ${today ? "whbox--today" : ""} ${expSoon ? "whbox--expiry" : ""} ${dim ? "whbox--dim" : ""} ${qv != null && qv <= 0 ? "whbox--out" : ""}${found ? " whbox--found" : ""}`}
                   style={{
                     left: b.x,
                     top: b.y,
@@ -1072,7 +1151,7 @@ export function WarehouseBoard({
                     ...(custom ? { background: custom } : {}),
                   }}
                   onPointerDown={(e) => clickable && startDrag(e, b)}
-                  onDoubleClick={() => clickable && renameBox(b)}
+                  onDoubleClick={() => clickable && isForm && renameBox(b)}
                   onContextMenu={(e) => {
                     if (!clickable) return;
                     e.preventDefault();
@@ -1084,7 +1163,7 @@ export function WarehouseBoard({
                   onPointerEnter={() => !isForm && setHovered(b.id)}
                   onPointerLeave={() => setHovered((h) => (h === b.id ? null : h))}
                 >
-                  <span className="whbox__label">{b.label}</span>
+                  <span className="whbox__label">{label}</span>
                   {!isForm && qv != null && (
                     <span className={`whbox__qty${qv <= 0 ? " is-out" : ""}`}>
                       수량 {qv}
@@ -1196,16 +1275,19 @@ export function WarehouseBoard({
                 ✕
               </button>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                const b = boxesRef.current.find((x) => x.id === menu.id);
-                setMenu(null);
-                if (b) renameBox(b);
-              }}
-            >
-              이름 변경
-            </button>
+            {/* 이름 변경은 구조물(form)에만 — 품목 셀은 재고현황 품목명을 그대로 따라간다. */}
+            {!boxesRef.current.find((x) => x.id === menu.id)?.itemId && (
+              <button
+                type="button"
+                onClick={() => {
+                  const b = boxesRef.current.find((x) => x.id === menu.id);
+                  setMenu(null);
+                  if (b) renameBox(b);
+                }}
+              >
+                이름 변경
+              </button>
+            )}
             <button
               type="button"
               className="whmenu__del"
