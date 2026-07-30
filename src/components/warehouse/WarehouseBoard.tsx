@@ -128,6 +128,60 @@ function snapResize(handle: Handle, box: BoxDTO, dx: number, dy: number, others:
   return { x, y, w, h, vg, hg };
 }
 
+// ── 겹침 방지(밀어내기) ── 품목 셀끼리 절대 겹치지 않게, 겹치는 쌍을 최소 침투축으로 밀어낸다.
+// active(방금 옮긴/키운 박스)는 가급적 제자리, passive가 밀린다. 여러 번 반복해 연쇄 겹침까지 해소.
+// 폼박스(구조물=itemId 없음, 벽/문)는 배경이라 충돌 대상에서 제외한다.
+function separate(boxes: BoxDTO[], activeIds: Set<string>): BoxDTO[] {
+  const arr = boxes.map((b) => ({ ...b }));
+  const idx: number[] = [];
+  for (let i = 0; i < arr.length; i++) if (arr[i].itemId) idx.push(i);
+  const ITER = 20;
+  for (let iter = 0; iter < ITER; iter++) {
+    let any = false;
+    for (let p = 0; p < idx.length; p++) {
+      for (let q = p + 1; q < idx.length; q++) {
+        const a = arr[idx[p]];
+        const b = arr[idx[q]];
+        const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+        const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+        if (ox <= 0 || oy <= 0) continue; // 안 겹침
+        any = true;
+        const aAct = activeIds.has(a.id);
+        const bAct = activeIds.has(b.id);
+        // 이동 배분(합=1): active는 안 움직이고 passive를 민다. 둘 다 같으면 반반.
+        let wa: number, wb: number;
+        if (aAct && !bAct) { wa = 0; wb = 1; }
+        else if (!aAct && bAct) { wa = 1; wb = 0; }
+        else { wa = 0.5; wb = 0.5; }
+        if (ox < oy) {
+          // 가로로 분리 — 중심이 왼쪽인 박스를 왼(-)으로, 오른쪽 박스를 오른(+)으로.
+          const aLeft = a.x + a.w / 2 <= b.x + b.w / 2;
+          const left = aLeft ? a : b;
+          const right = aLeft ? b : a;
+          left.x -= ox * (aLeft ? wa : wb);
+          right.x += ox * (aLeft ? wb : wa);
+        } else {
+          const aTop = a.y + a.h / 2 <= b.y + b.h / 2;
+          const top = aTop ? a : b;
+          const bot = aTop ? b : a;
+          top.y -= oy * (aTop ? wa : wb);
+          bot.y += oy * (aTop ? wb : wa);
+        }
+      }
+    }
+    for (const b of arr) {
+      if (b.x < 0) b.x = 0;
+      if (b.y < 0) b.y = 0;
+    }
+    if (!any) break;
+  }
+  for (const b of arr) {
+    b.x = Math.round(b.x);
+    b.y = Math.round(b.y);
+  }
+  return arr;
+}
+
 const HANDLES: Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
 export function WarehouseBoard({
@@ -274,6 +328,10 @@ export function WarehouseBoard({
   const canvasElRef = useRef<HTMLDivElement | null>(null); // 평면도 DOM(마퀴 좌표 계산)
   const marqStart = useRef<{ x0: number; y0: number } | null>(null); // 마퀴 시작점(캔버스 좌표)
   const marqRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null); // 마퀴 현재 사각형
+  const preGesture = useRef<BoxDTO[]>([]); // 제스처 시작 시 전체 박스 스냅샷(밀려난 박스까지 저장 diff용)
+  const liveBoxes = useRef<BoxDTO[]>([]); // 제스처 중 동기 작업본(React 플러시 타이밍과 무관하게 최신 유지)
+  const locationRef = useRef(location); // 현재 장소(전역 리스너에서 최신값 참조)
+  locationRef.current = location;
 
   // 위치 전환 — 해당 위치 박스 로드
   const switchLocation = async (loc: string) => {
@@ -297,8 +355,19 @@ export function WarehouseBoard({
       y: 40 + (n % 8) * 26,
     }).catch(() => null);
     if (res?.ok && res.box) {
-      setBoxes((b) => [...b, res.box!]);
-      setSelectedIds([res.box.id]);
+      const nb = res.box;
+      const before = boxesRef.current;
+      // 새 박스가 기존과 겹치면 기존 셀을 밀어낸다(절대 안 겹침).
+      const merged = separate([...before, nb], new Set([nb.id]));
+      setBoxes(merged);
+      setSelectedIds([nb.id]);
+      const prev = new Map(before.map((b) => [b.id, b]));
+      for (const cur of merged) {
+        const o = prev.get(cur.id);
+        if (o ? o.x !== cur.x || o.y !== cur.y : cur.x !== nb.x || cur.y !== nb.y) {
+          updateBox({ id: cur.id, x: cur.x, y: cur.y }).catch(() => {});
+        }
+      }
       flashSavedRef.current();
     }
   };
@@ -354,11 +423,16 @@ export function WarehouseBoard({
     }
     return undefined;
   };
+  const snapshotForGesture = () => {
+    preGesture.current = boxesRef.current.map((b) => ({ ...b }));
+    liveBoxes.current = boxesRef.current.map((b) => ({ ...b }));
+  };
   const startDrag = (e: React.PointerEvent, box: BoxDTO) => {
     if (e.button !== 0) return;
     e.preventDefault();
     const group = groupFor(box.id);
     if (!group) setSelectedIds([box.id]);
+    snapshotForGesture();
     active.current = { mode: "drag", id: box.id, sx: e.clientX, sy: e.clientY, box: { ...box }, group };
   };
   const startResize = (e: React.PointerEvent, box: BoxDTO, handle: Handle) => {
@@ -366,6 +440,7 @@ export function WarehouseBoard({
     e.stopPropagation();
     const group = groupFor(box.id);
     if (!group) setSelectedIds([box.id]);
+    snapshotForGesture();
     active.current = { mode: "resize", id: box.id, handle, sx: e.clientX, sy: e.clientY, box: { ...box }, group };
   };
 
@@ -396,21 +471,41 @@ export function WarehouseBoard({
       const a = active.current;
       if (!a) return;
       const cv = canvasRef.current;
+      // 지오메트리 변경 적용 → 겹침 밀어내기(separate) → 밀려나 캔버스 밖이면 평면도 자동확장.
+      const commit = (mapFn: (b: BoxDTO) => BoxDTO, activeIds: Set<string>) => {
+        const sep = separate(liveBoxes.current.map(mapFn), activeIds);
+        liveBoxes.current = sep;
+        setBoxes(sep);
+        let needW = 0,
+          needH = 0;
+        for (const b of sep) {
+          needW = Math.max(needW, b.x + b.w);
+          needH = Math.max(needH, b.y + b.h);
+        }
+        const c = canvasRef.current;
+        if (needW > c.w || needH > c.h) {
+          setCanvas({
+            w: Math.max(c.w, Math.ceil(needW) + 40),
+            h: Math.max(c.h, Math.ceil(needH) + 40),
+          });
+        }
+      };
       if (a.mode === "drag") {
         const dx = e.clientX - a.sx,
           dy = e.clientY - a.sy;
         if (a.group && a.group.length > 1) {
-          // 그룹 전체를 같은 델타로 함께 이동(스냅 없음).
+          // 그룹 전체를 같은 델타로 함께 이동(스냅 없음) — 겹치면 다른 셀을 밀어낸다.
           const g = a.group;
-          setBoxes((bs) =>
-            bs.map((b) => {
+          commit(
+            (b) => {
               const o = g.find((x) => x.id === b.id);
               return o ? { ...b, x: Math.max(0, o.x + dx), y: Math.max(0, o.y + dy) } : b;
-            }),
+            },
+            new Set(g.map((x) => x.id)),
           );
           setGuides({ v: [], h: [] });
         } else {
-          const others: Rect[] = boxesRef.current
+          const others: Rect[] = liveBoxes.current
             .filter((b) => b.id !== a.id)
             .map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
           const s = snapDrag(
@@ -419,28 +514,27 @@ export function WarehouseBoard({
             cv.w,
             cv.h,
           );
-          setBoxes((bs) =>
-            bs.map((b) => (b.id === a.id ? { ...b, x: Math.max(0, s.x), y: Math.max(0, s.y) } : b)),
+          commit(
+            (b) => (b.id === a.id ? { ...b, x: Math.max(0, s.x), y: Math.max(0, s.y) } : b),
+            new Set([a.id]),
           );
           setGuides({ v: s.v, h: s.h });
         }
       } else {
-        const others: Rect[] = boxesRef.current
+        const others: Rect[] = liveBoxes.current
           .filter((b) => b.id !== a.id)
           .map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
         const r = snapResize(a.handle, a.box, e.clientX - a.sx, e.clientY - a.sy, others, cv.w, cv.h);
         if (a.group && a.group.length > 1) {
-          // 그룹 전체를 '똑같은 크기'로: 잡은 박스만 스냅 위치 반영, 나머지는 제자리(x,y) + 같은 w,h.
+          // 그룹 전체를 '똑같은 크기'로 키우고, 서로/이웃과 겹치면 밀어낸다(절대 안 겹침).
           const ids = new Set(a.group.map((x) => x.id));
-          setBoxes((bs) =>
-            bs.map((b) => {
-              if (b.id === a.id) return { ...b, x: r.x, y: r.y, w: r.w, h: r.h };
-              return ids.has(b.id) ? { ...b, w: r.w, h: r.h } : b;
-            }),
-          );
+          commit((b) => {
+            if (b.id === a.id) return { ...b, x: r.x, y: r.y, w: r.w, h: r.h };
+            return ids.has(b.id) ? { ...b, w: r.w, h: r.h } : b;
+          }, ids);
           setGuides({ v: r.vg, h: r.hg });
         } else {
-          setBoxes((bs) => bs.map((b) => (b.id === a.id ? { ...b, x: r.x, y: r.y, w: r.w, h: r.h } : b)));
+          commit((b) => (b.id === a.id ? { ...b, x: r.x, y: r.y, w: r.w, h: r.h } : b), new Set([a.id]));
           setGuides({ v: r.vg, h: r.hg });
         }
       }
@@ -473,11 +567,42 @@ export function WarehouseBoard({
       if (!a) return;
       active.current = null;
       setGuides({ v: [], h: [] });
-      // 단일이면 그 박스만, 그룹이면 그룹 전체를 저장.
-      const ids = a.group && a.group.length > 1 ? a.group.map((g) => g.id) : [a.id];
-      for (const id of ids) {
-        const cur = boxesRef.current.find((b) => b.id === id);
-        if (cur) updateBox({ id: cur.id, x: cur.x, y: cur.y, w: cur.w, h: cur.h }).catch(() => {});
+      // 저장 직전 한 번 더 확실히 겹침 정리(제스처 작업본 기준 — 플러시 타이밍과 무관).
+      const activeIds = new Set(
+        a.group && a.group.length > 1 ? a.group.map((g) => g.id) : [a.id],
+      );
+      const base = liveBoxes.current.length ? liveBoxes.current : boxesRef.current;
+      const finalBoxes = separate(base, activeIds);
+      liveBoxes.current = finalBoxes;
+      setBoxes(finalBoxes);
+      // 밀려나 캔버스 밖이면 평면도 확장(밀려난 셀이 안 잘리게).
+      let needW = 0,
+        needH = 0;
+      for (const b of finalBoxes) {
+        needW = Math.max(needW, b.x + b.w);
+        needH = Math.max(needH, b.y + b.h);
+      }
+      const c0 = canvasRef.current;
+      const grew = needW > c0.w || needH > c0.h;
+      const finalCanvas = grew
+        ? { w: Math.max(c0.w, Math.ceil(needW) + 40), h: Math.max(c0.h, Math.ceil(needH) + 40) }
+        : c0;
+      if (grew) setCanvas(finalCanvas);
+      // 방금 옮긴 것 + 밀려난 것 — 시작 스냅샷 대비 바뀐 박스는 모두 저장.
+      const before = new Map(preGesture.current.map((b) => [b.id, b]));
+      for (const cur of finalBoxes) {
+        const o = before.get(cur.id);
+        if (o && (o.x !== cur.x || o.y !== cur.y || o.w !== cur.w || o.h !== cur.h)) {
+          updateBox({ id: cur.id, x: cur.x, y: cur.y, w: cur.w, h: cur.h }).catch(() => {});
+        }
+      }
+      // 캔버스가 커졌으면 이 장소 크기로 저장.
+      if (grew) {
+        try {
+          localStorage.setItem(canvasKeyFor(locationRef.current), JSON.stringify(finalCanvas));
+        } catch {
+          /* noop */
+        }
       }
       flashSavedRef.current();
     };
