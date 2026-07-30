@@ -251,6 +251,15 @@ export async function saveBoardAction(input: {
   return { ok: true };
 }
 
+// 실물재고 동기화(수동 버튼) — 지금 재고현황(base)을 창고 '수량' 스냅샷으로 반영. 재고현황은 안 바꿈.
+export async function syncWarehouseStockAction(): Promise<{ ok: boolean; count: number }> {
+  await requireAdmin();
+  const { snapshotWarehouseStock } = await import("@/lib/warehouse-stock");
+  const count = await snapshotWarehouseStock();
+  revalidatePath("/warehouse");
+  return { ok: true, count };
+}
+
 // ── 창고관리 진입 비밀번호 확인 → 통과 시 쿠키 세팅 ──
 export async function unlockWarehouseAction(formData: FormData) {
   await requireAdmin();

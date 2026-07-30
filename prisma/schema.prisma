@@ -315,6 +315,8 @@ model StockHold {
 model AppMeta {
   key      String   @id
   syncedAt DateTime @default(now())
+  // 값 저장용(JSON 등) — 창고 실물재고 스냅샷(wh_stock_snap) 같은 키-값 데이터.
+  value    String   @default("")
 }
 
 // 재고현황 — 새롭(본사)이 작성/구글시트 동기화, 핫딜마켓 가맹점만 열람

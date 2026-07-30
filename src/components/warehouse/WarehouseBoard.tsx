@@ -13,6 +13,7 @@ import {
   deleteLocationAction,
   moveLocationAction,
   saveBoardAction,
+  syncWarehouseStockAction,
   type BoxDTO,
 } from "@/app/actions/warehouse";
 
@@ -312,6 +313,18 @@ export function WarehouseBoard({
       m.set(i.itemId, i.qty);
     return m;
   }, [activeStore, storeFilters]);
+  // 품목별 '예약(오늘 출고할 담기·예약연동)' 수량 — 전체 취합. 지점 선택 시엔 storeQty(그 지점)만.
+  const reservedAllByItem = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const f of storeFilters)
+      for (const i of f.items) m.set(i.itemId, (m.get(i.itemId) ?? 0) + i.qty);
+    return m;
+  }, [storeFilters]);
+  // 이 박스 품목의 '예약' 수량 — 전체보기=취합, 지점선택=그 지점.
+  const reservedOf = (itemId: string | null | undefined): number => {
+    if (!itemId) return 0;
+    return storeQty ? storeQty.get(itemId) ?? 0 : reservedAllByItem.get(itemId) ?? 0;
+  };
   // 박스의 품목이 유통기한 임박(≤30일)/만료인지 — itemId로 재고 조회 후 expiryInfo.
   const isExpiryBox = (b: BoxDTO) => {
     if (!b.itemId) return false;
@@ -385,6 +398,26 @@ export function WarehouseBoard({
       if (next) setSelectedIds([]);
       return next;
     });
+  };
+
+  // 실물재고 동기화 — 지금 재고현황(base)을 창고 '수량'으로 반영(스냅샷 갱신). 재고현황은 안 바뀜.
+  const [syncing, setSyncing] = useState(false);
+  const syncStock = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await syncWarehouseStockAction();
+      const res = await fetch("/api/warehouse/stock", { cache: "no-store" });
+      if (res.ok) {
+        const j = (await res.json()) as { qty?: Record<string, number> };
+        if (j.qty) setLiveQty(j.qty);
+      }
+      flashSavedRef.current();
+    } catch {
+      /* noop */
+    } finally {
+      setSyncing(false);
+    }
   };
 
   // 팔레트 품목 → 박스 추가(계단식 오프셋으로 겹침 방지)
@@ -753,6 +786,15 @@ export function WarehouseBoard({
           </a>
           <button
             type="button"
+            className="whtop__sync"
+            onClick={syncStock}
+            disabled={syncing}
+            title="지금 재고현황을 창고 '수량'에 반영(실물재고 동기화). 매일 오전 10시 자동으로도 동기화됩니다."
+          >
+            {syncing ? "동기화 중…" : "🔄 동기화"}
+          </button>
+          <button
+            type="button"
             className={`whtop__lock ${locked ? "is-on" : ""}`}
             onClick={toggleLock}
             title="잠그면 이동·수정·추가가 막혀 보기 전용이 됩니다(주문 반짝임은 유지). 다시 누르면 풀려요."
@@ -1045,7 +1087,8 @@ export function WarehouseBoard({
                   <span className="whbox__label">{b.label}</span>
                   {!isForm && qv != null && (
                     <span className={`whbox__qty${qv <= 0 ? " is-out" : ""}`}>
-                      {qv <= 0 ? "(품절)" : `(${qv}개)`}
+                      수량 {qv}
+                      <span className="whbox__resv"> ㅣ 예약 {reservedOf(b.itemId)}</span>
                     </span>
                   )}
                   {sel && (

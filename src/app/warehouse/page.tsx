@@ -2,9 +2,7 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { headers, cookies } from "next/headers";
 import { kstToday, orderRangeForShipment } from "@/lib/date";
-import { heldByItem } from "@/lib/stock-hold";
-import { reservationHeldByItem } from "@/lib/reservation-stock";
-import { windowKeyAt } from "@/lib/schedule";
+import { getWarehouseStockSnapshot } from "@/lib/warehouse-stock";
 import { WarehouseBoard } from "@/components/warehouse/WarehouseBoard";
 import type { BoxDTO } from "@/app/actions/warehouse";
 import { unlockWarehouseAction } from "@/app/actions/warehouse";
@@ -37,10 +35,8 @@ export default async function WarehousePage(props: {
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: { id: true, name: true, qty: true, expiry: true },
   });
-  const [held, resv] = await Promise.all([
-    heldByItem(windowKeyAt()),
-    reservationHeldByItem(),
-  ]);
+  // 창고 '수량' = 실물재고 스냅샷(재고현황 base 기준). 없으면 실시간 base.
+  const stockSnap = await getWarehouseStockSnapshot();
 
   // 창고 장소(동적) — 관리자가 추가/이름변경/삭제. 박스가 있는 장소는 삭제 못 하게 boxCount도 전달.
   // placedRows: '미배치' 필터용 — 전 장소(모든 위치)에서 한 번이라도 박스로 배치된 재고 품목 id.
@@ -170,7 +166,7 @@ export default async function WarehousePage(props: {
       items={items.map((it) => ({
         id: it.id,
         name: it.name,
-        qty: Math.max(0, it.qty - (held[it.id] ?? 0) - (resv[it.id] ?? 0)),
+        qty: stockSnap?.map[it.id] ?? it.qty,
         expiry: it.expiry ?? "",
       }))}
       initialLocation={initialLocation}

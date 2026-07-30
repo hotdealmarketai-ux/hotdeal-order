@@ -4046,6 +4046,13 @@ a.resv-card:active { transform: scale(0.995); }
 .whtop__save { border-color: #2f6b45; color: #7ee0a0; }
 .whtop__save:hover { background: #16351f; color: #aef0c4; }
 .whtop__save:disabled { opacity: 0.55; cursor: default; }
+.whtop__sync {
+  border: 1px solid #2c3b57; background: transparent; color: #b8c6de;
+  padding: 7px 14px; border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-size: 13px; font-weight: 700; white-space: nowrap;
+}
+.whtop__sync:hover { background: #1a2740; color: #fff; }
+.whtop__sync:disabled { opacity: 0.55; cursor: default; }
 /* 지점 선택 시 그 품목이 있는 장소 탭 반짝임 */
 .whtab--glow { border-color: #f59e0b !important; color: #fde68a; animation: whGlowToday 1.2s ease-in-out infinite; }
 /* 장소 편집 — 순서 바꾸기 위/아래 */
@@ -4221,6 +4228,8 @@ a.resv-card:active { transform: scale(0.995); }
 /* 남은수량(재고현황 실시간) — 박스 라벨 밑. 평면도에서 잘 보이게 크게. */
 .whbox__qty { pointer-events: none; font-size: 15px; font-weight: 800; color: #1d4ed8; margin-top: 1px; }
 .whbox__qty.is-out { color: #dc2626; }
+/* 예약(잡힌) 수량 — 실물 '수량' 옆에 작게 회색. 전체=취합, 지점선택=그 지점. */
+.whbox__resv { font-size: 11px; font-weight: 700; color: #64748b; }
 /* 품절 박스 — 빨강 틴트 */
 .whbox--out { background: #fee2e2; border-color: #dc2626; color: #7f1d1d; }
 .whbox--out .whbox__label { color: #7f1d1d; }
