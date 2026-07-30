@@ -125,6 +125,7 @@ export async function updateBox(input: {
   h?: number;
   label?: string;
   z?: number;
+  color?: string; // 셀 배경색(우클릭 색 선택). ""=기본색으로 초기화. 허용: "" 또는 #rrggbb.
 }): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   const id = String(input.id ?? "");
@@ -135,6 +136,11 @@ export async function updateBox(input: {
   if (input.w != null) data.w = clampSize(input.w);
   if (input.h != null) data.h = clampSize(input.h);
   if (input.z != null) data.z = Math.max(0, Math.round(Number(input.z) || 0));
+  if (input.color != null) {
+    // 안전: 빈 문자열(기본색 초기화) 또는 #rrggbb 6자리 헥스만 저장.
+    const c = String(input.color);
+    if (c === "" || /^#[0-9a-fA-F]{6}$/.test(c)) data.color = c;
+  }
   if (input.label != null) {
     const l = String(input.label).trim().slice(0, 80);
     if (l) data.label = l;

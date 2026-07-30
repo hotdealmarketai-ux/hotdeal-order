@@ -20,13 +20,18 @@ type LocationDTO = { id: string; name: string; boxCount: number };
 // 캔버스 논리 크기(평면도) 기본값 — 사용자가 자유 리사이즈(#12) 가능, localStorage 유지.
 const CANVAS_DEFAULT = { w: 1600, h: 1000 };
 const CANVAS_KEY = "wh_canvas";
+// 장소(위치)별 평면도 크기 — localStorage 키를 위치별로 분리(냉동고/냉장고 각각 다르게 저장).
+// 값이 없으면 예전 전역 키(CANVAS_KEY)로 폴백 → 기존에 정해둔 크기를 그대로 보존한다.
+const canvasKeyFor = (loc: string) => `${CANVAS_KEY}:${loc}`;
+// 우클릭 셀 배경색 6종. 어두운 보드 위에서 대비되는 파스텔(검정 텍스트 가독).
+const BOX_COLORS = ["#fecaca", "#fed7aa", "#fde68a", "#bbf7d0", "#bfdbfe", "#e9d5ff"];
 const SNAP = 6; // 스냅 임계(px)
 const MIN = 40; // 최소 박스 크기(px)
 
 type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 type Active =
-  | { mode: "drag"; id: string; sx: number; sy: number; box: BoxDTO }
-  | { mode: "resize"; id: string; handle: Handle; sx: number; sy: number; box: BoxDTO };
+  | { mode: "drag"; id: string; sx: number; sy: number; box: BoxDTO; group?: BoxDTO[] }
+  | { mode: "resize"; id: string; handle: Handle; sx: number; sy: number; box: BoxDTO; group?: BoxDTO[] };
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -133,6 +138,7 @@ export function WarehouseBoard({
   todayCount,
   storeFilters,
   locations,
+  placedAllIds,
 }: {
   storeName: string;
   items: Item[];
@@ -143,12 +149,16 @@ export function WarehouseBoard({
   storeFilters: { storeName: string; items: { itemId: string; qty: number }[] }[];
   // 창고 장소(동적) — 관리자가 추가/이름변경/삭제. boxCount>0이면 삭제 불가.
   locations: LocationDTO[];
+  // 미배치 필터용 — 전 장소(모든 위치)에서 한 번이라도 배치된 재고 품목 id(페이지 로드 스냅샷).
+  placedAllIds: string[];
 }) {
   const [location, setLocation] = useState<string>(initialLocation);
   const [locEdit, setLocEdit] = useState(false); // 장소 편집(추가/이름변경/삭제) 패널 토글
   const [boxes, setBoxes] = useState<BoxDTO[]>(initialBoxes);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]); // 다중 선택(드래그 셀 선택)
+  const [showUnplaced, setShowUnplaced] = useState(false); // 미배치(전 장소 어디에도 없는 품목)만
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null); // 드래그 선택 사각형(캔버스 좌표)
   const [guides, setGuides] = useState<{ v: number[]; h: number[] }>({ v: [], h: [] });
   const [q, setQ] = useState("");
   const [showIntro, setShowIntro] = useState(true); // #12 로그인 인트로(오늘 발주 요약)
@@ -196,18 +206,25 @@ export function WarehouseBoard({
     };
   }, []);
 
-  // 캔버스 크기 복원(localStorage). 리사이즈 후 저장.
+  // 캔버스 크기 복원 — 장소(위치)별 저장값. 없으면 예전 전역값(CANVAS_KEY)로 폴백해 기존 크기 보존.
+  // location이 바뀔 때마다 그 장소의 크기로 갱신 → 냉동고/냉장고 각각 다른 평면도 크기.
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(CANVAS_KEY);
+      const raw =
+        localStorage.getItem(canvasKeyFor(location)) ||
+        localStorage.getItem(CANVAS_KEY);
       if (raw) {
         const c = JSON.parse(raw);
-        if (c && c.w > 0 && c.h > 0) setCanvas({ w: c.w, h: c.h });
+        if (c && c.w > 0 && c.h > 0) {
+          setCanvas({ w: c.w, h: c.h });
+          return;
+        }
       }
+      setCanvas(CANVAS_DEFAULT);
     } catch {
-      /* noop */
+      setCanvas(CANVAS_DEFAULT);
     }
-  }, []);
+  }, [location]);
 
   // 품목 id → 정보(유통기한 임박 판정용). 오늘 발주 품목명(정규화) 집합.
   const itemById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
@@ -252,14 +269,17 @@ export function WarehouseBoard({
   const active = useRef<Active | null>(null);
   const boxesRef = useRef(boxes);
   boxesRef.current = boxes;
-  const selectedRef = useRef(selected);
-  selectedRef.current = selected;
+  const selectedRef = useRef(selectedIds);
+  selectedRef.current = selectedIds;
+  const canvasElRef = useRef<HTMLDivElement | null>(null); // 평면도 DOM(마퀴 좌표 계산)
+  const marqStart = useRef<{ x0: number; y0: number } | null>(null); // 마퀴 시작점(캔버스 좌표)
+  const marqRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null); // 마퀴 현재 사각형
 
   // 위치 전환 — 해당 위치 박스 로드
   const switchLocation = async (loc: string) => {
     if (loc === location || active.current) return;
     setLocation(loc);
-    setSelected(null);
+    setSelectedIds([]);
     setLoading(true);
     const rows = await listBoxes(loc).catch(() => [] as BoxDTO[]);
     setBoxes(rows);
@@ -278,7 +298,7 @@ export function WarehouseBoard({
     }).catch(() => null);
     if (res?.ok && res.box) {
       setBoxes((b) => [...b, res.box!]);
-      setSelected(res.box.id);
+      setSelectedIds([res.box.id]);
       flashSavedRef.current();
     }
   };
@@ -298,15 +318,22 @@ export function WarehouseBoard({
     if (res?.ok && res.box) {
       setBoxes((b) => [...b, res.box!]);
       setFormEdit(true);
-      setSelected(res.box.id);
+      setSelectedIds([res.box.id]);
       flashSavedRef.current();
     }
   };
 
   const removeBox = async (id: string) => {
     setBoxes((b) => b.filter((x) => x.id !== id));
-    if (selectedRef.current === id) setSelected(null);
+    setSelectedIds((ids) => ids.filter((x) => x !== id));
     await deleteBox(id).catch(() => {});
+    flashSavedRef.current();
+  };
+
+  // 셀 배경색 변경(우클릭 색 선택). ""=기본색으로 초기화.
+  const setBoxColor = async (id: string, color: string) => {
+    setBoxes((b) => b.map((x) => (x.id === id ? { ...x, color } : x)));
+    await updateBox({ id, color }).catch(() => {});
     flashSavedRef.current();
   };
 
@@ -318,57 +345,141 @@ export function WarehouseBoard({
     flashSavedRef.current();
   };
 
+  // 여러 개가 선택된 상태에서 그 중 하나를 잡으면 그룹 전체 스냅샷을 만든다(함께 이동/똑같이 리사이즈).
+  // 선택 밖의 박스를 잡으면 그 하나만 단일 선택.
+  const groupFor = (id: string): BoxDTO[] | undefined => {
+    const ids = selectedRef.current;
+    if (ids.length > 1 && ids.includes(id)) {
+      return boxesRef.current.filter((b) => ids.includes(b.id)).map((b) => ({ ...b }));
+    }
+    return undefined;
+  };
   const startDrag = (e: React.PointerEvent, box: BoxDTO) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    setSelected(box.id);
-    active.current = { mode: "drag", id: box.id, sx: e.clientX, sy: e.clientY, box: { ...box } };
+    const group = groupFor(box.id);
+    if (!group) setSelectedIds([box.id]);
+    active.current = { mode: "drag", id: box.id, sx: e.clientX, sy: e.clientY, box: { ...box }, group };
   };
   const startResize = (e: React.PointerEvent, box: BoxDTO, handle: Handle) => {
     e.preventDefault();
     e.stopPropagation();
-    setSelected(box.id);
-    active.current = { mode: "resize", id: box.id, handle, sx: e.clientX, sy: e.clientY, box: { ...box } };
+    const group = groupFor(box.id);
+    if (!group) setSelectedIds([box.id]);
+    active.current = { mode: "resize", id: box.id, handle, sx: e.clientX, sy: e.clientY, box: { ...box }, group };
   };
 
-  // 전역 포인터 이동/해제 — 드래그·리사이즈 처리 + 스냅
+  // 전역 포인터 이동/해제 — 마퀴(드래그 선택) + 박스 드래그·리사이즈(단일/그룹) + 스냅
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
+      // 1) 드래그 선택(마퀴) 진행 중 — 캔버스 좌표로 사각형 갱신
+      if (marqStart.current) {
+        const el = canvasElRef.current;
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const cw = canvasRef.current.w,
+            ch = canvasRef.current.h;
+          const cx = Math.max(0, Math.min(cw, e.clientX - rect.left));
+          const cy = Math.max(0, Math.min(ch, e.clientY - rect.top));
+          const { x0, y0 } = marqStart.current;
+          const r = {
+            x: Math.min(x0, cx),
+            y: Math.min(y0, cy),
+            w: Math.abs(cx - x0),
+            h: Math.abs(cy - y0),
+          };
+          marqRect.current = r;
+          setMarquee(r);
+        }
+        return;
+      }
       const a = active.current;
       if (!a) return;
-      const others: Rect[] = boxesRef.current
-        .filter((b) => b.id !== a.id)
-        .map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
       const cv = canvasRef.current;
       if (a.mode === "drag") {
-        const s = snapDrag(
-          { x: a.box.x + (e.clientX - a.sx), y: a.box.y + (e.clientY - a.sy), w: a.box.w, h: a.box.h },
-          others,
-          cv.w,
-          cv.h,
-        );
-        setBoxes((bs) =>
-          bs.map((b) => (b.id === a.id ? { ...b, x: Math.max(0, s.x), y: Math.max(0, s.y) } : b)),
-        );
-        setGuides({ v: s.v, h: s.h });
+        const dx = e.clientX - a.sx,
+          dy = e.clientY - a.sy;
+        if (a.group && a.group.length > 1) {
+          // 그룹 전체를 같은 델타로 함께 이동(스냅 없음).
+          const g = a.group;
+          setBoxes((bs) =>
+            bs.map((b) => {
+              const o = g.find((x) => x.id === b.id);
+              return o ? { ...b, x: Math.max(0, o.x + dx), y: Math.max(0, o.y + dy) } : b;
+            }),
+          );
+          setGuides({ v: [], h: [] });
+        } else {
+          const others: Rect[] = boxesRef.current
+            .filter((b) => b.id !== a.id)
+            .map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
+          const s = snapDrag(
+            { x: a.box.x + dx, y: a.box.y + dy, w: a.box.w, h: a.box.h },
+            others,
+            cv.w,
+            cv.h,
+          );
+          setBoxes((bs) =>
+            bs.map((b) => (b.id === a.id ? { ...b, x: Math.max(0, s.x), y: Math.max(0, s.y) } : b)),
+          );
+          setGuides({ v: s.v, h: s.h });
+        }
       } else {
+        const others: Rect[] = boxesRef.current
+          .filter((b) => b.id !== a.id)
+          .map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h }));
         const r = snapResize(a.handle, a.box, e.clientX - a.sx, e.clientY - a.sy, others, cv.w, cv.h);
-        setBoxes((bs) =>
-          bs.map((b) => (b.id === a.id ? { ...b, x: r.x, y: r.y, w: r.w, h: r.h } : b)),
-        );
-        setGuides({ v: r.vg, h: r.hg });
+        if (a.group && a.group.length > 1) {
+          // 그룹 전체를 '똑같은 크기'로: 잡은 박스만 스냅 위치 반영, 나머지는 제자리(x,y) + 같은 w,h.
+          const ids = new Set(a.group.map((x) => x.id));
+          setBoxes((bs) =>
+            bs.map((b) => {
+              if (b.id === a.id) return { ...b, x: r.x, y: r.y, w: r.w, h: r.h };
+              return ids.has(b.id) ? { ...b, w: r.w, h: r.h } : b;
+            }),
+          );
+          setGuides({ v: r.vg, h: r.hg });
+        } else {
+          setBoxes((bs) => bs.map((b) => (b.id === a.id ? { ...b, x: r.x, y: r.y, w: r.w, h: r.h } : b)));
+          setGuides({ v: r.vg, h: r.hg });
+        }
       }
     };
     const onUp = () => {
+      // 마퀴 종료 → 사각형에 걸린 재고 셀(품목)만 다중 선택
+      if (marqStart.current) {
+        marqStart.current = null;
+        const m = marqRect.current;
+        marqRect.current = null;
+        setMarquee(null);
+        if (m && (m.w > 3 || m.h > 3)) {
+          const hit = boxesRef.current
+            .filter(
+              (b) =>
+                b.itemId &&
+                b.x < m.x + m.w &&
+                b.x + b.w > m.x &&
+                b.y < m.y + m.h &&
+                b.y + b.h > m.y,
+            )
+            .map((b) => b.id);
+          setSelectedIds(hit);
+        } else {
+          setSelectedIds([]); // 빈 클릭 = 선택 해제
+        }
+        return;
+      }
       const a = active.current;
       if (!a) return;
       active.current = null;
       setGuides({ v: [], h: [] });
-      const cur = boxesRef.current.find((b) => b.id === a.id);
-      if (cur) {
-        updateBox({ id: cur.id, x: cur.x, y: cur.y, w: cur.w, h: cur.h }).catch(() => {});
-        flashSavedRef.current();
+      // 단일이면 그 박스만, 그룹이면 그룹 전체를 저장.
+      const ids = a.group && a.group.length > 1 ? a.group.map((g) => g.id) : [a.id];
+      for (const id of ids) {
+        const cur = boxesRef.current.find((b) => b.id === id);
+        if (cur) updateBox({ id: cur.id, x: cur.x, y: cur.y, w: cur.w, h: cur.h }).catch(() => {});
       }
+      flashSavedRef.current();
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -383,9 +494,9 @@ export function WarehouseBoard({
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedRef.current) {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedRef.current.length) {
         e.preventDefault();
-        removeBox(selectedRef.current);
+        [...selectedRef.current].forEach((id) => removeBox(id));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -394,13 +505,21 @@ export function WarehouseBoard({
   }, []);
 
   const placedItemIds = new Set(boxes.map((b) => b.itemId).filter(Boolean));
+  // 미배치 필터용 — 전 장소 스냅샷(placedAllIds) + 현재 장소 실시간 박스의 합집합.
+  // (다른 장소는 로드 시점 스냅샷, 현재 장소는 추가/삭제 즉시 반영)
+  const placedAnywhere = new Set<string>([
+    ...placedAllIds,
+    ...(boxes.map((b) => b.itemId).filter(Boolean) as string[]),
+  ]);
   const searched = q.trim()
     ? items.filter((it) => it.name.replace(/\s/g, "").includes(q.trim().replace(/\s/g, "")))
     : items;
-  // 지점 필터가 켜지면 그 지점에 발주가 들어온 품목만 팔레트에 보인다. 전체면 전 품목.
-  const filtered = storeQty
-    ? searched.filter((it) => storeQty.has(it.id))
-    : searched;
+  // 지점 필터가 켜지면 그 지점 발주 품목만. '미배치' 체크 시 어느 장소에도 없는 품목만.
+  const filtered = searched.filter((it) => {
+    if (storeQty && !storeQty.has(it.id)) return false;
+    if (showUnplaced && placedAnywhere.has(it.id)) return false;
+    return true;
+  });
 
   return (
     <div className="whwrap">
@@ -571,6 +690,14 @@ export function WarehouseBoard({
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
+          <label className="whside__unplaced" title="전 장소(모든 위치) 중 어디에도 배치되지 않은 품목만 보기">
+            <input
+              type="checkbox"
+              checked={showUnplaced}
+              onChange={(e) => setShowUnplaced(e.target.checked)}
+            />
+            <span>미배치만 보기</span>
+          </label>
           <div className="whpal">
             {filtered.length === 0 && <div className="whpal__empty">품목이 없어요.</div>}
             {filtered.map((it) => {
@@ -628,14 +755,37 @@ export function WarehouseBoard({
 
         </aside>
 
-        <div className="whcanvaswrap">
+        <div
+          className="whcanvaswrap"
+          onPointerDown={(e) => {
+            // 빈 곳(박스/리사이즈 핸들 제외)에서 시작하면 드래그 선택(마퀴) 시작 — 안이든 밖이든.
+            const t = e.target as HTMLElement;
+            if (t.closest(".whbox") || t.closest(".whcanvas__resize")) return;
+            const el = canvasElRef.current;
+            if (!el) return;
+            e.preventDefault();
+            const rect = el.getBoundingClientRect();
+            const cw = canvasRef.current.w,
+              ch = canvasRef.current.h;
+            const x0 = Math.max(0, Math.min(cw, e.clientX - rect.left));
+            const y0 = Math.max(0, Math.min(ch, e.clientY - rect.top));
+            marqStart.current = { x0, y0 };
+            marqRect.current = { x: x0, y: y0, w: 0, h: 0 };
+            setMarquee({ x: x0, y: y0, w: 0, h: 0 });
+          }}
+        >
           <div
             className="whcanvas"
+            ref={canvasElRef}
             style={{ width: canvas.w, height: canvas.h }}
-            onPointerDown={(e) => {
-              if (e.target === e.currentTarget) setSelected(null);
-            }}
           >
+            {/* 드래그 선택 사각형(마퀴) */}
+            {marquee && (
+              <div
+                className="whmarquee"
+                style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
+              />
+            )}
             {/* 스냅 가이드선 */}
             {guides.v.map((x, i) => (
               <div key={`v${i}`} className="whguide whguide--v" style={{ left: x }} />
@@ -645,8 +795,9 @@ export function WarehouseBoard({
             ))}
 
             {boxes.map((b) => {
-              const sel = b.id === selected;
-              const isForm = b.color === "form"; // 폼박스(구조물)
+              const sel = selectedIds.includes(b.id);
+              const isForm = !b.itemId; // 폼박스(구조물)=재고 품목 없는 박스. color는 배경색 용도로 자유롭게 씀.
+              const custom = /^#[0-9a-fA-F]{6}$/.test(b.color) ? b.color : null; // 우클릭 지정 배경색
               const today = !isForm && !!b.itemId && glowIds.has(b.itemId); // 오늘 나갈 품목 → 반짝
               const expSoon = !isForm && expiryOn && isExpiryBox(b); // 유통기한 임박 토글 ON + 임박
               // 흐리게(필터 효과): 유통기한 모드면 임박 아닌 것 / 특정 지점 필터면 그 지점 품목 아닌 것.
@@ -671,13 +822,16 @@ export function WarehouseBoard({
                     height: b.h,
                     zIndex: zi,
                     pointerEvents: clickable ? "auto" : "none",
+                    ...(custom ? { background: custom } : {}),
                   }}
                   onPointerDown={(e) => clickable && startDrag(e, b)}
                   onDoubleClick={() => clickable && renameBox(b)}
                   onContextMenu={(e) => {
                     if (!clickable) return;
                     e.preventDefault();
-                    setSelected(b.id);
+                    // 다중 선택 중 하나를 우클릭하면 선택 유지(색을 전체 적용), 아니면 그 박스만 선택.
+                    if (!(selectedIds.includes(b.id) && selectedIds.length > 1))
+                      setSelectedIds([b.id]);
                     setMenu({ id: b.id, x: e.clientX, y: e.clientY });
                   }}
                   onPointerEnter={() => !isForm && setHovered(b.id)}
@@ -686,7 +840,7 @@ export function WarehouseBoard({
                   <span className="whbox__label">{b.label}</span>
                   {!isForm && qv != null && (
                     <span className={`whbox__qty${qv <= 0 ? " is-out" : ""}`}>
-                      {qv <= 0 ? "품절" : `${qv}개`}
+                      {qv <= 0 ? "(품절)" : `(${qv}개)`}
                     </span>
                   )}
                   {sel && (
@@ -735,7 +889,8 @@ export function WarehouseBoard({
                   el.removeEventListener("pointermove", move);
                   el.removeEventListener("pointerup", up);
                   try {
-                    localStorage.setItem(CANVAS_KEY, JSON.stringify(canvasRef.current));
+                    // 이 장소(위치)의 평면도 크기만 저장 — 다른 장소는 영향 없음.
+                    localStorage.setItem(canvasKeyFor(location), JSON.stringify(canvasRef.current));
                   } catch {
                     /* noop */
                   }
@@ -761,6 +916,41 @@ export function WarehouseBoard({
             }}
           />
           <div className="whmenu" style={{ left: menu.x, top: menu.y }}>
+            {/* 셀 배경색 — 6색 + 기본색 초기화. 다중 선택 중이면 선택된 셀 전체에 적용. */}
+            <div className="whmenu__colors">
+              {BOX_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className="whmenu__color"
+                  style={{ background: c }}
+                  title="이 색으로"
+                  onClick={() => {
+                    const targets =
+                      selectedIds.includes(menu.id) && selectedIds.length > 1
+                        ? selectedIds
+                        : [menu.id];
+                    setMenu(null);
+                    targets.forEach((id) => setBoxColor(id, c));
+                  }}
+                />
+              ))}
+              <button
+                type="button"
+                className="whmenu__color whmenu__color--reset"
+                title="기본색으로"
+                onClick={() => {
+                  const targets =
+                    selectedIds.includes(menu.id) && selectedIds.length > 1
+                      ? selectedIds
+                      : [menu.id];
+                  setMenu(null);
+                  targets.forEach((id) => setBoxColor(id, ""));
+                }}
+              >
+                ✕
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => {

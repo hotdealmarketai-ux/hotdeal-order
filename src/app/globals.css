@@ -4099,6 +4099,12 @@ a.resv-card:active { transform: scale(0.995); }
   font-family: inherit; font-size: 14px; outline: none;
 }
 .whside__search::placeholder { color: #5f7396; }
+/* 미배치만 보기 체크박스 */
+.whside__unplaced {
+  display: flex; align-items: center; gap: 7px; cursor: pointer;
+  margin: 8px 16px 4px; font-size: 12.5px; font-weight: 600; color: #9fb0cc; user-select: none;
+}
+.whside__unplaced input { width: 15px; height: 15px; accent-color: #2563eb; cursor: pointer; }
 .whpal { flex: 1; overflow-y: auto; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 5px; }
 .whpal__empty { color: #5f7396; font-size: 13px; padding: 10px 6px; }
 .whpal__item {
@@ -4129,6 +4135,20 @@ a.resv-card:active { transform: scale(0.995); }
 }
 .whmenu button:hover { background: #26344e; }
 .whmenu__del { color: #ff6b8a; }
+/* 셀 배경색 선택 — 6색 스와치 + 기본색 초기화 */
+.whmenu__colors {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px 8px; max-width: 176px;
+  border-bottom: 1px solid #2a3a56; margin-bottom: 4px;
+}
+.whmenu__color {
+  width: 24px; height: 24px; padding: 0; border-radius: 6px; cursor: pointer;
+  border: 1px solid #ffffff30; box-shadow: 0 1px 3px #0006;
+}
+.whmenu__color:hover { transform: scale(1.12); border-color: #fff; }
+.whmenu__color--reset {
+  background: #2a3550; color: #c7d3e6; font-size: 12px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+}
 
 /* 자동 저장 표시 칩 */
 .whsave {
@@ -4154,6 +4174,11 @@ a.resv-card:active { transform: scale(0.995); }
 .whguide { position: absolute; background: #ff3b6b; z-index: 1000; pointer-events: none; }
 .whguide--v { top: 0; bottom: 0; width: 1px; }
 .whguide--h { left: 0; right: 0; height: 1px; }
+/* 드래그 선택 사각형(마퀴) */
+.whmarquee {
+  position: absolute; z-index: 3500; pointer-events: none;
+  border: 1.5px solid #2563eb; background: rgba(37, 99, 235, 0.12); border-radius: 2px;
+}
 
 /* 박스 */
 .whbox {
@@ -4167,8 +4192,8 @@ a.resv-card:active { transform: scale(0.995); }
 .whbox:active { cursor: grabbing; }
 .whbox--sel { border-color: #ff3b6b; box-shadow: 0 0 0 2px #ff3b6b40; background: #e3edff; }
 .whbox__label { pointer-events: none; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-/* 남은수량(재고현황 실시간) — 박스 라벨 밑 */
-.whbox__qty { pointer-events: none; font-size: 11px; font-weight: 800; color: #1d4ed8; }
+/* 남은수량(재고현황 실시간) — 박스 라벨 밑. 평면도에서 잘 보이게 크게. */
+.whbox__qty { pointer-events: none; font-size: 15px; font-weight: 800; color: #1d4ed8; margin-top: 1px; }
 .whbox__qty.is-out { color: #dc2626; }
 /* 품절 박스 — 빨강 틴트 */
 .whbox--out { background: #fee2e2; border-color: #dc2626; color: #7f1d1d; }
