@@ -13,22 +13,35 @@ export default async function InboundPage() {
   const [logs, catRows] = await Promise.all([
     // 최근 입고 기록(스크롤 창). 전체 기록은 검색으로 조회.
     prisma.inboundLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }),
-    // 카테고리 선택지 — 재고현황 품목에 붙은 대분류에서 도출(빈값 제외).
+    // 카테고리 선택지 — 재고현황 품목의 대분류/중분류 조합에서 도출.
     prisma.inventoryItem.findMany({
       where: { deletedAt: null, majorCat: { not: "" } },
-      select: { majorCat: true },
-      distinct: ["majorCat"],
-      orderBy: { majorCat: "asc" },
+      select: { majorCat: true, minorCat: true },
+      distinct: ["majorCat", "minorCat"],
+      orderBy: [{ majorCat: "asc" }, { minorCat: "asc" }],
     }),
   ]);
-  const categories = [...new Set(catRows.map((c) => c.majorCat).filter(Boolean))];
+
+  // 대분류 → 중분류[] 트리(중분류는 빈값 제외).
+  const treeMap = new Map<string, string[]>();
+  for (const r of catRows) {
+    if (!r.majorCat) continue;
+    const minors = treeMap.get(r.majorCat) ?? [];
+    if (r.minorCat && !minors.includes(r.minorCat)) minors.push(r.minorCat);
+    treeMap.set(r.majorCat, minors);
+  }
+  const catTree = [...treeMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "ko"))
+    .map(([major, minors]) => ({
+      major,
+      minors: minors.sort((a, b) => a.localeCompare(b, "ko")),
+    }));
 
   return (
     <>
       <Topbar brand="새롭 · 관리자" right={<TopbarChip>{user.storeName}</TopbarChip>} />
       <div className="page">
-        <h1 className="h1">입고</h1>
-        <InboundManager initialRows={logs.map(toInboundRow)} categories={categories} />
+        <InboundManager initialRows={logs.map(toInboundRow)} catTree={catTree} />
       </div>
     </>
   );

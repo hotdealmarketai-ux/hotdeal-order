@@ -348,6 +348,7 @@ model InboundLog {
   supplyPrice Int      @default(0) // 점주 공급가(원) — 입고 당시 스냅샷
   expiry      String   @default("") // 유통기한 YYYY-MM-DD(빈값=없음)
   majorCat    String   @default("") // 카테고리(대분류) — 입고 당시 스냅샷
+  minorCat    String   @default("") // 카테고리(중분류) — 입고 당시 스냅샷
   itemId      String? // 반영된 InventoryItem.id(느슨 참조 — 품목 삭제돼도 로그 보존)
   createdAt   DateTime @default(now()) // 입고 버튼 누른 시각(= 입고시간)
 

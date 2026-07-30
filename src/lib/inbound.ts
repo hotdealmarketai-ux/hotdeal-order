@@ -7,7 +7,9 @@ export type InboundRow = {
   supplyPrice: number;
   expiry: string; // 유통기한 YYYY-MM-DD(빈값=없음)
   majorCat: string; // 카테고리(대분류)
+  minorCat: string; // 카테고리(중분류)
   at: string; // 입고시간 — KST "YY-MM-DD HH:MM"
+  createdAtMs: number; // 입고 시각(epoch ms) — 삭제 시 '1시간 이내' 판정(재고 되돌림 여부)용
 };
 
 // 입고시간 표시 — KST(UTC+9) "YY-MM-DD HH:MM". createdAt은 불변이라 서버에서 미리 문자열로 만들어 보낸다.
@@ -26,6 +28,7 @@ export function toInboundRow(r: {
   supplyPrice: number;
   expiry: string;
   majorCat: string;
+  minorCat: string;
   createdAt: Date;
 }): InboundRow {
   return {
@@ -35,6 +38,8 @@ export function toInboundRow(r: {
     supplyPrice: r.supplyPrice,
     expiry: r.expiry,
     majorCat: r.majorCat,
+    minorCat: r.minorCat,
     at: fmtInboundAt(r.createdAt),
+    createdAtMs: r.createdAt.getTime(),
   };
 }
