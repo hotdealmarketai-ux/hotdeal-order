@@ -1238,6 +1238,124 @@ a {
   justify-content: center;
 }
 
+/* ---- 입고 페이지(입력폼 + 기록목록) ---- */
+.inb {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.inb__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inb__row2 {
+  display: flex;
+  gap: 8px;
+}
+.inb__row2 > * {
+  flex: 1;
+  min-width: 0;
+}
+/* select 도 .input 과 톤 맞춤 */
+.inb__catsel {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 28px;
+}
+.inb__search {
+  width: 100%;
+}
+.inb__list {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 14px);
+  background: var(--surface);
+  overflow-y: auto;
+  max-height: 52vh;
+  -webkit-overflow-scrolling: touch;
+}
+.inb__empty {
+  padding: 26px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+.inb__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 38px 11px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.inb__item:last-child {
+  border-bottom: none;
+}
+.inb__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.inb__name {
+  font-weight: 700;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inb__at {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.inb__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.inb__qty {
+  font-weight: 800;
+  color: var(--green-700);
+}
+.inb__cat {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 6px;
+  line-height: 1.6;
+}
+.inb__x {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--danger);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.inb__x:active {
+  transform: translateY(-50%) scale(0.85);
+}
+
 /* ---- 큰 카테고리 카드(홈) ---- */
 .catgrid {
   display: grid;

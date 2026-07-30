@@ -338,6 +338,23 @@ model InventoryItem {
   updatedAt DateTime @updatedAt
 }
 
+// 입고 기록(로그) — '입고' 버튼을 누른 시점의 스냅샷. 그때 어떤 품목이 몇 개·얼마·유통기한·카테고리로
+// 들어왔는지를 영구 보존한다(무제한, 자동삭제 없음). 재고현황(InventoryItem)과는 독립 —
+// 나중에 조회해도 '입고 당시' 값 그대로 보인다(현재 실재고 아님). itemId는 느슨 참조(관계 아님).
+model InboundLog {
+  id          String   @id @default(cuid())
+  name        String
+  qty         Int      @default(0)
+  supplyPrice Int      @default(0) // 점주 공급가(원) — 입고 당시 스냅샷
+  expiry      String   @default("") // 유통기한 YYYY-MM-DD(빈값=없음)
+  majorCat    String   @default("") // 카테고리(대분류) — 입고 당시 스냅샷
+  itemId      String? // 반영된 InventoryItem.id(느슨 참조 — 품목 삭제돼도 로그 보존)
+  createdAt   DateTime @default(now()) // 입고 버튼 누른 시각(= 입고시간)
+
+  @@index([createdAt])
+  @@index([name])
+}
+
 // 계산서(장끼) — 새롭이 '실제 출고 기준'으로 직접 작성해 점포에 청구.
 // 발주 리스트는 참고만(경매·생물 특성상 출고가 주문과 다름). 발행 후 수정 금지(취소→재작성).
 model Invoice {

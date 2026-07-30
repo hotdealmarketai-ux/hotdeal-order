@@ -55,33 +55,37 @@ export default async function AdminHome() {
   const hotdealOrders = hotdealStores.length;
   const hotdealNewCount = hotdealNew.length;
 
+  // 2열 그리드(읽는 순서 = 배열 순서). 지정된 배치/이름:
+  // 가입대기·회원관리 / 전체발주목록·핫딜마켓발주 / 입금관리·계산서발행 /
+  // 주간발주·예약달력 / 입고·재고 / 담기현황·재고마감 / 창고관리·로그
   const menu = [
     {
       href: "/admin/approvals",
-      title: "가입 대기",
+      title: "가입대기",
       badge: pending > 0 ? pending : undefined,
     },
-    { href: "/admin/members", title: "회원 관리" },
-    { href: "/admin/orders", title: "전체 발주 목록", sub: `${totalOrders}건` },
+    { href: "/admin/members", title: "회원관리" },
+    { href: "/admin/orders", title: "전체발주목록", sub: `${totalOrders}건` },
     {
       href: "/admin/hotdeal",
-      title: "핫딜마켓 발주",
+      title: "핫딜마켓발주",
       sub: `${hotdealOrders}건`,
       badge: hotdealNewCount > 0 ? hotdealNewCount : undefined,
     },
+    { href: "/admin/deposits", title: "입금관리" },
+    { href: "/admin/billing", title: "계산서발행" },
     {
       href: "/admin/weekly",
       title: "주간발주",
       badge: weeklyCount > 0 ? weeklyCount : undefined,
     },
-    { href: "/admin/billing", title: "계산서 발행" },
-    { href: "/admin/calendar", title: "예약 달력" },
-    { href: "/admin/deposits", title: "입금 관리" },
+    { href: "/admin/calendar", title: "예약달력" },
+    { href: "/admin/inbound", title: "입고" },
     { href: "/admin/inventory", title: "재고" },
-    { href: "/admin/holds", title: "담기 현황" },
-    { href: "/admin/stock-reconcile", title: "재고 마감" },
-    { href: "/admin/audit", title: "로그" },
+    { href: "/admin/holds", title: "담기현황" },
+    { href: "/admin/stock-reconcile", title: "재고마감" },
     { href: "/warehouse", title: "창고관리" },
+    { href: "/admin/audit", title: "로그" },
   ];
 
   return (
