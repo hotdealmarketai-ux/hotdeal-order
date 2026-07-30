@@ -4160,6 +4160,16 @@ a.resv-card:active { transform: scale(0.995); }
 }
 .whsave.is-on { opacity: 1; transform: translateY(0); }
 
+/* 전역 실행취소(Ctrl-Z) 토스트 */
+.undotoast {
+  position: fixed; left: 50%; bottom: 88px; transform: translate(-50%, 8px);
+  z-index: 6000; background: #1f2937; color: #fff; font-size: 13px; font-weight: 700;
+  padding: 8px 16px; border-radius: 999px; box-shadow: 0 6px 20px #0005;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.undotoast.is-on { opacity: 1; transform: translate(-50%, 0); }
+
 /* 캔버스(평면도) */
 .whcanvaswrap { flex: 1; overflow: auto; position: relative; background: #0b1119; }
 .whcanvas {

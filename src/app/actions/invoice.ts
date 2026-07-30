@@ -127,6 +127,38 @@ async function recomputeInvoiceTotal(tx: Prisma.TransactionClient, invoiceId: st
   });
 }
 
+// 동시작성 실시간 반영(폴링) — 이 계산서 초안의 현재 확정 카테고리 + 품목(주간 제외)을 돌려준다.
+// 다른 현장/폰이 확정한 카테고리를 관찰자 화면에 자동 반영하기 위한 읽기 전용 조회.
+export async function getInvoiceSyncAction(invoiceId: string): Promise<{
+  ok: boolean;
+  gone?: boolean;
+  status?: string;
+  confirmedCats?: string;
+  items?: { category: string; name: string; qty: string; unitPrice: string }[];
+}> {
+  await requireAdmin();
+  const id = String(invoiceId ?? "");
+  if (!id) return { ok: false };
+  const inv = await prisma.invoice.findUnique({
+    where: { id },
+    include: { items: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!inv) return { ok: true, gone: true };
+  return {
+    ok: true,
+    status: inv.status,
+    confirmedCats: inv.confirmedCats,
+    items: inv.items
+      .filter((it) => it.category !== "WEEKLY")
+      .map((it) => ({
+        category: it.category,
+        name: it.name,
+        qty: String(it.qty),
+        unitPrice: String(it.unitPrice),
+      })),
+  };
+}
+
 // 계산서 저장(임시저장) / 발행 — invoiceId 없으면 생성, 있으면 DRAFT만 수정 가능
 export async function saveInvoiceAction(
   _prev: InvoiceFormState,
@@ -210,9 +242,15 @@ export async function saveInvoiceAction(
   // 이번 저장에 실제로 담긴(품목이 있는) 카테고리 — 이 카테고리들만 교체하고 나머지는 안 건드린다.
   const submittedCats = [...new Set(items.map((it) => it.category))];
 
+  // 동시작성 데이터 유실 방지 — invoiceId가 없어도(각자 빈 폼으로 시작) 같은 점포·날짜의 작성중(DRAFT)
+  // 계산서가 이미 있으면 새로 만들지 않고 '그 하나'에 병합한다. 두 사람이 서로 다른 폰/PC에서
+  // 과일/야채·공구/채움채를 나눠 확정해도 한 계산서에 모여, 발행 시 전원 데이터가 담긴다.
   const existing = invoiceId
     ? await prisma.invoice.findUnique({ where: { id: invoiceId } })
-    : null;
+    : await prisma.invoice.findFirst({
+        where: { userId, date, kind: "DAILY", status: "DRAFT" },
+        orderBy: { createdAt: "asc" }, // 여러 개면 가장 먼저 만들어진 것으로 일관되게 수렴
+      });
   if (existing && existing.status !== "DRAFT") {
     return { error: "발행된 계산서는 수정할 수 없어요. 취소 후 다시 작성해 주세요." };
   }

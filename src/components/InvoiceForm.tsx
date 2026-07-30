@@ -15,6 +15,7 @@ import {
   loadWeeklyIntoInvoiceAction,
   saveWeeklyItemsAction,
   clearWeeklyFromInvoiceAction,
+  getInvoiceSyncAction,
   type InvoiceFormState,
 } from "@/app/actions/invoice";
 import { SubmitButton } from "./SubmitButton";
@@ -262,6 +263,8 @@ export function InvoiceForm({
     weeklyFilledCount;
 
   // #8 자동 임시저장 — 입력을 localStorage에 저장/복원(다른 페이지 갔다와도 유지). 임시저장 버튼 불필요.
+  // ⚠ 동시작성: localStorage는 '이 브라우저'만의 것이라, 다른 사람이 확정한 카테고리를 덮으면 안 된다.
+  //   → 확정(잠금)된 카테고리는 서버(공유) 데이터를 유지하고, 미확정(내가 작성 중) 카테고리만 복원한다.
   const draftKey = `invdraft:${userId}:${date}`;
   useEffect(() => {
     try {
@@ -269,17 +272,15 @@ export function InvoiceForm({
       if (!raw) return;
       const saved = JSON.parse(raw) as Record<string, Row[]>;
       if (!saved || typeof saved !== "object") return;
-      const hasContent = categories.some((c) =>
-        (saved[c] ?? []).some((r) => r && (r.name || r.qty || r.unitPrice)),
-      );
-      if (!hasContent) return;
-      setRowsByCat(() => {
-        const next: Record<string, Row[]> = {};
+      setRowsByCat((prev) => {
+        const next: Record<string, Row[]> = { ...prev }; // 서버에서 만든 rows에서 시작
         for (const c of categories) {
+          if (confirmed.has(c)) continue; // 확정 카테고리는 서버 데이터 보존(다른 사람 입력 유지)
           const rows = (saved[c] ?? []).filter(
             (r) => r && (r.name || r.qty || r.unitPrice),
           );
-          next[c] = [...rows.map((r) => ({ ...r, id: ++uid.current })), newRow()];
+          if (rows.length)
+            next[c] = [...rows.map((r) => ({ ...r, id: ++uid.current })), newRow()];
         }
         return next;
       });
@@ -297,6 +298,70 @@ export function InvoiceForm({
     () => new Set(confirmedCats.split(",").map((s) => s.trim()).filter(Boolean)),
   );
   const allConfirmed = categories.every((c) => confirmed.has(c));
+
+  // 동시작성 실시간 반영 — 5초마다 서버(공유 초안)의 확정분을 가져와 관찰자 화면에 반영한다.
+  // 확정(잠금)된 카테고리는 서버 기준으로 갱신(다른 폰/PC가 넣은 품목이 바로 보임).
+  // 내가 작성 중(미확정)인 카테고리는 절대 건드리지 않는다(내 입력 보존).
+  useEffect(() => {
+    if (!invoiceId) return;
+    let cancelled = false;
+    const pull = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        const res = await getInvoiceSyncAction(invoiceId);
+        if (cancelled || !res.ok || res.gone || res.status !== "DRAFT") return;
+        const serverConfirmed = new Set(
+          String(res.confirmedCats ?? "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        );
+        setConfirmed((prevC) => {
+          if (
+            prevC.size === serverConfirmed.size &&
+            [...serverConfirmed].every((c) => prevC.has(c))
+          )
+            return prevC; // 동일 — 불필요 렌더 방지
+          return new Set(serverConfirmed);
+        });
+        const byCat: Record<string, { name: string; qty: string; unitPrice: string }[]> = {};
+        for (const it of res.items ?? []) (byCat[it.category] ??= []).push(it);
+        setRowsByCat((prev) => {
+          let changed = false;
+          const next = { ...prev };
+          for (const c of categories) {
+            if (!serverConfirmed.has(c)) continue; // 미확정은 로컬 보존
+            const srv = byCat[c] ?? [];
+            const cur = (prev[c] ?? []).filter(isFilled);
+            const same =
+              cur.length === srv.length &&
+              cur.every(
+                (r, i) =>
+                  r.name === srv[i].name &&
+                  r.qty === srv[i].qty &&
+                  r.unitPrice === srv[i].unitPrice,
+              );
+            if (same) continue;
+            next[c] = [
+              ...srv.map((r) => ({ id: ++uid.current, ...r })),
+              newRow(),
+            ];
+            changed = true;
+          }
+          return changed ? next : prev;
+        });
+      } catch {
+        /* noop */
+      }
+    };
+    pull();
+    const iv = setInterval(pull, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceId]);
 
   // 한 카테고리의 채워진 줄들이 유효한지(빈 카테고리는 유효 — 없는 품목도 확정 가능)
   function validateCat(c: Category): boolean {
