@@ -4,8 +4,11 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { normalizeDateStr } from "@/lib/date";
 import { BillingDateBar } from "@/components/BillingDateBar";
+import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
+// 수량 표시 — 부동소수 정리(소수 둘째자리까지).
+const fmtQty = (n: number) => String(Math.round(n * 100) / 100);
 
 // 날짜별 계산서 보기(#7·N4) — 선택한 출고일에 계산서가 있는 '지점 목록'.
 // 지점 버튼을 누르면 그 지점의 계산서 상세로 이동. 기본 오늘, 상단 날짜선택.
@@ -23,6 +26,8 @@ export default async function BillingByDatePage(props: {
       total: true,
       userId: true,
       user: { select: { storeName: true } },
+      // 집계용 — 전 지점 계산서의 출고 품목(카테고리·이름·수량·단위)
+      items: { select: { category: true, name: true, qty: true, unit: true } },
     },
     orderBy: [{ user: { storeName: "asc" } }],
   });
@@ -60,6 +65,30 @@ export default async function BillingByDatePage(props: {
   const issuedTotal = stores.reduce((n, s) => n + s.total, 0);
   const issuedCount = stores.reduce((n, s) => n + s.issued, 0);
 
+  // 총 집계 — 전 지점 계산서의 출고 품목을 카테고리별·품목명별로 수량 합산(원래 있던 총 집계처럼).
+  // status VOID 제외분(작성중 포함) 전체 대상. 주간(WEEKLY) 품목은 일일 출고 집계와 분리(자동 제외).
+  const aggMap = new Map<string, { category: Category; name: string; unit: string; qty: number }>();
+  for (const inv of invoices) {
+    for (const it of inv.items) {
+      const cat = it.category as Category;
+      if (!CATEGORY_ORDER.includes(cat)) continue; // FRUIT|VEG|TOOL|TOFU 만
+      const name = it.name.trim();
+      if (!name) continue;
+      const key = `${cat}::${name}::${it.unit}`;
+      const cur = aggMap.get(key);
+      if (cur) cur.qty += it.qty;
+      else aggMap.set(key, { category: cat, name, unit: it.unit, qty: it.qty });
+    }
+  }
+  const aggByCat = CATEGORY_ORDER.map((c) => ({
+    key: c,
+    label: CATEGORIES[c].label,
+    items: [...aggMap.values()]
+      .filter((a) => a.category === c)
+      .sort((a, b) => a.name.localeCompare(b.name, "ko")),
+  })).filter((g) => g.items.length > 0);
+  const aggItemCount = aggByCat.reduce((n, g) => n + g.items.length, 0);
+
   return (
     <>
       <Topbar backHref="/admin/billing" title="날짜별 계산서" />
@@ -79,6 +108,32 @@ export default async function BillingByDatePage(props: {
             {fmt(issuedTotal)}원
           </div>
         </div>
+
+        {/* 총 집계 — 전 지점 계산서 출고 품목 합산(기본 닫힘) */}
+        {aggItemCount > 0 && (
+          <details className="wagg" style={{ marginBottom: 16 }}>
+            <summary className="wagg__sum">집계 ({aggItemCount}개 품목)</summary>
+            <div style={{ marginTop: 10 }}>
+              {aggByCat.map((g) => (
+                <div className="invcat" key={g.key}>
+                  <div className="invcat__head">
+                    <span className="chip">{g.label}</span>
+                    <span className="invcat__sum">{g.items.length}개 품목</span>
+                  </div>
+                  {g.items.map((a, i) => (
+                    <div className="confitem" key={i}>
+                      <span className="confitem__name">{a.name}</span>
+                      <span className="confitem__qtytext">
+                        {fmtQty(a.qty)}
+                        {a.unit || "개"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
 
         {stores.length === 0 ? (
           <div className="empty">

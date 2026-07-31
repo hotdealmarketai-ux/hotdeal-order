@@ -106,8 +106,8 @@ export function InvoiceForm({
   });
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState("");
-  const [loadingTool, setLoadingTool] = useState(false);
-  const [loadNote, setLoadNote] = useState("");
+  const [loadingCat, setLoadingCat] = useState<Category | null>(null);
+  const [loadNote, setLoadNote] = useState<{ cat: Category; msg: string } | null>(null);
   const [state, formAction] = useActionState<InvoiceFormState, FormData>(
     saveInvoiceAction,
     {},
@@ -196,14 +196,14 @@ export function InvoiceForm({
     });
   }
 
-  // 공구 '불러오기' — 그 출고일에 청구할 공구 품목(담기 발주 + 예약 확정분)을 서버에서 받아
-  // 공구칸에 그대로 채운다. 일일이 손으로 안 쳐도 되게. 기존 공구 입력은 불러온 목록으로 교체.
+  // '불러오기' — 그 출고일에 청구할 해당 카테고리 품목(담기 발주 + 공구는 예약 확정분)을 서버에서 받아
+  // 그 칸에 그대로 채운다. 일일이 손으로 안 쳐도 되게. 기존 입력은 불러온 목록으로 교체. (공구·채움채)
   async function loadToolItems(cat: Category) {
-    if (loadingTool) return;
-    setLoadingTool(true);
-    setLoadNote("");
+    if (loadingCat) return;
+    setLoadingCat(cat);
+    setLoadNote(null);
     try {
-      const { items } = await loadInvoiceToolItemsAction(userId, date);
+      const { items } = await loadInvoiceToolItemsAction(userId, date, cat);
       setConfirming(false);
       setRowsByCat((prev) => {
         const rows: Row[] = items.map((it) => ({
@@ -215,15 +215,17 @@ export function InvoiceForm({
         rows.push(newRow());
         return { ...prev, [cat]: rows };
       });
-      setLoadNote(
-        items.length > 0
-          ? `${items.length}개 품목을 불러왔어요. 확인 후 확정해 주세요.`
-          : "불러올 공구 발주(담기·예약)가 없어요.",
-      );
+      setLoadNote({
+        cat,
+        msg:
+          items.length > 0
+            ? `${items.length}개 품목을 불러왔어요. 확인 후 확정해 주세요.`
+            : `불러올 ${CATEGORIES[cat].label} 발주가 없어요.`,
+      });
     } catch {
-      setLoadNote("불러오기에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      setLoadNote({ cat, msg: "불러오기에 실패했어요. 잠시 후 다시 시도해 주세요." });
     } finally {
-      setLoadingTool(false);
+      setLoadingCat(null);
     }
   }
 
@@ -481,16 +483,16 @@ export function InvoiceForm({
                     {sub.sum > 0 ? `${fmt(sub.sum)}원` : ""}
                   </span>
                 )}
-                {/* 오른쪽 액션 묶음 — 공구는 '불러오기'(담기·예약 발주 로드)를 확정 버튼 옆에 깔끔히 */}
+                {/* 오른쪽 액션 묶음 — 공구·채움채는 '불러오기'(담기·예약 발주 로드)를 확정 버튼 옆에 깔끔히 */}
                 <div className="invcat__actions">
-                  {c === "TOOL" && !confirmed.has(c) && (
+                  {(c === "TOOL" || c === "TOFU") && !confirmed.has(c) && (
                     <button
                       type="button"
                       className="invcat__load"
                       onClick={() => loadToolItems(c)}
-                      disabled={loadingTool}
+                      disabled={loadingCat !== null}
                     >
-                      {loadingTool ? "불러오는 중…" : "불러오기"}
+                      {loadingCat === c ? "불러오는 중…" : "불러오기"}
                     </button>
                   )}
                   <button
@@ -503,8 +505,8 @@ export function InvoiceForm({
                   </button>
                 </div>
               </div>
-              {c === "TOOL" && loadNote && (
-                <div className="invcat__loadnote">{loadNote}</div>
+              {loadNote?.cat === c && (
+                <div className="invcat__loadnote">{loadNote.msg}</div>
               )}
               <div className="invcols">
                 <span>품목</span>

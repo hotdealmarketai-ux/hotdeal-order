@@ -336,24 +336,25 @@ export async function saveInvoiceAction(
   redirect(`/admin/invoices/${id}?saved=1`);
 }
 
-// 공구(TOOL) 계산서 '불러오기' — 그 출고일(shipmentDate)에 청구할 공구 품목을 한 번에 로드.
-//  ① 재고현황 '담기' 발주(TOOL Order) — 출고일 기준 발주범위(orderRangeForShipment). 공급가는 재고현황 이름매칭.
-//  ② 예약(재고연동+수기) 확정분 — 픽업일 == 출고일(사용자 규칙). 공급가는 예약 스냅샷.
-// 같은 품목명은 수량 합산. 공급가는 처음 잡힌 값(없으면 빈칸 → 관리자가 채움). 계산서 공구칸에 그대로 채운다.
+// 계산서 '불러오기' — 그 출고일(shipmentDate)에 청구할 해당 카테고리 품목을 한 번에 로드.
+//  ① 재고현황 '담기' 발주(category Order) — 출고일 기준 발주범위(orderRangeForShipment). 공급가는 재고현황 이름매칭.
+//  ② 예약(재고연동+수기) 확정분 — 픽업일 == 출고일(사용자 규칙). 공급가는 예약 스냅샷. ※예약은 공구 전용 개념이라 TOOL만.
+// 같은 품목명은 수량 합산. 공급가는 처음 잡힌 값(없으면 빈칸 → 관리자가 채움). 계산서 해당 칸에 그대로 채운다.
 export async function loadInvoiceToolItemsAction(
   userId: string,
   shipmentDate: string,
+  category: Category = "TOOL",
 ): Promise<{ items: { name: string; qty: string; unitPrice: string }[] }> {
   await requireAdmin();
   if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(shipmentDate)) return { items: [] };
 
   const { start, end } = orderRangeForShipment(shipmentDate);
   const [toolOrders, resvItems, invItems] = await Promise.all([
-    // ① 담기 발주(공구) — 출고일에 실릴 발주(전날 등). 취소 제외.
+    // ① 담기 발주(해당 카테고리) — 출고일에 실릴 발주(전날 등). 취소 제외.
     prisma.order.findMany({
       where: {
         userId,
-        category: "TOOL",
+        category,
         status: { not: "CANCELLED" },
         createdAt: { gte: start, lt: end },
       },
@@ -365,16 +366,18 @@ export async function loadInvoiceToolItemsAction(
       },
       orderBy: { createdAt: "asc" },
     }),
-    // ② 예약 확정분 — 픽업일==출고일(연동·수기 모두). 기존 자동로드와 동일 게이트(confirmed·batch active).
-    prisma.reservationOrderItem.findMany({
-      where: {
-        pickupDate: shipmentDate,
-        qty: { gt: 0 },
-        order: { userId, confirmed: true, batch: { active: true } },
-      },
-      select: { name: true, qty: true, supplyPrice: true },
-      orderBy: { sortOrder: "asc" },
-    }),
+    // ② 예약 확정분 — 픽업일==출고일(연동·수기 모두). 공구 전용(예약엔 카테고리 없음)이라 TOOL일 때만.
+    category === "TOOL"
+      ? prisma.reservationOrderItem.findMany({
+          where: {
+            pickupDate: shipmentDate,
+            qty: { gt: 0 },
+            order: { userId, confirmed: true, batch: { active: true } },
+          },
+          select: { name: true, qty: true, supplyPrice: true },
+          orderBy: { sortOrder: "asc" },
+        })
+      : Promise.resolve([] as { name: string; qty: number; supplyPrice: number }[]),
     // 공급가 이름매칭용(담기 품목엔 가격이 없어 재고현황에서 가져온다)
     prisma.inventoryItem.findMany({
       where: { deletedAt: null },

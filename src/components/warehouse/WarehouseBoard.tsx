@@ -1113,7 +1113,15 @@ export function WarehouseBoard({
               <div key={`h${i}`} className="whguide whguide--h" style={{ top: y }} />
             ))}
 
-            {boxes.map((b) => {
+            {boxes
+              .filter((b) => {
+                // 품절(재고 0 이하)인 품목 셀은 평면도에서 숨긴다(배치에서 제외). 재입고되면 폴링으로 자동 복귀.
+                // 구조물(itemId 없음)·재고 미확인(null)은 항상 표시 — DB(WarehouseBox)는 건드리지 않음.
+                if (!b.itemId) return true;
+                const q = qtyOf(b.itemId);
+                return !(q != null && q <= 0);
+              })
+              .map((b) => {
               const sel = selectedIds.includes(b.id);
               const isForm = !b.itemId; // 폼박스(구조물)=재고 품목 없는 박스. color는 배경색 용도로 자유롭게 씀.
               const custom = /^#[0-9a-fA-F]{6}$/.test(b.color) ? b.color : null; // 우클릭 지정 배경색
