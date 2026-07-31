@@ -356,6 +356,19 @@ model InboundLog {
   @@index([name])
 }
 
+// 재고 마감(계산서 기준) 수동 조정 — 관리자가 그 출고일 품목별 출고량을 수정한 '보정치'(품목명 기준).
+// correction = (계산서 발행 총합 − 관리자 확정 출고량). base에 +correction 만큼 이미 반영돼 있음(양수=복구, 음수=추가차감).
+// 표시 출고량 = 계산서총합 − correction. 계산서를 추가 발행/취소해도 correction은 그대로라 어긋나지 않음(멱등·정합).
+model DailyStockAdjustment {
+  id         String   @id @default(cuid())
+  date       String // 출고일 KST YYYY-MM-DD
+  itemName   String
+  correction Int      @default(0) // base에 더한 보정치 = 계산서총합 − 확정출고량
+  updatedAt  DateTime @updatedAt
+
+  @@unique([date, itemName])
+}
+
 // 계산서(장끼) — 새롭이 '실제 출고 기준'으로 직접 작성해 점포에 청구.
 // 발주 리스트는 참고만(경매·생물 특성상 출고가 주문과 다름). 발행 후 수정 금지(취소→재작성).
 model Invoice {

@@ -4521,9 +4521,24 @@ a.resv-card:active { transform: scale(0.995); }
   display: grid; grid-template-columns: minmax(0,1fr) 66px 52px 58px; gap: 7px;
   align-items: center; padding: 9px 11px;
 }
-/* 계산서 기준 재고 정산 = 읽기전용 3열(품목 / 계산서수량 / 현재재고) */
+/* 계산서 기준 재고 마감 — 4열(품목 / 출고(차감) / 현재재고 / 수정) */
 .rectable--record .rectable__head, .rectable--record .rectable__row {
-  grid-template-columns: minmax(0,1fr) 88px 88px;
+  grid-template-columns: minmax(0,1fr) 72px 62px 48px;
+}
+/* 차감 안 된(재고현황 없는) 품목 — 2열(품목 / 계산서 출고) */
+.rectable--record2 .rectable__head, .rectable--record2 .rectable__row {
+  grid-template-columns: minmax(0,1fr) 84px;
+}
+.rectable__num--act { text-align: center; }
+.rectable__edit {
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg);
+  border-radius: 7px; font-size: 12px; font-weight: 700; padding: 4px 8px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.rectable__edit:active { transform: scale(0.94); }
+.rectable__adj {
+  margin-left: 5px; font-size: 10px; font-weight: 800; color: var(--green-700);
+  background: var(--green-100); padding: 1px 5px; border-radius: 999px;
 }
 .rectable__head { background: var(--green-100); font-size: 11.5px; font-weight: 700; color: var(--muted); }
 .rectable__row { border-top: 1px solid var(--line); font-size: 13.5px; }

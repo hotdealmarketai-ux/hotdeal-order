@@ -8,17 +8,17 @@ export const dynamic = "force-dynamic";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
-// 재고 정산 = 계산서(실제 출고) 기준 공구 차감 내역. 재고는 계산서 발행 시 자동 차감되며,
-// 이 페이지는 그 출고일 발행 계산서의 공구 품목·차감 결과를 보여주고, 미차감분이 있으면 '재고 반영'으로 보정한다.
+// 재고 마감 = 계산서(실제 출고) 기준 공구 '총 출고량(=총 차감량)' 집계. 재고는 계산서 발행 시 자동 차감되며,
+// 이 페이지에서 품목별 총 출고량을 확인하고(기본 잠금) 필요 시 수량을 수정한다. 재고현황에 없는 품목은 따로 표시.
 export default async function StockReconcilePage(props: {
   searchParams: Promise<{ date?: string }>;
 }) {
   await requireAdmin();
   const { date: dateParam } = await props.searchParams;
   const date = normalizeDateStr(dateParam);
-  const { rows, orderCount, resvCount } = await computeToolReconcile(date);
-  const totalOrdered = rows.reduce((n, r) => n + r.ordered, 0);
-  const unmatched = rows.filter((r) => !r.matched);
+  const { matched, unmatched, invoiceCount, undeductedCount } =
+    await computeToolReconcile(date);
+  const totalDeducted = matched.reduce((n, r) => n + r.deducted, 0);
 
   return (
     <>
@@ -29,38 +29,37 @@ export default async function StockReconcilePage(props: {
           style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}
         >
           <span className="row__sub">출고일</span>
-          <input className="input input--compact" type="date" name="date" defaultValue={date} style={{ width: "auto" }} />
-          <button className="btn btn--soft btn--sm" type="submit">보기</button>
+          <input
+            className="input input--compact"
+            type="date"
+            name="date"
+            defaultValue={date}
+            style={{ width: "auto" }}
+          />
+          <button className="btn btn--soft btn--sm" type="submit">
+            보기
+          </button>
         </form>
 
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="spread">
             <span className="row__sub">
-              계산서 발행 공구 {orderCount}건
-              {resvCount > 0 ? ` · 미차감 ${resvCount}건` : " · 재고 반영 완료"}
+              계산서 발행 {invoiceCount}건 · 차감 품목 {matched.length}개
+              {undeductedCount > 0 ? ` · 미차감 ${undeductedCount}건` : ""}
             </span>
-            <b>총 {fmt(totalOrdered)}개</b>
+            <b>총 {fmt(totalDeducted)}개</b>
           </div>
           <div className="row__sub" style={{ marginTop: 6, fontSize: 12.5 }}>
-            재고는 계산서 발행 시 자동으로 차감돼요. 아래는 그 내역이며, 혹시 미차감분이 있으면 ‘재고 반영’으로 보정하세요.
+            계산서 발행 시 자동 차감된 오늘의 총 출고량이에요. 수량이 다르면 품목별 ‘수정’으로 조정하세요.
           </div>
         </div>
 
-        {rows.length === 0 ? (
-          <div className="empty">
-            <p>이 출고일에 발행된 계산서 공구가 없어요.</p>
-          </div>
-        ) : (
-          <>
-            <StockReconcileForm date={date} rows={rows} undeducted={resvCount} />
-
-            {unmatched.length > 0 && (
-              <div className="notice notice--mute" style={{ marginTop: 12 }}>
-                ‘재고없음’ 품목은 재고현황에 같은 이름이 없어 차감되지 않아요(이름 확인 필요).
-              </div>
-            )}
-          </>
-        )}
+        <StockReconcileForm
+          date={date}
+          matched={matched}
+          unmatched={unmatched}
+          undeducted={undeductedCount}
+        />
       </div>
     </>
   );
