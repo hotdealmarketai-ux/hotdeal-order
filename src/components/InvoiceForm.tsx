@@ -23,9 +23,13 @@ import { CATEGORIES, type Category } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { sumQty } from "@/lib/qty";
 import { MoneyInput } from "./MoneyInput";
+import { rankStockMatches } from "@/lib/stock-match";
 
-type Row = { id: number; name: string; qty: string; unitPrice: string };
+type Row = { id: number; name: string; qty: string; unitPrice: string; inventoryItemId: string };
 type WeeklyRow = { id: number; name: string; qty: string; unitPrice: string; unit: string };
+
+// 공구칸 드롭다운용 재고현황 상품(연동 후보)
+export type InvOption = { id: string; name: string; supplyPrice: number };
 
 export type InvoiceWeeklyItem = {
   name: string;
@@ -39,6 +43,7 @@ export type InvoiceInitialItem = {
   name: string;
   qty: string;
   unitPrice: string;
+  inventoryItemId?: string;
 };
 
 export type InvoiceRefGroup = {
@@ -46,12 +51,12 @@ export type InvoiceRefGroup = {
   items: { name: string; qty: string; note: string }[];
 };
 
-function isFilled(r: Row) {
+function isFilled(r: { name: string; qty: string; unitPrice: string }) {
   return !!(r.name.trim() || r.qty.trim() || r.unitPrice.trim());
 }
 
 // 서버(cleanItems)와 동일한 엄격 파싱 — 형식이 아니면 금액을 아예 표시하지 않는다
-function rowAmount(r: Row): number {
+function rowAmount(r: { qty: string; unitPrice: string }): number {
   const qty = parseQtyStrict(r.qty);
   const price = parsePriceStrict(r.unitPrice);
   if (qty == null || price == null) return 0;
@@ -70,6 +75,7 @@ export function InvoiceForm({
   confirmedCats = "",
   weeklyAvailable = false,
   weeklyItems = [],
+  invOptions = [],
 }: {
   invoiceId?: string;
   userId: string;
@@ -80,6 +86,7 @@ export function InvoiceForm({
   confirmedCats?: string;
   weeklyAvailable?: boolean; // 이 출고일에 불러올 확정 주간발주가 있는가
   weeklyItems?: InvoiceWeeklyItem[]; // 이미 이 계산서에 불러와진 주간발주 합산분
+  invOptions?: InvOption[]; // 공구칸 드롭다운용 재고현황 상품(연동+공급가 자동채움)
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({
@@ -87,6 +94,7 @@ export function InvoiceForm({
     name: "",
     qty: "",
     unitPrice: "",
+    inventoryItemId: "",
   });
 
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
@@ -99,6 +107,7 @@ export function InvoiceForm({
         name: it.name,
         qty: it.qty,
         unitPrice: it.unitPrice,
+        inventoryItemId: it.inventoryItemId ?? "",
       });
     }
     for (const c of categories) init[c].push(newRow());
@@ -196,6 +205,47 @@ export function InvoiceForm({
     });
   }
 
+  // 공구칸 재고현황 연동 자동완성 — 열려있는 행 id.
+  const [acRow, setAcRow] = useState<number | null>(null);
+  // 이름 유사매칭(챗봇과 동일한 rankStockMatches 재사용). 2글자↑부터.
+  function invMatches(q: string): InvOption[] {
+    const query = q.trim();
+    if (query.length < 1 || invOptions.length === 0) return [];
+    const ranked = rankStockMatches(query, invOptions, 8).filter((r) => r.score >= 8);
+    const byId = new Map(invOptions.map((o) => [o.id, o]));
+    return ranked.map((r) => byId.get(r.id)).filter((o): o is InvOption => !!o);
+  }
+  // 공구 이름 직접 입력 — 연동 해제(수기), 자동완성 후보 갱신.
+  function onToolName(cat: Category, id: number, value: string) {
+    setConfirming(false);
+    setAcRow(value.trim() ? id : null);
+    setRowsByCat((prev) => {
+      const list = prev[cat].map((r) =>
+        r.id === id ? { ...r, name: value, inventoryItemId: "" } : r,
+      );
+      const kept = list.filter((r) => isFilled(r) || r.id === id);
+      const last = kept[kept.length - 1];
+      if (!last || isFilled(last)) kept.push(newRow());
+      return { ...prev, [cat]: kept };
+    });
+  }
+  // 드롭다운에서 상품 선택 — 이름·점주공급가·연동 id를 한 번에 채운다.
+  function pickInvOption(cat: Category, id: number, opt: InvOption) {
+    setConfirming(false);
+    setAcRow(null);
+    setRowsByCat((prev) => {
+      const list = prev[cat].map((r) =>
+        r.id === id
+          ? { ...r, name: opt.name, unitPrice: String(opt.supplyPrice), inventoryItemId: opt.id }
+          : r,
+      );
+      const kept = list.filter((r) => isFilled(r) || r.id === id);
+      const last = kept[kept.length - 1];
+      if (!last || isFilled(last)) kept.push(newRow());
+      return { ...prev, [cat]: kept };
+    });
+  }
+
   // '불러오기' — 그 출고일에 청구할 해당 카테고리 품목(담기 발주 + 공구는 예약 확정분)을 서버에서 받아
   // 그 칸에 그대로 채운다. 일일이 손으로 안 쳐도 되게. 기존 입력은 불러온 목록으로 교체. (공구·채움채)
   async function loadToolItems(cat: Category) {
@@ -211,6 +261,7 @@ export function InvoiceForm({
           name: it.name,
           qty: it.qty,
           unitPrice: it.unitPrice,
+          inventoryItemId: it.inventoryItemId ?? "",
         }));
         rows.push(newRow());
         return { ...prev, [cat]: rows };
@@ -240,6 +291,7 @@ export function InvoiceForm({
             name: r.name,
             qty: r.qty,
             unitPrice: r.unitPrice,
+            inventoryItemId: r.inventoryItemId,
           })),
       ),
     [categories, rowsByCat],
@@ -326,7 +378,10 @@ export function InvoiceForm({
             return prevC; // 동일 — 불필요 렌더 방지
           return new Set(serverConfirmed);
         });
-        const byCat: Record<string, { name: string; qty: string; unitPrice: string }[]> = {};
+        const byCat: Record<
+          string,
+          { name: string; qty: string; unitPrice: string; inventoryItemId: string }[]
+        > = {};
         for (const it of res.items ?? []) (byCat[it.category] ??= []).push(it);
         setRowsByCat((prev) => {
           let changed = false;
@@ -519,13 +574,58 @@ export function InvoiceForm({
                 const locked = confirmed.has(c);
                 return (
                   <div className="invrow" key={r.id}>
-                    <input
-                      className="input"
-                      value={r.name}
-                      disabled={locked}
-                      onChange={(e) => updateRow(c, r.id, "name", e.target.value)}
-                      placeholder="품목"
-                    />
+                    {c === "TOOL" ? (
+                      <div className="invac">
+                        <input
+                          className="input"
+                          value={r.name}
+                          disabled={locked}
+                          onChange={(e) => onToolName(c, r.id, e.target.value)}
+                          onFocus={() => r.name.trim() && setAcRow(r.id)}
+                          onBlur={() =>
+                            setTimeout(
+                              () => setAcRow((cur) => (cur === r.id ? null : cur)),
+                              150,
+                            )
+                          }
+                          placeholder="품목(재고 검색)"
+                          autoComplete="off"
+                        />
+                        {acRow === r.id &&
+                          !locked &&
+                          (() => {
+                            const ms = invMatches(r.name);
+                            return ms.length > 0 ? (
+                              <div className="invac__list">
+                                {ms.map((o) => (
+                                  <button
+                                    type="button"
+                                    key={o.id}
+                                    className="invac__item"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      pickInvOption(c, r.id, o);
+                                    }}
+                                  >
+                                    <span className="invac__name">{o.name}</span>
+                                    <span className="invac__price">
+                                      {o.supplyPrice.toLocaleString("ko-KR")}원
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null;
+                          })()}
+                      </div>
+                    ) : (
+                      <input
+                        className="input"
+                        value={r.name}
+                        disabled={locked}
+                        onChange={(e) => updateRow(c, r.id, "name", e.target.value)}
+                        placeholder="품목"
+                      />
+                    )}
                     <input
                       className="input"
                       inputMode="decimal"

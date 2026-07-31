@@ -2003,6 +2003,58 @@ a {
   padding: 5px 0;
   border-top: 1px solid var(--line);
 }
+/* 공구칸 재고현황 연동 자동완성 드롭다운 */
+.invac {
+  position: relative;
+  min-width: 0;
+}
+.invac > .input {
+  width: 100%;
+}
+.invac__list {
+  position: absolute;
+  z-index: 50;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+.invac__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+  text-align: left;
+}
+.invac__item:hover {
+  background: var(--green-100);
+}
+.invac__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.invac__price {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--green-700);
+}
 .invrow .input {
   min-width: 0; /* 그리드 칸이 내용보다 안 커지게 — 없으면 행이 넘쳐 금액칸이 화면 밖으로 잘림 */
   min-height: 42px;

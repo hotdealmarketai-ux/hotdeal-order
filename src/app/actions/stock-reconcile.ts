@@ -3,96 +3,58 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { kstToday, orderRangeForShipment } from "@/lib/date";
-import { deductToolOrders } from "@/lib/stock-hold";
+import { kstToday } from "@/lib/date";
+import { deductInvoiceStock } from "@/lib/invoice-stock";
 import { writeAudit } from "@/lib/audit";
 
-// 공구(상시) 발주분 재고 정산 — 미리보기/적용. 예약분은 픽업일 10시 자동차감이라 여기 포함 안 함(중복 방지).
+// 재고 정산 = '계산서(실제 출고) 기준' 공구 차감 내역. 재고 차감은 계산서 발행 시 자동으로 일어나며(deductInvoiceStock),
+// 이 페이지는 그 출고일에 발행된 계산서의 공구 품목·차감 결과를 보여주고, 혹시 미차감분이 있으면 '재고 반영'으로 보정한다.
+// (발주 마감 8시 자동차감은 폐지 — 계산서가 유일 소스.)
 export type ReconcileRow = {
   name: string;
-  tool: number; // 공구(상시 담기) 발주 합계
-  resv: number; // 예약발주(재고연동) 합계 — 픽업일 = 이 출고일
-  ordered: number; // tool + resv (기본 차감량)
-  base: number; // 현재 실재고
-  proposed: number; // 제안 실재고 = max(0, base − ordered)
+  tool: number; // 계산서(발행)에 적힌 공구 수량 = 실제 출고
+  resv: number; // (미사용, 계산서에 통합됨) — 항상 0
+  ordered: number; // = tool (계산서 기준 차감량)
+  base: number; // 현재 실재고(계산서 발행 시 이미 차감 반영됨)
+  proposed: number; // 현재 실재고와 동일(이미 차감됨)
   matched: boolean; // 재고현황에 같은 이름 품목이 있는지
 };
 
 const validDate = (d?: string) =>
   d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : kstToday();
 
-async function toolOrdersForShipment(date: string) {
-  const { start, end } = orderRangeForShipment(date);
-  return prisma.order.findMany({
-    where: {
-      category: "TOOL",
-      status: { not: "CANCELLED" },
-      stockDeductedAt: null, // 아직 차감 안 된 발주만
-      createdAt: { gte: start, lt: end },
+// 그 출고일에 발행(ISSUED/PAID)된 DAILY 계산서 + 공구 품목 + 차감여부.
+async function issuedInvoicesForDate(date: string) {
+  return prisma.invoice.findMany({
+    where: { date, kind: "DAILY", status: { in: ["ISSUED", "PAID"] } },
+    select: {
+      id: true,
+      stockDeductedAt: true,
+      items: { where: { category: "TOOL" }, select: { name: true, qty: true } },
     },
-    select: { id: true, items: { select: { name: true, qty: true } } },
-  });
-}
-
-// 그 출고일(=픽업일)에 나갈 미차감 예약발주(재고연동) 아이템 — 픽업10시 자동차감과 stockDeductedAt 공유(중복 방지).
-async function resvItemsForPickup(date: string) {
-  return prisma.reservationOrderItem.findMany({
-    where: {
-      pickupDate: date,
-      inventoryItemId: { not: "" },
-      qty: { gt: 0 },
-      stockDeductedAt: null,
-      order: { confirmed: true, batch: { active: true } },
-    },
-    select: { inventoryItemId: true, qty: true },
   });
 }
 
 export async function computeToolReconcile(shipDate?: string): Promise<{
   date: string;
   rows: ReconcileRow[];
-  orderCount: number;
-  resvCount: number;
+  orderCount: number; // 그 출고일 공구가 있는 발행 계산서 수
+  resvCount: number; // 아직 재고 미반영(차감 안 된) 발행 계산서 수 → '재고 반영' 대상
 }> {
   await requireAdmin();
   const date = validDate(shipDate);
-  const [orders, resvItems] = await Promise.all([
-    toolOrdersForShipment(date),
-    resvItemsForPickup(date),
-  ]);
+  const invoices = await issuedInvoicesForDate(date);
 
-  // 공구(상시) — 품목명 합산
+  // 계산서(발행) 공구 품목 — 품목명 합산(정수)
   const toolByName = new Map<string, number>();
-  for (const o of orders)
-    for (const it of o.items) {
+  for (const inv of invoices)
+    for (const it of inv.items) {
       const name = it.name.trim();
-      const n = parseInt(String(it.qty).replace(/[^\d]/g, ""), 10);
-      if (name && Number.isFinite(n) && n > 0)
-        toolByName.set(name, (toolByName.get(name) ?? 0) + n);
+      const q = Math.round(it.qty);
+      if (name && q > 0) toolByName.set(name, (toolByName.get(name) ?? 0) + q);
     }
 
-  // 예약(연동) — inventoryItemId 합산 → 품목명으로 변환
-  const resvByItemId = new Map<string, number>();
-  for (const r of resvItems)
-    resvByItemId.set(
-      r.inventoryItemId,
-      (resvByItemId.get(r.inventoryItemId) ?? 0) + r.qty,
-    );
-  const resvItemIds = [...resvByItemId.keys()];
-  const resvInv = resvItemIds.length
-    ? await prisma.inventoryItem.findMany({
-        where: { id: { in: resvItemIds } },
-        select: { id: true, name: true },
-      })
-    : [];
-  const resvByName = new Map<string, number>();
-  for (const inv of resvInv)
-    resvByName.set(
-      inv.name,
-      (resvByName.get(inv.name) ?? 0) + (resvByItemId.get(inv.id) ?? 0),
-    );
-
-  const names = [...new Set([...toolByName.keys(), ...resvByName.keys()])];
+  const names = [...toolByName.keys()];
   const items = names.length
     ? await prisma.inventoryItem.findMany({
         where: { name: { in: names }, deletedAt: null },
@@ -106,69 +68,42 @@ export async function computeToolReconcile(shipDate?: string): Promise<{
   const rows: ReconcileRow[] = names
     .map((name) => {
       const tool = toolByName.get(name) ?? 0;
-      const resv = resvByName.get(name) ?? 0;
-      const ordered = tool + resv;
       const matched = baseByName.has(name);
       const base = baseByName.get(name) ?? 0;
-      return { name, tool, resv, ordered, base, proposed: Math.max(0, base - ordered), matched };
+      // 계산서 발행 시 이미 차감됨 → base가 곧 차감 후 재고. proposed = base(추가 차감 없음).
+      return { name, tool, resv: 0, ordered: tool, base, proposed: base, matched };
     })
     .sort((a, b) => a.name.localeCompare(b.name, "ko"));
 
-  return { date, rows, orderCount: orders.length, resvCount: resvItems.length };
+  const withTool = invoices.filter((i) => i.items.length > 0);
+  const undeducted = withTool.filter((i) => !i.stockDeductedAt).length;
+  return { date, rows, orderCount: withTool.length, resvCount: undeducted };
 }
 
-// 관리자가 차감량을 '수정'해서 적용(추가 불출 등 실제 나간 만큼). adjustments: [{name, qty}].
-// 실제 차감은 넘어온 수정값 기준(발주합계와 달라도 됨). 해당 출고일 공구 발주는 stockDeductedAt로 표시(재정산 방지).
+// '재고 반영' — 그 출고일에 발행된 계산서 중 아직 재고 미차감분을 차감(멱등, 안전망).
+// 계산서 발행 시 자동 차감되지만, 혹시 누락된 게 있으면 여기서 보정한다. 이미 차감된 계산서는 건너뜀(이중차감 없음).
+// (adjustments 인자는 하위호환용 — 계산서 기준이라 수기 수정은 계산서 수정으로 대신함.)
 export async function applyToolReconcileAdjusted(
   shipDate: string | undefined,
-  adjustments: { name: string; qty: number }[],
+  _adjustments?: { name: string; qty: number }[],
 ): Promise<{ ok: boolean; count: number }> {
   const admin = await requireAdmin();
   const date = validDate(shipDate);
-  const [orders, resvItems] = await Promise.all([
-    toolOrdersForShipment(date),
-    resvItemsForPickup(date),
-  ]);
-  if (orders.length === 0 && resvItems.length === 0) return { ok: true, count: 0 };
-
-  // 검증 — 이름 트림, 수량 0 이상 정수. 같은 이름 여러 행이면 합산.
-  const byName = new Map<string, number>();
-  for (const a of adjustments ?? []) {
-    const name = String(a?.name ?? "").trim();
-    const qty = Math.max(0, Math.floor(Number(a?.qty) || 0));
-    if (name && qty > 0) byName.set(name, (byName.get(name) ?? 0) + qty);
+  const invoices = await issuedInvoicesForDate(date);
+  const undeducted = invoices.filter((i) => !i.stockDeductedAt && i.items.length > 0);
+  let count = 0;
+  for (const inv of undeducted) {
+    if (await deductInvoiceStock(inv.id)) count++;
   }
-  const now = new Date();
-  await prisma.$transaction([
-    // GREATEST(0, …): 실물이 재고보다 많이 나가도 음수 저장 방지(차이는 수기 보정).
-    ...[...byName.entries()].map(
-      ([name, q]) =>
-        prisma.$executeRaw`UPDATE "InventoryItem" SET qty = GREATEST(0, qty - ${q}) WHERE name = ${name} AND "deletedAt" IS NULL`,
-    ),
-    // 공구 발주 표시(재정산 방지)
-    prisma.order.updateMany({
-      where: { id: { in: orders.map((o) => o.id) } },
-      data: { stockDeductedAt: now },
-    }),
-    // 예약(연동) 아이템도 표시 — 픽업10시 자동차감(deductDuePickupStock)과 stockDeductedAt 공유해 이중차감 방지.
-    prisma.reservationOrderItem.updateMany({
-      where: {
-        pickupDate: date,
-        inventoryItemId: { not: "" },
-        stockDeductedAt: null,
-        order: { confirmed: true, batch: { active: true } },
-      },
-      data: { stockDeductedAt: now },
-    }),
-  ]);
-  await writeAudit({
-    action: "stock.reconcileTool",
-    actorId: admin.id,
-    actorName: admin.storeName,
-    summary: `${date} 재고 정산(수정 차감) — ${byName.size}품목 · 공구 ${orders.length}건 · 예약 ${resvItems.length}건`,
-    snapshot: [...byName.entries()].map(([name, qty]) => ({ name, qty })),
-  }).catch(() => {});
+  if (count > 0) {
+    await writeAudit({
+      action: "stock.reconcileTool",
+      actorId: admin.id,
+      actorName: admin.storeName,
+      summary: `${date} 재고 반영(계산서 기준) — 미차감 계산서 ${count}건 차감`,
+    }).catch(() => {});
+  }
   revalidatePath("/admin/stock-reconcile");
   revalidatePath("/admin/inventory");
-  return { ok: true, count: orders.length + resvItems.length };
+  return { ok: true, count };
 }

@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
-// 재고 정산 — 그 출고일에 나갈 공구(상시 담기) + 예약(재고연동) 발주분을 미리보고 차감량 수정 후 승인.
+// 재고 정산 = 계산서(실제 출고) 기준 공구 차감 내역. 재고는 계산서 발행 시 자동 차감되며,
+// 이 페이지는 그 출고일 발행 계산서의 공구 품목·차감 결과를 보여주고, 미차감분이 있으면 '재고 반영'으로 보정한다.
 export default async function StockReconcilePage(props: {
   searchParams: Promise<{ date?: string }>;
 }) {
@@ -35,15 +36,19 @@ export default async function StockReconcilePage(props: {
         <div className="card" style={{ marginBottom: 14 }}>
           <div className="spread">
             <span className="row__sub">
-              정산 대상(미차감) — 공구 {orderCount}건 · 예약 {resvCount}건
+              계산서 발행 공구 {orderCount}건
+              {resvCount > 0 ? ` · 미차감 ${resvCount}건` : " · 재고 반영 완료"}
             </span>
             <b>총 {fmt(totalOrdered)}개</b>
+          </div>
+          <div className="row__sub" style={{ marginTop: 6, fontSize: 12.5 }}>
+            재고는 계산서 발행 시 자동으로 차감돼요. 아래는 그 내역이며, 혹시 미차감분이 있으면 ‘재고 반영’으로 보정하세요.
           </div>
         </div>
 
         {rows.length === 0 ? (
           <div className="empty">
-            <p>정산할 발주가 없어요.</p>
+            <p>이 출고일에 발행된 계산서 공구가 없어요.</p>
           </div>
         ) : (
           <>

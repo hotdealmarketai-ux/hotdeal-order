@@ -29,6 +29,13 @@ import {
 import { boxWord } from "@/lib/weekly-catalog";
 import { orderRangeForShipment } from "@/lib/date";
 import { Prisma } from "@prisma/client";
+import {
+  deductInvoiceStock,
+  restoreInvoiceStock,
+  applyInvoiceStockDelta,
+  invoiceToolByName,
+} from "@/lib/invoice-stock";
+import { logError } from "@/lib/log";
 
 export type InvoiceFormState = { error?: string };
 
@@ -37,6 +44,7 @@ type RawItem = {
   name?: string;
   qty?: string;
   unitPrice?: string;
+  inventoryItemId?: string; // 공구칸 드롭다운으로 선택한 재고현황 상품 연동(있으면)
 };
 
 type CleanItem = {
@@ -45,6 +53,7 @@ type CleanItem = {
   qty: number;
   unitPrice: number;
   amount: number;
+  inventoryItemId: string;
 };
 
 const MAX_ITEMS = 200;
@@ -86,6 +95,9 @@ function cleanItems(
       qty,
       unitPrice,
       amount: Math.round(qty * unitPrice),
+      // 연동은 공구(TOOL)만 의미 있음 — 다른 카테고리는 빈값.
+      inventoryItemId:
+        category === "TOOL" ? String(r.inventoryItemId ?? "").trim().slice(0, 40) : "",
     });
   }
   return out;
@@ -134,7 +146,13 @@ export async function getInvoiceSyncAction(invoiceId: string): Promise<{
   gone?: boolean;
   status?: string;
   confirmedCats?: string;
-  items?: { category: string; name: string; qty: string; unitPrice: string }[];
+  items?: {
+    category: string;
+    name: string;
+    qty: string;
+    unitPrice: string;
+    inventoryItemId: string;
+  }[];
 }> {
   await requireAdmin();
   const id = String(invoiceId ?? "");
@@ -155,6 +173,7 @@ export async function getInvoiceSyncAction(invoiceId: string): Promise<{
         name: it.name,
         qty: String(it.qty),
         unitPrice: String(it.unitPrice),
+        inventoryItemId: it.inventoryItemId,
       })),
   };
 }
@@ -221,6 +240,13 @@ export async function saveInvoiceAction(
     });
     if (upd.count === 0) {
       return { error: "발행된 계산서는 수정할 수 없어요. 취소 후 다시 작성해 주세요." };
+    }
+    // 계산서 = 실제 출고 기준 재고 차감 — 발행 시 이 계산서의 공구 품목만큼 기준재고 차감(멱등).
+    // (발주 마감 8시 자동차감은 폐지 — 계산서가 유일 소스.) 실패해도 발행은 유지(멱등이라 재고정산에서 보정 가능).
+    try {
+      await deductInvoiceStock(invoiceId);
+    } catch (e) {
+      logError("invoice.issue.deductStock", e, { invoiceId });
     }
     await notifyMerchantInvoiceIssued(userId, invoiceId);
     revalidatePath("/admin/invoices");
@@ -344,7 +370,9 @@ export async function loadInvoiceToolItemsAction(
   userId: string,
   shipmentDate: string,
   category: Category = "TOOL",
-): Promise<{ items: { name: string; qty: string; unitPrice: string }[] }> {
+): Promise<{
+  items: { name: string; qty: string; unitPrice: string; inventoryItemId: string }[];
+}> {
   await requireAdmin();
   if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(shipmentDate)) return { items: [] };
 
@@ -374,21 +402,25 @@ export async function loadInvoiceToolItemsAction(
             qty: { gt: 0 },
             order: { userId, confirmed: true, batch: { active: true } },
           },
-          select: { name: true, qty: true, supplyPrice: true },
+          select: { name: true, qty: true, supplyPrice: true, inventoryItemId: true },
           orderBy: { sortOrder: "asc" },
         })
-      : Promise.resolve([] as { name: string; qty: number; supplyPrice: number }[]),
-    // 공급가 이름매칭용(담기 품목엔 가격이 없어 재고현황에서 가져온다)
+      : Promise.resolve(
+          [] as { name: string; qty: number; supplyPrice: number; inventoryItemId: string }[],
+        ),
+    // 공급가·연동 id 이름매칭용(담기 품목엔 가격·연동이 없어 재고현황에서 가져온다)
     prisma.inventoryItem.findMany({
       where: { deletedAt: null },
-      select: { name: true, supplyPrice: true },
+      select: { id: true, name: true, supplyPrice: true },
     }),
   ]);
 
   const priceByName = new Map<string, number>();
+  const idByName = new Map<string, string>();
   for (const it of invItems) {
     const k = it.name.trim();
     if (k && !priceByName.has(k)) priceByName.set(k, it.supplyPrice);
+    if (k && !idByName.has(k)) idByName.set(k, it.id);
   }
 
   const qtyToNum = (v: string | number): number => {
@@ -397,15 +429,15 @@ export async function loadInvoiceToolItemsAction(
     return Number.isFinite(n) ? n : 0;
   };
 
-  type Agg = { name: string; qty: number; unitPrice: number; priced: boolean };
+  type Agg = { name: string; qty: number; unitPrice: number; priced: boolean; inventoryItemId: string };
   const orderKeys: string[] = [];
   const agg = new Map<string, Agg>();
-  const add = (name: string, qty: number, price: number | null) => {
+  const add = (name: string, qty: number, price: number | null, invId: string) => {
     const key = name.trim();
     if (!key || qty <= 0) return;
     let a = agg.get(key);
     if (!a) {
-      a = { name: key, qty: 0, unitPrice: 0, priced: false };
+      a = { name: key, qty: 0, unitPrice: 0, priced: false, inventoryItemId: "" };
       agg.set(key, a);
       orderKeys.push(key);
     }
@@ -414,18 +446,19 @@ export async function loadInvoiceToolItemsAction(
       a.unitPrice = price;
       a.priced = true;
     }
+    if (!a.inventoryItemId && invId) a.inventoryItemId = invId;
   };
 
-  // ① 담기 발주(공구) — 공급가는 재고현황 이름매칭
+  // ① 담기 발주(공구) — 공급가·연동 id는 재고현황 이름매칭
   for (const o of toolOrders) {
     for (const it of o.items) {
       const nm = (it.name || it.rawName || "").trim();
-      add(nm, qtyToNum(it.qty || it.rawQty), priceByName.get(nm) ?? null);
+      add(nm, qtyToNum(it.qty || it.rawQty), priceByName.get(nm) ?? null, idByName.get(nm) ?? "");
     }
   }
-  // ② 예약 확정분(픽업==출고일) — 공급가는 예약 스냅샷
+  // ② 예약 확정분(픽업==출고일) — 공급가는 예약 스냅샷, 연동 id는 예약 스냅샷 우선(없으면 이름매칭)
   for (const it of resvItems) {
-    add(it.name, qtyToNum(it.qty), it.supplyPrice);
+    add(it.name, qtyToNum(it.qty), it.supplyPrice, it.inventoryItemId || idByName.get(it.name.trim()) || "");
   }
 
   const items = orderKeys.map((k) => {
@@ -435,6 +468,7 @@ export async function loadInvoiceToolItemsAction(
       name: a.name,
       qty: String(qty),
       unitPrice: a.priced ? String(a.unitPrice) : "",
+      inventoryItemId: a.inventoryItemId,
     };
   });
   return { items };
@@ -479,6 +513,9 @@ export async function reviseInvoiceAction(
   const items = cleaned;
   if (items.length === 0) return { error: "품목을 한 개 이상 입력하세요." };
 
+  // 수정 전 공구 품목 스냅샷 — 아래 재고 재조정(차이만큼)에 사용.
+  const oldTool = await invoiceToolByName(invoiceId);
+
   try {
     await prisma.$transaction(async (tx) => {
       // 상태 가드를 쓰기 자체에 — 수정 도중 입금확인/취소로 전이되면 count 0 → 중단(레이스 차단).
@@ -503,6 +540,20 @@ export async function reviseInvoiceAction(
     }
     console.error("[invoice] revise failed:", err);
     return { error: "수정에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+
+  // 재고 재조정 — 이미 차감된 계산서면 '차이만큼'만 반영, (발행 때 차감 실패 등으로) 미차감이면 전량 차감.
+  try {
+    const stDed = (
+      await prisma.invoice.findUnique({
+        where: { id: invoiceId },
+        select: { stockDeductedAt: true },
+      })
+    )?.stockDeductedAt;
+    if (stDed) await applyInvoiceStockDelta(invoiceId, oldTool);
+    else await deductInvoiceStock(invoiceId);
+  } catch (e) {
+    logError("invoice.revise.adjustStock", e, { invoiceId });
   }
 
   // 최종 총액(주간발주 합산분 포함) — 감사/알림에 사용.
@@ -544,6 +595,12 @@ export async function voidInvoiceAction(formData: FormData) {
     data: { status: "VOID", voidedAt: new Date() },
   });
   if (upd.count === 0) return; // 이미 다른 상태로 전이됨 → 무시
+  // 계산서 취소 → 발행 때 차감했던 공구 재고 복구 + 예약 차감표시 되돌림(멱등).
+  try {
+    await restoreInvoiceStock(id);
+  } catch (e) {
+    logError("invoice.void.restoreStock", e, { invoiceId: id });
+  }
   const inv = await prisma.invoice.findUnique({
     where: { id },
     select: { userId: true, date: true },

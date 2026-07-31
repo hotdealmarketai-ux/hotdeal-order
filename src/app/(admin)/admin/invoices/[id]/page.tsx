@@ -86,6 +86,7 @@ export default async function AdminInvoiceDetail(props: {
         name: it.name,
         qty: String(it.qty),
         unitPrice: String(it.unitPrice),
+        inventoryItemId: it.inventoryItemId,
       }));
     // 예약분 자동채움 — 아직 이 계산서에 안 들어간 확정 예약분만 공구(TOOL)에 덧붙인다
     // (초안을 다시 열어도 예약분이 사라지지 않게).
@@ -122,6 +123,13 @@ export default async function AdminInvoiceDetail(props: {
         })
       ).length > 0;
 
+    // 공구칸 재고현황 연동 드롭다운용 — 활성 재고 품목(id·이름·점주공급가).
+    const invOptions = await prisma.inventoryItem.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true, supplyPrice: true },
+      orderBy: { sortOrder: "asc" },
+    });
+
     return (
       <>
         <Topbar backHref="/admin/invoices" title="계산서 작성중" />
@@ -145,6 +153,7 @@ export default async function AdminInvoiceDetail(props: {
             confirmedCats={inv.confirmedCats}
             weeklyAvailable={weeklyLoadable || weeklyItems.length > 0}
             weeklyItems={weeklyItems}
+            invOptions={invOptions}
           />
           <DeleteDraftButton invoiceId={inv.id} />
         </div>

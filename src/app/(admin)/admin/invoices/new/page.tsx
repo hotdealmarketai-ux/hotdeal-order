@@ -91,6 +91,13 @@ export default async function NewInvoicePage(props: {
     (await getWeeklyItemsForStoreShipment(userId, date, { requireConfirmed: false }))
       .length > 0;
 
+  // 공구칸 재고현황 연동 드롭다운용 — 활성 재고 품목(id·이름·점주공급가).
+  const invOptions = await prisma.inventoryItem.findMany({
+    where: { deletedAt: null },
+    select: { id: true, name: true, supplyPrice: true },
+    orderBy: { sortOrder: "asc" },
+  });
+
   return (
     <>
       <Topbar backHref={`/admin/combined/${userId}/${date}`} title="계산서 작성" />
@@ -112,6 +119,7 @@ export default async function NewInvoicePage(props: {
           initialItems={initialItems}
           refGroups={refGroups}
           weeklyAvailable={weeklyLoadable}
+          invOptions={invOptions}
         />
       </div>
     </>
