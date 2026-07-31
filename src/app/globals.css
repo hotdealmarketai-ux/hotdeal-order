@@ -4521,6 +4521,10 @@ a.resv-card:active { transform: scale(0.995); }
   display: grid; grid-template-columns: minmax(0,1fr) 66px 52px 58px; gap: 7px;
   align-items: center; padding: 9px 11px;
 }
+/* 계산서 기준 재고 정산 = 읽기전용 3열(품목 / 계산서수량 / 현재재고) */
+.rectable--record .rectable__head, .rectable--record .rectable__row {
+  grid-template-columns: minmax(0,1fr) 88px 88px;
+}
 .rectable__head { background: var(--green-100); font-size: 11.5px; font-weight: 700; color: var(--muted); }
 .rectable__row { border-top: 1px solid var(--line); font-size: 13.5px; }
 .rectable__name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

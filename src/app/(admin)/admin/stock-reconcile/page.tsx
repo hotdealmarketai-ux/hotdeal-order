@@ -52,7 +52,7 @@ export default async function StockReconcilePage(props: {
           </div>
         ) : (
           <>
-            <StockReconcileForm date={date} rows={rows} />
+            <StockReconcileForm date={date} rows={rows} undeducted={resvCount} />
 
             {unmatched.length > 0 && (
               <div className="notice notice--mute" style={{ marginTop: 12 }}>
