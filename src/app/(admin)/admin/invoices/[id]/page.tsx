@@ -80,7 +80,7 @@ export default async function AdminInvoiceDetail(props: {
 
     // 주간발주 합산분(WEEKLY)은 일반 카테고리 rows에서 제외 — 별도 주간발주 섹션에서 편집.
     const initialItems: InvoiceInitialItem[] = inv.items
-      .filter((it) => it.category !== "WEEKLY")
+      .filter((it) => it.category !== "WEEKLY" && it.category !== "DELIVERY")
       .map((it) => ({
         category: it.category as Category,
         name: it.name,
@@ -129,6 +129,9 @@ export default async function AdminInvoiceDetail(props: {
       select: { id: true, name: true, supplyPrice: true },
       orderBy: { sortOrder: "asc" },
     });
+    // 저장된 용달 발송(용차비용) — 있으면 폼이 토글 ON 상태로 복원.
+    const deliveryFee =
+      inv.items.find((it) => it.category === "DELIVERY")?.unitPrice ?? 0;
 
     return (
       <>
@@ -154,6 +157,7 @@ export default async function AdminInvoiceDetail(props: {
             weeklyAvailable={weeklyLoadable || weeklyItems.length > 0}
             weeklyItems={weeklyItems}
             invOptions={invOptions}
+            deliveryFee={deliveryFee}
           />
           <DeleteDraftButton invoiceId={inv.id} />
         </div>
@@ -170,7 +174,7 @@ export default async function AdminInvoiceDetail(props: {
   // 입금대기(ISSUED)·일반발주(DAILY)면 제자리 수정 폼을 붙인다(같은 계산서 갱신·재발송).
   const canRevise = inv.status === "ISSUED" && inv.kind === "DAILY";
   const reviseItems: ReviseInitialItem[] = inv.items
-    .filter((it) => it.category !== "WEEKLY")
+    .filter((it) => it.category !== "WEEKLY" && it.category !== "DELIVERY")
     .map((it) => ({
       category: it.category as Category,
       name: it.name,
@@ -179,6 +183,7 @@ export default async function AdminInvoiceDetail(props: {
     }));
   // 주간발주 합산분(읽기 전용 표시) — 발행된 계산서 영수증에 별도 섹션으로.
   const weeklyBilled = inv.items.filter((it) => it.category === "WEEKLY");
+  const deliveryBilled = inv.items.filter((it) => it.category === "DELIVERY");
   const reviseAllowed = allowedCategoriesFor(inv.user.role as Role);
   const reviseCategories = reviseAllowed.length
     ? reviseAllowed
@@ -230,6 +235,23 @@ export default async function AdminInvoiceDetail(props: {
             <span className={`badge ${badge.cls}`}>{badge.label}</span>
           </div>
         </div>
+
+        {deliveryBilled.length > 0 && (
+          <div className="invcat">
+            <div className="invcat__head">
+              <span className="chip">용달 발송</span>
+              <span className="invcat__sum">
+                {fmt(deliveryBilled.reduce((n, it) => n + it.amount, 0))}원
+              </span>
+            </div>
+            {deliveryBilled.map((it) => (
+              <div className="invline" key={it.id}>
+                <span>용차비용</span>
+                <span className="invline__amt">{fmt(it.amount)}원</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {cats.map((c) => {
           const items = inv.items.filter((it) => it.category === c);

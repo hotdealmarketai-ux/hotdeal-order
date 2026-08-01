@@ -1797,6 +1797,23 @@ a {
   gap: 8px;
   flex-shrink: 0;
 }
+/* 용달 발송 — 용차비용 입력 한 줄(라벨 + 금액입력 + 확정 버튼) */
+.invdelivery {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.invdelivery__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted-2);
+  flex-shrink: 0;
+}
+.invdelivery .input {
+  flex: 1;
+  min-width: 0;
+}
 /* 공구 '불러오기' — 배경 없는 작은 글씨 버튼(담기·예약 발주를 계산서로 로드) */
 .invcat__load {
   border: none;

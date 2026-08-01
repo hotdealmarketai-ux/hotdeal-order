@@ -107,6 +107,11 @@ function cleanItems(
 //    불러온 뒤 관리자가 수량·단가를 고칠 수 있고, 발행 시 총액에 그대로 합산된다.
 const WEEKLY_CAT = "WEEKLY";
 
+// ── 용달 발송 — 계산서에 단일 품목(category=DELIVERY)으로 붙는다. 재고와 무관(TOOL 아님), 총액에 합산.
+//    토글 ON 시 용차비용 1줄 + '확정'. WEEKLY 처럼 일반 카테고리 확정/발행 흐름과 분리(안전).
+const DELIVERY_CAT = "DELIVERY";
+const DELIVERY_NAME = "용달 발송";
+
 type WeeklyRaw = { name?: string; qty?: string; unitPrice?: string; unit?: string };
 function cleanWeeklyItems(
   raw: WeeklyRaw[],
@@ -216,7 +221,7 @@ export async function saveInvoiceAction(
     if (!invoiceId) return { error: "먼저 카테고리를 확정해 주세요." };
     const inv = await prisma.invoice.findUnique({
       where: { id: invoiceId },
-      include: { items: { select: { amount: true } } },
+      include: { items: { select: { amount: true, category: true } } },
     });
     if (!inv) return { error: "계산서를 찾을 수 없어요." };
     if (inv.status !== "DRAFT") {
@@ -228,6 +233,11 @@ export async function saveInvoiceAction(
     // #11 발행 게이트 — 4개 카테고리 모두 'DB 기준' 확정돼야 발행(빈 카테고리도 확정 대상).
     if (allCats.length > 0 && allCats.some((c) => !dbConfirmed.has(c))) {
       return { error: "모든 품목(과일·야채·공구·채움채)을 확정해야 발행할 수 있어요." };
+    }
+    // 용달 발송이 계산서에 들어 있으면 반드시 확정돼야 발행 — 서버가 권위(클라이언트 allCats 우회 차단).
+    // 수정(unconfirm)으로 잠금만 풀린 채 남은 용차비용이 다른 편집자에 의해 미승인 발행되는 것을 막는다.
+    if (inv.items.some((it) => it.category === DELIVERY_CAT) && !dbConfirmed.has(DELIVERY_CAT)) {
+      return { error: "용달 발송을 확정해 주세요." };
     }
     if (inv.items.length === 0) {
       return { error: "품목을 한 개 이상 입력하세요." };
@@ -281,6 +291,13 @@ export async function saveInvoiceAction(
     return { error: "발행된 계산서는 수정할 수 없어요. 취소 후 다시 작성해 주세요." };
   }
 
+  // ── 용달 발송(DELIVERY) 파라미터 — 토큰과 품목을 '같은 트랜잭션'에서 원자적으로 처리(분리 금지). ──
+  const isDelivery = confirmCat === DELIVERY_CAT;
+  const deliveryFee = parsePriceStrict(String(formData.get("deliveryFee") ?? "")) ?? 0;
+  const deliveryOff = String(formData.get("deliveryOff") ?? "") === "1";
+  // 용달 '확정'은 유효한 용차비용이 있어야만 성립 — 그때만 토큰을 켜고 품목을 쓴다(토큰만 남는 유령 방지, #10).
+  const deliveryConfirm = isDelivery && confirmOn && !deliveryOff && deliveryFee > 0;
+
   // confirmedCats 델타 — DB값 기준으로 확정이면 추가, 수정(해제)이면 삭제(폼 전체로 덮지 않음).
   const confSet = new Set(
     String(existing?.confirmedCats ?? "").split(",").map((s) => s.trim()).filter(Boolean),
@@ -288,8 +305,32 @@ export async function saveInvoiceAction(
   if (CATEGORY_ORDER.includes(confirmCat as Category)) {
     if (confirmOn) confSet.add(confirmCat);
     else confSet.delete(confirmCat);
+  } else if (isDelivery) {
+    if (deliveryConfirm) confSet.add(DELIVERY_CAT);
+    else confSet.delete(DELIVERY_CAT); // 수정(unconfirm)·토글오프·무효금액 → 토큰 해제
   }
   const newConfirmed = [...confSet].join(",");
+
+  // 용달 품목을 트랜잭션 안에서 적용 — 확정=현재 fee로 재작성, 토글오프/무효=삭제, 수정(unconfirm)=유지.
+  const applyDeliveryTx = async (tx: Prisma.TransactionClient, invId: string) => {
+    if (!isDelivery) return;
+    if (deliveryOff || confirmOn) {
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: invId, category: DELIVERY_CAT } });
+      if (deliveryConfirm) {
+        await tx.invoiceItem.create({
+          data: {
+            invoiceId: invId,
+            category: DELIVERY_CAT,
+            name: DELIVERY_NAME,
+            qty: 1,
+            unitPrice: deliveryFee,
+            amount: deliveryFee,
+            sortOrder: -1,
+          },
+        });
+      }
+    }
+  };
 
   let id = invoiceId;
   try {
@@ -309,6 +350,7 @@ export async function saveInvoiceAction(
             data: items.map((it, i) => ({ ...it, sortOrder: i, invoiceId: existing.id })),
           });
         }
+        await applyDeliveryTx(tx, existing.id); // 용달 품목도 같은 트랜잭션에서(토큰-품목 원자성, #1)
         const all = await tx.invoiceItem.findMany({
           where: { invoiceId: existing.id },
           select: { amount: true },
@@ -320,8 +362,28 @@ export async function saveInvoiceAction(
       });
       id = existing.id;
     } else {
-      // 새 계산서 — 첫 확정. 제출된 품목으로 생성.
-      const total = items.reduce((n, it) => n + it.amount, 0);
+      // 새 계산서 — 첫 확정. 제출된 품목 + (있으면) 용달 품목을 한 번에 생성(토큰-품목 원자성, #1).
+      const createItems: {
+        category: string;
+        name: string;
+        qty: number;
+        unitPrice: number;
+        amount: number;
+        inventoryItemId: string;
+        sortOrder: number;
+      }[] = items.map((it, i) => ({ ...it, sortOrder: i }));
+      if (deliveryConfirm) {
+        createItems.push({
+          category: DELIVERY_CAT,
+          name: DELIVERY_NAME,
+          qty: 1,
+          unitPrice: deliveryFee,
+          amount: deliveryFee,
+          inventoryItemId: "",
+          sortOrder: -1,
+        });
+      }
+      const total = createItems.reduce((n, it) => n + it.amount, 0);
       const created = await prisma.invoice.create({
         data: {
           userId,
@@ -329,7 +391,7 @@ export async function saveInvoiceAction(
           total,
           status: "DRAFT",
           confirmedCats: newConfirmed,
-          items: { create: items.map((it, i) => ({ ...it, sortOrder: i })) },
+          items: { create: createItems },
         },
       });
       id = created.id;
@@ -524,9 +586,9 @@ export async function reviseInvoiceAction(
         data: { revisedAt: new Date() },
       });
       if (upd.count === 0) throw new Error("INVOICE_NOT_ISSUED");
-      // 일반 품목만 통째 교체(제출된 payload가 최종본) — 주간발주 합산분(WEEKLY)은 보존.
+      // 일반 품목만 통째 교체(제출된 payload가 최종본) — 주간발주 합산분(WEEKLY)·용달 발송(DELIVERY)은 보존.
       await tx.invoiceItem.deleteMany({
-        where: { invoiceId, category: { not: WEEKLY_CAT } },
+        where: { invoiceId, category: { notIn: [WEEKLY_CAT, DELIVERY_CAT] } },
       });
       await tx.invoiceItem.createMany({
         data: items.map((it, i) => ({ ...it, sortOrder: i, invoiceId })),

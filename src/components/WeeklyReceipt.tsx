@@ -29,26 +29,33 @@ export function WeeklyReceipt({
   // 목록에 없는 카테고리 항목(구 데이터 등)도 빠뜨리지 않게
   const others = items.filter((it) => !shown.some((c) => c.key === it.category));
 
-  const renderGroup = (label: string, list: ReceiptItem[], key: string) => (
-    <div className="invcat" key={key}>
-      <div className="invcat__head">
-        <span className="chip">{label}</span>
-        <span className="invcat__sum">
-          총 {won(sumQty(list.map((it) => it.sub.split("×")[0])))}개
-        </span>
-      </div>
-      {list.map((it, i) => (
-        <div className="invline" key={i}>
-          <span>
-            <span className="receipt-item__no">{i + 1}</span>
-            {it.name}
-            <span className="invline__meta">{it.sub}</span>
+  const renderGroup = (label: string, list: ReceiptItem[], key: string) => {
+    // 용달 발송은 수량 개념이 없어 '총 N개' 대신 금액을 헤더에 표시.
+    const isFee = key === "DELIVERY";
+    const groupAmt = list.reduce((n, it) => n + it.amount, 0);
+    return (
+      <div className="invcat" key={key}>
+        <div className="invcat__head">
+          <span className="chip">{label}</span>
+          <span className="invcat__sum">
+            {isFee
+              ? `${won(groupAmt)}원`
+              : `총 ${won(sumQty(list.map((it) => it.sub.split("×")[0])))}개`}
           </span>
-          <span className="invline__amt">{won(it.amount)}원</span>
         </div>
-      ))}
-    </div>
-  );
+        {list.map((it, i) => (
+          <div className="invline" key={i}>
+            <span>
+              <span className="receipt-item__no">{i + 1}</span>
+              {it.name}
+              {it.sub && <span className="invline__meta">{it.sub}</span>}
+            </span>
+            <span className="invline__amt">{won(it.amount)}원</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div>

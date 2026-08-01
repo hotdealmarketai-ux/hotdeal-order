@@ -39,17 +39,20 @@ export default async function MerchantInvoiceDetailPage({
   const receipt = inv.items.map((it) => ({
     category: it.category,
     name: it.name,
-    // 주간발주 합산분은 박스/판 단위 그대로 표시(예: "3박스 × 20,000").
+    // 주간발주 합산분은 박스/판 단위 그대로 표시(예: "3박스 × 20,000"). 용달 발송은 수량·단가 표기 없이 금액만.
     sub:
-      it.category === "WEEKLY" && it.unit
+      it.category === "DELIVERY"
+        ? ""
+        : it.category === "WEEKLY" && it.unit
         ? `${it.qty}${it.unit} × ${won(it.unitPrice)}`
         : `${it.qty} × ${won(it.unitPrice)}`,
     amount: it.amount,
   }));
-  // 일반발주 계산서는 과일/야채/공구/채움채(+주간발주 합산분)로 분류(안 넘기면 전부 '기타'로 나옴). 주간은 기본값.
+  // 일반발주 계산서는 용달 발송/과일/야채/공구/채움채(+주간발주 합산분)로 분류(안 넘기면 전부 '기타'로 나옴). 주간은 기본값.
   const invCats =
     inv.kind === "DAILY"
       ? [
+          { key: "DELIVERY", label: "용달 발송" },
           ...CATEGORY_ORDER.map((c) => ({ key: c, label: CATEGORIES[c].label })),
           { key: "WEEKLY", label: "주간발주" },
         ]

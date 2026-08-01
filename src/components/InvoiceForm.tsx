@@ -25,6 +25,8 @@ import { sumQty } from "@/lib/qty";
 import { MoneyInput } from "./MoneyInput";
 import { rankStockMatches } from "@/lib/stock-match";
 
+const DELIVERY_CAT = "DELIVERY";
+
 type Row = { id: number; name: string; qty: string; unitPrice: string; inventoryItemId: string };
 type WeeklyRow = { id: number; name: string; qty: string; unitPrice: string; unit: string };
 
@@ -76,6 +78,7 @@ export function InvoiceForm({
   weeklyAvailable = false,
   weeklyItems = [],
   invOptions = [],
+  deliveryFee = 0,
 }: {
   invoiceId?: string;
   userId: string;
@@ -87,6 +90,7 @@ export function InvoiceForm({
   weeklyAvailable?: boolean; // 이 출고일에 불러올 확정 주간발주가 있는가
   weeklyItems?: InvoiceWeeklyItem[]; // 이미 이 계산서에 불러와진 주간발주 합산분
   invOptions?: InvOption[]; // 공구칸 드롭다운용 재고현황 상품(연동+공급가 자동채움)
+  deliveryFee?: number; // 저장된 용달 발송 용차비용(0=없음). 있으면 토글 ON 상태로 복원.
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({
@@ -131,6 +135,25 @@ export function InvoiceForm({
     return rows;
   });
   const [weeklySaving, startWeeklySave] = useTransition();
+
+  // ── 용달 발송 ── 토글 ON → 용차비용 1줄 + '확정'(다른 카테고리처럼). 계산서 총액에 합산(재고 무관).
+  const deliveryConfirmedInit = confirmedCats
+    .split(",")
+    .map((s) => s.trim())
+    .includes(DELIVERY_CAT);
+  const [deliveryOn, setDeliveryOn] = useState(
+    () => deliveryFee > 0 || deliveryConfirmedInit,
+  );
+  const [deliveryFeeStr, setDeliveryFeeStr] = useState(() =>
+    deliveryFee > 0 ? String(deliveryFee) : "",
+  );
+  const [deliveryConfirmed, setDeliveryConfirmed] = useState(
+    () => deliveryConfirmedInit,
+  );
+  const deliveryFeeNum = (() => {
+    const n = parseInt((deliveryFeeStr || "").replace(/[^\d]/g, ""), 10);
+    return Number.isFinite(n) ? n : 0;
+  })();
 
   function updateWeekly(id: number, field: keyof WeeklyRow, value: string) {
     setWeeklyRows((prev) => {
@@ -311,7 +334,8 @@ export function InvoiceForm({
   }, [categories, rowsByCat]);
 
   const dailyTotal = categories.reduce((n, c) => n + (subtotals[c]?.sum ?? 0), 0);
-  const total = dailyTotal + weeklyTotal; // 주간발주 합산분 포함
+  const deliveryTotal = deliveryOn ? deliveryFeeNum : 0;
+  const total = dailyTotal + weeklyTotal + deliveryTotal; // 주간발주 합산분 + 용달 발송 포함
   const totalCount =
     categories.reduce((n, c) => n + (subtotals[c]?.count ?? 0), 0) +
     weeklyFilledCount;
@@ -352,6 +376,11 @@ export function InvoiceForm({
     () => new Set(confirmedCats.split(",").map((s) => s.trim()).filter(Boolean)),
   );
   const allConfirmed = categories.every((c) => confirmed.has(c));
+  // 용달 발송이 켜져 있으면 확정돼야 발행 가능(다른 카테고리와 동일 게이트).
+  const deliveryReady = !deliveryOn || deliveryConfirmed;
+  const allCatsValue = deliveryOn
+    ? [...categories, DELIVERY_CAT].join(",")
+    : categories.join(",");
 
   // 동시작성 실시간 반영 — 5초마다 서버(공유 초안)의 확정분을 가져와 관찰자 화면에 반영한다.
   // 확정(잠금)된 카테고리는 서버 기준으로 갱신(다른 폰/PC가 넣은 품목이 바로 보임).
@@ -378,6 +407,9 @@ export function InvoiceForm({
             return prevC; // 동일 — 불필요 렌더 방지
           return new Set(serverConfirmed);
         });
+        // (용달 발송은 5초 폴링으로 동기화하지 않는다 — 편집 중 덮어쓰기/포커스 탈취·유령 잠금 방지.
+        //  다른 편집자의 용달 상태는 새로고침 시 deliveryFee/confirmedCats prop로 반영되고,
+        //  발행 정합성은 서버 게이트(용달 품목 있으면 확정 필수)가 보장한다.)
         const byCat: Record<
           string,
           { name: string; qty: string; unitPrice: string; inventoryItemId: string }[]
@@ -450,7 +482,7 @@ export function InvoiceForm({
     fd.set("payload", JSON.stringify(payload));
     fd.set("confirmCat", cat); // 토글한 카테고리 하나
     fd.set("confirmOn", on ? "1" : "0"); // 확정=1 / 수정(해제)=0
-    fd.set("allCats", categories.join(","));
+    fd.set("allCats", allCatsValue);
     fd.set("mode", "confirm");
     startTransition(() => formAction(fd));
   }
@@ -467,6 +499,47 @@ export function InvoiceForm({
     }
     setConfirmed(next);
     persistConfirmed(c, on);
+  }
+
+  // 용달 발송 저장 — 확정/수정/토글오프를 서버에 알린다(WEEKLY처럼 별도 흐름, confirmCat=DELIVERY).
+  function persistDelivery(opts: { confirmOn: boolean; off?: boolean }) {
+    const fd = new FormData();
+    if (invoiceId) fd.set("invoiceId", invoiceId);
+    fd.set("userId", userId);
+    fd.set("date", date);
+    // 용달 액션은 카테고리 품목을 건드리지 않는다 — 빈 payload로 다른 관리자의 카테고리 편집 덮어쓰기 방지(#9).
+    fd.set("payload", "[]");
+    fd.set("confirmCat", DELIVERY_CAT);
+    fd.set("confirmOn", opts.confirmOn ? "1" : "0");
+    fd.set("deliveryFee", String(deliveryFeeNum));
+    if (opts.off) fd.set("deliveryOff", "1");
+    fd.set("allCats", allCatsValue);
+    fd.set("mode", "confirm");
+    startTransition(() => formAction(fd));
+  }
+  function toggleDelivery() {
+    if (deliveryOn) {
+      setDeliveryOn(false);
+      setDeliveryConfirmed(false);
+      setDeliveryFeeStr("");
+      persistDelivery({ confirmOn: false, off: true }); // 끄기 — 용달 품목 삭제
+    } else {
+      setDeliveryOn(true); // 켜기 — 용차비용 입력칸만(확정 전엔 저장 안 함)
+    }
+  }
+  function toggleDeliveryConfirm() {
+    if (deliveryConfirmed) {
+      setDeliveryConfirmed(false);
+      persistDelivery({ confirmOn: false }); // 수정 — 잠금 해제(품목 유지)
+    } else {
+      if (deliveryFeeNum <= 0) {
+        setLocalError("용달 발송: 용차비용을 입력해 주세요.");
+        return;
+      }
+      setLocalError("");
+      setDeliveryConfirmed(true);
+      persistDelivery({ confirmOn: true }); // 확정 — 용차비용 저장
+    }
   }
 
   // 발행 전 검증 — 서버(cleanItems)와 동일 규칙
@@ -514,13 +587,57 @@ export function InvoiceForm({
         <input type="hidden" name="date" value={date} />
         <input type="hidden" name="payload" value={JSON.stringify(payload)} />
         <input type="hidden" name="confirmedCats" value={[...confirmed].join(",")} />
-        <input type="hidden" name="allCats" value={categories.join(",")} />
+        <input type="hidden" name="allCats" value={allCatsValue} />
 
         {(state?.error || localError) && (
           <div className="notice notice--error" style={{ marginBottom: 12 }}>
             {state?.error || localError}
           </div>
         )}
+
+        {/* 용달 발송 — 과일 칸 위. 토글 ON → 용차비용 입력 + 확정(다른 카테고리처럼), 계산서 총액에 합산. */}
+        <div className={`invcat ${deliveryConfirmed ? "is-locked" : ""}`}>
+          <div className="invcat__head">
+            <span className="chip">용달 발송</span>
+            {deliveryOn && deliveryFeeNum > 0 && (
+              <span className="invcat__sum">{fmt(deliveryFeeNum)}원</span>
+            )}
+            <div className="invcat__actions">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={deliveryOn}
+                aria-label="용달 발송"
+                className={`switch ${deliveryOn ? "is-on" : ""}`}
+                onClick={toggleDelivery}
+              >
+                <span className="switch__knob" />
+              </button>
+            </div>
+          </div>
+          {deliveryOn && (
+            <div className="invdelivery">
+              <span className="invdelivery__label">용차비용</span>
+              <MoneyInput
+                value={deliveryFeeStr}
+                disabled={deliveryConfirmed}
+                onChange={(raw) => {
+                  setDeliveryConfirmed(false);
+                  setDeliveryFeeStr(raw);
+                }}
+                placeholder="용차비용"
+              />
+              <button
+                type="button"
+                className={`btn btn--xs ${deliveryConfirmed ? "btn--soft" : "btn--primary"}`}
+                style={{ flexShrink: 0 }}
+                onClick={toggleDeliveryConfirm}
+              >
+                {deliveryConfirmed ? "수정" : "확정"}
+              </button>
+            </div>
+          )}
+        </div>
 
         {categories.map((c) => {
           const sub = subtotals[c] ?? { count: 0, sum: 0 };
@@ -759,7 +876,7 @@ export function InvoiceForm({
               <button
                 type="button"
                 className="btn btn--primary btn--block"
-                disabled={!allConfirmed}
+                disabled={!allConfirmed || !deliveryReady}
                 onClick={() => {
                   if (validate()) setConfirming(true);
                 }}
@@ -818,6 +935,18 @@ export function InvoiceForm({
                     <span className="invline__amt">{fmt(rowAmount(r))}</span>
                   </div>
                 ))}
+              </div>
+            )}
+            {deliveryOn && deliveryFeeNum > 0 && (
+              <div className="invcat">
+                <div className="invcat__head">
+                  <span className="chip">용달 발송</span>
+                  <span className="invcat__sum">{fmt(deliveryFeeNum)}원</span>
+                </div>
+                <div className="invline">
+                  <span>용차비용</span>
+                  <span className="invline__amt">{fmt(deliveryFeeNum)}</span>
+                </div>
               </div>
             )}
             <div className="invtotal" style={{ marginTop: 10 }}>

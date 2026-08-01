@@ -106,6 +106,21 @@ export default async function BillingByDateStorePage(props: {
                     );
                   })}
 
+                  {inv.items
+                    .filter((it) => it.category === "DELIVERY")
+                    .map((it) => (
+                      <div className="invcat" key={it.id}>
+                        <div className="invcat__head">
+                          <span className="chip">용달 발송</span>
+                          <span className="invcat__sum">{fmt(it.amount)}원</span>
+                        </div>
+                        <div className="invline">
+                          <span>용차비용</span>
+                          <span className="invline__amt">{fmt(it.amount)}원</span>
+                        </div>
+                      </div>
+                    ))}
+
                   <div className="invgrand">
                     <span>총 결제요청 금액</span>
                     <b>{fmt(inv.total)}원</b>
