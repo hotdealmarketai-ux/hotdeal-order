@@ -2,13 +2,11 @@
 // 서버 데이터 접근(prisma 쿼리)은 actions/reservation.ts 에 둔다(주간발주 schedule/weekly 분리 패턴).
 import { shiftDate, labelDate } from "@/lib/date";
 
-// 예약 마감 = 예약일자가 속한 '일반발주 창'의 마감(저녁 8시). 일반발주와 함께 20시에 취합.
-//  - 월~금·일: 그날 20:00 KST
-//  - 토요일: 주말 연속창(토12~일20)이라 다음날(일) 20:00
+// 예약 마감 = '판매 당일' 저녁 8시(KST). 예약발주는 그 상품을 판매한 날(예약일자)에만 받고 그날 마감한다.
+//  - 요일 무관(주말·토요일도 그날 마감). 픽업(출고)일자는 별개 — 나중에 그 픽업일자 발주에 포함시킨다.
+//  - (구: 토요일은 주말 연속 발주창 때문에 일요일로 밀었으나, 예약발주는 '당일 마감'이 맞아 폐지)
 export function reservationDeadlineUtc(reserveDate: string): Date {
-  const dow = new Date(`${reserveDate}T00:00:00Z`).getUTCDay(); // 그 캘린더 날짜의 요일(0=일..6=토)
-  const closeDate = dow === 6 ? shiftDate(reserveDate, 1) : reserveDate;
-  return new Date(`${closeDate}T20:00:00+09:00`);
+  return new Date(`${reserveDate}T20:00:00+09:00`);
 }
 
 // 공구 자동로드일(= 픽업 전날) KST YYYY-MM-DD — 그날 발주창 공구에 읽기전용으로 뜬다.
@@ -16,7 +14,7 @@ export function reservationLoadDate(pickupDate: string): string {
   return shiftDate(pickupDate, -1);
 }
 
-// 지금 예약이 마감됐는가(예약일자+1 12:00 지남)
+// 지금 예약이 마감됐는가(예약일자 그날 저녁 8시 지남)
 export function isReservationClosed(reserveDate: string, now: number = Date.now()): boolean {
   return now >= reservationDeadlineUtc(reserveDate).getTime();
 }
@@ -45,11 +43,9 @@ export function validateBatchDates(
   return { ok: true };
 }
 
-// 마감 카운트다운/안내 라벨: "7월 21일 (월) 저녁 8시" (토요일 예약은 일요일 20시)
+// 마감 카운트다운/안내 라벨: "7월 21일 (월) 저녁 8시" — 예약일자 그날 저녁 8시(요일 무관)
 export function reservationDeadlineLabel(reserveDate: string): string {
-  const dow = new Date(`${reserveDate}T00:00:00Z`).getUTCDay();
-  const closeDate = dow === 6 ? shiftDate(reserveDate, 1) : reserveDate;
-  return `${labelDate(closeDate)} 저녁 8시`;
+  return `${labelDate(reserveDate)} 저녁 8시`;
 }
 
 // 상태 배지 + 편집잠금 판정(점주/관리자 공용)
