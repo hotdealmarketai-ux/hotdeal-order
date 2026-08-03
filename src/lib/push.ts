@@ -263,6 +263,24 @@ export async function notifyMerchantInvoiceIssued(userId: string, invoiceId: str
   }
 }
 
+// 점주에게 '환불계산서 발행' 알림 — 미수에서 차감됨. 해당 환불계산서로 이동.
+export async function notifyMerchantRefundIssued(
+  userId: string,
+  invoiceId: string,
+  amount: number,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: `환불계산서 ${amount.toLocaleString("ko-KR")}원이 발행되었습니다. (미수 차감)`,
+      body: "",
+      url: `/invoices/${invoiceId}`,
+      type: "invoice",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantRefundIssued failed:", err);
+  }
+}
+
 // 점주에게 '계산서(입금요청서) 수정 재발송' 알림 — 같은 계산서로 이동, 바뀐 금액 포함
 export async function notifyMerchantInvoiceRevised(
   userId: string,

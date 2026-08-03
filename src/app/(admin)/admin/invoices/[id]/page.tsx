@@ -25,6 +25,8 @@ import { InvoiceAdminActions } from "@/components/InvoiceAdminActions";
 import { InvoiceRevisionHistory } from "@/components/InvoiceRevisionHistory";
 import { parseRevisionChanges } from "@/lib/invoice-revision";
 import { DeleteDraftButton } from "@/components/DeleteDraftButton";
+import { RefundReceipt } from "@/components/RefundReceipt";
+import { RefundVoidButton } from "@/components/RefundVoidButton";
 import {
   ReviseInvoiceForm,
   type ReviseInitialItem,
@@ -55,6 +57,49 @@ export default async function AdminInvoiceDetail(props: {
     },
   });
   if (!inv) notFound();
+
+  // 환불계산서 — 카테고리·재고·발주 참고 없이 단순 조회(+취소). 일반 계산서 편집 흐름과 분리.
+  if (inv.kind === "REFUND") {
+    const items = inv.items.map((it) => ({
+      name: it.name,
+      qty: it.qty,
+      unitPrice: it.unitPrice,
+      amount: it.amount,
+    }));
+    return (
+      <>
+        <Topbar backHref={`/admin/billing/${inv.userId}`} title="환불계산서" />
+        <div className="page">
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 10,
+            }}
+          >
+            <span className="badge badge--refund">환불</span>
+            {inv.status === "ISSUED" ? (
+              <RefundVoidButton id={inv.id} />
+            ) : (
+              <span className="badge badge--mute">취소됨</span>
+            )}
+          </div>
+          <RefundReceipt
+            storeName={inv.user.storeName}
+            dateLabel={labelDate(inv.date)}
+            items={items}
+            note={
+              inv.status === "ISSUED"
+                ? "이 금액만큼 점포 미수에서 차감되었습니다."
+                : "취소된 환불계산서입니다. (미수 복구됨)"
+            }
+          />
+        </div>
+      </>
+    );
+  }
 
   // 작성중이면 편집 화면(발주 참고 포함)
   if (inv.status === "DRAFT") {

@@ -22,15 +22,26 @@ export function BillingLauncher({ userId }: { userId: string }) {
             onChange={(e) => setDate(e.target.value)}
           />
         </div>
-        <button
-          type="button"
-          className="btn btn--primary btn--block"
-          style={{ marginTop: 12 }}
-          disabled={!/^\d{4}-\d{2}-\d{2}$/.test(date)}
-          onClick={() => router.push(`/admin/invoices/new?user=${userId}&date=${date}`)}
-        >
-          계산서 발행
-        </button>
+        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <button
+            type="button"
+            className="btn btn--primary"
+            style={{ flex: 1 }}
+            disabled={!/^\d{4}-\d{2}-\d{2}$/.test(date)}
+            onClick={() => router.push(`/admin/invoices/new?user=${userId}&date=${date}`)}
+          >
+            계산서 발행
+          </button>
+          {/* 환불계산서 — 미수 차감용. 카테고리·재고 없이 자유 입력. 빨강. */}
+          <button
+            type="button"
+            className="btn btn--refund"
+            style={{ flex: 1 }}
+            onClick={() => router.push(`/admin/billing/${userId}/refund`)}
+          >
+            환불계산서 발행
+          </button>
+        </div>
       </div>
     </div>
   );

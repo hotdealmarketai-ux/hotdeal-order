@@ -7,7 +7,7 @@ import { receivableOf } from "@/lib/receivable";
 import { labelDate } from "@/lib/date";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
-const KIND: Record<string, string> = { DAILY: "일반발주", WEEKLY: "주간발주" };
+const KIND: Record<string, string> = { DAILY: "일반발주", WEEKLY: "주간발주", REFUND: "환불계산서" };
 const STATUS: Record<string, { label: string; cls: string }> = {
   ISSUED: { label: "입금대기", cls: "badge--wait" },
   PAID: { label: "입금완료", cls: "badge--ok" },
@@ -45,15 +45,28 @@ export default async function MerchantInvoicesPage() {
           <div className="list">
             {invoices.map((inv) => {
               const s = STATUS[inv.status] ?? STATUS.ISSUED;
+              const isRefund = inv.kind === "REFUND";
               return (
-                <Link href={`/invoices/${inv.id}`} className="row" key={inv.id}>
+                <Link
+                  href={`/invoices/${inv.id}`}
+                  className={`row${isRefund ? " row--refund" : ""}`}
+                  key={inv.id}
+                >
                   <div className="row__main">
                     <div className="row__title">
                       {labelDate(inv.date)} · {KIND[inv.kind] ?? "계산서"}
                     </div>
-                    <div className="row__sub">{won(inv.total)}원</div>
+                    <div className="row__sub">
+                      {isRefund
+                        ? `− ${won(Math.abs(inv.total))}원 (미수 차감)`
+                        : `${won(inv.total)}원`}
+                    </div>
                   </div>
-                  <span className={`badge ${s.cls}`}>{s.label}</span>
+                  {isRefund ? (
+                    <span className="badge badge--refund">환불</span>
+                  ) : (
+                    <span className={`badge ${s.cls}`}>{s.label}</span>
+                  )}
                 </Link>
               );
             })}

@@ -8,9 +8,10 @@ import {
   CATEGORIES,
   CATEGORY_ORDER,
 } from "@/lib/constants";
-import { labelDateLong } from "@/lib/date";
+import { labelDate, labelDateLong } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
+import { RefundReceipt } from "@/components/RefundReceipt";
 import { PrintButton } from "@/components/PrintButton";
 import { InvoiceRevisionHistory } from "@/components/InvoiceRevisionHistory";
 import { parseRevisionChanges } from "@/lib/invoice-revision";
@@ -36,6 +37,42 @@ export default async function MerchantInvoiceDetailPage({
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
   if (!inv || inv.userId !== user.id || inv.status === "DRAFT") notFound();
+
+  // 환불계산서 — 입금요청서와 달리 '입금하실 금액' 없이 환불 내역만. 미수에서 차감됨.
+  if (inv.kind === "REFUND") {
+    const refundItems = inv.items.map((it) => ({
+      name: it.name,
+      qty: it.qty,
+      unitPrice: it.unitPrice,
+      amount: it.amount,
+    }));
+    return (
+      <>
+        <Topbar backHref="/invoices" title="환불계산서" right={<TopbarChip>{user.storeName}</TopbarChip>} />
+        <div className="page">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <h1 className="h1" style={{ margin: 0 }}>
+              환불계산서
+            </h1>
+            <span className="badge badge--refund">환불</span>
+          </div>
+          <RefundReceipt
+            storeName={user.storeName}
+            dateLabel={labelDate(inv.date)}
+            items={refundItems}
+            note={
+              inv.status === "VOID"
+                ? "취소된 환불계산서입니다."
+                : "이 금액만큼 미수(입금하실 금액)에서 차감되었습니다."
+            }
+          />
+          <div style={{ marginTop: 16 }}>
+            <PrintButton label="환불계산서 인쇄" />
+          </div>
+        </div>
+      </>
+    );
+  }
 
   // 수정 내역(재발송 시점별) — 최신순.
   const revisions = (

@@ -317,7 +317,8 @@ export async function replaceManualPlaceholderWithReal(
 // 해제가 영구 무력화되지 않게.
 export async function clearOrderUnlockIfSettled(userId: string) {
   const remaining = await prisma.invoice.count({
-    where: { userId, status: "ISSUED" },
+    // 환불계산서(REFUND, 음수)는 미수 '남은 빚'이 아니라 크레딧이므로 정산 판정에서 제외.
+    where: { userId, status: "ISSUED", kind: { not: "REFUND" } },
   });
   if (remaining === 0) {
     await prisma.user.updateMany({
