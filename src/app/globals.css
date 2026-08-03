@@ -2433,6 +2433,18 @@ a {
   font-size: 14px; /* 좁은 칸에 품목·수량·단가가 잘리지 않게 살짝 축소 */
   box-shadow: none;
 }
+/* 재고연동 행 하단 재고 힌트 — 그리드 전 칸 폭으로 한 줄 */
+.invrow__stock {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: -1px 0 2px;
+  padding-left: 2px;
+  letter-spacing: -0.2px;
+}
+.invrow__stock b { font-weight: 800; color: var(--fg-soft); font-variant-numeric: tabular-nums; }
+.invrow__stock--after { color: var(--green-700); }
+.invrow__stock--over { color: var(--danger); }
 .invrow__amt {
   min-width: 0;
   text-align: right;

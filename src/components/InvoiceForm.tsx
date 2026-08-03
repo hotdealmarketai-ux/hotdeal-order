@@ -30,8 +30,8 @@ const DELIVERY_CAT = "DELIVERY";
 type Row = { id: number; name: string; qty: string; unitPrice: string; inventoryItemId: string };
 type WeeklyRow = { id: number; name: string; qty: string; unitPrice: string; unit: string };
 
-// 공구칸 드롭다운용 재고현황 상품(연동 후보)
-export type InvOption = { id: string; name: string; supplyPrice: number };
+// 공구칸 드롭다운용 재고현황 상품(연동 후보). qty=현재 실물 재고(출고 후 잔량 계산용).
+export type InvOption = { id: string; name: string; supplyPrice: number; qty: number };
 
 export type InvoiceWeeklyItem = {
   name: string;
@@ -227,6 +227,12 @@ export function InvoiceForm({
       return { ...prev, [cat]: list };
     });
   }
+
+  // 재고연동 행의 현재 실물 재고(출고 후 잔량 계산용) — inventoryItemId → qty.
+  const stockById = useMemo(
+    () => new Map(invOptions.map((o) => [o.id, o.qty])),
+    [invOptions],
+  );
 
   // 공구칸 재고현황 연동 자동완성 — 열려있는 행 id.
   const [acRow, setAcRow] = useState<number | null>(null);
@@ -771,6 +777,29 @@ export function InvoiceForm({
                         ✕
                       </button>
                     )}
+                    {/* 재고연동 행 — 입력칸 밑에 현재 재고 + 이 수량 출고 시 잔량. */}
+                    {c === "TOOL" &&
+                      r.inventoryItemId &&
+                      stockById.has(r.inventoryItemId) &&
+                      (() => {
+                        const base = stockById.get(r.inventoryItemId) ?? 0;
+                        const entered = parseQtyStrict(r.qty);
+                        const after = entered != null ? base - entered : null;
+                        return (
+                          <div className="invrow__stock">
+                            남은 재고 <b>{base.toLocaleString("ko-KR")}개</b>
+                            {after != null && (
+                              <>
+                                {" · 출고 시 "}
+                                <b className={after < 0 ? "invrow__stock--over" : "invrow__stock--after"}>
+                                  {after.toLocaleString("ko-KR")}개
+                                </b>
+                                {" 남음"}
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
                   </div>
                 );
               })}

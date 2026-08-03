@@ -128,7 +128,7 @@ export default async function AdminInvoiceDetail(props: {
     // 공구칸 재고현황 연동 드롭다운용 — 활성 재고 품목(id·이름·점주공급가).
     const invOptions = await prisma.inventoryItem.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true, supplyPrice: true },
+      select: { id: true, name: true, supplyPrice: true, qty: true },
       orderBy: { sortOrder: "asc" },
     });
     // 저장된 용달 발송(용차비용) — 있으면 폼이 토글 ON 상태로 복원.
