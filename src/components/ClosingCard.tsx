@@ -54,8 +54,7 @@ export function ClosingCard() {
         style={{ font: "inherit", cursor: "pointer", width: "100%" }}
         onClick={() => setOpen(true)}
       >
-        <div className="admcard__title">마감</div>
-        <div className="admcard__sub">엑셀 백업</div>
+        <div className="admcard__title">데이터 백업/마감</div>
       </button>
 
       {open && (
