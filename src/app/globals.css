@@ -1351,6 +1351,72 @@ a {
   color: #a9c6b3;
 }
 
+/* 패치 카드 — 제목/상태(좌) + 온오프 토글(우) 한 줄 */
+.patchcard {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* 패치(유지보수) 모드 — 가맹점 화면 전체 차단 안내.
+   전역 채팅 FAB·설치배너까지 덮도록 fixed 오버레이 + 최상단 z-index. */
+.maint {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background: var(--bg);
+}
+.maint__box {
+  text-align: center;
+  max-width: 340px;
+}
+.maint__mark {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  background: var(--green-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.maint__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--green-700);
+  animation: maintPulse 1.4s ease-in-out infinite;
+}
+@keyframes maintPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.7);
+  }
+}
+.maint__title {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+.maint__sub {
+  margin-top: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 /* ---- 입고 페이지(입력폼 + 기록목록) ---- */
 .inb {
   display: flex;

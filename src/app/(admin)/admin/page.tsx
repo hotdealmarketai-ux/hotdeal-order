@@ -6,6 +6,8 @@ import { kstToday, kstDayRange } from "@/lib/date";
 import { weeklyKeyAt } from "@/lib/weekly";
 import { LogoutButton } from "@/components/LogoutButton";
 import { ClosingCard } from "@/components/ClosingCard";
+import { MaintenanceToggleCard } from "@/components/MaintenanceToggleCard";
+import { maintenanceOn } from "@/lib/maintenance";
 import { getAdminSeen } from "@/lib/admin-seen";
 
 export default async function AdminHome() {
@@ -55,12 +57,19 @@ export default async function AdminHome() {
   const totalOrders = allStores.length;
   const hotdealOrders = hotdealStores.length;
   const hotdealNewCount = hotdealNew.length;
+  const maintOn = await maintenanceOn(); // 패치(유지보수) 모드 현재 상태 — 회원·시스템 그룹 '패치' 토글
 
   // 관리자 홈 = 4개 그룹 섹션(발주·주문 / 정산·입금 / 재고·창고 / 회원·시스템).
   // 발주·주문 맨 위 두 항목(전체 발주 목록·핫딜마켓 발주)은 '오늘 건수'를 큰 숫자로 보여주는 KPI 타일.
   type Kpi = { href: string; title: string; value: number; fill?: boolean; badge?: number };
   type Item = { href: string; title: string; badge?: number };
-  type Group = { label: string; kpis?: Kpi[]; items: Item[]; closing?: boolean };
+  type Group = {
+    label: string;
+    kpis?: Kpi[];
+    items: Item[];
+    closing?: boolean;
+    patch?: boolean;
+  };
   const groups: Group[] = [
     {
       label: "발주 · 주문",
@@ -104,6 +113,7 @@ export default async function AdminHome() {
         { href: "/admin/members", title: "회원 관리" },
         { href: "/admin/audit", title: "로그" },
       ],
+      patch: true, // 패치(유지보수) 토글 카드 = 로그 옆, 이 그룹 끝에 렌더
     },
   ];
 
@@ -114,7 +124,10 @@ export default async function AdminHome() {
         <div className="admhome">
           {groups.map((g) => {
             const count =
-              (g.kpis?.length ?? 0) + g.items.length + (g.closing ? 1 : 0);
+              (g.kpis?.length ?? 0) +
+              g.items.length +
+              (g.closing ? 1 : 0) +
+              (g.patch ? 1 : 0);
             return (
               <section className="admsec" key={g.label}>
                 <div className="admsec__head">
@@ -153,6 +166,7 @@ export default async function AdminHome() {
                     </Link>
                   ))}
                   {g.closing ? <ClosingCard /> : null}
+                  {g.patch ? <MaintenanceToggleCard on={maintOn} /> : null}
                 </div>
               </section>
             );
