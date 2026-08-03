@@ -189,7 +189,10 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
           <button className="btn btn--sm btn--ghost" disabled>
             마감
           </button>
-          {p.myQty > 0 ? <span className="rcard__mine">내 발주 {p.myQty}개</span> : null}
+          {/* 확정분만 '내 발주'로 표시 — 담기만 하고 미확정인 홀드는 마감 후 자동 해제되므로 발주로 오인시키지 않는다. */}
+          {p.myConfirmed && p.myQty > 0 ? (
+            <span className="rcard__mine">내 발주 {p.myQty}개</span>
+          ) : null}
         </div>
       ) : p.myConfirmed ? (
         <div className="rcard__act">

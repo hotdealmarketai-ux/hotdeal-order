@@ -122,11 +122,19 @@ export async function notifyMerchantOrderEdited(userId: string) {
   }
 }
 
+// 주격조사 이/가 — 이름 끝 글자에 받침 있으면 '이', 없으면 '가'(한글 아니면 '이'로 안전).
+function josaIGa(word: string): string {
+  const ch = word.trim().slice(-1);
+  const code = ch.charCodeAt(0);
+  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 === 0 ? "가" : "이";
+  return "이";
+}
+
 // 예약발주에 상품이 새로 등록됨 → 핫딜마켓 점주 전체에게 알림.
 export async function notifyMerchantsReservationProductAdded(name: string) {
   try {
     await sendPushToRole("MERCHANT_HOTDEAL", {
-      title: `${name}이 예약발주에 등록되었습니다.`,
+      title: `${name}${josaIGa(name)} 예약발주에 등록되었습니다.`,
       body: "",
       url: "/reservations",
       type: "system",

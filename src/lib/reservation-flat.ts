@@ -58,6 +58,9 @@ export async function listFlatProductsAdmin(
     where: {
       productId: { in: ids },
       qty: { gt: 0 },
+      // 확정분만 집계 — 연동 상품의 '담기만 하고 미확정'인 홀드는 공구/계산서로 안 나가고 마감 후 해제되므로
+      // '총 N개 · 점포'가 움직이는 값이 되지 않도록(= 실제 발주될 수량과 일치).
+      confirmedAt: { not: null },
       order: { batch: { active: true } },
     },
     select: { productId: true, qty: true, order: { select: { userId: true } } },
@@ -188,7 +191,8 @@ export async function flatProductStores(productId: string): Promise<{
   });
   if (!product) return { product: null, stores: [] };
   const items = await prisma.reservationOrderItem.findMany({
-    where: { productId, order: { batch: { active: true } } },
+    // 확정분만 — 점포별 상세/편집은 실제 발주된(확정) 예약만 보여준다(미확정 담기는 제외).
+    where: { productId, confirmedAt: { not: null }, order: { batch: { active: true } } },
     select: {
       id: true,
       qty: true,

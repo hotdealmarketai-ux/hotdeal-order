@@ -38,8 +38,11 @@ export async function lockedInventoryItemIds(
     where: {
       active: true,
       inventoryItemId: { not: "" },
-      pickupDate: { gte },
       batch: { active: true },
+      // 잠금 = ①픽업이 아직 안 지남(레거시·flat 공통) 또는 ②flat 예약이 아직 열려 있음(closeAt 미래).
+      // ②가 없으면 '당일 픽업' flat 상품이 오전 10시 이후 pickupDate 조건에서 빠져(minLockedPickupDate=today+1)
+      // 예약이 20시까지 열려 있는데도 일일 담기가 풀려 같은 재고를 이중 배정(초과판매)한다. closeAt은 flat만 non-null.
+      OR: [{ pickupDate: { gte } }, { closeAt: { gt: new Date(now) } }],
     },
     select: { inventoryItemId: true },
   });
@@ -56,8 +59,10 @@ export async function isItemReservationLocked(
     where: {
       inventoryItemId: itemId,
       active: true,
-      pickupDate: { gte: minLockedPickupDate(now) },
       batch: { active: true },
+      // 픽업 대기(레거시·flat) 또는 flat 예약이 열려 있는 동안 잠금 — lockedInventoryItemIds와 동일 규칙.
+      // 당일 픽업 flat이 10시 이후 초과판매 나던 구멍을 closeAt 조건으로 막는다.
+      OR: [{ pickupDate: { gte: minLockedPickupDate(now) } }, { closeAt: { gt: new Date(now) } }],
     },
     select: { id: true },
   });
