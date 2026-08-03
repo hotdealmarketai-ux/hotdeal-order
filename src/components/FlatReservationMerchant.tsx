@@ -83,51 +83,58 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
 
   return (
     <div className="rcard">
-      <div className="rcard__top">
-        <div className="rcard__name">{p.name}</div>
-        <Countdown ms={p.closeAtMs} />
-      </div>
-      <div className="rcard__meta">
-        픽업 {p.pickupDate} · 공급가 {won(p.supplyPrice)}원
-        {p.myQty > 0 ? <b className="rcard__mine"> · 내 예약 {p.myQty}개</b> : null}
+      <div className="rcard__name">{p.name}</div>
+      <Countdown ms={p.closeAtMs} />
+      <div className="rcard__info">
+        <div>
+          픽업 <b>{p.pickupDate}</b>
+        </div>
+        <div>
+          공급가 <b>{won(p.supplyPrice)}원</b>
+        </div>
+        {p.myQty > 0 && (!p.myConfirmed || closed) && (
+          <div className="rcard__mine">
+            {closed ? "내 발주" : "내 예약"} {p.myQty}개
+          </div>
+        )}
       </div>
 
-      {closed ? (
-        <div className="rcard__act">
+      <div className="rcard__act">
+        {closed ? (
           <button className="btn btn--sm btn--ghost" disabled>
             마감
           </button>
-        </div>
-      ) : p.myConfirmed ? (
-        <div className="rcard__act">
-          <span className="rcard__done">예약 {p.myQty}개 · 확정됨</span>
-          <button
-            className="btn btn--sm btn--soft"
-            disabled={pending}
-            onClick={() => run(() => unlockFlatProductAction({ productId: p.id }))}
-          >
-            수정
-          </button>
-        </div>
-      ) : (
-        <div className="rcard__act">
-          <input
-            className="input input--compact rcard__qty"
-            inputMode="numeric"
-            value={qty}
-            onChange={(e) => setQty(e.target.value.replace(/[^\d]/g, "").slice(0, 5))}
-            placeholder="수량"
-            aria-label={`${p.name} 수량`}
-          />
-          <button
-            className="btn btn--sm btn--primary"
-            disabled={pending || (n === 0 && p.myQty === 0)}
-            onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty: n }))}
-          >
-            {n === 0 && p.myQty > 0 ? "예약 취소" : `발주 확정${n > 0 ? ` (${n}개)` : ""}`}
-          </button>
-        </div>
-      )}
+        ) : p.myConfirmed ? (
+          <>
+            <span className="rcard__done">예약 {p.myQty}개 · 확정됨</span>
+            <button
+              className="btn btn--sm btn--soft"
+              disabled={pending}
+              onClick={() => run(() => unlockFlatProductAction({ productId: p.id }))}
+            >
+              수정
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              className="input input--compact rcard__qty"
+              inputMode="numeric"
+              value={qty}
+              onChange={(e) => setQty(e.target.value.replace(/[^\d]/g, "").slice(0, 5))}
+              placeholder="수량"
+              aria-label={`${p.name} 수량`}
+            />
+            <button
+              className="btn btn--sm btn--primary"
+              disabled={pending || (n === 0 && p.myQty === 0)}
+              onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty: n }))}
+            >
+              {n === 0 && p.myQty > 0 ? "예약 취소" : `발주 확정${n > 0 ? ` (${n}개)` : ""}`}
+            </button>
+          </>
+        )}
+      </div>
       {err && <div className="rcard__err">{err}</div>}
     </div>
   );
@@ -173,68 +180,76 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
 
   return (
     <div className="rcard">
-      <div className="rcard__top">
-        <div className="rcard__name">
-          {p.name}
-          <span className="rcard__tag">재고연동</span>
-        </div>
-        <Countdown ms={p.closeAtMs} />
+      <div className="rcard__name">
+        {p.name}
+        <span className="rcard__tag">재고연동</span>
       </div>
-      <div className="rcard__meta">
-        픽업 {p.pickupDate} · 남은 수량 {Math.max(0, max - qty)}개 · 공급가 {won(p.supplyPrice)}원
+      <Countdown ms={p.closeAtMs} />
+      <div className="rcard__info">
+        <div>
+          픽업 <b>{p.pickupDate}</b>
+        </div>
+        <div>
+          공급가 <b>{won(p.supplyPrice)}원</b>
+          {!closed && (
+            <>
+              {" "}· 남은 <b>{Math.max(0, max - qty)}개</b>
+            </>
+          )}
+        </div>
+        {/* 확정분만 '내 발주'로 표시 — 미확정 담기는 마감 후 자동 해제되므로 발주로 오인시키지 않는다. */}
+        {closed && p.myConfirmed && p.myQty > 0 && (
+          <div className="rcard__mine">내 발주 {p.myQty}개</div>
+        )}
       </div>
 
-      {closed ? (
-        <div className="rcard__act">
+      <div className="rcard__act">
+        {closed ? (
           <button className="btn btn--sm btn--ghost" disabled>
             마감
           </button>
-          {/* 확정분만 '내 발주'로 표시 — 담기만 하고 미확정인 홀드는 마감 후 자동 해제되므로 발주로 오인시키지 않는다. */}
-          {p.myConfirmed && p.myQty > 0 ? (
-            <span className="rcard__mine">내 발주 {p.myQty}개</span>
-          ) : null}
-        </div>
-      ) : p.myConfirmed ? (
-        <div className="rcard__act">
-          <span className="rcard__done">예약 {p.myQty}개 · 확정됨</span>
-          <button
-            className="btn btn--sm btn--soft"
-            disabled={pending}
-            onClick={() => run(() => unlockFlatProductAction({ productId: p.id }))}
-          >
-            수정
-          </button>
-        </div>
-      ) : (
-        <div className="rcard__act">
-          <div className="rstep">
+        ) : p.myConfirmed ? (
+          <>
+            <span className="rcard__done">예약 {p.myQty}개 · 확정됨</span>
             <button
-              className="rstep__btn"
+              className="btn btn--sm btn--soft"
+              disabled={pending}
+              onClick={() => run(() => unlockFlatProductAction({ productId: p.id }))}
+            >
+              수정
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="rstep">
+              <button
+                className="rstep__btn"
+                disabled={pending || qty <= 0}
+                onClick={() => hold(qty - 1)}
+                aria-label="빼기"
+              >
+                −
+              </button>
+              <span className="rstep__val">{qty}</span>
+              <button
+                className="rstep__btn"
+                disabled={pending || qty >= max}
+                onClick={() => hold(qty + 1)}
+                aria-label="담기"
+              >
+                +
+              </button>
+            </div>
+            <button
+              className="btn btn--sm btn--primary"
               disabled={pending || qty <= 0}
-              onClick={() => hold(qty - 1)}
-              aria-label="빼기"
+              onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty }))}
             >
-              −
+              발주 확정{qty > 0 ? ` (${qty}개)` : ""}
             </button>
-            <span className="rstep__val">{qty}</span>
-            <button
-              className="rstep__btn"
-              disabled={pending || qty >= max}
-              onClick={() => hold(qty + 1)}
-              aria-label="담기"
-            >
-              +
-            </button>
-          </div>
-          <button
-            className="btn btn--sm btn--primary"
-            disabled={pending || qty <= 0}
-            onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty }))}
-          >
-            발주 확정{qty > 0 ? ` (${qty}개)` : ""}
-          </button>
-        </div>
-      )}
+          </>
+        )}
+      </div>
       {err && <div className="rcard__err">{err}</div>}
     </div>
   );

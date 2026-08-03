@@ -5026,26 +5026,37 @@ a.resv-card:active { transform: scale(0.995); }
 .flatinv__price { font-size: 12px; font-weight: 700; color: var(--green-700); flex-shrink: 0; }
 .flatinv__none { padding: 12px; font-size: 13px; color: var(--muted); text-align: center; }
 
-/* ---- 예약발주 flat: 점주 상품 카드 ---- */
-.rcardwrap { display: block; }
+/* ---- 예약발주 flat: 점주 상품 카드 (강조형 2열) ---- */
+.rcardwrap { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: stretch; }
 .rcard {
-  padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+  padding: 11px 9px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+  display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; min-width: 0;
 }
-.rcard + .rcard { margin-top: 8px; }
-.rcard__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.rcard__name { font-size: 15px; font-weight: 800; color: var(--fg); display: flex; align-items: center; gap: 6px; }
+.rcard__name {
+  font-size: 13px; font-weight: 800; color: var(--fg); line-height: 1.25; min-height: 32px;
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 3px;
+}
 .rcard__tag {
-  font-size: 10.5px; font-weight: 800; color: var(--green-700);
-  background: var(--green-100); border-radius: 6px; padding: 1px 6px;
+  font-size: 9.5px; font-weight: 800; color: var(--green-700);
+  background: var(--green-100); border-radius: 5px; padding: 1px 5px;
 }
-.rcard__cd { font-size: 12.5px; font-weight: 800; color: var(--danger); font-variant-numeric: tabular-nums; flex-shrink: 0; } /* 남은 시간 빨간색 */
+/* 카운트다운 크게 강조 */
+.rcard__cd { font-size: 14px; font-weight: 800; color: var(--danger); font-variant-numeric: tabular-nums; line-height: 1.15; }
 .rcard__cd--closed { color: var(--danger); }
-.rcard__meta { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+/* 정보 블록 — 픽업 전체날짜·공급가·남은수량·내 수량 (기존 정보 전부) */
+.rcard__info {
+  width: 100%; border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 1px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.rcard__info > div { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.rcard__info b { color: var(--fg-soft); font-weight: 700; }
 .rcard__mine { color: var(--green-700); font-weight: 800; }
-.rcard__act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.rcard__qty { width: 84px; text-align: center; }
-.rcard__done { font-size: 13px; font-weight: 700; color: var(--green-700); flex: 1; }
-.rcard__err { margin-top: 8px; font-size: 12.5px; color: var(--danger); }
+.rcard__act { width: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 3px; }
+.rcard__act .btn { width: 100%; }
+.rcard__act .rstep { display: flex; justify-content: space-between; width: 100%; height: 32px; }
+.rcard__qty { width: 100%; text-align: center; }
+.rcard__done { font-size: 11.5px; font-weight: 800; color: var(--green-700); }
+.rcard__err { margin-top: 4px; font-size: 11px; color: var(--danger); width: 100%; }
 
 /* 스테퍼 −/+ (예약 flat 공용) */
 .rstep { display: inline-flex; align-items: center; gap: 2px; border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px; }
