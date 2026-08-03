@@ -85,6 +85,126 @@ export async function listFlatProductsAdmin(
   });
 }
 
+export type FlatMerchantRow = {
+  id: string;
+  name: string;
+  pickupDate: string;
+  supplyPrice: number;
+  inventoryItemId: string;
+  closeAtMs: number;
+  myQty: number; // 내가 예약한 수량
+  myConfirmed: boolean; // 품목별 확정(confirmedAt) 여부
+  available: number; // 재고연동 상품의 남은수량(수기는 무시)
+};
+
+// 점주 flat 상품 목록. scope "open"=마감 전(임박순), "closed"=마감 후. 재고연동 상품은 남은수량 시드.
+export async function listFlatProductsMerchant(
+  userId: string,
+  scope: "open" | "closed",
+  now: Date = new Date(),
+): Promise<FlatMerchantRow[]> {
+  const { availableForReservationProducts } = await import("@/lib/reservation-stock");
+  const products = await prisma.reservationProduct.findMany({
+    where: {
+      active: true,
+      closeAt: scope === "open" ? { gt: now } : { lte: now },
+    },
+    orderBy: { closeAt: scope === "open" ? "asc" : "desc" },
+    select: {
+      id: true,
+      name: true,
+      pickupDate: true,
+      supplyPrice: true,
+      inventoryItemId: true,
+      closeAt: true,
+    },
+  });
+  if (products.length === 0) return [];
+
+  const ids = products.map((p) => p.id);
+  const [mine, availMap] = await Promise.all([
+    prisma.reservationOrderItem.findMany({
+      where: { productId: { in: ids }, order: { userId } },
+      select: { productId: true, qty: true, confirmedAt: true },
+    }),
+    availableForReservationProducts(
+      products
+        .filter((p) => p.inventoryItemId)
+        .map((p) => ({ id: p.id, inventoryItemId: p.inventoryItemId })),
+    ),
+  ]);
+  const myMap = new Map(mine.map((i) => [i.productId, i]));
+
+  return products.map((p) => {
+    const m = myMap.get(p.id);
+    const myQty = m?.qty ?? 0;
+    return {
+      id: p.id,
+      name: p.name,
+      pickupDate: p.pickupDate,
+      supplyPrice: p.supplyPrice,
+      inventoryItemId: p.inventoryItemId,
+      closeAtMs: (p.closeAt as Date).getTime(),
+      myQty,
+      myConfirmed: !!m?.confirmedAt,
+      // 재고연동: 표시용 남은수량 = 전체가용 + 내가 이미 담은 만큼(내 수량은 내가 줄일 수 있으니 더함)
+      available: p.inventoryItemId ? (availMap[p.id] ?? 0) + myQty : 0,
+    };
+  });
+}
+
+// 관리자 상품 상세 — 이 상품을 예약한 점포별 수량(수정용).
+export type FlatStoreRow = {
+  userId: string;
+  storeName: string;
+  itemId: string;
+  qty: number;
+  inventoryItemId: string;
+  stockDeducted: boolean;
+};
+export async function flatProductStores(productId: string): Promise<{
+  product: { id: string; name: string; pickupDate: string; supplyPrice: number; inventoryItemId: string; closeAtMs: number } | null;
+  stores: FlatStoreRow[];
+}> {
+  const product = await prisma.reservationProduct.findFirst({
+    where: { id: productId, closeAt: { not: null } },
+    select: { id: true, name: true, pickupDate: true, supplyPrice: true, inventoryItemId: true, closeAt: true },
+  });
+  if (!product) return { product: null, stores: [] };
+  const items = await prisma.reservationOrderItem.findMany({
+    where: { productId, order: { batch: { active: true } } },
+    select: {
+      id: true,
+      qty: true,
+      inventoryItemId: true,
+      stockDeductedAt: true,
+      order: { select: { userId: true, user: { select: { storeName: true } } } },
+    },
+  });
+  const stores: FlatStoreRow[] = items
+    .filter((it) => it.qty > 0)
+    .map((it) => ({
+      userId: it.order.userId,
+      storeName: it.order.user.storeName,
+      itemId: it.id,
+      qty: it.qty,
+      inventoryItemId: it.inventoryItemId,
+      stockDeducted: !!it.stockDeductedAt,
+    }))
+    .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
+  return {
+    product: {
+      id: product.id,
+      name: product.name,
+      pickupDate: product.pickupDate,
+      supplyPrice: product.supplyPrice,
+      inventoryItemId: product.inventoryItemId,
+      closeAtMs: (product.closeAt as Date).getTime(),
+    },
+    stores,
+  };
+}
+
 // 남은 시간 라벨 "N시간 M분 S초 남음" / "마감". 서버 SSR 시드용(클라가 1초 갱신).
 export function closeRemainLabel(closeAt: Date, now: number = Date.now()): string {
   let s = Math.floor((closeAt.getTime() - now) / 1000);

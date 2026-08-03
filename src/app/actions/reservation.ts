@@ -349,10 +349,25 @@ export async function unlockReservationAction(formData: FormData) {
   });
   if (!batch) redirect("/reservations");
   if (!isReservationClosed(batch.reserveDate)) {
-    await prisma.reservationOrder.updateMany({
+    const order = await prisma.reservationOrder.findFirst({
       where: { userId: user.id, batchId },
-      data: { confirmed: false },
+      select: { id: true },
     });
+    if (order) {
+      // 잠금 해제 시 confirmed 뿐 아니라 품목 confirmedAt 도 함께 해제해야 한다.
+      // 공구 자동로드 게이트가 (order.confirmed OR item.confirmedAt) 이므로, confirmedAt 를 안 지우면
+      // Phase1 백필로 채워진 옛 확정분이 잠금해제 후에도 발주서/출고서/계산서에 계속 뜬다.
+      await prisma.$transaction([
+        prisma.reservationOrder.update({
+          where: { id: order.id },
+          data: { confirmed: false },
+        }),
+        prisma.reservationOrderItem.updateMany({
+          where: { orderId: order.id },
+          data: { confirmedAt: null },
+        }),
+      ]);
+    }
   }
   revalidatePath(`/reservations/${batchId}`);
   redirect(`/reservations/${batchId}`);

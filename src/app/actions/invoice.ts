@@ -463,7 +463,7 @@ export async function loadInvoiceToolItemsAction(
           where: {
             pickupDate: shipmentDate,
             qty: { gt: 0 },
-            order: { userId, confirmed: true, batch: { active: true } },
+            order: { userId, batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
           },
           select: { name: true, qty: true, supplyPrice: true, inventoryItemId: true },
           orderBy: { sortOrder: "asc" },

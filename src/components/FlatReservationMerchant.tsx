@@ -1,0 +1,243 @@
+"use client";
+
+import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  confirmFlatProductAction,
+  unlockFlatProductAction,
+  holdFlatProductAction,
+} from "@/app/actions/reservation-flat";
+
+export type FlatMerchantCard = {
+  id: string;
+  name: string;
+  pickupDate: string;
+  supplyPrice: number;
+  inventoryItemId: string;
+  closeAtMs: number;
+  myQty: number;
+  myConfirmed: boolean;
+  available: number;
+};
+
+const won = (n: number) => n.toLocaleString("ko-KR");
+
+// 1초마다 갱신되는 현재시각 — 마감 경계에서 버튼이 실시간으로 잠기도록.
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+function remain(ms: number, now: number): string {
+  let s = Math.floor((ms - now) / 1000);
+  if (s <= 0) return "마감";
+  const d = Math.floor(s / 86400);
+  s -= d * 86400;
+  const h = Math.floor(s / 3600);
+  s -= h * 3600;
+  const m = Math.floor(s / 60);
+  s -= m * 60;
+  if (d > 0) return `${d}일 ${h}시간 ${m}분 남음`;
+  return `${h}시간 ${m}분 ${s}초 남음`;
+}
+
+function Countdown({ ms }: { ms: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const closed = now >= ms;
+  return (
+    <span className={closed ? "rcard__cd rcard__cd--closed" : "rcard__cd"}>
+      {remain(ms, now)}
+    </span>
+  );
+}
+
+// 수기 상품 카드 — 수량 입력 + 발주 확정 / 수정(잠금해제) / 마감
+function ManualCard({ p }: { p: FlatMerchantCard }) {
+  const router = useRouter();
+  const [qty, setQty] = useState(String(p.myQty || ""));
+  const [err, setErr] = useState("");
+  const [pending, start] = useTransition();
+  const closed = useNow() >= p.closeAtMs;
+
+  const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    setErr("");
+    start(async () => {
+      const r = await fn();
+      if (!r.ok) {
+        setErr(r.error ?? "실패했어요.");
+        return;
+      }
+      router.refresh();
+    });
+  };
+  const n = Math.max(0, parseInt(qty.replace(/[^\d]/g, "") || "0", 10) || 0);
+
+  return (
+    <div className="rcard">
+      <div className="rcard__top">
+        <div className="rcard__name">{p.name}</div>
+        <Countdown ms={p.closeAtMs} />
+      </div>
+      <div className="rcard__meta">
+        픽업 {p.pickupDate} · 공급가 {won(p.supplyPrice)}원
+        {p.myQty > 0 ? <b className="rcard__mine"> · 내 예약 {p.myQty}개</b> : null}
+      </div>
+
+      {closed ? (
+        <div className="rcard__act">
+          <button className="btn btn--sm btn--ghost" disabled>
+            마감
+          </button>
+        </div>
+      ) : p.myConfirmed ? (
+        <div className="rcard__act">
+          <span className="rcard__done">예약 {p.myQty}개 · 확정됨</span>
+          <button
+            className="btn btn--sm btn--soft"
+            disabled={pending}
+            onClick={() => run(() => unlockFlatProductAction({ productId: p.id }))}
+          >
+            수정
+          </button>
+        </div>
+      ) : (
+        <div className="rcard__act">
+          <input
+            className="input input--compact rcard__qty"
+            inputMode="numeric"
+            value={qty}
+            onChange={(e) => setQty(e.target.value.replace(/[^\d]/g, "").slice(0, 5))}
+            placeholder="수량"
+            aria-label={`${p.name} 수량`}
+          />
+          <button
+            className="btn btn--sm btn--primary"
+            disabled={pending || (n === 0 && p.myQty === 0)}
+            onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty: n }))}
+          >
+            {n === 0 && p.myQty > 0 ? "예약 취소" : `발주 확정${n > 0 ? ` (${n}개)` : ""}`}
+          </button>
+        </div>
+      )}
+      {err && <div className="rcard__err">{err}</div>}
+    </div>
+  );
+}
+
+// 재고연동 상품 카드 — 실시간 −/+ 담기(즉시 예약). 남은수량 캡.
+function LinkedCard({ p }: { p: FlatMerchantCard }) {
+  const router = useRouter();
+  const [qty, setQty] = useState(p.myQty);
+  const [err, setErr] = useState("");
+  const [pending, start] = useTransition();
+  const closed = useNow() >= p.closeAtMs;
+  const max = p.available; // = 전체가용 + 내 현재수량
+
+  const set = (next: number) => {
+    const v = Math.max(0, Math.min(max, next));
+    if (v === qty) return;
+    setQty(v);
+    setErr("");
+    start(async () => {
+      const r = await holdFlatProductAction({ productId: p.id, qty: v });
+      if (!r.ok) {
+        setErr(r.error ?? "실패했어요.");
+        setQty(p.myQty); // 롤백
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  return (
+    <div className="rcard">
+      <div className="rcard__top">
+        <div className="rcard__name">
+          {p.name}
+          <span className="rcard__tag">재고연동</span>
+        </div>
+        <Countdown ms={p.closeAtMs} />
+      </div>
+      <div className="rcard__meta">
+        픽업 {p.pickupDate} · 남은 수량 {Math.max(0, max - qty)}개 · 공급가 {won(p.supplyPrice)}원
+      </div>
+
+      {closed ? (
+        <div className="rcard__act">
+          <button className="btn btn--sm btn--ghost" disabled>
+            마감
+          </button>
+          {p.myQty > 0 ? <span className="rcard__mine">내 발주 {p.myQty}개</span> : null}
+        </div>
+      ) : (
+        <div className="rcard__act">
+          <div className="rstep">
+            <button
+              className="rstep__btn"
+              disabled={pending || qty <= 0}
+              onClick={() => set(qty - 1)}
+              aria-label="빼기"
+            >
+              −
+            </button>
+            <span className="rstep__val">{qty}</span>
+            <button
+              className="rstep__btn"
+              disabled={pending || qty >= max}
+              onClick={() => set(qty + 1)}
+              aria-label="담기"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      )}
+      {err && <div className="rcard__err">{err}</div>}
+    </div>
+  );
+}
+
+// 점주 예약발주 단일 목록 — 검색 + 마감 임박순 카드. 수기=확정흐름, 연동=실시간 담기.
+export function FlatReservationMerchant({ products }: { products: FlatMerchantCard[] }) {
+  const [q, setQ] = useState("");
+  const query = q.trim();
+  const shown = query
+    ? products.filter((p) => p.name.includes(query))
+    : products;
+
+  return (
+    <>
+      <input
+        className="input"
+        type="search"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="상품 검색"
+        style={{ marginBottom: 12 }}
+      />
+      {shown.length === 0 ? (
+        <div className="empty">
+          <p>{query ? "검색 결과가 없어요." : "예약 가능한 상품이 없어요."}</p>
+        </div>
+      ) : (
+        <div className="rcardwrap">
+          {shown.map((p) =>
+            p.inventoryItemId ? (
+              <LinkedCard key={`${p.id}:${p.myQty}:${p.available}`} p={p} />
+            ) : (
+              <ManualCard key={`${p.id}:${p.myQty}:${p.myConfirmed}`} p={p} />
+            ),
+          )}
+        </div>
+      )}
+    </>
+  );
+}

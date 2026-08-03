@@ -166,13 +166,12 @@ export async function getMerchantReservationBatches(
 export async function getMerchantPastReservationBatches(
   userId: string,
 ): Promise<MerchantReservationListItem[]> {
-  const today = kstToday();
   const batches = await prisma.reservationBatch.findMany({
     where: {
       active: true,
       reserveDate: { not: FLAT_RESERVE_KEY }, // flat 상시 배치 제외
-      orders: { some: { userId, items: { some: {} } } }, // 내가 실제로 예약한 것만
-      products: { none: { active: true, pickupDate: { gte: today } } }, // 픽업이 모두 지남
+      // 기존(날짜형) 예약 전부를 '지난 예약발주'로 통합 — 내가 예약한 레거시 배치 모두(출고 전 포함).
+      orders: { some: { userId, items: { some: {} } } },
     },
     orderBy: { reserveDate: "desc" },
     select: {
@@ -357,7 +356,7 @@ export async function getReservationInvoiceItems(
       pickupDate,
       qty: { gt: 0 },
       // 확정(예약 확정)한 예약분만 공구/계산서에 로드 — 연동·수기 모두 동일 게이트.
-      order: { userId, confirmed: true, batch: { active: true } },
+      order: { userId, batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
     },
     select: { name: true, qty: true, supplyPrice: true },
     orderBy: { sortOrder: "asc" },
@@ -386,7 +385,7 @@ export async function getReservationLoadForOrder(
       pickupDate,
       qty: { gt: 0 },
       // 확정한 예약분만 공구에 자동 로드 — 연동·수기 모두 동일 게이트(예약 확정 시 로드·잠금).
-      order: { userId, confirmed: true, batch: { active: true } },
+      order: { userId, batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
     },
     select: { name: true, qty: true },
     orderBy: { sortOrder: "asc" },
@@ -407,7 +406,7 @@ export async function getReservationLinesForPickup(
     where: {
       pickupDate,
       qty: { gt: 0 },
-      order: { confirmed: true, batch: { active: true } },
+      order: { batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
     },
     select: {
       name: true,
@@ -438,7 +437,7 @@ export async function getReservationStoresForPickup(
     where: {
       pickupDate,
       qty: { gt: 0 },
-      order: { confirmed: true, batch: { active: true } },
+      order: { batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
     },
     select: {
       qty: true,
@@ -472,7 +471,7 @@ export async function getReservationItemsForStorePickup(
     where: {
       pickupDate,
       qty: { gt: 0 },
-      order: { userId, confirmed: true, batch: { active: true } },
+      order: { userId, batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
     },
     select: { name: true, qty: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

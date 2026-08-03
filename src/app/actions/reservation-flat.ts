@@ -2,9 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/session";
+import { requireAdmin, getCurrentUser } from "@/lib/session";
 import { writeAudit } from "@/lib/audit";
 import { getOrCreateFlatBatchId } from "@/lib/reservation-flat";
+import { windowKeyAt } from "@/lib/schedule";
+import { logError } from "@/lib/log";
+
+type ResvHoldResult = { ok: boolean; error?: string; available?: number };
+
+async function requireHotdealMerchant() {
+  const user = await getCurrentUser();
+  if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
+    return null;
+  }
+  return user;
+}
 
 const toInt = (v: unknown, min = 0) => {
   const n = Math.floor(Number(String(v ?? "").replace(/[^\d-]/g, "")));
@@ -117,4 +129,214 @@ export async function saveFlatProductAction(
   revalidatePath("/reservations");
   revalidatePath("/admin/calendar");
   return { ok: true };
+}
+
+// ── 점주(핫딜마켓) flat 예약 — 품목별 확정/해제 + 재고연동 실시간 담기 ───────────
+
+// 수기 상품 발주 확정 = 수량 저장 + 품목별 확정(confirmedAt). qty<=0 이면 예약 취소(행 삭제). 마감 전에만.
+export async function confirmFlatProductAction(input: {
+  productId: string;
+  qty: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireHotdealMerchant();
+  if (!user) return { ok: false, error: "권한이 없어요." };
+  const productId = String(input?.productId ?? "");
+  const qty = Math.max(0, Math.floor(Number(input?.qty) || 0));
+
+  const product = await prisma.reservationProduct.findFirst({
+    where: {
+      id: productId,
+      active: true,
+      closeAt: { not: null },
+      inventoryItemId: "", // 수기 상품만(연동은 holdFlatProductAction)
+      batch: { active: true },
+    },
+    select: { name: true, supplyPrice: true, pickupDate: true, closeAt: true, batchId: true },
+  });
+  if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
+  if (Date.now() >= (product.closeAt as Date).getTime()) {
+    return { ok: false, error: "예약이 마감됐어요." };
+  }
+
+  const order = await prisma.reservationOrder.upsert({
+    where: { userId_batchId: { userId: user.id, batchId: product.batchId } },
+    create: { userId: user.id, batchId: product.batchId },
+    update: {},
+    select: { id: true },
+  });
+  if (qty <= 0) {
+    await prisma.reservationOrderItem.deleteMany({ where: { orderId: order.id, productId } });
+  } else {
+    await prisma.reservationOrderItem.upsert({
+      where: { orderId_productId: { orderId: order.id, productId } },
+      create: {
+        orderId: order.id,
+        productId,
+        name: product.name,
+        supplyPrice: product.supplyPrice,
+        pickupDate: product.pickupDate,
+        inventoryItemId: "",
+        qty,
+        confirmedAt: new Date(),
+      },
+      update: {
+        qty,
+        confirmedAt: new Date(),
+        name: product.name,
+        supplyPrice: product.supplyPrice,
+        pickupDate: product.pickupDate,
+      },
+    });
+  }
+  revalidatePath("/reservations");
+  revalidatePath("/order");
+  return { ok: true };
+}
+
+// 수정 = 품목별 확정 해제(confirmedAt=null, 수량 유지). 마감 전에만.
+export async function unlockFlatProductAction(input: {
+  productId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const user = await requireHotdealMerchant();
+  if (!user) return { ok: false, error: "권한이 없어요." };
+  const productId = String(input?.productId ?? "");
+  const product = await prisma.reservationProduct.findFirst({
+    // 수기 상품만(연동은 잠금해제 개념 없이 실시간 담기로 조정).
+    where: { id: productId, active: true, closeAt: { not: null }, inventoryItemId: "" },
+    select: { closeAt: true },
+  });
+  if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
+  if (Date.now() >= (product.closeAt as Date).getTime()) {
+    return { ok: false, error: "예약이 마감됐어요." };
+  }
+  await prisma.reservationOrderItem.updateMany({
+    where: { productId, order: { userId: user.id } },
+    data: { confirmedAt: null },
+  });
+  revalidatePath("/reservations");
+  revalidatePath("/order");
+  return { ok: true };
+}
+
+// 재고연동 상품 실시간 담기 = 즉시 홀드(qty=홀드) + 즉시 확정(confirmedAt). 마감 전·재고 캡. qty0=취소.
+export async function holdFlatProductAction(input: {
+  productId: string;
+  qty: number;
+}): Promise<ResvHoldResult> {
+  const user = await requireHotdealMerchant();
+  if (!user) return { ok: false, error: "권한이 없어요." };
+  const productId = String(input?.productId ?? "");
+  const qty = Math.max(0, Math.floor(Number(input?.qty) || 0));
+
+  const product = await prisma.reservationProduct.findFirst({
+    where: {
+      id: productId,
+      active: true,
+      closeAt: { not: null },
+      inventoryItemId: { not: "" },
+      batch: { active: true },
+    },
+    select: {
+      name: true,
+      supplyPrice: true,
+      pickupDate: true,
+      inventoryItemId: true,
+      closeAt: true,
+      batchId: true,
+    },
+  });
+  if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
+  if (Date.now() >= (product.closeAt as Date).getTime()) {
+    return { ok: false, error: "예약이 마감됐어요." };
+  }
+  const itemId = product.inventoryItemId;
+
+  try {
+    const res = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${itemId} FOR UPDATE`;
+      const item = await tx.inventoryItem.findUnique({
+        where: { id: itemId },
+        select: { qty: true, deletedAt: true },
+      });
+      if (!item || item.deletedAt) return { ok: false, error: "재고 품목을 찾을 수 없어요." };
+
+      // 이 품목에 걸린 '아직 차감 안 된' 전체 예약홀드(연동·활성배치·flat+레거시) − 내 이 상품 현재 수량.
+      // ⚠ pickupDate 기준으로 거르면 당일픽업 상품이 10시 이후 자기 홀드를 제외해 초과판매가 나므로,
+      //   stockDeductedAt:null(=아직 재고에서 안 뺀 살아있는 홀드) 기준으로 센다(재고현황 시드와 동일).
+      const resvRows = await tx.reservationOrderItem.findMany({
+        where: {
+          inventoryItemId: itemId,
+          stockDeductedAt: null,
+          qty: { gt: 0 },
+          order: { batch: { active: true } },
+        },
+        select: { qty: true, productId: true, order: { select: { userId: true } } },
+      });
+      let resvHeld = 0;
+      let myThis = 0;
+      for (const r of resvRows) {
+        resvHeld += r.qty;
+        if (r.order.userId === user.id && r.productId === productId) myThis += r.qty;
+      }
+      const dayAgg = await tx.stockHold.aggregate({
+        where: { itemId, windowDate: windowKeyAt() },
+        _sum: { qty: true },
+      });
+      const availableForMe = item.qty - (resvHeld - myThis) - (dayAgg._sum.qty ?? 0);
+
+      const order = await tx.reservationOrder.findUnique({
+        where: { userId_batchId: { userId: user.id, batchId: product.batchId } },
+        select: { id: true },
+      });
+      if (qty <= 0) {
+        if (order)
+          await tx.reservationOrderItem.deleteMany({ where: { orderId: order.id, productId } });
+        return { ok: true, available: Math.max(0, availableForMe) };
+      }
+      if (qty > availableForMe) {
+        return {
+          ok: false,
+          error: `남은 수량이 부족해요. (담을 수 있는 최대 ${Math.max(0, availableForMe)}개)`,
+          available: Math.max(0, availableForMe),
+        };
+      }
+      const oid =
+        order?.id ??
+        (
+          await tx.reservationOrder.create({
+            data: { userId: user.id, batchId: product.batchId },
+            select: { id: true },
+          })
+        ).id;
+      await tx.reservationOrderItem.upsert({
+        where: { orderId_productId: { orderId: oid, productId } },
+        create: {
+          orderId: oid,
+          productId,
+          name: product.name,
+          supplyPrice: product.supplyPrice,
+          pickupDate: product.pickupDate,
+          inventoryItemId: itemId,
+          qty,
+          confirmedAt: new Date(),
+        },
+        update: {
+          qty,
+          name: product.name,
+          supplyPrice: product.supplyPrice,
+          pickupDate: product.pickupDate,
+          inventoryItemId: itemId,
+          confirmedAt: new Date(),
+        },
+      });
+      return { ok: true, available: Math.max(0, availableForMe - qty) };
+    });
+    revalidatePath("/reservations");
+    revalidatePath("/inventory");
+    revalidatePath("/order");
+    return res;
+  } catch (err) {
+    logError("reservation.holdFlat", err, { productId, userId: user.id });
+    return { ok: false, error: "담기에 실패했어요. 다시 시도해 주세요." };
+  }
 }

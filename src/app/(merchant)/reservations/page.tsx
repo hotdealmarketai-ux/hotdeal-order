@@ -2,20 +2,31 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
-import { getMerchantReservationBatches } from "@/lib/reservation-data";
-import { reservationStatusOf } from "@/lib/reservation";
-import { ReservationDates } from "@/components/ReservationDates";
+import { listFlatProductsMerchant } from "@/lib/reservation-flat";
+import { FlatReservationMerchant } from "@/components/FlatReservationMerchant";
 
+export const dynamic = "force-dynamic";
+
+// 점주 예약발주 — 단일 목록(상품별 마감 임박순) + 검색 + 실시간 카운트다운 + 품목별 발주 확정.
 export default async function ReservationsPage() {
   const user = await requireMerchant();
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
-  const batches = await getMerchantReservationBatches(user.id);
+  const products = await listFlatProductsMerchant(user.id, "open");
 
   return (
     <>
       <Topbar brand="핫딜오더 · 예약발주" />
       <div className="page">
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 2 }}>
+        <div
+          style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginBottom: 8 }}
+        >
+          <Link
+            href="/reservations/closed"
+            className="linkbtn"
+            style={{ color: "var(--muted)", textDecoration: "none" }}
+          >
+            지난 예약 마감 ›
+          </Link>
           <Link
             href="/reservations/past"
             className="linkbtn"
@@ -24,44 +35,8 @@ export default async function ReservationsPage() {
             지난 예약발주 ›
           </Link>
         </div>
-        <div className="itemshead">
-          <span className="itemshead__label">예약 가능한 날짜</span>
-          <span className="itemshead__count">{batches.length}개</span>
-        </div>
 
-        {batches.length === 0 ? (
-          <div className="empty">지금은 예약할 수 있는 상품이 없습니다.</div>
-        ) : (
-          <div className="stack">
-            {batches.map((b) => {
-              const st = reservationStatusOf(
-                { confirmed: b.confirmed },
-                b.reserveDate,
-                Date.now(),
-                b.reservedQty,
-              );
-              return (
-                <Link
-                  key={b.id}
-                  href={`/reservations/${b.id}`}
-                  className={`card resv-card${b.reservedQty > 0 ? " resv-card--mine" : ""}`}
-                >
-                  <div className="resv-card__main">
-                    <ReservationDates
-                      reserveDate={b.reserveDate}
-                      pickupDates={b.pickupDates}
-                    />
-                    <div className="resv-card__meta">
-                      상품 {b.productCount}개
-                      {b.reservedQty > 0 ? ` · 내 예약 ${b.reservedQty}개` : ""}
-                    </div>
-                  </div>
-                  <span className={`badge ${st.cls}`}>{st.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        <FlatReservationMerchant products={products} />
       </div>
     </>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { MoneyInput } from "./MoneyInput";
 import { saveFlatProductAction } from "@/app/actions/reservation-flat";
 
@@ -60,8 +61,18 @@ export function FlatReservationAdmin({
   const router = useRouter();
   const [f, setF] = useState({ ...EMPTY });
   const [err, setErr] = useState("");
+  const [invSearch, setInvSearch] = useState("");
   const [pending, start] = useTransition();
   const editing = f.id !== "";
+
+  const invMatches = invSearch.trim()
+    ? inventoryItems
+        .filter((i) => i.name.includes(invSearch.trim()))
+        .slice(0, 8)
+    : [];
+  const linkedName = f.invId
+    ? (inventoryItems.find((i) => i.id === f.invId)?.name ?? "연동 품목")
+    : "";
 
   const reset = () => {
     setF({ ...EMPTY });
@@ -137,19 +148,55 @@ export function FlatReservationAdmin({
         <div className="section-label" style={{ marginBottom: 8 }}>
           {editing ? "예약상품 수정" : "예약상품 등록"}
         </div>
-        <select
-          className="input"
-          value={f.invId}
-          onChange={(e) => pickInv(e.target.value)}
-          style={{ marginBottom: 8 }}
-        >
-          <option value="">직접 입력 (재고 연동 안 함)</option>
-          {inventoryItems.map((i) => (
-            <option key={i.id} value={i.id}>
-              재고연동 · {i.name}
-            </option>
-          ))}
-        </select>
+        {/* 재고연동 — 품목이 많아 드롭다운 대신 검색해서 선택 */}
+        {f.invId ? (
+          <div className="flatinv__picked">
+            <span>
+              재고연동 · <b>{linkedName}</b>
+            </span>
+            <button
+              type="button"
+              className="btn btn--xs btn--ghost"
+              onClick={() => {
+                setF((s) => ({ ...s, invId: "" }));
+                setInvSearch("");
+              }}
+            >
+              연동 해제
+            </button>
+          </div>
+        ) : (
+          <div className="flatinv">
+            <input
+              className="input"
+              value={invSearch}
+              onChange={(e) => setInvSearch(e.target.value)}
+              placeholder="재고 연동 검색 (선택) — 품목명"
+            />
+            {invSearch.trim() && (
+              <div className="flatinv__results">
+                {invMatches.length === 0 ? (
+                  <div className="flatinv__none">검색 결과 없음</div>
+                ) : (
+                  invMatches.map((i) => (
+                    <button
+                      type="button"
+                      key={i.id}
+                      className="flatinv__opt"
+                      onClick={() => {
+                        pickInv(i.id);
+                        setInvSearch("");
+                      }}
+                    >
+                      <span>{i.name}</span>
+                      <span className="flatinv__price">{won(i.supplyPrice)}원</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
         <input
           className="input"
           value={f.name}
@@ -217,7 +264,10 @@ export function FlatReservationAdmin({
         <div className="resvflatwrap">
           {products.map((p) => (
             <div className="resvflat" key={p.id}>
-              <div className="resvflat__main">
+              <Link
+                href={`/admin/reservations/product/${p.id}`}
+                className="resvflat__main"
+              >
                 <div className="resvflat__name">
                   {p.name}
                   {p.inventoryItemId ? <span className="resvflat__tag">재고연동</span> : null}
@@ -228,10 +278,10 @@ export function FlatReservationAdmin({
                 <div className="resvflat__meta2">
                   <Countdown ms={p.closeAtMs} />
                   <span className="resvflat__agg">
-                    취합 {p.totalQty}개 · {p.storeCount}점포
+                    취합 {p.totalQty}개 · {p.storeCount}점포 ›
                   </span>
                 </div>
-              </div>
+              </Link>
               <div className="resvflat__acts">
                 <button type="button" className="btn btn--xs btn--soft" onClick={() => startEdit(p)}>
                   수정
