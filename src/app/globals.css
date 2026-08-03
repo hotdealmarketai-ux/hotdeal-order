@@ -1238,6 +1238,93 @@ a {
   justify-content: center;
 }
 
+/* ---- 관리자 홈: 그룹 섹션 + KPI 타일 ---- */
+.admhome {
+  display: flex;
+  flex-direction: column;
+}
+.admsec {
+  margin-top: 18px;
+}
+.admsec:first-child {
+  margin-top: 4px;
+}
+.admsec__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 2px 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.admsec__label {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--fg-soft);
+  letter-spacing: 0.02em;
+}
+.admsec__count {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted-2);
+}
+.admsec .admgrid + .admgrid {
+  margin-top: 10px;
+}
+/* 오늘 발주 건수 = 커머스 대시보드식 큰 숫자 타일 */
+.admkpi {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 78px;
+  padding: 15px 15px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 14px);
+  background: var(--surface);
+  color: var(--fg);
+  text-decoration: none;
+}
+.admkpi:active {
+  transform: translateY(1px);
+}
+.admkpi__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg-soft);
+  letter-spacing: -0.01em;
+}
+.admkpi__value {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+.admkpi__value b {
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+.admkpi__value span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.admkpi--fill {
+  background: var(--green-700);
+  border-color: var(--green-700);
+}
+.admkpi--fill .admkpi__label {
+  color: #cfe0d4;
+}
+.admkpi--fill .admkpi__value b {
+  color: #fff;
+}
+.admkpi--fill .admkpi__value span {
+  color: #a9c6b3;
+}
+
 /* ---- 입고 페이지(입력폼 + 기록목록) ---- */
 .inb {
   display: flex;

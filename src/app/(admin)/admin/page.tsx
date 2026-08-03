@@ -56,55 +56,104 @@ export default async function AdminHome() {
   const hotdealOrders = hotdealStores.length;
   const hotdealNewCount = hotdealNew.length;
 
-  // 2열 그리드(읽는 순서 = 배열 순서). 지정된 배치/이름:
-  // 가입대기·회원관리 / 전체발주목록·핫딜마켓발주 / 입금관리·계산서발행 /
-  // 주간발주·예약달력 / 입고·재고 / 담기현황·재고마감 / 창고관리·로그
-  const menu = [
+  // 관리자 홈 = 4개 그룹 섹션(발주·주문 / 정산·입금 / 재고·창고 / 회원·시스템).
+  // 발주·주문 맨 위 두 항목(전체 발주 목록·핫딜마켓 발주)은 '오늘 건수'를 큰 숫자로 보여주는 KPI 타일.
+  type Kpi = { href: string; title: string; value: number; fill?: boolean; badge?: number };
+  type Item = { href: string; title: string; badge?: number };
+  type Group = { label: string; kpis?: Kpi[]; items: Item[]; closing?: boolean };
+  const groups: Group[] = [
     {
-      href: "/admin/approvals",
-      title: "가입 대기",
-      badge: pending > 0 ? pending : undefined,
+      label: "발주 · 주문",
+      kpis: [
+        { href: "/admin/orders", title: "전체 발주 목록", value: totalOrders, fill: true },
+        {
+          href: "/admin/hotdeal",
+          title: "핫딜마켓 발주",
+          value: hotdealOrders,
+          badge: hotdealNewCount > 0 ? hotdealNewCount : undefined,
+        },
+      ],
+      items: [
+        { href: "/admin/weekly", title: "주간발주", badge: weeklyCount > 0 ? weeklyCount : undefined },
+        { href: "/admin/calendar", title: "예약 달력" },
+        { href: "/admin/holds", title: "담기 현황" },
+      ],
     },
-    { href: "/admin/members", title: "회원 관리" },
-    { href: "/admin/orders", title: "전체 발주 목록", sub: `${totalOrders}건` },
     {
-      href: "/admin/hotdeal",
-      title: "핫딜마켓 발주",
-      sub: `${hotdealOrders}건`,
-      badge: hotdealNewCount > 0 ? hotdealNewCount : undefined,
+      label: "정산 · 입금",
+      items: [
+        { href: "/admin/deposits", title: "입금 관리" },
+        { href: "/admin/billing", title: "계산서 발행" },
+      ],
+      closing: true, // 마감 백업(ClosingCard) = 시트 확인창 카드, 이 그룹 끝에 렌더
     },
-    { href: "/admin/deposits", title: "입금 관리" },
-    { href: "/admin/billing", title: "계산서 발행" },
     {
-      href: "/admin/weekly",
-      title: "주간발주",
-      badge: weeklyCount > 0 ? weeklyCount : undefined,
+      label: "재고 · 창고",
+      items: [
+        { href: "/admin/inbound", title: "입고" },
+        { href: "/admin/inventory", title: "재고" },
+        { href: "/admin/stock-reconcile", title: "재고 마감" },
+        { href: "/warehouse", title: "창고 관리" },
+      ],
     },
-    { href: "/admin/calendar", title: "예약 달력" },
-    { href: "/admin/inbound", title: "입고" },
-    { href: "/admin/inventory", title: "재고" },
-    { href: "/admin/holds", title: "담기 현황" },
-    { href: "/admin/stock-reconcile", title: "재고 마감" },
-    { href: "/warehouse", title: "창고 관리" },
-    { href: "/admin/audit", title: "로그" },
+    {
+      label: "회원 · 시스템",
+      items: [
+        { href: "/admin/approvals", title: "가입 대기", badge: pending > 0 ? pending : undefined },
+        { href: "/admin/members", title: "회원 관리" },
+        { href: "/admin/audit", title: "로그" },
+      ],
+    },
   ];
 
   return (
     <>
       <Topbar brand="새롭 · 관리자" right={<TopbarChip>{user.storeName}</TopbarChip>} />
       <div className="page">
-        <h1 className="h1">관리자</h1>
-        <p className="lead">전체 발주를 확인하고 가맹점을 관리하세요.</p>
-
-        <div className="admgrid">
-          {menu.map((m) => (
-            <Link href={m.href} className="admcard" key={m.href}>
-              {m.badge ? <span className="admcard__badge">{m.badge}</span> : null}
-              <div className="admcard__title">{m.title}</div>
-              {m.sub ? <div className="admcard__sub">{m.sub}</div> : null}
-            </Link>
-          ))}
-          <ClosingCard />
+        <div className="admhome">
+          {groups.map((g) => {
+            const count =
+              (g.kpis?.length ?? 0) + g.items.length + (g.closing ? 1 : 0);
+            return (
+              <section className="admsec" key={g.label}>
+                <div className="admsec__head">
+                  <span className="admsec__label">{g.label}</span>
+                  <span className="admsec__count">{count}</span>
+                </div>
+                {g.kpis && g.kpis.length > 0 ? (
+                  <div className="admgrid">
+                    {g.kpis.map((k) => (
+                      <Link
+                        href={k.href}
+                        key={k.href}
+                        className={`admkpi${k.fill ? " admkpi--fill" : ""}`}
+                      >
+                        {k.badge ? (
+                          <span className="admcard__badge">{k.badge}</span>
+                        ) : null}
+                        <div className="admkpi__label">{k.title}</div>
+                        <div className="admkpi__value">
+                          <b>{k.value}</b>
+                          <span>건</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="admgrid">
+                  {g.items.map((m) => (
+                    <Link href={m.href} className="admcard" key={m.href}>
+                      {m.badge ? (
+                        <span className="admcard__badge">{m.badge}</span>
+                      ) : null}
+                      <div className="admcard__title">{m.title}</div>
+                    </Link>
+                  ))}
+                  {g.closing ? <ClosingCard /> : null}
+                </div>
+              </section>
+            );
+          })}
         </div>
 
         <div style={{ marginTop: 22 }}>
