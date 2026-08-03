@@ -70,6 +70,7 @@ export default async function AdminHome() {
           href: "/admin/hotdeal",
           title: "핫딜마켓 발주",
           value: hotdealOrders,
+          fill: true,
           badge: hotdealNewCount > 0 ? hotdealNewCount : undefined,
         },
       ],
