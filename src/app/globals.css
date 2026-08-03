@@ -3855,6 +3855,8 @@ body {
   font-size: 12.5px; font-weight: 700; color: var(--green-700);
   padding: 12px 4px 4px;
 }
+/* 품절 대분류 — 빨강으로 구분(재고 0 상품이 모이는 곳) */
+.invcatsec__major--out { color: var(--danger); border-bottom-color: var(--danger); }
 /* 상단 카테고리 필터(가로 스크롤 칩) */
 .catfilter {
   display: flex; gap: 7px; overflow-x: auto; padding: 4px 0 6px;
@@ -3867,6 +3869,8 @@ body {
   color: var(--fg-2); cursor: pointer; white-space: nowrap;
 }
 .catfilter__chip.is-on { border-color: var(--green-700); background: var(--green-700); color: #fff; }
+.catfilter__chip--out { border-color: var(--danger-line); color: var(--danger); }
+.catfilter__chip--out.is-on { border-color: var(--danger); background: var(--danger); color: #fff; }
 /* 중분류(2단계) 필터 — 대분류 칩 바로 아래, 조금 작게 */
 .catfilter--minor { margin-top: 0; }
 .catfilter--minor .catfilter__chip { font-size: 12px; padding: 5px 11px; }
