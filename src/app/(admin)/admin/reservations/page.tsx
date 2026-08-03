@@ -1,25 +1,48 @@
 import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
-import {
-  getReservationBatchesAdmin,
-  countHiddenReservationBatches,
-} from "@/lib/reservation-data";
-import { PurgeHiddenReservationsButton } from "@/components/PurgeHiddenReservationsButton";
-import { AdminReservationList } from "@/components/AdminReservationList";
+import { listFlatProductsAdmin } from "@/lib/reservation-flat";
+import { getInventoryPickList } from "@/lib/reservation-data";
+import { FlatReservationAdmin } from "@/components/FlatReservationAdmin";
 
+export const dynamic = "force-dynamic";
+
+// 관리자 예약발주 — 날짜 뎁스 없는 단일 목록. 상품별 마감(시분초) 등록, 마감 임박순 노출.
 export default async function AdminReservationsPage() {
   await requireAdmin();
-  const [batches, hiddenCount] = await Promise.all([
-    getReservationBatchesAdmin("current"),
-    countHiddenReservationBatches(),
+  const [products, inventoryItems] = await Promise.all([
+    listFlatProductsAdmin("open"),
+    getInventoryPickList(),
   ]);
+
+  const rows = products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    pickupDate: p.pickupDate,
+    supplyPrice: p.supplyPrice,
+    inventoryItemId: p.inventoryItemId,
+    closeAtMs: p.closeAt.getTime(),
+    closeAtLocal: new Date(p.closeAt.getTime() + 9 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 19),
+    totalQty: p.totalQty,
+    storeCount: p.storeCount,
+  }));
 
   return (
     <>
       <Topbar brand="새롭 · 예약발주" />
       <div className="page">
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 2 }}>
+        <div
+          style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginBottom: 6 }}
+        >
+          <Link
+            href="/admin/reservations/closed"
+            className="linkbtn"
+            style={{ color: "var(--muted)", textDecoration: "none" }}
+          >
+            지난 예약 마감 ›
+          </Link>
           <Link
             href="/admin/reservations/past"
             className="linkbtn"
@@ -28,26 +51,8 @@ export default async function AdminReservationsPage() {
             지난 예약발주 ›
           </Link>
         </div>
-        <div className="itemshead">
-          <span className="itemshead__label">예약일자 목록</span>
-          <span className="itemshead__count">{batches.length}개</span>
-        </div>
 
-        <AdminReservationList
-          batches={batches}
-          emptyText="진행 중인 예약발주가 없어요. 아래에서 새로 만들어 주세요."
-        />
-
-        <Link
-          href="/admin/reservations/new"
-          className="btn btn--primary btn--block"
-          style={{ marginTop: 16 }}
-        >
-          + 새 예약일자 만들기
-        </Link>
-
-        {/* 숨겨진(삭제된) 예약이 같은 날짜 재생성을 막을 때 완전 삭제 */}
-        <PurgeHiddenReservationsButton count={hiddenCount} />
+        <FlatReservationAdmin products={rows} inventoryItems={inventoryItems} />
       </div>
     </>
   );

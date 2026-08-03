@@ -2,6 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { kstToday, shiftDate } from "@/lib/date";
 import { isReservationClosed } from "@/lib/reservation";
+import { FLAT_RESERVE_KEY } from "@/lib/reservation-flat";
 
 export type ReservationBatchListItem = {
   id: string;
@@ -24,13 +25,16 @@ export async function countHiddenReservationBatches(): Promise<number> {
 // 관리자 목록 — 활성 배치 + 상품/예약 건수 + 픽업일 목록. 예약일자 내림차순.
 // scope: current=예약일이 오늘 이후(진행/예정), past=예약일이 지난 것('지난 예약발주' 페이지).
 export async function getReservationBatchesAdmin(
-  scope: "current" | "past" = "current",
+  scope: "current" | "past" | "legacy" = "current",
 ): Promise<ReservationBatchListItem[]> {
   const today = kstToday();
+  // 신규 단일목록(flat) 상시 배치는 날짜 목록에서 제외. "legacy" = 기존 날짜형 예약 전부(지난 예약발주로 통합).
+  const dateFilter =
+    scope === "legacy" ? {} : scope === "past" ? { lt: today } : { gte: today };
   const batches = await prisma.reservationBatch.findMany({
     where: {
       active: true,
-      reserveDate: scope === "past" ? { lt: today } : { gte: today },
+      reserveDate: { not: FLAT_RESERVE_KEY, ...dateFilter },
     },
     orderBy: { reserveDate: "desc" },
     select: {
@@ -118,7 +122,12 @@ export async function getMerchantReservationBatches(
   const today = kstToday();
   const batches = await prisma.reservationBatch.findMany({
     // 픽업이 상품별이므로: 아직 픽업 안 지난 활성 상품이 하나라도 있는 배치만 노출.
-    where: { active: true, products: { some: { active: true, pickupDate: { gte: today } } } },
+    // 신규 flat 상시 배치는 제외(Phase 3에서 별도 단일목록 화면으로 노출).
+    where: {
+      active: true,
+      reserveDate: { not: FLAT_RESERVE_KEY },
+      products: { some: { active: true, pickupDate: { gte: today } } },
+    },
     orderBy: { reserveDate: "asc" },
     select: {
       id: true,
@@ -161,6 +170,7 @@ export async function getMerchantPastReservationBatches(
   const batches = await prisma.reservationBatch.findMany({
     where: {
       active: true,
+      reserveDate: { not: FLAT_RESERVE_KEY }, // flat 상시 배치 제외
       orders: { some: { userId, items: { some: {} } } }, // 내가 실제로 예약한 것만
       products: { none: { active: true, pickupDate: { gte: today } } }, // 픽업이 모두 지남
     },
