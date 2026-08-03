@@ -129,10 +129,12 @@ export default async function AdminHome() {
                         key={k.href}
                         className={`admkpi${k.fill ? " admkpi--fill" : ""}`}
                       >
-                        {k.badge ? (
-                          <span className="admcard__badge">{k.badge}</span>
-                        ) : null}
-                        <div className="admkpi__label">{k.title}</div>
+                        <div className="admkpi__label">
+                          <span className="admkpi__name">{k.title}</span>
+                          {k.badge ? (
+                            <span className="admkpi__badge">{k.badge}</span>
+                          ) : null}
+                        </div>
                         <div className="admkpi__value">
                           <b>{k.value}</b>
                           <span>건</span>
