@@ -4,6 +4,7 @@ import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { labelDate } from "@/lib/date";
+import { receivableOf } from "@/lib/receivable";
 import { BillingLauncher } from "@/components/BillingLauncher";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -26,11 +27,9 @@ export default async function AdminBillingMerchantPage(props: {
   });
   if (!merchant || merchant.role !== "MERCHANT_HOTDEAL") notFound();
 
-  const [ar, invoices] = await Promise.all([
-    prisma.invoice.aggregate({
-      where: { userId: id, status: "ISSUED" },
-      _sum: { total: true },
-    }),
+  const [rec, invoices] = await Promise.all([
+    // 미수 = 발행분 + 관리자 수동조정(입금관리·점주 화면과 동일 기준). ISSUED만 합치면 수동조정이 빠져 안 맞음.
+    receivableOf(id),
     prisma.invoice.findMany({
       where: { userId: id, status: { not: "VOID" } },
       orderBy: { updatedAt: "desc" },
@@ -38,7 +37,7 @@ export default async function AdminBillingMerchantPage(props: {
       select: { id: true, date: true, kind: true, status: true, total: true },
     }),
   ]);
-  const bal = ar._sum.total ?? 0;
+  const bal = rec.balance;
 
   return (
     <>

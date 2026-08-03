@@ -16,12 +16,14 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 export default async function AdminInvoices() {
   await requireAdmin();
 
-  const [ar, invoices] = await Promise.all([
+  const [ar, adj, invoices] = await Promise.all([
+    // 미수 합계 = 발행·미입금(전 종류) + 관리자 수동조정 — receivableOf·입금관리와 동일 기준.
     prisma.invoice.aggregate({
-      where: { status: "ISSUED", kind: "DAILY" },
+      where: { status: "ISSUED" },
       _sum: { total: true },
       _count: true,
     }),
+    prisma.receivableAdjustment.aggregate({ _sum: { amount: true } }),
     prisma.invoice.findMany({
       where: { kind: "DAILY" }, // 주간(WEEKLY)은 /admin/weekly 에서 별도 관리
       orderBy: { updatedAt: "desc" },
@@ -29,7 +31,7 @@ export default async function AdminInvoices() {
       include: { user: { select: { storeName: true } } },
     }),
   ]);
-  const arSum = ar._sum.total ?? 0;
+  const arSum = (ar._sum.total ?? 0) + (adj._sum.amount ?? 0);
 
   return (
     <>

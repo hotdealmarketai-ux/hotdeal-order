@@ -15,11 +15,18 @@ export default async function AdminBillingPage() {
     select: { id: true, storeName: true },
   });
   const ids = merchants.map((m) => m.id);
-  const [ar, drafts] = await Promise.all([
+  const [ar, adj, drafts] = await Promise.all([
     prisma.invoice.groupBy({
       by: ["userId"],
       where: { status: "ISSUED", userId: { in: ids } },
       _sum: { total: true },
+    }),
+    // 미수 = 발행·미입금 계산서 합 + 관리자 수동조정(ReceivableAdjustment) — receivableOf·입금관리와 동일 기준.
+    // 수동조정을 빠뜨리면 입금관리에서 맞춘 미수와 이 목록 숫자가 안 맞는다.
+    prisma.receivableAdjustment.groupBy({
+      by: ["userId"],
+      where: { userId: { in: ids } },
+      _sum: { amount: true },
     }),
     // 작성중(DRAFT) 계산서가 있는 지점 — 목록에서 브랜드컬러로 강조
     prisma.invoice.findMany({
@@ -30,6 +37,7 @@ export default async function AdminBillingPage() {
   ]);
   const arMap: Record<string, number> = {};
   for (const a of ar) arMap[a.userId] = a._sum.total ?? 0;
+  for (const a of adj) arMap[a.userId] = (arMap[a.userId] ?? 0) + (a._sum.amount ?? 0);
   const totalAr = Object.values(arMap).reduce((n, v) => n + v, 0);
   const draftUserIds = new Set(drafts.map((d) => d.userId));
 
