@@ -43,12 +43,23 @@ export function isUnlockActiveThisWindow(
 export async function receivableOf(
   userId: string,
 ): Promise<{ balance: number; count: number }> {
-  const ar = await prisma.invoice.aggregate({
-    where: { userId, status: "ISSUED" },
-    _sum: { total: true },
-    _count: true,
-  });
-  return { balance: ar._sum.total ?? 0, count: ar._count };
+  // 미수 = 발행·미입금 계산서 합 + 관리자 수동 조정(ReceivableAdjustment) 합.
+  // 수동 조정은 입금 누락·반품·오류 정정 등 청구 외 미수를 가감(관리자만 수정 가능).
+  const [ar, adj] = await Promise.all([
+    prisma.invoice.aggregate({
+      where: { userId, status: "ISSUED" },
+      _sum: { total: true },
+      _count: true,
+    }),
+    prisma.receivableAdjustment.aggregate({
+      where: { userId },
+      _sum: { amount: true },
+    }),
+  ]);
+  return {
+    balance: (ar._sum.total ?? 0) + (adj._sum.amount ?? 0),
+    count: ar._count,
+  };
 }
 
 // 1일 미수 잠금: '이번 발주창 시작 이전' 날짜의 미입금 계산서가 있으면 이번 창 발주 잠금.

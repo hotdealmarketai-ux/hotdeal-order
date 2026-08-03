@@ -1814,6 +1814,173 @@ a {
   flex: 1;
   min-width: 0;
 }
+
+/* 계산서 수정 내역 — 재발송 시점별 변경(추가/변경/제거) + 결제요청(미수) 금액 변화. 점주·관리자 공용 */
+.revhist { margin-top: 22px; }
+.revhist__title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--fg-soft);
+  margin-bottom: 10px;
+}
+.revcard {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--surface);
+}
+.revcard:last-child { margin-bottom: 0; }
+.revcard__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed var(--line);
+}
+.revcard__time { font-size: 12.5px; font-weight: 700; color: var(--muted-2); }
+.revcard__amt {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--fg);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.revcard__was { color: var(--muted-2); text-decoration: line-through; font-weight: 600; }
+.revcard__arrow { color: var(--muted-2); font-weight: 700; }
+.revcard__delta { font-size: 12px; font-weight: 800; padding: 1px 7px; border-radius: 999px; }
+.revcard__delta.is-up { color: var(--danger); background: var(--danger-bg); }
+.revcard__delta.is-down { color: var(--green-700); background: rgba(28, 74, 47, 0.09); }
+.revcard__none { font-size: 12.5px; color: var(--muted-2); }
+.revcard__list { display: flex; flex-direction: column; gap: 9px; }
+.revchg__top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.revchg__badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 7px;
+  white-space: nowrap;
+}
+.revchg--add .revchg__badge { color: var(--green-700); background: rgba(28, 74, 47, 0.10); }
+.revchg--del .revchg__badge { color: var(--danger); background: var(--danger-bg); }
+.revchg--chg .revchg__badge { color: #9a6b0b; background: rgba(200, 150, 20, 0.15); }
+.revchg__name {
+  min-width: 0;
+  font-weight: 700;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.revchg__cat { font-size: 11.5px; font-weight: 700; color: var(--muted-2); margin-right: 5px; }
+.revchg__detail {
+  margin-top: 3px;
+  margin-left: 2px;
+  font-size: 12px;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 미수 수동 조정 컨트롤 — 방향(미수 줄이기 −/늘리기 +) 토글 */
+.radj__dir { display: flex; gap: 8px; margin-bottom: 8px; }
+.radj__diropt {
+  flex: 1;
+  padding: 9px 0;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--muted-2);
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.radj__diropt.is-on.is-minus {
+  color: var(--green-700);
+  border-color: var(--green-700);
+  background: rgba(28, 74, 47, 0.07);
+}
+.radj__diropt.is-on.is-plus {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-bg);
+}
+
+/* 관리자 예약 편집 — 점포별 품목 수량 +/−·삭제 */
+.resvedit__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.resvedit__unconfirmed {
+  margin-left: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--muted-2);
+  background: var(--line-soft);
+  border-radius: 5px;
+  padding: 1px 5px;
+  vertical-align: middle;
+}
+.resvedit__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+}
+.resvedit__row + .resvedit__row { border-top: 1px solid var(--line-soft); }
+.resvedit__row.is-removed .resvedit__name {
+  text-decoration: line-through;
+  color: var(--muted-2);
+}
+.resvedit__name {
+  min-width: 0;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resvedit__locked { font-size: 12px; color: var(--muted-2); flex-shrink: 0; }
+.resvedit__ctrl { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.resvedit__step {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.resvedit__step:disabled { opacity: 0.4; cursor: default; }
+.resvedit__qty {
+  min-width: 26px;
+  text-align: center;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.resvedit__del {
+  border: none;
+  background: none;
+  color: var(--danger);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
 /* 공구 '불러오기' — 배경 없는 작은 글씨 버튼(담기·예약 발주를 계산서로 로드) */
 .invcat__load {
   border: none;

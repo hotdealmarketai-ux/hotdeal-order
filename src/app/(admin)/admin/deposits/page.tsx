@@ -18,17 +18,18 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 export default async function AdminDeposits() {
   await requireAdmin();
 
-  const [stores, balances, splitReqs, unmatched, syncedAt, pendingSplits] =
+  const [stores, balances, splitReqs, unmatched, syncedAt, pendingSplits, adjustments] =
     await Promise.all([
     prisma.user.findMany({
       where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
       select: { id: true, storeName: true, payerNames: true },
       orderBy: { storeName: "asc" },
     }),
-    // 미입금 계산서(ISSUED) 합 = 남은 결제잔액 (마이페이지·발주잠금과 동일 기준)
+    // 미입금 계산서(ISSUED) 합 = 남은 결제잔액. receivableOf(마이·점포상세)와 동일하게 전 종류(일반+주간) 합산
+    // — kind:DAILY로 좁히면 주간 미수가 있는 점포에서 목록과 상세 미수가 달라진다.
     prisma.invoice.groupBy({
       by: ["userId"],
-      where: { status: "ISSUED", kind: "DAILY" },
+      where: { status: "ISSUED" },
       _sum: { total: true },
       _count: true,
     }),
@@ -54,10 +55,18 @@ export default async function AdminDeposits() {
       },
       orderBy: { splitRequestedAt: "asc" },
     }),
+    // 미수 수동 조정(ReceivableAdjustment) 점포별 합계 — 파생 미수에 가산.
+    prisma.receivableAdjustment.groupBy({
+      by: ["userId"],
+      _sum: { amount: true },
+    }),
   ]);
 
   const balByUser = new Map(
     balances.map((b) => [b.userId, { sum: b._sum.total ?? 0, count: b._count }]),
+  );
+  const adjByUser = new Map(
+    adjustments.map((a) => [a.userId, a._sum.amount ?? 0]),
   );
   const splitSet = new Set(splitReqs.map((s) => s.userId));
 
@@ -66,7 +75,7 @@ export default async function AdminDeposits() {
       id: s.id,
       storeName: s.storeName,
       payer: s.payerNames[0] ?? "미등록",
-      balance: balByUser.get(s.id)?.sum ?? 0,
+      balance: (balByUser.get(s.id)?.sum ?? 0) + (adjByUser.get(s.id) ?? 0),
       count: balByUser.get(s.id)?.count ?? 0,
       split: splitSet.has(s.id),
     }))

@@ -11,8 +11,82 @@ import {
   type CollectResult,
 } from "@/lib/bank";
 import { setOrderLockOverride } from "@/lib/order-open";
+import { writeAudit } from "@/lib/audit";
 
 export type CollectState = { result?: CollectResult; error?: string };
+
+// 미수 수동 조정 후 미수를 읽는 모든 화면 갱신(관리자 입금관리 + 점주 배지/마이/입금요청서).
+function revalidateReceivable(userId: string) {
+  revalidatePath("/admin/deposits");
+  revalidatePath(`/admin/deposits/${userId}`);
+  revalidatePath("/admin");
+  revalidatePath("/order");
+  revalidatePath("/mypage");
+  revalidatePath("/invoices");
+}
+
+// 미수 수동 조정 — 관리자 전용. 점포 미수를 가감(입금 누락·반품·오류 정정 등).
+// direction=plus 면 미수 증가(+), minus 면 미수 감소(−). 사유(memo) 필수.
+// ⚠ 보안: 반드시 requireAdmin — 점주는 이 액션에 도달할 수 없다(입금관리는 관리자 전용 경로).
+export async function adjustReceivableAction(
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const admin = await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const direction = String(formData.get("direction") ?? "plus");
+  const memo = String(formData.get("memo") ?? "").trim().slice(0, 200);
+  const magnitude = Math.abs(
+    parseInt(String(formData.get("amount") ?? "").replace(/[^\d]/g, ""), 10) || 0,
+  );
+  if (!userId) return { error: "잘못된 요청이에요." };
+  if (magnitude <= 0) return { error: "금액을 입력해 주세요." };
+  if (!memo) return { error: "조정 사유를 입력해 주세요." };
+
+  const store = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, storeName: true },
+  });
+  if (!store || !isMerchant(store.role as Role)) {
+    return { error: "점포를 찾을 수 없어요." };
+  }
+  const amount = direction === "minus" ? -magnitude : magnitude;
+
+  await prisma.receivableAdjustment.create({
+    data: { userId, amount, memo, adminId: admin.id, adminName: admin.storeName },
+  });
+  await writeAudit({
+    action: "receivable.adjust",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "store",
+    targetId: userId,
+    summary: `${store.storeName} 미수 조정 ${amount > 0 ? "+" : "−"}${Math.abs(amount).toLocaleString("ko-KR")}원 · ${memo}`,
+  }).catch(() => {});
+  revalidateReceivable(userId);
+  return {};
+}
+
+// 미수 조정 내역 삭제(되돌리기) — 관리자 전용.
+export async function deleteReceivableAdjustmentAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const adj = await prisma.receivableAdjustment.findUnique({
+    where: { id },
+    select: { userId: true, amount: true, memo: true },
+  });
+  if (!adj) return;
+  await prisma.receivableAdjustment.delete({ where: { id } });
+  await writeAudit({
+    action: "receivable.adjust.delete",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "store",
+    targetId: adj.userId,
+    summary: `미수 조정 삭제 ${adj.amount > 0 ? "+" : "−"}${Math.abs(adj.amount).toLocaleString("ko-KR")}원 · ${adj.memo}`,
+  }).catch(() => {});
+  revalidateReceivable(adj.userId);
+}
 
 // 관리자 수동 '지금 수집' — 팝빌에서 최근 입금을 즉시 끌어온다
 export async function collectDepositsAction(

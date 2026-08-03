@@ -12,6 +12,8 @@ import {
 } from "@/lib/receivable";
 import { setOrderUnlockAction } from "@/app/actions/deposit";
 import { ManualPayButton } from "@/components/ManualPayButton";
+import { ReceivableAdjustControl } from "@/components/ReceivableAdjustControl";
+import { ReceivableAdjustDeleteButton } from "@/components/ReceivableAdjustDeleteButton";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -47,7 +49,7 @@ export default async function AdminDepositStore(props: {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || user.role !== "MERCHANT_HOTDEAL") notFound();
 
-  const [invoices, deposits, ar, lock] = await Promise.all([
+  const [invoices, deposits, ar, lock, adjustments] = await Promise.all([
     prisma.invoice.findMany({
       where: { userId, kind: "DAILY", status: { not: "VOID" } },
       select: {
@@ -73,6 +75,11 @@ export default async function AdminDepositStore(props: {
     }),
     receivableOf(userId),
     orderLockOf(userId, user.orderUnlock, user.orderUnlockAt),
+    prisma.receivableAdjustment.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, amount: true, memo: true, adminName: true, createdAt: true },
+    }),
   ]);
 
   // 수동 해제가 '이번 발주창'에 유효한지(1회성). orderLockOf와 동일한 창-키 판정 공유.
@@ -186,6 +193,43 @@ export default async function AdminDepositStore(props: {
             </form>
           </div>
         </div>
+
+        <ReceivableAdjustControl userId={userId} />
+
+        {adjustments.length > 0 && (
+          <>
+            <div className="section-label">미수 조정 내역</div>
+            <div className="list" style={{ marginBottom: 16 }}>
+              {adjustments.map((a) => (
+                <div className="deprow" key={a.id}>
+                  <div className="deprow__head">
+                    <div className="row__main">
+                      <div className="row__title">
+                        <span
+                          style={{
+                            color: a.amount > 0 ? "var(--danger)" : "var(--green-700)",
+                            fontWeight: 800,
+                            fontVariantNumeric: "tabular-nums",
+                          }}
+                        >
+                          {a.amount > 0 ? "+" : "−"}
+                          {fmt(Math.abs(a.amount))}원
+                        </span>
+                      </div>
+                      <div className="row__sub">
+                        {a.memo || "사유 없음"} · {a.adminName || "관리자"} ·{" "}
+                        {formatKDateTime(a.createdAt)}
+                      </div>
+                    </div>
+                    <div style={{ flexShrink: 0 }}>
+                      <ReceivableAdjustDeleteButton id={a.id} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         <div className="section-label">입출금 내역</div>
         <form method="get" style={{ marginBottom: 12 }}>

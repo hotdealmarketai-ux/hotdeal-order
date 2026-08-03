@@ -45,6 +45,7 @@ model User {
   pushSubs        PushSubscription[]
   matchedDeposits Deposit[]
   invoices        Invoice[]
+  receivableAdjustments ReceivableAdjustment[]
   notifications   Notification[]
   chatThread      ChatThread?
   createdAt    DateTime @default(now())
@@ -408,12 +409,73 @@ model Invoice {
   stockDeductedAt   DateTime?
 
   items     InvoiceItem[]
+  revisions InvoiceRevision[]
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
   @@index([userId, date])
   @@index([status, issuedAt])
   @@index([userId, kind, status])
+}
+
+// 미수 수동 조정 — 관리자가 점포 미수를 가감(입금 누락·반품·오류 정정 등). 파생 미수(receivableOf)에 합산.
+// 점주는 절대 수정 불가(모든 쓰기 액션은 requireAdmin). 조정 이력은 입금관리 점포 상세에 남는다.
+model ReceivableAdjustment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Int // +면 미수 증가, −면 미수 감소 (원)
+  memo      String   @default("") // 사유
+  adminId   String // 실행 관리자 id
+  adminName String   @default("") // 실행 관리자 상호(사후 표시용 비정규화 스냅샷)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// 예약발주 관리자 수정 내역 — 관리자가 점포의 예약 수량을 가감/삭제할 때마다 그 변경을 남긴다.
+// (점주가 /reservations/[id] 에서 자기 예약 수정 내역을 열람. 느슨 참조 — batchId/userId 스냅샷.)
+model ReservationChangeLog {
+  id        String   @id @default(cuid())
+  batchId   String
+  userId    String
+  actorName String   @default("") // 실행 관리자 상호 스냅샷
+  changes   String   @default("[]") // JSON: [{name, op:changed|removed, before, after}]
+  createdAt DateTime @default(now())
+
+  @@index([batchId, userId, createdAt])
+}
+
+// 마감(일일 백업) 로그 — 관리자 '마감' 버튼으로 xlsx 백업을 내려받은 순간의 '요약'만 기록.
+// xlsx 파일 자체는 저장하지 않는다(관리자가 즉시 다운로드). snapshot은 소형 JSON(점포별 미수 등, 8KB 컷).
+// 데이터 유실 대비 — 언제 무엇을 백업했는지 추적 + 미수 총액 추이 확인용.
+model ClosingLog {
+  id               String   @id @default(cuid())
+  actorId          String // 실행 관리자 id
+  actorName        String   @default("") // 상호 비정규화 스냅샷
+  storeCount       Int      @default(0) // 미수 집계 대상 점포 수
+  receivableTotal  Int      @default(0) // 전체 미수 합계(원)
+  invoiceCount     Int      @default(0) // 백업한 계산서 수
+  invoiceItemCount Int      @default(0) // 백업한 출고 품목 행 수
+  inventoryCount   Int      @default(0) // 백업한 재고 품목 수
+  snapshot         String? // 소형 JSON 요약(점포별 미수 등)
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// 계산서 수정(재발송) 내역 — 발행된 계산서를 제자리 수정(reviseInvoiceAction)할 때마다
+// '그 시점(재발송 순간)에 무엇이 어떻게 바뀌었는지'를 스냅샷으로 남긴다(점주·관리자 공통 열람).
+model InvoiceRevision {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  totalBefore Int      @default(0) // 수정 전 결제요청(미수) 금액
+  totalAfter  Int      @default(0) // 수정 후 결제요청(미수) 금액
+  changes     String   @default("[]") // 품목 변경 JSON: [{op:added|changed|removed, category, name, before?, after?}]
+  createdAt   DateTime @default(now()) // 수정 재발송 시점
+
+  @@index([invoiceId, createdAt])
 }
 
 model InvoiceItem {

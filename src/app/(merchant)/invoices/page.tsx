@@ -3,6 +3,7 @@ import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { SAEROP_BANK_ACCOUNT, SAEROP_ACCOUNT_HOLDER } from "@/lib/constants";
+import { receivableOf } from "@/lib/receivable";
 import { labelDate } from "@/lib/date";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -20,9 +21,9 @@ export default async function MerchantInvoicesPage() {
     orderBy: [{ issuedAt: "desc" }, { date: "desc" }],
     select: { id: true, date: true, kind: true, status: true, total: true },
   });
-  const unpaid = invoices
-    .filter((i) => i.status === "ISSUED")
-    .reduce((n, i) => n + i.total, 0);
+  // 미수(입금하실 금액)는 마이·발주 화면과 동일하게 receivableOf(계산서 합 + 관리자 수동 조정)로 계산 —
+  // 조정을 무시한 계산서 합만 쓰면 여기 표시액이 마이페이지와 달라진다.
+  const unpaid = (await receivableOf(user.id)).balance;
 
   return (
     <>

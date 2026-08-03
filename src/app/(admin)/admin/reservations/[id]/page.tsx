@@ -3,14 +3,14 @@ import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import {
   getReservationBatch,
-  getBatchConfirmations,
+  getBatchConfirmationsEditable,
   getInventoryPickList,
 } from "@/lib/reservation-data";
 import {
   ReservationBatchEditor,
   ReservationBatchDeleteButton,
 } from "@/components/ReservationBatchEditor";
-import { ConfirmedMerchants } from "@/components/ConfirmedMerchants";
+import { AdminReservationEditor } from "@/components/AdminReservationEditor";
 import { labelDate } from "@/lib/date";
 
 export default async function EditReservationBatchPage(props: {
@@ -22,7 +22,7 @@ export default async function EditReservationBatchPage(props: {
   // 삭제/숨김된 배치면 404 대신 목록으로
   if (!batch) redirect("/admin/reservations");
   const [confirmations, inventoryItems] = await Promise.all([
-    getBatchConfirmations(batch.id),
+    getBatchConfirmationsEditable(batch.id),
     getInventoryPickList(),
   ]);
 
@@ -32,12 +32,12 @@ export default async function EditReservationBatchPage(props: {
       <div className="page">
         <ReservationBatchEditor batch={batch} inventoryItems={inventoryItems} />
 
-        {/* 확정한 점주 — 점주를 누르면 상품별 예약 수량이 펼쳐진다 */}
+        {/* 예약한 점주 — 점주를 누르면 상품별 예약 수량을 +/−·삭제하고 저장(점주에게 알림) */}
         <div className="itemshead" style={{ marginTop: 26 }}>
-          <span className="itemshead__label">확정한 점주</span>
+          <span className="itemshead__label">예약한 점주</span>
           <span className="itemshead__count">{confirmations.length}곳</span>
         </div>
-        <ConfirmedMerchants confirmations={confirmations} />
+        <AdminReservationEditor batchId={batch.id} stores={confirmations} />
 
         <ReservationBatchDeleteButton batchId={batch.id} />
       </div>

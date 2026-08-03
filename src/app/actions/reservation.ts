@@ -9,7 +9,10 @@ import { validateBatchDates, isReservationClosed } from "@/lib/reservation";
 import {
   reservationLockActiveAt,
   minLockedPickupDate,
+  reservationHeldByItem,
 } from "@/lib/reservation-stock";
+import { heldByItem } from "@/lib/stock-hold";
+import { notifyMerchantReservationEdited } from "@/lib/push";
 import { windowKeyAt } from "@/lib/schedule";
 import { logError } from "@/lib/log";
 
@@ -493,4 +496,152 @@ export async function holdReservationAction(input: {
     logError("reservation.hold", err, { batchId, productId, userId: user.id });
     return { ok: false, error: "담기에 실패했어요. 다시 시도해 주세요." };
   }
+}
+
+// ── 관리자: 특정 점포의 예약 수량 편집/삭제 ──
+// edits: [{itemId, qty}] — qty<=0 이면 그 예약 품목 삭제. 예약 수량은 ReservationOrderItem.qty 자체가 곧 홀드라
+// 여기서 qty만 바꾸면 판매가능·자동로드가 자동 반영된다(StockHold 안 건드림). 연동(inventoryItemId≠"") 증가는
+// 재고 가용으로 캡(음수 재고 방지). 이미 출고(stockDeductedAt≠null)된 품목은 수정 불가(이중 반영 방지).
+// 저장 후 점주에게 푸시 + ReservationChangeLog(점주 열람용) 기록. ⚠ 관리자 전용(requireAdmin).
+export async function adminEditReservationItemsAction(input: {
+  batchId: string;
+  userId: string;
+  edits: { itemId: string; qty: number }[];
+}): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireAdmin();
+  const batchId = String(input?.batchId ?? "");
+  const userId = String(input?.userId ?? "");
+  const rawEdits = Array.isArray(input?.edits) ? input.edits : [];
+  if (!batchId || !userId) return { ok: false, error: "잘못된 요청이에요." };
+
+  const order = await prisma.reservationOrder.findFirst({
+    where: { batchId, userId },
+    select: {
+      id: true,
+      user: { select: { storeName: true } },
+      items: {
+        select: {
+          id: true,
+          name: true,
+          qty: true,
+          inventoryItemId: true,
+          stockDeductedAt: true,
+        },
+      },
+    },
+  });
+  if (!order) return { ok: false, error: "예약을 찾을 수 없어요." };
+  const byId = new Map(order.items.map((it) => [it.id, it]));
+
+  type Change = { item: (typeof order.items)[number]; qty: number };
+  const changes: Change[] = [];
+  for (const e of rawEdits) {
+    const it = byId.get(String(e?.itemId ?? ""));
+    if (!it) continue;
+    const qty = Math.max(0, Math.floor(Number(e?.qty) || 0));
+    if (qty === it.qty) continue; // 변화 없음 — 건너뜀(출고 품목이어도 무해)
+    if (it.stockDeductedAt)
+      return { ok: false, error: `${it.name}은(는) 이미 출고돼 수정할 수 없어요.` };
+    changes.push({ item: it, qty });
+  }
+  if (changes.length === 0) return { ok: true };
+
+  // 연동 품목 '증가'는 재고 가용 캡. cap = base − 전체예약홀드 − 일일홀드 + 이 행 현재수량.
+  const linkedUp = changes.filter(
+    (c) => c.item.inventoryItemId && c.qty > c.item.qty,
+  );
+  if (linkedUp.length > 0) {
+    const [resvHeld, dailyHeld] = await Promise.all([
+      reservationHeldByItem(),
+      heldByItem(),
+    ]);
+    const iids = [...new Set(linkedUp.map((c) => c.item.inventoryItemId))];
+    const invs = await prisma.inventoryItem.findMany({
+      where: { id: { in: iids } },
+      select: { id: true, qty: true },
+    });
+    const baseById = new Map(invs.map((i) => [i.id, i.qty]));
+    // iid별 '남은 재고 풀' = base − 전체예약홀드 − 일일홀드(이 저장의 증가 반영 전).
+    // 같은 재고품목을 여러 행이 함께 늘릴 때 풀을 순차 소진해야 초과판매가 안 난다.
+    const pool = new Map<string, number>();
+    for (const iid of iids)
+      pool.set(
+        iid,
+        (baseById.get(iid) ?? 0) - (resvHeld[iid] ?? 0) - (dailyHeld[iid] ?? 0),
+      );
+    for (const c of linkedUp) {
+      const iid = c.item.inventoryItemId;
+      const inc = c.qty - c.item.qty; // 증가량
+      const left = pool.get(iid) ?? 0;
+      if (inc > left) {
+        return {
+          ok: false,
+          error: `${c.item.name} 재고가 부족해요(최대 ${c.item.qty + Math.max(0, left)}개).`,
+        };
+      }
+      pool.set(iid, left - inc);
+    }
+  }
+
+  const logChanges = changes.map((c) => ({
+    name: c.item.name,
+    op: c.qty <= 0 ? "removed" : "changed",
+    before: c.item.qty,
+    after: c.qty,
+  }));
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const c of changes) {
+        if (c.qty <= 0)
+          await tx.reservationOrderItem.delete({ where: { id: c.item.id } });
+        else
+          await tx.reservationOrderItem.update({
+            where: { id: c.item.id },
+            data: { qty: c.qty },
+          });
+      }
+      const remaining = await tx.reservationOrderItem.count({
+        where: { orderId: order.id },
+      });
+      if (remaining === 0) {
+        await tx.reservationOrder.update({
+          where: { id: order.id },
+          data: { confirmed: false, confirmedAt: null },
+        });
+      }
+      await tx.reservationChangeLog.create({
+        data: {
+          batchId,
+          userId,
+          actorName: admin.storeName,
+          changes: JSON.stringify(logChanges),
+        },
+      });
+    });
+  } catch (err) {
+    logError("reservation.adminEdit", err, { batchId, userId });
+    return { ok: false, error: "수정에 실패했어요. 다시 시도해 주세요." };
+  }
+
+  await writeAudit({
+    action: "reservation.adminEditStore",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "ReservationOrder",
+    targetId: order.id,
+    summary: `${order.user.storeName} 예약 수정 — ${changes.length}건`,
+    snapshot: logChanges,
+  }).catch(() => {});
+  await notifyMerchantReservationEdited(userId, batchId);
+
+  revalidatePath(`/admin/reservations/${batchId}`);
+  revalidatePath("/reservations");
+  revalidatePath(`/reservations/${batchId}`);
+  revalidatePath("/inventory");
+  revalidatePath("/order");
+  revalidatePath("/vendor");
+  revalidatePath("/admin/hotdeal");
+  revalidatePath("/admin");
+  return { ok: true };
 }

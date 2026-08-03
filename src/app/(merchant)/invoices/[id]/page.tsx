@@ -12,6 +12,8 @@ import { labelDateLong } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { PrintButton } from "@/components/PrintButton";
+import { InvoiceRevisionHistory } from "@/components/InvoiceRevisionHistory";
+import { parseRevisionChanges } from "@/lib/invoice-revision";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 const KIND: Record<string, string> = { DAILY: "일반발주", WEEKLY: "주간발주" };
@@ -34,6 +36,21 @@ export default async function MerchantInvoiceDetailPage({
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
   if (!inv || inv.userId !== user.id || inv.status === "DRAFT") notFound();
+
+  // 수정 내역(재발송 시점별) — 최신순.
+  const revisions = (
+    await prisma.invoiceRevision.findMany({
+      where: { invoiceId: id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        createdAt: true,
+        totalBefore: true,
+        totalAfter: true,
+        changes: true,
+      },
+    })
+  ).map((r) => ({ ...r, changes: parseRevisionChanges(r.changes) }));
 
   const s = STATUS[inv.status] ?? STATUS.ISSUED;
   const receipt = inv.items.map((it) => ({
@@ -89,6 +106,8 @@ export default async function MerchantInvoiceDetailPage({
             </div>
           </div>
         )}
+
+        <InvoiceRevisionHistory revisions={revisions} />
 
         <div style={{ marginTop: 16 }}>
           <PrintButton label="계산서 인쇄" />

@@ -266,6 +266,74 @@ export async function getBatchConfirmations(batchId: string): Promise<BatchConfi
     .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
 }
 
+// 관리자 편집용 — 각 점포의 예약 품목을 '식별자와 함께' 반환(수량 편집·삭제에 필요).
+// getBatchConfirmations와 달리 confirmed 무관(연동 담기는 미확정에도 유효) + itemId/inventoryItemId/출고여부 포함.
+export type EditableReservationStore = {
+  userId: string;
+  storeName: string;
+  confirmed: boolean;
+  items: {
+    itemId: string;
+    name: string;
+    qty: number;
+    supplyPrice: number;
+    inventoryItemId: string;
+    stockDeducted: boolean; // 픽업 지나 이미 재고 차감됨 → 수정 불가
+  }[];
+};
+export async function getBatchConfirmationsEditable(
+  batchId: string,
+): Promise<EditableReservationStore[]> {
+  const orders = await prisma.reservationOrder.findMany({
+    where: { batchId, items: { some: { qty: { gt: 0 } } } },
+    select: {
+      userId: true,
+      confirmed: true,
+      user: { select: { storeName: true } },
+      items: {
+        where: { qty: { gt: 0 } },
+        orderBy: { sortOrder: "asc" },
+        select: {
+          id: true,
+          name: true,
+          qty: true,
+          supplyPrice: true,
+          inventoryItemId: true,
+          stockDeductedAt: true,
+        },
+      },
+    },
+  });
+  return orders
+    .map((o) => ({
+      userId: o.userId,
+      storeName: o.user.storeName,
+      confirmed: o.confirmed,
+      items: o.items.map((it) => ({
+        itemId: it.id,
+        name: it.name,
+        qty: it.qty,
+        supplyPrice: it.supplyPrice,
+        inventoryItemId: it.inventoryItemId,
+        stockDeducted: it.stockDeductedAt != null,
+      })),
+    }))
+    .filter((o) => o.items.length > 0)
+    .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
+}
+
+// 점주용 — 이 배치에서 관리자가 내 예약을 수정한 내역(최신순).
+export async function getReservationChangesForMerchant(
+  batchId: string,
+  userId: string,
+) {
+  return prisma.reservationChangeLog.findMany({
+    where: { batchId, userId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, actorName: true, changes: true, createdAt: true },
+  });
+}
+
 // 계산서용 — 이 '출고일'(=예약 픽업일)에 로드되는 확정 예약분(이름·수량·점주공급가). 일반 계산서 공구에 자동 채움.
 // 계산서 date는 출고일이고 예약 픽업일 == 출고일이므로, 픽업일이 '출고일과 같은' 확정 아이템만 모은다.
 // (예전엔 orderDay+1로 잡아 하루 밀렸음 — 출고일 계산서엔 안 맞아 바로잡음. '불러오기' 버튼과 동일 규칙.)

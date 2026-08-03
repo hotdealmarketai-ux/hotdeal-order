@@ -22,6 +22,8 @@ import {
   type InvoiceWeeklyItem,
 } from "@/components/InvoiceForm";
 import { InvoiceAdminActions } from "@/components/InvoiceAdminActions";
+import { InvoiceRevisionHistory } from "@/components/InvoiceRevisionHistory";
+import { parseRevisionChanges } from "@/lib/invoice-revision";
 import { DeleteDraftButton } from "@/components/DeleteDraftButton";
 import {
   ReviseInvoiceForm,
@@ -167,6 +169,20 @@ export default async function AdminInvoiceDetail(props: {
 
   // 발행/입금완료/취소 — 읽기 전용 + 상태 액션
   const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.DRAFT;
+  // 수정 내역(재발송 시점별) — 최신순. 점주 화면과 동일 컴포넌트.
+  const revisions = (
+    await prisma.invoiceRevision.findMany({
+      where: { invoiceId: inv.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        createdAt: true,
+        totalBefore: true,
+        totalAfter: true,
+        changes: true,
+      },
+    })
+  ).map((r) => ({ ...r, changes: parseRevisionChanges(r.changes) }));
   const cats = CATEGORY_ORDER.filter((c) =>
     inv.items.some((it) => it.category === c),
   );
@@ -314,6 +330,8 @@ export default async function AdminInvoiceDetail(props: {
           status={inv.status}
           total={inv.total}
         />
+
+        <InvoiceRevisionHistory revisions={revisions} />
 
         {canRevise && (
           <ReviseInvoiceForm

@@ -35,6 +35,7 @@ import {
   applyInvoiceStockDelta,
   invoiceToolByName,
 } from "@/lib/invoice-stock";
+import { diffInvoiceItems } from "@/lib/invoice-revision";
 import { logError } from "@/lib/log";
 
 export type InvoiceFormState = { error?: string };
@@ -552,7 +553,17 @@ export async function reviseInvoiceAction(
 
   const inv = await prisma.invoice.findUnique({
     where: { id: invoiceId },
-    select: { userId: true, date: true, status: true, kind: true },
+    select: {
+      userId: true,
+      date: true,
+      status: true,
+      kind: true,
+      total: true, // 수정 전 결제요청(미수) 금액 — 수정 내역에 before로 기록
+      items: {
+        // 수정 전 품목 스냅샷 — 아래에서 수정 후와 비교해 추가/변경/제거 내역 생성
+        select: { category: true, name: true, qty: true, unitPrice: true, amount: true },
+      },
+    },
   });
   if (!inv) return { error: "계산서를 찾을 수 없어요." };
   if (inv.status !== "ISSUED") {
@@ -626,6 +637,29 @@ export async function reviseInvoiceAction(
         select: { total: true },
       })
     )?.total ?? 0;
+
+  // ── 수정 내역 스냅샷 — 이번 재발송 시점에 무엇이 추가/변경/제거됐는지 + 결제요청(미수) 금액 변화 기록. ──
+  //    (점주·관리자 공통 열람. 변경이 하나도 없으면 남기지 않는다.)
+  try {
+    const afterItems = await prisma.invoiceItem.findMany({
+      where: { invoiceId },
+      select: { category: true, name: true, qty: true, unitPrice: true, amount: true },
+    });
+    const changes = diffInvoiceItems(inv.items, afterItems);
+    if (changes.length > 0 || inv.total !== finalTotal) {
+      await prisma.invoiceRevision.create({
+        data: {
+          invoiceId,
+          totalBefore: inv.total,
+          totalAfter: finalTotal,
+          changes: JSON.stringify(changes),
+        },
+      });
+    }
+  } catch (e) {
+    logError("invoice.revise.history", e, { invoiceId });
+  }
+
   await writeAudit({
     action: "invoice.revise",
     actorId: admin.id,

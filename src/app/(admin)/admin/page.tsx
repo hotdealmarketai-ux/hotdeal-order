@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { kstToday, kstDayRange } from "@/lib/date";
 import { weeklyKeyAt } from "@/lib/weekly";
 import { LogoutButton } from "@/components/LogoutButton";
+import { ClosingCard } from "@/components/ClosingCard";
 import { getAdminSeen } from "@/lib/admin-seen";
 
 export default async function AdminHome() {
@@ -103,6 +104,7 @@ export default async function AdminHome() {
               {m.sub ? <div className="admcard__sub">{m.sub}</div> : null}
             </Link>
           ))}
+          <ClosingCard />
         </div>
 
         <div style={{ marginTop: 22 }}>

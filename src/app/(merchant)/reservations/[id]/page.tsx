@@ -1,9 +1,13 @@
 import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
-import { getMerchantReservation } from "@/lib/reservation-data";
+import {
+  getMerchantReservation,
+  getReservationChangesForMerchant,
+} from "@/lib/reservation-data";
 import { availableForReservationProducts } from "@/lib/reservation-stock";
 import { ReservationOrderForm } from "@/components/ReservationOrderForm";
+import { ReservationChangeHistory } from "@/components/ReservationChangeHistory";
 import { ReservationDeadlineCountdown } from "@/components/ReservationDeadlineCountdown";
 import { ReservationDates } from "@/components/ReservationDates";
 import { isReservationClosed } from "@/lib/reservation";
@@ -22,6 +26,23 @@ export default async function ReservationDetailPage(props: {
   const closed = isReservationClosed(detail.reserveDate);
   // 연동 상품의 실시간 남은수량 SSR 초기값(이후 클라 폴링이 갱신)
   const availableByProduct = await availableForReservationProducts(detail.products);
+
+  // 본사(관리자)가 내 예약을 수정한 내역 — 점주 열람용.
+  const changeEntries = (
+    await getReservationChangesForMerchant(detail.id, user.id)
+  ).map((r) => {
+    let changes: {
+      name: string;
+      op: "changed" | "removed";
+      before: number;
+      after: number;
+    }[] = [];
+    try {
+      const a = JSON.parse(r.changes);
+      if (Array.isArray(a)) changes = a;
+    } catch {}
+    return { id: r.id, actorName: r.actorName, createdAt: r.createdAt, changes };
+  });
 
   return (
     <>
@@ -46,6 +67,7 @@ export default async function ReservationDetailPage(props: {
           closed={closed}
           availableByProduct={availableByProduct}
         />
+        <ReservationChangeHistory entries={changeEntries} />
       </div>
     </>
   );
