@@ -122,6 +122,34 @@ export async function notifyMerchantOrderEdited(userId: string) {
   }
 }
 
+// 예약발주에 상품이 새로 등록됨 → 핫딜마켓 점주 전체에게 알림.
+export async function notifyMerchantsReservationProductAdded(name: string) {
+  try {
+    await sendPushToRole("MERCHANT_HOTDEAL", {
+      title: `${name}이 예약발주에 등록되었습니다.`,
+      body: "",
+      url: "/reservations",
+      type: "system",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantsReservationProductAdded", err, {});
+  }
+}
+
+// 예약발주 상품 마감 1시간 전 → 핫딜마켓 점주 전체에게 알림(마감 임박 리마인더).
+export async function notifyMerchantsReservationClosingSoon(name: string) {
+  try {
+    await sendPushToRole("MERCHANT_HOTDEAL", {
+      title: `${name} 예약발주 마감이 1시간 남았습니다.`,
+      body: "",
+      url: "/reservations",
+      type: "system",
+    });
+  } catch (err) {
+    logError("push.notifyMerchantsReservationClosingSoon", err, {});
+  }
+}
+
 // 관리자(새롭)가 지점 예약발주 수량을 수정 → 점주에게 알림(예약 상세로 딥링크).
 export async function notifyMerchantReservationEdited(
   userId: string,

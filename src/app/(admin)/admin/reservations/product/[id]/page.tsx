@@ -32,7 +32,7 @@ export default async function FlatProductDetailPage(props: {
             {product.inventoryItemId ? " · 재고연동" : ""}
           </div>
           <div style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>
-            취합 {total}개 · {stores.length}점포
+            총 {total}개 · {stores.length}점포
           </div>
           <div className="row__sub" style={{ marginTop: 4 }}>
             마감 {formatKDateTime(new Date(product.closeAtMs))}

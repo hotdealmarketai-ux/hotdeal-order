@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { listFlatProductsAdmin } from "@/lib/reservation-flat";
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
-// 지난 예약 마감 — 마감 시각이 지난 신규 예약상품. 취합 수량만 확인(수정 불가).
+// 지난 예약 마감 — 마감 시각이 지난 신규 예약상품. 카드를 열면 점포별 취합 상세(진행 중과 동일).
 export default async function ClosedReservationsPage() {
   await requireAdmin();
   const products = await listFlatProductsAdmin("closed");
@@ -29,7 +30,10 @@ export default async function ClosedReservationsPage() {
           <div className="resvflatwrap">
             {products.map((p) => (
               <div className="resvflat" key={p.id}>
-                <div className="resvflat__main">
+                <Link
+                  href={`/admin/reservations/product/${p.id}`}
+                  className="resvflat__main"
+                >
                   <div className="resvflat__name">
                     {p.name}
                     {p.inventoryItemId ? (
@@ -44,10 +48,10 @@ export default async function ClosedReservationsPage() {
                       {formatKDateTime(p.closeAt)} 마감
                     </span>
                     <span className="resvflat__agg">
-                      취합 {p.totalQty}개 · {p.storeCount}점포
+                      총 {p.totalQty}개 · {p.storeCount}점포 ›
                     </span>
                   </div>
-                </div>
+                </Link>
               </div>
             ))}
           </div>

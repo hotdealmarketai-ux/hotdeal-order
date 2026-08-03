@@ -4969,7 +4969,7 @@ a.resv-card:active { transform: scale(0.995); }
 .resvflat__cd {
   font-size: 12.5px;
   font-weight: 800;
-  color: var(--green-700);
+  color: var(--danger); /* 남은 시간 빨간색 */
   font-variant-numeric: tabular-nums;
 }
 .resvflat__cd--closed { color: var(--danger); }
@@ -4981,6 +4981,17 @@ a.resv-card:active { transform: scale(0.995); }
   font-weight: 700;
   color: var(--fg-soft);
   margin-bottom: 4px;
+}
+
+/* ---- 예약발주 flat: '오늘 마감' / '마감 여유' 섹터 ---- */
+.rsec + .rsec { margin-top: 16px; }
+.rsec__head {
+  font-size: 12.5px; font-weight: 800; color: var(--fg-soft);
+  margin: 4px 0 8px; display: flex; align-items: center; gap: 6px;
+}
+.rsec__head--today { color: var(--danger); }
+.rsec__head--today::before {
+  content: ""; width: 6px; height: 6px; border-radius: 999px; background: var(--danger);
 }
 
 /* ---- 예약발주 flat: 재고연동 검색 피커 ---- */
@@ -5015,11 +5026,11 @@ a.resv-card:active { transform: scale(0.995); }
   font-size: 10.5px; font-weight: 800; color: var(--green-700);
   background: var(--green-100); border-radius: 6px; padding: 1px 6px;
 }
-.rcard__cd { font-size: 12.5px; font-weight: 800; color: var(--green-700); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.rcard__cd { font-size: 12.5px; font-weight: 800; color: var(--danger); font-variant-numeric: tabular-nums; flex-shrink: 0; } /* 남은 시간 빨간색 */
 .rcard__cd--closed { color: var(--danger); }
 .rcard__meta { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 .rcard__mine { color: var(--green-700); font-weight: 800; }
-.rcard__act { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.rcard__act { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .rcard__qty { width: 84px; text-align: center; }
 .rcard__done { font-size: 13px; font-weight: 700; color: var(--green-700); flex: 1; }
 .rcard__err { margin-top: 8px; font-size: 12.5px; color: var(--danger); }

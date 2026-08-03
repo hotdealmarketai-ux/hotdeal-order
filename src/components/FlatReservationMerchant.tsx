@@ -22,6 +22,11 @@ export type FlatMerchantCard = {
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
+// ms → KST 달력 날짜(YYYY-MM-DD). '오늘 마감' 섹터 분리에 사용.
+function kstDateStr(ms: number): string {
+  return new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 // 1초마다 갱신되는 현재시각 — 마감 경계에서 버튼이 실시간으로 잠기도록.
 function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
@@ -46,11 +51,7 @@ function remain(ms: number, now: number): string {
 }
 
 function Countdown({ ms }: { ms: number }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow();
   const closed = now >= ms;
   return (
     <span className={closed ? "rcard__cd rcard__cd--closed" : "rcard__cd"}>
@@ -132,7 +133,7 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
   );
 }
 
-// 재고연동 상품 카드 — 실시간 −/+ 담기(즉시 예약). 남은수량 캡.
+// 재고연동 상품 카드 — 실시간 −/+ 담기(재고 홀드)로 수량 조절 후 '발주 확정'. 수기와 동일한 확정/수정 흐름.
 function LinkedCard({ p }: { p: FlatMerchantCard }) {
   const router = useRouter();
   const [qty, setQty] = useState(p.myQty);
@@ -141,7 +142,8 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
   const closed = useNow() >= p.closeAtMs;
   const max = p.available; // = 전체가용 + 내 현재수량
 
-  const set = (next: number) => {
+  // 담기 = 재고 홀드(qty)만. 확정은 별도 버튼.
+  const hold = (next: number) => {
     const v = Math.max(0, Math.min(max, next));
     if (v === qty) return;
     setQty(v);
@@ -151,6 +153,18 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
       if (!r.ok) {
         setErr(r.error ?? "실패했어요.");
         setQty(p.myQty); // 롤백
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
+    setErr("");
+    start(async () => {
+      const r = await fn();
+      if (!r.ok) {
+        setErr(r.error ?? "실패했어요.");
         return;
       }
       router.refresh();
@@ -177,13 +191,24 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
           </button>
           {p.myQty > 0 ? <span className="rcard__mine">내 발주 {p.myQty}개</span> : null}
         </div>
+      ) : p.myConfirmed ? (
+        <div className="rcard__act">
+          <span className="rcard__done">예약 {p.myQty}개 · 확정됨</span>
+          <button
+            className="btn btn--sm btn--soft"
+            disabled={pending}
+            onClick={() => run(() => unlockFlatProductAction({ productId: p.id }))}
+          >
+            수정
+          </button>
+        </div>
       ) : (
         <div className="rcard__act">
           <div className="rstep">
             <button
               className="rstep__btn"
               disabled={pending || qty <= 0}
-              onClick={() => set(qty - 1)}
+              onClick={() => hold(qty - 1)}
               aria-label="빼기"
             >
               −
@@ -192,12 +217,19 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
             <button
               className="rstep__btn"
               disabled={pending || qty >= max}
-              onClick={() => set(qty + 1)}
+              onClick={() => hold(qty + 1)}
               aria-label="담기"
             >
               +
             </button>
           </div>
+          <button
+            className="btn btn--sm btn--primary"
+            disabled={pending || qty <= 0}
+            onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty }))}
+          >
+            발주 확정{qty > 0 ? ` (${qty}개)` : ""}
+          </button>
         </div>
       )}
       {err && <div className="rcard__err">{err}</div>}
@@ -205,13 +237,24 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
   );
 }
 
-// 점주 예약발주 단일 목록 — 검색 + 마감 임박순 카드. 수기=확정흐름, 연동=실시간 담기.
+function renderCard(p: FlatMerchantCard) {
+  return p.inventoryItemId ? (
+    <LinkedCard key={`${p.id}:${p.myQty}:${p.myConfirmed}:${p.available}`} p={p} />
+  ) : (
+    <ManualCard key={`${p.id}:${p.myQty}:${p.myConfirmed}`} p={p} />
+  );
+}
+
+// 점주 예약발주 단일 목록 — 검색 + '오늘 마감'/'마감 여유' 섹터. 각 섹터는 마감 임박순+ㄱㄴㄷ(서버 정렬).
 export function FlatReservationMerchant({ products }: { products: FlatMerchantCard[] }) {
   const [q, setQ] = useState("");
+  const now = useNow();
   const query = q.trim();
-  const shown = query
-    ? products.filter((p) => p.name.includes(query))
-    : products;
+  const shown = query ? products.filter((p) => p.name.includes(query)) : products;
+
+  const todayStr = kstDateStr(now);
+  const todayList = shown.filter((p) => kstDateStr(p.closeAtMs) === todayStr);
+  const laterList = shown.filter((p) => kstDateStr(p.closeAtMs) !== todayStr);
 
   return (
     <>
@@ -228,15 +271,20 @@ export function FlatReservationMerchant({ products }: { products: FlatMerchantCa
           <p>{query ? "검색 결과가 없어요." : "예약 가능한 상품이 없어요."}</p>
         </div>
       ) : (
-        <div className="rcardwrap">
-          {shown.map((p) =>
-            p.inventoryItemId ? (
-              <LinkedCard key={`${p.id}:${p.myQty}:${p.available}`} p={p} />
-            ) : (
-              <ManualCard key={`${p.id}:${p.myQty}:${p.myConfirmed}`} p={p} />
-            ),
+        <>
+          {todayList.length > 0 && (
+            <section className="rsec">
+              <div className="rsec__head rsec__head--today">오늘 마감</div>
+              <div className="rcardwrap">{todayList.map(renderCard)}</div>
+            </section>
           )}
-        </div>
+          {laterList.length > 0 && (
+            <section className="rsec">
+              <div className="rsec__head">마감 여유</div>
+              <div className="rcardwrap">{laterList.map(renderCard)}</div>
+            </section>
+          )}
+        </>
       )}
     </>
   );

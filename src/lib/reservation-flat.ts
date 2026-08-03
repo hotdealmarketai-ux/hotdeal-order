@@ -70,7 +70,7 @@ export async function listFlatProductsAdmin(
     agg.set(it.productId, a);
   }
 
-  return products.map((p) => {
+  const rows = products.map((p) => {
     const a = agg.get(p.id);
     return {
       id: p.id,
@@ -83,6 +83,14 @@ export async function listFlatProductsAdmin(
       storeCount: a?.stores.size ?? 0,
     };
   });
+  // 정렬: ①마감 임박순(closeAt) ②같은 마감시각이면 ㄱㄴㄷ(이름). DB 콜레이션 대신 JS localeCompare로 한글 순서 보장.
+  rows.sort((a, b) => {
+    const ca = a.closeAt.getTime();
+    const cb = b.closeAt.getTime();
+    if (ca !== cb) return scope === "open" ? ca - cb : cb - ca;
+    return a.name.localeCompare(b.name, "ko");
+  });
+  return rows;
 }
 
 export type FlatMerchantRow = {
@@ -135,7 +143,7 @@ export async function listFlatProductsMerchant(
   ]);
   const myMap = new Map(mine.map((i) => [i.productId, i]));
 
-  return products.map((p) => {
+  const rows = products.map((p) => {
     const m = myMap.get(p.id);
     const myQty = m?.qty ?? 0;
     return {
@@ -151,6 +159,14 @@ export async function listFlatProductsMerchant(
       available: p.inventoryItemId ? (availMap[p.id] ?? 0) + myQty : 0,
     };
   });
+  // 정렬: ①마감 임박순(closeAtMs) ②같은 마감시각이면 ㄱㄴㄷ(이름). JS localeCompare로 한글 순서 보장.
+  rows.sort((a, b) => {
+    if (a.closeAtMs !== b.closeAtMs) {
+      return scope === "open" ? a.closeAtMs - b.closeAtMs : b.closeAtMs - a.closeAtMs;
+    }
+    return a.name.localeCompare(b.name, "ko");
+  });
+  return rows;
 }
 
 // 관리자 상품 상세 — 이 상품을 예약한 점포별 수량(수정용).
@@ -203,6 +219,29 @@ export async function flatProductStores(productId: string): Promise<{
     },
     stores,
   };
+}
+
+// 마감된 flat 재고연동 상품의 '미확정' 홀드를 해제(삭제).
+// 재고연동 담기는 즉시 재고를 홀드(stockDeductedAt:null 로 가용에서 빠짐)하는데,
+// 발주 확정을 안 한 채 상품이 마감되면 그 홀드가 계산서로 차감되지도 해제되지도 않아
+// 같은 재고품목의 다른 발주·재고현황 가용을 영구히 갉아먹는다 → 마감 후 정리.
+export async function releaseClosedFlatHolds(now: Date = new Date()): Promise<number> {
+  const closed = await prisma.reservationProduct.findMany({
+    where: { closeAt: { not: null, lte: now }, inventoryItemId: { not: "" } },
+    select: { id: true },
+  });
+  if (closed.length === 0) return 0;
+  const ids = closed.map((p) => p.id);
+  const res = await prisma.reservationOrderItem.deleteMany({
+    where: {
+      productId: { in: ids },
+      confirmedAt: null, // 확정분은 계산서로 차감되므로 건드리지 않음
+      qty: { gt: 0 },
+      stockDeductedAt: null,
+      inventoryItemId: { not: "" },
+    },
+  });
+  return res.count;
 }
 
 // 남은 시간 라벨 "N시간 M분 S초 남음" / "마감". 서버 SSR 시드용(클라가 1초 갱신).

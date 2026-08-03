@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/log";
 import { releaseStaleHolds } from "@/lib/stock-hold";
+import { releaseClosedFlatHolds } from "@/lib/reservation-flat";
 
 // 정시 크론 디스패처 — 외부 크론(cron-job.org 등)이 '1분마다' 이 엔드포인트를 호출하면,
 // 각 잡을 정해진 KST 시각에 정확히 1회 실행한다. 한 분을 놓쳐도 다음 호출에서 캐치업.
@@ -108,6 +109,9 @@ export async function GET(request: Request) {
     ran.push("tick:collect");
   }
 
+  // 예약발주 상품 '마감 1시간 전' 리마인더 — 매 분 확인(창 진입 즉시 1회 발송, 라우트가 멱등).
+  if (await hit("/api/cron/reservation-close-reminder")) ran.push("tick:resv-warn");
+
   // #12 재고 구글시트 동기화 — 매 분(시트=기준). 실패해도 다음 분 재시도.
   if (await hit("/api/cron/inventory-sync")) ran.push("tick:inventory");
 
@@ -117,6 +121,14 @@ export async function GET(request: Request) {
     if (released > 0) ran.push(`tick:holds(${released})`);
   } catch (e) {
     logError("tick.holds", e, {});
+  }
+
+  // 예약 flat 재고연동 '미확정' 홀드 해제 — 마감됐는데 발주확정 안 한 담기가 재고 가용을 계속 점유하는 누수 방지.
+  try {
+    const releasedFlat = await releaseClosedFlatHolds();
+    if (releasedFlat > 0) ran.push(`tick:flat-holds(${releasedFlat})`);
+  } catch (e) {
+    logError("tick.flatHolds", e, {});
   }
 
   // (예약분 픽업10시 자동차감 제거 — 예약분은 계산서 발행 시 함께 차감됨)

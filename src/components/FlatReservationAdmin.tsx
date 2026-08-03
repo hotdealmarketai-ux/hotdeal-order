@@ -34,12 +34,23 @@ function remainLabel(ms: number, nowMs: number): string {
   return `${h}시간 ${m}분 ${s}초 남음`;
 }
 
-function Countdown({ ms }: { ms: number }) {
+// 1초마다 갱신되는 현재시각.
+function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+  return now;
+}
+
+// ms → KST 달력 날짜(YYYY-MM-DD). '오늘 마감' 섹터 분리에 사용.
+function kstDateStr(ms: number): string {
+  return new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+function Countdown({ ms }: { ms: number }) {
+  const now = useNow();
   const closed = now >= ms;
   return (
     <span className={closed ? "resvflat__cd resvflat__cd--closed" : "resvflat__cd"}>
@@ -140,6 +151,44 @@ export function FlatReservationAdmin({
       router.refresh();
     });
   };
+
+  const now = useNow();
+  const todayStr = kstDateStr(now);
+  const todayList = products.filter((p) => kstDateStr(p.closeAtMs) === todayStr);
+  const laterList = products.filter((p) => kstDateStr(p.closeAtMs) !== todayStr);
+
+  const row = (p: FlatAdminRow) => (
+    <div className="resvflat" key={p.id}>
+      <Link href={`/admin/reservations/product/${p.id}`} className="resvflat__main">
+        <div className="resvflat__name">
+          {p.name}
+          {p.inventoryItemId ? <span className="resvflat__tag">재고연동</span> : null}
+        </div>
+        <div className="resvflat__meta">
+          픽업 {p.pickupDate} · 공급가 {won(p.supplyPrice)}원
+        </div>
+        <div className="resvflat__meta2">
+          <Countdown ms={p.closeAtMs} />
+          <span className="resvflat__agg">
+            총 {p.totalQty}개 · {p.storeCount}점포 ›
+          </span>
+        </div>
+      </Link>
+      <div className="resvflat__acts">
+        <button type="button" className="btn btn--xs btn--soft" onClick={() => startEdit(p)}>
+          수정
+        </button>
+        <button
+          type="button"
+          className="btn btn--xs btn--ghost"
+          onClick={() => del(p.id, p.name)}
+          disabled={pending}
+        >
+          삭제
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -251,7 +300,7 @@ export function FlatReservationAdmin({
         </div>
       </div>
 
-      {/* 마감 임박순 목록 */}
+      {/* '오늘 마감' / '마감 여유' 섹터. 각 섹터 안은 서버 정렬(마감 임박순 + ㄱㄴㄷ) 유지. */}
       <div className="itemshead">
         <span className="itemshead__label">진행 중 예약상품</span>
         <span className="itemshead__count">{products.length}개</span>
@@ -261,43 +310,20 @@ export function FlatReservationAdmin({
           <p>진행 중인 예약상품이 없어요. 위에서 등록해 주세요.</p>
         </div>
       ) : (
-        <div className="resvflatwrap">
-          {products.map((p) => (
-            <div className="resvflat" key={p.id}>
-              <Link
-                href={`/admin/reservations/product/${p.id}`}
-                className="resvflat__main"
-              >
-                <div className="resvflat__name">
-                  {p.name}
-                  {p.inventoryItemId ? <span className="resvflat__tag">재고연동</span> : null}
-                </div>
-                <div className="resvflat__meta">
-                  픽업 {p.pickupDate} · 공급가 {won(p.supplyPrice)}원
-                </div>
-                <div className="resvflat__meta2">
-                  <Countdown ms={p.closeAtMs} />
-                  <span className="resvflat__agg">
-                    취합 {p.totalQty}개 · {p.storeCount}점포 ›
-                  </span>
-                </div>
-              </Link>
-              <div className="resvflat__acts">
-                <button type="button" className="btn btn--xs btn--soft" onClick={() => startEdit(p)}>
-                  수정
-                </button>
-                <button
-                  type="button"
-                  className="btn btn--xs btn--ghost"
-                  onClick={() => del(p.id, p.name)}
-                  disabled={pending}
-                >
-                  삭제
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <>
+          {todayList.length > 0 && (
+            <section className="rsec">
+              <div className="rsec__head rsec__head--today">오늘 마감</div>
+              <div className="resvflatwrap">{todayList.map(row)}</div>
+            </section>
+          )}
+          {laterList.length > 0 && (
+            <section className="rsec">
+              <div className="rsec__head">마감 여유</div>
+              <div className="resvflatwrap">{laterList.map(row)}</div>
+            </section>
+          )}
+        </>
       )}
     </>
   );

@@ -7,6 +7,7 @@ import { writeAudit } from "@/lib/audit";
 import { getOrCreateFlatBatchId } from "@/lib/reservation-flat";
 import { windowKeyAt } from "@/lib/schedule";
 import { logError } from "@/lib/log";
+import { notifyMerchantsReservationProductAdded } from "@/lib/push";
 
 type ResvHoldResult = { ok: boolean; error?: string; available?: number };
 
@@ -114,6 +115,8 @@ export async function saveFlatProductAction(
         active: true,
       },
     });
+    // 신규 등록만 점주 전체에 푸시(수정은 제외).
+    await notifyMerchantsReservationProductAdded(name);
   }
 
   await writeAudit({
@@ -144,14 +147,15 @@ export async function confirmFlatProductAction(input: {
   const qty = Math.max(0, Math.floor(Number(input?.qty) || 0));
 
   const product = await prisma.reservationProduct.findFirst({
-    where: {
-      id: productId,
-      active: true,
-      closeAt: { not: null },
-      inventoryItemId: "", // 수기 상품만(연동은 holdFlatProductAction)
-      batch: { active: true },
+    where: { id: productId, active: true, closeAt: { not: null }, batch: { active: true } },
+    select: {
+      name: true,
+      supplyPrice: true,
+      pickupDate: true,
+      closeAt: true,
+      batchId: true,
+      inventoryItemId: true,
     },
-    select: { name: true, supplyPrice: true, pickupDate: true, closeAt: true, batchId: true },
   });
   if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
   if (Date.now() >= (product.closeAt as Date).getTime()) {
@@ -164,7 +168,19 @@ export async function confirmFlatProductAction(input: {
     update: {},
     select: { id: true },
   });
-  if (qty <= 0) {
+
+  if (product.inventoryItemId) {
+    // 재고연동 — 수량은 담기(holdFlatProductAction)가 관리. 담아둔 수량을 '발주 확정'만 한다.
+    const item = await prisma.reservationOrderItem.findUnique({
+      where: { orderId_productId: { orderId: order.id, productId } },
+      select: { qty: true },
+    });
+    if (!item || item.qty <= 0) return { ok: false, error: "수량을 먼저 담아 주세요." };
+    await prisma.reservationOrderItem.update({
+      where: { orderId_productId: { orderId: order.id, productId } },
+      data: { confirmedAt: new Date() },
+    });
+  } else if (qty <= 0) {
     await prisma.reservationOrderItem.deleteMany({ where: { orderId: order.id, productId } });
   } else {
     await prisma.reservationOrderItem.upsert({
@@ -201,8 +217,8 @@ export async function unlockFlatProductAction(input: {
   if (!user) return { ok: false, error: "권한이 없어요." };
   const productId = String(input?.productId ?? "");
   const product = await prisma.reservationProduct.findFirst({
-    // 수기 상품만(연동은 잠금해제 개념 없이 실시간 담기로 조정).
-    where: { id: productId, active: true, closeAt: { not: null }, inventoryItemId: "" },
+    // 수기·연동 공통. 연동도 발주 확정(confirmedAt)을 쓰므로 잠금해제 가능(수량 홀드는 유지).
+    where: { id: productId, active: true, closeAt: { not: null } },
     select: { closeAt: true },
   });
   if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
@@ -218,7 +234,8 @@ export async function unlockFlatProductAction(input: {
   return { ok: true };
 }
 
-// 재고연동 상품 실시간 담기 = 즉시 홀드(qty=홀드) + 즉시 확정(confirmedAt). 마감 전·재고 캡. qty0=취소.
+// 재고연동 상품 실시간 담기 = 즉시 홀드(qty=홀드)만. 마감 전·재고 캡. qty0=취소.
+// 공구로 나가는 '발주 확정'은 confirmFlatProductAction(별도 버튼)에서 confirmedAt을 찍는다.
 export async function holdFlatProductAction(input: {
   productId: string;
   qty: number;
@@ -308,6 +325,7 @@ export async function holdFlatProductAction(input: {
             select: { id: true },
           })
         ).id;
+      // 담기 = 재고 홀드(qty)만. 공구로 나가는 '발주 확정'(confirmedAt)은 별도 버튼(confirmFlatProductAction).
       await tx.reservationOrderItem.upsert({
         where: { orderId_productId: { orderId: oid, productId } },
         create: {
@@ -318,7 +336,6 @@ export async function holdFlatProductAction(input: {
           pickupDate: product.pickupDate,
           inventoryItemId: itemId,
           qty,
-          confirmedAt: new Date(),
         },
         update: {
           qty,
@@ -326,7 +343,6 @@ export async function holdFlatProductAction(input: {
           supplyPrice: product.supplyPrice,
           pickupDate: product.pickupDate,
           inventoryItemId: itemId,
-          confirmedAt: new Date(),
         },
       });
       return { ok: true, available: Math.max(0, availableForMe - qty) };
