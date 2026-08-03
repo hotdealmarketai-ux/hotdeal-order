@@ -1416,6 +1416,9 @@ a {
   line-height: 1.5;
   color: var(--muted);
 }
+.maint__foot {
+  margin-top: 26px;
+}
 
 /* ---- 입고 페이지(입력폼 + 기록목록) ---- */
 .inb {

@@ -54,12 +54,6 @@ export function MaintenanceToggleCard({ on }: { on: boolean }) {
       <div className="admcard patchcard">
         <div style={{ minWidth: 0 }}>
           <div className="admcard__title">패치</div>
-          <div
-            className="admcard__sub"
-            style={{ color: on ? "var(--danger)" : "var(--muted)" }}
-          >
-            {on ? "사용 차단 중" : "사용 가능"}
-          </div>
         </div>
         <button
           type="button"
@@ -87,10 +81,6 @@ export function MaintenanceToggleCard({ on }: { on: boolean }) {
                 ✕
               </button>
             </div>
-            <p className="sheet__hint">
-              켜면 모든 가맹점 화면이 &lsquo;업데이트 작업으로 사용 불가&rsquo;
-              안내로 잠깁니다. 비밀번호를 입력하세요.
-            </p>
             <input
               className="input"
               type="password"
@@ -124,7 +114,7 @@ export function MaintenanceToggleCard({ on }: { on: boolean }) {
                 onClick={() => apply(true, pw)}
                 disabled={pending}
               >
-                {pending ? "적용 중…" : "패치 ON (사용 차단)"}
+                {pending ? "적용 중…" : "사용 차단"}
               </button>
             </div>
           </div>
