@@ -246,10 +246,14 @@ model ReservationProduct {
   inventoryItemId String        @default("")
   sortOrder   Int              @default(0)
   active      Boolean          @default(true) // false = 소프트삭제
+  // 예약 마감 시각(시분초, UTC 저장) — 신규 '단일 목록' 방식의 상품별 마감. 지나면 예약 잠김.
+  // null = 레거시(배치 예약일자 20:00 규칙). Phase 1: 컬럼만 추가(아직 미사용).
+  closeAt     DateTime?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
   @@index([batchId, active, sortOrder])
+  @@index([active, closeAt])
 }
 
 // 점주×배치 1건 — 확정/수정 잠금(confirmed). 마감(예약+1 12시) 후엔 강제 잠금(판정은 앱에서).
@@ -287,6 +291,9 @@ model ReservationOrderItem {
   // 픽업 시점(픽업일 오전10시)에 기준재고(InventoryItem.qty)에서 이 수량을 실제로 차감했는지.
   // null=미차감. tick 크론이 픽업 지난 연동 예약분을 1회 차감하고 이 값을 채운다(멱등).
   stockDeductedAt DateTime?
+  // 품목별 발주 확정 시각. null = 미확정. Phase 4에서 공구 자동로드 게이트를
+  // order.confirmed → 이 값으로 전환. Phase 1: 기존 order.confirmed 기준으로 백필(현재 동작 보존).
+  confirmedAt DateTime?
 
   @@unique([orderId, productId]) // 주문 내 상품 1행
   @@index([pickupDate]) // 픽업 전날 공구 자동로드 필터용
