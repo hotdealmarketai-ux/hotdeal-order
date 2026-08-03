@@ -194,7 +194,7 @@ export default async function AdminDepositStore(props: {
           </div>
         </div>
 
-        <ReceivableAdjustControl userId={userId} />
+        <ReceivableAdjustControl userId={userId} currentBalance={ar.balance} />
 
         {adjustments.length > 0 && (
           <>

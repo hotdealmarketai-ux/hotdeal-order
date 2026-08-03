@@ -11,7 +11,11 @@ import {
   type CollectResult,
 } from "@/lib/bank";
 import { setOrderLockOverride } from "@/lib/order-open";
+import { receivableOf } from "@/lib/receivable";
 import { writeAudit } from "@/lib/audit";
+
+// 미수 수정 잠금 비밀번호 — 화면 잠금해제와 별개로 서버에서도 반드시 검증(방어).
+const RECEIVABLE_EDIT_PASSWORD = "1234";
 
 export type CollectState = { result?: CollectResult; error?: string };
 
@@ -26,21 +30,25 @@ function revalidateReceivable(userId: string) {
 }
 
 // 미수 수동 조정 — 관리자 전용. 점포 미수를 가감(입금 누락·반품·오류 정정 등).
-// direction=plus 면 미수 증가(+), minus 면 미수 감소(−). 사유(memo) 필수.
-// ⚠ 보안: 반드시 requireAdmin — 점주는 이 액션에 도달할 수 없다(입금관리는 관리자 전용 경로).
+// mode=delta: direction=plus면 미수 증가(+)/minus면 감소(−)·금액·사유(memo) 필수.
+// mode=set: 미수금액을 입력한 숫자로 바로 맞춘다(현재 미수와의 차이만큼 조정을 남김)·사유 선택.
+// ⚠ 보안: requireAdmin + 비밀번호(1234) 서버 검증 — 점주는 이 액션에 도달할 수 없고, 잠금해제 없이도 통과 못한다.
 export async function adjustReceivableAction(
   formData: FormData,
 ): Promise<{ error?: string }> {
   const admin = await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
+  const mode = String(formData.get("mode") ?? "delta"); // "delta"(+/−) | "set"(직접 입력)
   const direction = String(formData.get("direction") ?? "plus");
-  const memo = String(formData.get("memo") ?? "").trim().slice(0, 200);
+  const password = String(formData.get("password") ?? "").trim();
+  let memo = String(formData.get("memo") ?? "").trim().slice(0, 200);
   const magnitude = Math.abs(
     parseInt(String(formData.get("amount") ?? "").replace(/[^\d]/g, ""), 10) || 0,
   );
   if (!userId) return { error: "잘못된 요청이에요." };
-  if (magnitude <= 0) return { error: "금액을 입력해 주세요." };
-  if (!memo) return { error: "조정 사유를 입력해 주세요." };
+  if (password !== RECEIVABLE_EDIT_PASSWORD) {
+    return { error: "비밀번호가 올바르지 않아요." };
+  }
 
   const store = await prisma.user.findUnique({
     where: { id: userId },
@@ -49,7 +57,22 @@ export async function adjustReceivableAction(
   if (!store || !isMerchant(store.role as Role)) {
     return { error: "점포를 찾을 수 없어요." };
   }
-  const amount = direction === "minus" ? -magnitude : magnitude;
+
+  let amount: number;
+  if (mode === "set") {
+    // 목표 미수액(절대값)으로 맞춘다 — 현재 미수와의 차이만큼만 조정을 기록.
+    const target = magnitude;
+    const cur = await receivableOf(userId);
+    amount = target - cur.balance;
+    if (amount === 0) return { error: "미수금액이 이미 그 값이에요." };
+    if (!memo) {
+      memo = `미수 직접 수정 ${cur.balance.toLocaleString("ko-KR")} → ${target.toLocaleString("ko-KR")}`;
+    }
+  } else {
+    if (magnitude <= 0) return { error: "금액을 입력해 주세요." };
+    if (!memo) return { error: "조정 사유를 입력해 주세요." };
+    amount = direction === "minus" ? -magnitude : magnitude;
+  }
 
   await prisma.receivableAdjustment.create({
     data: { userId, amount, memo, adminId: admin.id, adminName: admin.storeName },

@@ -49,9 +49,6 @@ export default async function StockReconcilePage(props: {
             </span>
             <b>총 {fmt(totalDeducted)}개</b>
           </div>
-          <div className="row__sub" style={{ marginTop: 6, fontSize: 12.5 }}>
-            계산서 발행 시 자동 차감된 오늘의 총 출고량이에요. 수량이 다르면 품목별 ‘수정’으로 조정하세요.
-          </div>
         </div>
 
         <StockReconcileForm

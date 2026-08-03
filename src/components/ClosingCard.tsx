@@ -27,7 +27,8 @@ export function ClosingCard() {
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition") ?? "";
       const m = cd.match(/filename="?([^"]+)"?/);
-      const name = m?.[1] ?? "closing.xlsx";
+      // 서버는 ASCII(magam-날짜시간)로 주고, 다운로드 파일명은 한글 '마감-…'으로.
+      const name = (m?.[1] ?? "magam.xlsx").replace(/^magam/, "마감");
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -71,11 +72,6 @@ export function ClosingCard() {
                 ✕
               </button>
             </div>
-            <p className="sheet__hint">
-              지금 시점의 <b>지점별 미수</b> · <b>발행 계산서(출고 발주)</b> ·{" "}
-              <b>재고현황</b>을 엑셀 파일로 내려받아요. 매일 마감 때 저장해 두면
-              데이터가 사라져도 복구할 수 있어요.
-            </p>
             {err && (
               <div className="notice notice--error" style={{ marginTop: 8 }}>
                 {err}
@@ -103,7 +99,7 @@ export function ClosingCard() {
                   onClick={run}
                   disabled={busy}
                 >
-                  {busy ? "만드는 중…" : "마감 백업 내려받기"}
+                  {busy ? "만드는 중…" : "내려받기"}
                 </button>
               )}
             </div>

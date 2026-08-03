@@ -135,9 +135,6 @@ export function StockReconcileForm({
           <div className="section-label" style={{ color: "var(--danger)" }}>
             차감 안 됨 — 재고현황에 없는 품목 ({unmatched.length})
           </div>
-          <div className="notice notice--mute" style={{ margin: "8px 0 10px" }}>
-            계산서엔 있지만 재고현황에 같은 이름이 없어(미등록·이름 불일치) 재고에서 빠지지 않았어요. 재고현황에 등록하거나 이름을 맞추면 차감돼요.
-          </div>
           <div className="rectable rectable--record2">
             <div className="rectable__head">
               <span className="rectable__name">품목</span>

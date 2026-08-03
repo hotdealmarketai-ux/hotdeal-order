@@ -130,41 +130,91 @@ export async function buildClosingWorkbook(
   // ── 미수 ──
   const wsAr = wb.addWorksheet("미수");
   wsAr.columns = [
-    { header: "가맹점", key: "store", width: 22 },
-    { header: "미수금액", key: "balance", width: 16, style: { numFmt: "#,##0" } },
-    { header: "미입금 건수", key: "count", width: 12 },
+    { header: "가맹점", key: "store", width: 24 },
+    { header: "미수금액", key: "balance", width: 18, style: { numFmt: "#,##0" } },
   ];
-  for (const r of perStore)
-    wsAr.addRow({ store: r.store, balance: r.balance, count: r.count });
-  const arTotal = wsAr.addRow({ store: "합계", balance: receivableTotal, count: "" });
+  for (const r of perStore) wsAr.addRow({ store: r.store, balance: r.balance });
+  const arTotal = wsAr.addRow({ store: "합계", balance: receivableTotal });
   arTotal.font = { bold: true };
 
-  // ── 출고 계산서(발행/입금완료 품목) ──
-  const wsInv = wb.addWorksheet("출고 계산서");
-  wsInv.columns = [
-    { header: "점포", key: "store", width: 20 },
-    { header: "출고일", key: "date", width: 12 },
-    { header: "종류", key: "kind", width: 8 },
-    { header: "상태", key: "status", width: 10 },
-    { header: "분류", key: "cat", width: 12 },
-    { header: "품목", key: "name", width: 26 },
-    { header: "수량", key: "qty", width: 8 },
-    { header: "단가", key: "unitPrice", width: 12, style: { numFmt: "#,##0" } },
-    { header: "금액", key: "amount", width: 14, style: { numFmt: "#,##0" } },
-  ];
-  for (const inv of invoices)
-    for (const it of inv.items)
-      wsInv.addRow({
-        store: inv.user.storeName,
-        date: inv.date,
-        kind: inv.kind === "WEEKLY" ? "주간" : "일반",
-        status: inv.status === "PAID" ? "입금완료" : "입금대기",
-        cat: catLabel(it.category),
-        name: it.name,
-        qty: it.qty,
-        unitPrice: it.unitPrice,
-        amount: it.amount,
+  // ── 출고 계산서 — 지점별 탭. 각 탭: 품목 + 카테고리별 총 금액 + 지점 전체 총 금액. ──
+  const invByStore = new Map<string, typeof invoices>();
+  for (const inv of invoices) {
+    const arr = invByStore.get(inv.user.storeName);
+    if (arr) arr.push(inv);
+    else invByStore.set(inv.user.storeName, [inv]);
+  }
+  const CAT_RANK: Record<string, number> = {
+    FRUIT: 0,
+    VEG: 1,
+    TOOL: 2,
+    TOFU: 3,
+    DELIVERY: 4,
+    WEEKLY: 5,
+  };
+  // 시트명 규칙(엑셀): 31자 · [ ] * ? / \ : 금지 · 앞뒤 작은따옴표 금지 · "History" 예약 · 중복(대소문자 무시) 금지.
+  // exceljs는 중복을 대소문자 무시로 판정하므로(예: "Cafe"/"cafe") 소문자 키로 중복을 막는다.
+  const usedLower = new Set<string>(["요약", "미수", "재고현황"]);
+  const sheetName = (raw: string) => {
+    let base =
+      raw
+        .replace(/[[\]*?\/\\:]/g, " ")
+        .trim()
+        .slice(0, 27)
+        .replace(/^'+|'+$/g, "")
+        .trim();
+    if (!base || base.toLowerCase() === "history") base = "점포";
+    let n = base;
+    let i = 2;
+    while (usedLower.has(n.toLowerCase())) n = `${base.slice(0, 24)} ${i++}`;
+    usedLower.add(n.toLowerCase());
+    return n;
+  };
+  const storeSheets: ExcelJS.Worksheet[] = [];
+  for (const [store, invs] of invByStore) {
+    const ws = wb.addWorksheet(sheetName(store));
+    ws.columns = [
+      { header: "출고일", key: "date", width: 12 },
+      { header: "종류", key: "kind", width: 8 },
+      { header: "상태", key: "status", width: 10 },
+      { header: "분류", key: "cat", width: 12 },
+      { header: "품목", key: "name", width: 26 },
+      { header: "수량", key: "qty", width: 8 },
+      { header: "단가", key: "unitPrice", width: 12, style: { numFmt: "#,##0" } },
+      { header: "금액", key: "amount", width: 14, style: { numFmt: "#,##0" } },
+    ];
+    const catTotal = new Map<string, number>();
+    let grand = 0;
+    for (const inv of invs)
+      for (const it of inv.items) {
+        ws.addRow({
+          date: inv.date,
+          kind: inv.kind === "WEEKLY" ? "주간" : "일반",
+          status: inv.status === "PAID" ? "입금완료" : "입금대기",
+          cat: catLabel(it.category),
+          name: it.name,
+          qty: it.qty,
+          unitPrice: it.unitPrice,
+          amount: it.amount,
+        });
+        catTotal.set(it.category, (catTotal.get(it.category) ?? 0) + it.amount);
+        grand += it.amount;
+      }
+    ws.addRow({}); // 빈 줄
+    const cats = [...catTotal.keys()].sort(
+      (a, b) => (CAT_RANK[a] ?? 9) - (CAT_RANK[b] ?? 9),
+    );
+    for (const c of cats) {
+      const r = ws.addRow({
+        name: `${catLabel(c)} 총 금액`,
+        amount: catTotal.get(c),
       });
+      r.font = { bold: true };
+    }
+    const g = ws.addRow({ name: "계산서 전체 총 금액", amount: grand });
+    g.font = { bold: true };
+    storeSheets.push(ws);
+  }
 
   // ── 재고현황 ──
   const wsStock = wb.addWorksheet("재고현황");
@@ -186,7 +236,7 @@ export async function buildClosingWorkbook(
       expiry: it.expiry,
     });
 
-  for (const ws of [wsSum, wsAr, wsInv, wsStock]) {
+  for (const ws of [wsSum, wsAr, ...storeSheets, wsStock]) {
     ws.getRow(1).font = { bold: true };
     ws.views = [{ state: "frozen", ySplit: 1 }];
   }

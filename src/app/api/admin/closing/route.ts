@@ -29,7 +29,7 @@ export async function POST() {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="closing-${kstStamp(now)}.xlsx"`,
+      "Content-Disposition": `attachment; filename="magam-${kstStamp(now)}.xlsx"`,
       "Cache-Control": "no-store",
     },
   });
