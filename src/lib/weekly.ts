@@ -8,6 +8,7 @@ import {
   isWeeklyOpen,
 } from "@/lib/schedule";
 import { orderLockOverride } from "@/lib/order-open";
+import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
 // 주간발주 상품(DB 카탈로그) 한 줄
 export type WeeklyProductRow = {
   code: string;
@@ -190,6 +191,62 @@ export async function setWeeklyShipDow(dow: number): Promise<void> {
   await prisma.appMeta.create({ data: { key: `${SHIP_DOW_PREFIX}${d}` } });
 }
 
+// ── 카테고리별 출고 요일 ─────────────────────────────────────
+// 카테고리(계란/유제품/…)마다 출고 요일이 다를 수 있다 → AppMeta.value 에 JSON {category: dow} 저장.
+// 미설정 카테고리는 기존 전역 설정(weeklyShipDow)을 기본값으로 사용(하위호환).
+const SHIP_DOW_BY_CAT_KEY = "weekly_ship_dow_by_cat";
+
+// 전 카테고리의 출고요일 맵. 항상 모든 카테고리 키를 채워서 반환(미설정=전역 기본).
+export async function weeklyShipDowByCategory(): Promise<Record<string, number>> {
+  const [m, fallback] = await Promise.all([
+    prisma.appMeta.findUnique({ where: { key: SHIP_DOW_BY_CAT_KEY } }),
+    weeklyShipDow(),
+  ]);
+  let saved: Record<string, unknown> = {};
+  if (m?.value) {
+    try {
+      const j = JSON.parse(m.value);
+      if (j && typeof j === "object") saved = j as Record<string, unknown>;
+    } catch {
+      /* 손상된 값 → 전역 기본으로 폴백 */
+    }
+  }
+  const out: Record<string, number> = {};
+  for (const c of WEEKLY_CATEGORIES) {
+    const v = saved[c.key];
+    out[c.key] =
+      typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 5 ? v : fallback;
+  }
+  return out;
+}
+
+// 한 카테고리의 출고요일 설정(월~금). 나머지 카테고리 설정은 보존.
+export async function setWeeklyShipDowForCategory(
+  category: string,
+  dow: number,
+): Promise<void> {
+  const valid = WEEKLY_CATEGORIES.some((c) => c.key === category);
+  if (!valid) return;
+  const d =
+    Number.isInteger(dow) && dow >= 1 && dow <= 5 ? dow : WEEKLY_SHIP_DOW_DEFAULT;
+  const m = await prisma.appMeta.findUnique({ where: { key: SHIP_DOW_BY_CAT_KEY } });
+  let map: Record<string, number> = {};
+  if (m?.value) {
+    try {
+      const j = JSON.parse(m.value);
+      if (j && typeof j === "object") map = j as Record<string, number>;
+    } catch {
+      /* 무시 — 새로 쓴다 */
+    }
+  }
+  map[category] = d;
+  await prisma.appMeta.upsert({
+    where: { key: SHIP_DOW_BY_CAT_KEY },
+    create: { key: SHIP_DOW_BY_CAT_KEY, value: JSON.stringify(map) },
+    update: { value: JSON.stringify(map), syncedAt: new Date() },
+  });
+}
+
 // 토요일(weekKey)에서 출고일까지의 일수. 월~금=2~6일(예: 수요일=4).
 export function weeklyShipOffsetDays(shipDow: number): number {
   const off = (((shipDow - 6) % 7) + 7) % 7;
@@ -210,6 +267,14 @@ export function weeklyKeyForShipmentDay(
   return shiftDate(shipmentDay, -weeklyShipOffsetDays(shipDow));
 }
 
+// 카테고리별 출고요일이 달라 '어느 요일이든' 그 주 토요일 사이클을 가리킨다.
+// 월~금이면 항상 그 전 토요일(월=2일 전 … 금=6일 전) weekKey, 토·일은 출고 없음(null).
+export function weeklyKeyForAnyShipmentDay(shipmentDay: string): string | null {
+  const d = dowOf(shipmentDay);
+  if (d < 1 || d > 5) return null;
+  return shiftDate(shipmentDay, -weeklyShipOffsetDays(d));
+}
+
 export type WeeklyShipItem = {
   code: string;
   category: string; // SNACK | DAIRY | DRIED | EGG
@@ -220,8 +285,15 @@ export type WeeklyShipItem = {
   amount: number; // qty × unitPrice
 };
 
+// 그 출고일의 dow 에 출고되는 카테고리 집합. 없으면 빈 Set(그 날 나가는 주간발주 없음).
+async function categoriesShippingOn(shipmentDay: string): Promise<Set<string>> {
+  const dow = dowOf(shipmentDay);
+  const byCat = await weeklyShipDowByCategory();
+  return new Set(Object.keys(byCat).filter((c) => byCat[c] === dow));
+}
+
 // 한 점포의 '그 출고일' 주간발주 품목. 발주서 표시·계산서 불러오기 공용.
-// 출고일이 설정 요일(기본 수)이 아니면 빈 배열.
+// 카테고리별 출고요일에 맞는 품목만(그 dow 에 출고되는 카테고리). 토·일이거나 그 날 나갈 카테고리가 없으면 빈 배열.
 // requireConfirmed(기본 false): 주간발주는 있으면 출고일에 발주서/계산서에 무조건 넘어온다
 //   (발주 확인은 주간발주 탭에서 하는 관리용 상태일 뿐, 표시 게이트 아님). true로 주면 확정분만.
 export async function getWeeklyItemsForStoreShipment(
@@ -230,45 +302,55 @@ export async function getWeeklyItemsForStoreShipment(
   opts?: { requireConfirmed?: boolean },
 ): Promise<WeeklyShipItem[]> {
   const requireConfirmed = opts?.requireConfirmed ?? false;
-  const weekKey = weeklyKeyForShipmentDay(shipmentDay, await weeklyShipDow());
+  const weekKey = weeklyKeyForAnyShipmentDay(shipmentDay);
   if (!weekKey) return [];
+  const cats = await categoriesShippingOn(shipmentDay);
+  if (cats.size === 0) return [];
   const order = await prisma.weeklyOrder.findUnique({
     where: { userId_weekKey: { userId, weekKey } },
     include: { items: { where: { qty: { gt: 0 } }, orderBy: { sortOrder: "asc" } } },
   });
   if (!order) return [];
   if (requireConfirmed && !order.confirmed) return [];
-  return order.items.map((it) => ({
-    code: it.code,
-    category: it.category,
-    name: it.name,
-    boxUnit: it.boxUnit,
-    qty: it.qty,
-    unitPrice: it.unitPrice,
-    amount: it.qty * it.unitPrice,
-  }));
+  return order.items
+    .filter((it) => cats.has(it.category)) // 오늘 출고 요일인 카테고리만
+    .map((it) => ({
+      code: it.code,
+      category: it.category,
+      name: it.name,
+      boxUnit: it.boxUnit,
+      qty: it.qty,
+      unitPrice: it.unitPrice,
+      amount: it.qty * it.unitPrice,
+    }));
 }
 
 // '그 출고일'에 주간발주가 실리는 점포 목록. 주간발주만 있는 점포도(발주 확인 전이라도) 발주 목록에 뜨게.
+// 그 dow 에 출고되는 카테고리 품목이 있는 점포만.
 export async function getWeeklyStoresForShipment(
   shipmentDay: string,
 ): Promise<{ userId: string; storeName: string; count: number; qty: number }[]> {
-  const weekKey = weeklyKeyForShipmentDay(shipmentDay, await weeklyShipDow());
+  const weekKey = weeklyKeyForAnyShipmentDay(shipmentDay);
   if (!weekKey) return [];
+  const cats = await categoriesShippingOn(shipmentDay);
+  if (cats.size === 0) return [];
   const orders = await prisma.weeklyOrder.findMany({
     where: { weekKey },
     include: {
       user: { select: { storeName: true } },
-      items: { where: { qty: { gt: 0 } }, select: { qty: true } },
+      items: { where: { qty: { gt: 0 } }, select: { qty: true, category: true } },
     },
   });
   return orders
-    .map((o) => ({
-      userId: o.userId,
-      storeName: o.user.storeName,
-      count: o.items.length,
-      qty: o.items.reduce((n, it) => n + it.qty, 0),
-    }))
+    .map((o) => {
+      const today = o.items.filter((it) => cats.has(it.category));
+      return {
+        userId: o.userId,
+        storeName: o.user.storeName,
+        count: today.length,
+        qty: today.reduce((n, it) => n + it.qty, 0),
+      };
+    })
     .filter((o) => o.count > 0)
     .sort((a, b) => a.storeName.localeCompare(b.storeName));
 }

@@ -23,8 +23,7 @@ import { clearOrderUnlockIfSettled } from "@/lib/bank";
 import {
   clearWeeklyUnlockIfSettled,
   getWeeklyItemsForStoreShipment,
-  weeklyKeyForShipmentDay,
-  weeklyShipDow,
+  weeklyKeyForAnyShipmentDay,
 } from "@/lib/weekly";
 import { boxWord } from "@/lib/weekly-catalog";
 import { orderRangeForShipment } from "@/lib/date";
@@ -956,7 +955,8 @@ export async function loadWeeklyIntoInvoiceAction(formData: FormData) {
   if (weekly.length === 0) return;
 
   // 불러오는 순간 그 주간발주를 자동 '발주 확인' 처리 — 발주서(출고 sheet, 확정분만 표시)에도 함께 실리도록.
-  const weekKey = weeklyKeyForShipmentDay(date, await weeklyShipDow());
+  // 카테고리별 출고요일이 달라도 그 주 토요일 사이클을 가리키는 any-day 매핑 사용.
+  const weekKey = weeklyKeyForAnyShipmentDay(date);
   if (weekKey) {
     await prisma.weeklyOrder.updateMany({
       where: { userId, weekKey, confirmed: false },

@@ -1201,6 +1201,12 @@ a {
   padding: 12px 14px;
   background: var(--surface);
 }
+/* 카테고리별 출고 요일 행 */
+.wshipcat { padding: 8px 0; }
+.wshipcat + .wshipcat { border-top: 1px dashed var(--line); }
+.wshipcat__head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+}
 .wagg__sum {
   font-weight: 700;
   cursor: pointer;

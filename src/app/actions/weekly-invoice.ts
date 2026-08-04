@@ -8,7 +8,12 @@ import { isMerchant, type Role } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { notifyMerchantWeeklyInvoiceIssued } from "@/lib/push";
 import { writeAudit } from "@/lib/audit";
-import { setWeeklyForceOpen, setWeeklyShipDow } from "@/lib/weekly";
+import {
+  setWeeklyForceOpen,
+  setWeeklyShipDow,
+  setWeeklyShipDowForCategory,
+} from "@/lib/weekly";
+import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
 
 export type WeeklyInvoiceState = { error?: string };
 
@@ -221,6 +226,30 @@ export async function setWeeklyShipDowAction(formData: FormData) {
     targetType: "weekly",
     targetId: "global",
     summary: `주간발주 출고 요일 → ${names[dow]}요일`,
+  });
+  revalidatePath("/admin/weekly");
+  revalidatePath("/vendor");
+  revalidatePath("/admin/hotdeal");
+  revalidatePath("/admin/orders");
+}
+
+// 카테고리별 출고 요일 변경 — 그 카테고리 품목만 그 요일 발주서에 실린다. 월~금(1~5)만.
+export async function setWeeklyShipDowForCategoryAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const category = String(formData.get("category") ?? "");
+  const dow = parseInt(String(formData.get("dow") ?? ""), 10);
+  if (!WEEKLY_CATEGORIES.some((c) => c.key === category)) return;
+  if (!Number.isInteger(dow) || dow < 1 || dow > 5) return;
+  await setWeeklyShipDowForCategory(category, dow);
+  const names = ["일", "월", "화", "수", "목", "금", "토"];
+  const label = WEEKLY_CATEGORIES.find((c) => c.key === category)?.label ?? category;
+  await writeAudit({
+    action: "weekly.shipDowCat",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "weekly",
+    targetId: category,
+    summary: `주간발주 출고 요일: ${label} → ${names[dow]}요일`,
   });
   revalidatePath("/admin/weekly");
   revalidatePath("/vendor");

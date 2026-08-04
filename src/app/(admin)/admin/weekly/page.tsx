@@ -7,13 +7,13 @@ import {
   weeklyKeyAt,
   weeklyForceOpen,
   weeklyStatusOf,
-  weeklyShipDow,
+  weeklyShipDowByCategory,
   weeklyShipmentDayForKey,
 } from "@/lib/weekly";
 import { isWeeklyOpen } from "@/lib/schedule";
 import {
   setWeeklyForceOpenAction,
-  setWeeklyShipDowAction,
+  setWeeklyShipDowForCategoryAction,
 } from "@/app/actions/weekly-invoice";
 import { labelDateLong, labelDate, shiftDate } from "@/lib/date";
 import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
@@ -30,8 +30,8 @@ export default async function AdminWeeklyPage({
   const weekKey = /^\d{4}-\d{2}-\d{2}$/.test(sp.week ?? "") ? sp.week! : weeklyKeyAt();
   const forceOpen = await weeklyForceOpen();
   const inWindow = isWeeklyOpen();
-  const shipDow = await weeklyShipDow();
-  const shipDay = weeklyShipmentDayForKey(weekKey, shipDow);
+  // 카테고리별 출고 요일 + 이번 주 그 카테고리의 출고일.
+  const shipByCat = await weeklyShipDowByCategory();
 
   const orders = await prisma.weeklyOrder.findMany({
     where: { weekKey },
@@ -132,28 +132,39 @@ export default async function AdminWeeklyPage({
           </Link>
         </div>
 
-        {/* 주간발주 출고 요일 — 토요일에 넣은 주간발주가 이 요일에 출고되고, 그 날 발주서(본사출고·핫딜마켓·전체)에 함께 실린다 */}
+        {/* 카테고리별 출고 요일 — 카테고리마다 출고 요일을 따로 설정. 그 요일 발주서(본사출고·핫딜마켓·전체)에 그 카테고리 품목만 실린다. */}
         <div className="card" style={{ marginBottom: 16 }}>
-          <div
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}
-          >
-            <div style={{ fontWeight: 700 }}>주간발주 출고 요일</div>
-            <span className="hint">이번 주 출고 {labelDate(shipDay)}</span>
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>카테고리별 출고 요일</div>
+          <div className="hint" style={{ marginBottom: 6 }}>
+            계란·유제품처럼 나가는 날이 다르면 카테고리마다 요일을 따로 정하세요.
           </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
-            {[1, 2, 3, 4, 5].map((d) => (
-              <form action={setWeeklyShipDowAction} key={d} style={{ flex: 1 }}>
-                <input type="hidden" name="dow" value={d} />
-                <button
-                  type="submit"
-                  className={`btn btn--xs ${d === shipDow ? "btn--primary" : "btn--soft"}`}
-                  style={{ width: "100%" }}
-                >
-                  {["", "월", "화", "수", "목", "금"][d]}
-                </button>
-              </form>
-            ))}
-          </div>
+          {WEEKLY_CATEGORIES.map((c) => {
+            const dow = shipByCat[c.key];
+            const day = weeklyShipmentDayForKey(weekKey, dow);
+            return (
+              <div className="wshipcat" key={c.key}>
+                <div className="wshipcat__head">
+                  <span className="chip">{c.label}</span>
+                  <span className="hint">이번 주 {labelDate(day)}</span>
+                </div>
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  {[1, 2, 3, 4, 5].map((d) => (
+                    <form action={setWeeklyShipDowForCategoryAction} key={d} style={{ flex: 1 }}>
+                      <input type="hidden" name="category" value={c.key} />
+                      <input type="hidden" name="dow" value={d} />
+                      <button
+                        type="submit"
+                        className={`btn btn--xs ${d === dow ? "btn--primary" : "btn--soft"}`}
+                        style={{ width: "100%" }}
+                      >
+                        {["", "월", "화", "수", "목", "금"][d]}
+                      </button>
+                    </form>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {totalStores === 0 ? (
