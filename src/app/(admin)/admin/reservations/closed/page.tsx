@@ -36,6 +36,13 @@ export default async function ClosedReservationsPage() {
             지난 픽업 마감 ›
           </Link>
         </div>
+        <Link
+          href="/admin/reservations/summary?scope=closed"
+          className="btn btn--primary btn--block"
+          style={{ marginBottom: 14 }}
+        >
+          전체 집계 보기
+        </Link>
         <div className="itemshead">
           <span className="itemshead__label">마감된 예약상품</span>
           <span className="itemshead__count">{rows.length}개</span>

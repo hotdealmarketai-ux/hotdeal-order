@@ -52,6 +52,14 @@ export default async function AdminReservationsPage() {
           </Link>
         </div>
 
+        <Link
+          href="/admin/reservations/summary?scope=open"
+          className="btn btn--primary btn--block"
+          style={{ marginBottom: 14 }}
+        >
+          전체 집계 보기
+        </Link>
+
         <FlatReservationAdmin products={rows} inventoryItems={inventoryItems} />
       </div>
     </>

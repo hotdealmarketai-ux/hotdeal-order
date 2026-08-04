@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { listFlatProductsAdmin } from "@/lib/reservation-flat";
@@ -26,6 +27,13 @@ export default async function PickupClosedReservationsPage() {
     <>
       <Topbar backHref="/admin/reservations/closed" title="지난 픽업 마감" />
       <div className="page">
+        <Link
+          href="/admin/reservations/summary?scope=pickupClosed"
+          className="btn btn--primary btn--block"
+          style={{ marginBottom: 14 }}
+        >
+          전체 집계 보기
+        </Link>
         <div className="itemshead">
           <span className="itemshead__label">픽업까지 지난 예약상품</span>
           <span className="itemshead__count">{rows.length}개</span>

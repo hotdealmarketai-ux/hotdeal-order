@@ -195,6 +195,70 @@ export async function listFlatProductsMerchant(
   return rows;
 }
 
+// scope 전체 집계 — 각 상품에 '들어온 지점만'(확정분) 수량을 묶는다. '전체 집계' 페이지용.
+export type FlatAggProduct = {
+  id: string;
+  name: string;
+  pickupDate: string;
+  supplyPrice: number;
+  total: number; // 이 상품 전 지점 합
+  stores: { storeName: string; qty: number }[]; // 발주한 지점만(qty>0), ㄱㄴㄷ
+};
+export async function flatScopeAggregate(
+  scope: FlatScope,
+  now: Date = new Date(),
+): Promise<{ products: FlatAggProduct[]; grandTotal: number; storeCount: number }> {
+  const products = await prisma.reservationProduct.findMany({
+    where: flatScopeWhere(scope, now),
+    orderBy: { closeAt: scope === "open" ? "asc" : "desc" },
+    select: { id: true, name: true, pickupDate: true, supplyPrice: true, closeAt: true },
+  });
+  if (products.length === 0) return { products: [], grandTotal: 0, storeCount: 0 };
+
+  const ids = products.map((p) => p.id);
+  const items = await prisma.reservationOrderItem.findMany({
+    where: {
+      productId: { in: ids },
+      confirmedAt: { not: null }, // 확정분만(집계 = 실제 발주될 수량)
+      qty: { gt: 0 },
+      order: { batch: { active: true } },
+    },
+    select: {
+      productId: true,
+      qty: true,
+      order: { select: { userId: true, user: { select: { storeName: true } } } },
+    },
+  });
+
+  // 상품 → (점포 → 수량). 점포당 상품 1행이지만 안전하게 합산.
+  const byProduct = new Map<string, Map<string, { storeName: string; qty: number }>>();
+  const allStores = new Set<string>();
+  for (const it of items) {
+    let sm = byProduct.get(it.productId);
+    if (!sm) {
+      sm = new Map();
+      byProduct.set(it.productId, sm);
+    }
+    const cur = sm.get(it.order.userId) ?? { storeName: it.order.user.storeName, qty: 0 };
+    cur.qty += it.qty;
+    sm.set(it.order.userId, cur);
+    allStores.add(it.order.userId);
+  }
+
+  let grandTotal = 0;
+  const out: FlatAggProduct[] = products.map((p) => {
+    const sm = byProduct.get(p.id);
+    const stores = sm
+      ? [...sm.values()].sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"))
+      : [];
+    const total = stores.reduce((s, r) => s + r.qty, 0);
+    grandTotal += total;
+    return { id: p.id, name: p.name, pickupDate: p.pickupDate, supplyPrice: p.supplyPrice, total, stores };
+  });
+  // 발주가 하나도 없는 상품은 집계에서 제외(들어온 것만 정리).
+  return { products: out.filter((p) => p.total > 0), grandTotal, storeCount: allStores.size };
+}
+
 // 관리자 상품 상세 — 이 상품을 예약한 점포별 수량(수정용).
 export type FlatStoreRow = {
   userId: string;

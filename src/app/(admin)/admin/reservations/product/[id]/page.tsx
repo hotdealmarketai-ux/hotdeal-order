@@ -18,7 +18,8 @@ export default async function FlatProductDetailPage(props: {
   const { product, stores } = await flatProductStores(id);
   if (!product) notFound();
   const total = stores.reduce((s, r) => s + r.qty, 0);
-  const orderedCount = stores.filter((r) => r.qty > 0).length;
+  const orderedStores = stores.filter((r) => r.qty > 0);
+  const orderedCount = orderedStores.length;
 
   return (
     <>
@@ -43,6 +44,36 @@ export default async function FlatProductDetailPage(props: {
           stores={stores}
           editable={!product.pickupPassed}
         />
+
+        {/* 맨 밑 — '들어온 지점만' 정리된 집계(읽기전용). */}
+        <div className="section-label" style={{ marginTop: 22 }}>
+          집계 (발주한 지점)
+        </div>
+        <div className="card">
+          {orderedStores.length === 0 ? (
+            <div className="row__sub">아직 발주한 지점이 없어요.</div>
+          ) : (
+            <>
+              {orderedStores.map((r) => (
+                <div className="aggline" key={r.userId}>
+                  <span className="aggline__store">{r.storeName}</span>
+                  <span className="aggline__qty">{r.qty}개</span>
+                </div>
+              ))}
+              <div className="divider" style={{ margin: "8px 0" }} />
+              <div className="aggline">
+                <span className="aggline__store">
+                  <b>총 합계</b>
+                </span>
+                <span className="aggline__qty">
+                  <b>
+                    {total}개 · {orderedStores.length}점포
+                  </b>
+                </span>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </>
   );
