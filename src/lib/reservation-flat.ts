@@ -6,6 +6,32 @@ import { prisma } from "@/lib/prisma";
 // 신규 flat 상품을 담는 상시 배치의 예약일자 센티널(정렬/마감에 안 쓰임).
 export const FLAT_RESERVE_KEY = "__flat__";
 
+// KST 오늘(YYYY-MM-DD). 픽업일(문자열) 비교로 '지난 픽업 마감' 판정에 사용.
+export function kstTodayStr(now: Date = new Date()): string {
+  return new Date(now.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+// flat 예약상품 목록의 범위.
+//  · open        : 마감 전(진행 중)                         closeAt > now
+//  · closed      : 예약 마감 지남 · 픽업일 안 지남(지난 예약 마감)  closeAt ≤ now, pickup ≥ 오늘
+//  · pickupClosed: 예약 마감 + 픽업일까지 지남(지난 픽업 마감)     closeAt ≤ now, pickup < 오늘
+export type FlatScope = "open" | "closed" | "pickupClosed";
+
+// scope별 reservationProduct where 조각(active·closeAt·pickupDate).
+function flatScopeWhere(scope: FlatScope, now: Date) {
+  const today = kstTodayStr(now);
+  const closeAt = scope === "open" ? { gt: now } : { lte: now };
+  const where: {
+    active: true;
+    closeAt: { gt: Date } | { lte: Date };
+    pickupDate?: { gte: string } | { lt: string };
+  } = { active: true, closeAt };
+  // 픽업일(문자열 YYYY-MM-DD)로 마감분을 둘로 가른다. lexicographic 비교로 충분.
+  if (scope === "closed") where.pickupDate = { gte: today };
+  else if (scope === "pickupClosed") where.pickupDate = { lt: today };
+  return where;
+}
+
 // 상시 배치 id 확보(없으면 생성). 신규 상품/주문이 여기 붙는다.
 export async function getOrCreateFlatBatchId(): Promise<string> {
   const found = await prisma.reservationBatch.findUnique({
@@ -31,16 +57,13 @@ export type FlatProductRow = {
   storeCount: number; // 예약 점포 수
 };
 
-// 관리자 flat 상품 목록. scope "open"=마감 전(마감 임박순), "closed"=마감 후(최근 마감순).
+// 관리자 flat 상품 목록. open=마감 전(임박순), closed=지난 예약 마감(픽업 전), pickupClosed=지난 픽업 마감.
 export async function listFlatProductsAdmin(
-  scope: "open" | "closed",
+  scope: FlatScope,
   now: Date = new Date(),
 ): Promise<FlatProductRow[]> {
   const products = await prisma.reservationProduct.findMany({
-    where: {
-      active: true,
-      closeAt: scope === "open" ? { gt: now } : { lte: now },
-    },
+    where: flatScopeWhere(scope, now),
     orderBy: { closeAt: scope === "open" ? "asc" : "desc" },
     select: {
       id: true,
@@ -177,12 +200,24 @@ export type FlatStoreRow = {
   userId: string;
   storeName: string;
   itemId: string;
-  qty: number;
+  qty: number; // 확정 수량(집계와 일치). 미확정 홀드는 0으로 두고 heldUnconfirmed 로 표시.
   inventoryItemId: string;
   stockDeducted: boolean;
+  heldUnconfirmed: boolean; // 점주가 담는 중(확정 전) — 본사가 덮어쓰면 안 됨
 };
-export async function flatProductStores(productId: string): Promise<{
-  product: { id: string; name: string; pickupDate: string; supplyPrice: number; inventoryItemId: string; closeAtMs: number } | null;
+export async function flatProductStores(
+  productId: string,
+  now: Date = new Date(),
+): Promise<{
+  product: {
+    id: string;
+    name: string;
+    pickupDate: string;
+    supplyPrice: number;
+    inventoryItemId: string;
+    closeAtMs: number;
+    pickupPassed: boolean; // 픽업일까지 지남(=지난 픽업 마감) → 편집 불가
+  } | null;
   stores: FlatStoreRow[];
 }> {
   const product = await prisma.reservationProduct.findFirst({
@@ -190,28 +225,41 @@ export async function flatProductStores(productId: string): Promise<{
     select: { id: true, name: true, pickupDate: true, supplyPrice: true, inventoryItemId: true, closeAt: true },
   });
   if (!product) return { product: null, stores: [] };
-  const items = await prisma.reservationOrderItem.findMany({
-    // 확정분만 — 점포별 상세/편집은 실제 발주된(확정) 예약만 보여준다(미확정 담기는 제외).
-    where: { productId, confirmedAt: { not: null }, order: { batch: { active: true } } },
-    select: {
-      id: true,
-      qty: true,
-      inventoryItemId: true,
-      stockDeductedAt: true,
-      order: { select: { userId: true, user: { select: { storeName: true } } } },
-    },
+
+  // 발주를 안 넣은 지점도 관리자가 수량을 추가할 수 있게 — 전 가맹점(핫딜마켓·승인)을 모두 노출.
+  // 발주 없는 지점은 qty 0으로 뜨고, 여기서 수량을 넣으면 그 점주에게도 예약이 생긴다.
+  const [merchants, items] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
+      orderBy: { storeName: "asc" },
+      select: { id: true, storeName: true },
+    }),
+    prisma.reservationOrderItem.findMany({
+      // 확정/미확정 모두 읽는다(unique orderId_productId 로 점포당 1행). 표시 수량은 확정분만,
+      // 미확정 홀드(점주가 담는 중)는 heldUnconfirmed 로 구분해 본사가 덮어쓰지 않도록 한다.
+      where: { productId, qty: { gt: 0 }, order: { batch: { active: true } } },
+      select: {
+        qty: true,
+        confirmedAt: true,
+        stockDeductedAt: true,
+        order: { select: { userId: true } },
+      },
+    }),
+  ]);
+  const byUser = new Map(items.map((it) => [it.order.userId, it]));
+  const stores: FlatStoreRow[] = merchants.map((m) => {
+    const it = byUser.get(m.id);
+    const confirmed = !!it?.confirmedAt;
+    return {
+      userId: m.id,
+      storeName: m.storeName,
+      itemId: "", // 편집은 (productId,userId)로 식별 — 신규 생성/삭제 모두 처리
+      qty: confirmed ? (it?.qty ?? 0) : 0, // 확정분만 노출(집계와 일치)
+      inventoryItemId: product.inventoryItemId, // 신규 생성 시 상품의 연동 재고를 상속
+      stockDeducted: !!it?.stockDeductedAt,
+      heldUnconfirmed: !!it && !confirmed && it.qty > 0,
+    };
   });
-  const stores: FlatStoreRow[] = items
-    .filter((it) => it.qty > 0)
-    .map((it) => ({
-      userId: it.order.userId,
-      storeName: it.order.user.storeName,
-      itemId: it.id,
-      qty: it.qty,
-      inventoryItemId: it.inventoryItemId,
-      stockDeducted: !!it.stockDeductedAt,
-    }))
-    .sort((a, b) => a.storeName.localeCompare(b.storeName, "ko"));
   return {
     product: {
       id: product.id,
@@ -220,6 +268,7 @@ export async function flatProductStores(productId: string): Promise<{
       supplyPrice: product.supplyPrice,
       inventoryItemId: product.inventoryItemId,
       closeAtMs: (product.closeAt as Date).getTime(),
+      pickupPassed: product.pickupDate < kstTodayStr(now),
     },
     stores,
   };

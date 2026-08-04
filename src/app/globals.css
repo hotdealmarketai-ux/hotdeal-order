@@ -5110,6 +5110,7 @@ a.resv-card:active { transform: scale(0.995); }
 .fpse__row + .fpse__row { margin-top: 8px; }
 .fpse__store { font-size: 14px; font-weight: 700; color: var(--fg); min-width: 0; }
 .fpse__out { font-size: 12px; font-weight: 700; color: var(--danger); }
+.fpse__none { font-size: 12px; font-weight: 600; color: var(--muted); }
 .fpse__step { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 
 /* ── 송장 관리 ── */

@@ -20,7 +20,7 @@ export default async function MerchantClosedReservationsPage() {
           <span className="itemshead__label">마감된 예약상품</span>
           <span className="itemshead__count">{products.length}개</span>
         </div>
-        <FlatReservationMerchant products={products} />
+        <FlatReservationMerchant products={products} sectioned={false} />
       </div>
     </>
   );

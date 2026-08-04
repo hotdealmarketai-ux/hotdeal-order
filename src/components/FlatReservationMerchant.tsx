@@ -263,8 +263,15 @@ function renderCard(p: FlatMerchantCard) {
   );
 }
 
-// 점주 예약발주 단일 목록 — 검색 + '오늘 마감'/'마감 여유' 섹터. 각 섹터는 마감 임박순+ㄱㄴㄷ(서버 정렬).
-export function FlatReservationMerchant({ products }: { products: FlatMerchantCard[] }) {
+// 점주 예약발주 목록 — 검색 + (진행 중일 때만) '오늘 마감'/'마감 여유' 섹터.
+// sectioned=false(지난 예약 마감)면 이미 다 마감돼 '마감 여유'가 무의미하므로 섹터 없이 단일 리스트.
+export function FlatReservationMerchant({
+  products,
+  sectioned = true,
+}: {
+  products: FlatMerchantCard[];
+  sectioned?: boolean;
+}) {
   const [q, setQ] = useState("");
   const now = useNow();
   const query = q.trim();
@@ -288,6 +295,8 @@ export function FlatReservationMerchant({ products }: { products: FlatMerchantCa
         <div className="empty">
           <p>{query ? "검색 결과가 없어요." : "예약 가능한 상품이 없어요."}</p>
         </div>
+      ) : !sectioned ? (
+        <div className="rcardwrap">{shown.map(renderCard)}</div>
       ) : (
         <>
           {todayList.length > 0 && (

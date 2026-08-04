@@ -45,17 +45,15 @@ function timeLabel(iso: string | null): string {
 export function ShipmentManager({
   shipments,
   apiConfigured,
-  usage,
 }: {
   shipments: ShipmentRow[];
   apiConfigured: boolean;
-  usage: { used: number; remaining: number; cap: number };
 }) {
   const router = useRouter();
   const [courierCode, setCourierCode] = useState(COURIERS[0].code);
   const [trackingNo, setTrackingNo] = useState("");
   const [itemName, setItemName] = useState("");
-  const [qty, setQty] = useState("1");
+  const [qty, setQty] = useState("");
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
   const [refreshing, setRefreshing] = useState(false);
@@ -71,14 +69,8 @@ export function ShipmentManager({
       router.refresh();
       if (silent) return;
       if (!r.hadKey) setMsg("택배 조회 API 키가 설정되지 않았어요.");
-      else if (r.capped && r.updated === 0)
-        setMsg(`이번 달 무료 한도(서로 다른 송장 ${usage.cap}개)를 다 써서 새 송장 조회는 다음 달에 재개돼요. (기존 송장은 계속 갱신)`);
-      else if (r.updated === 0)
-        setMsg("최근 3시간 안에 조회한 송장뿐이라 지금은 갱신할 게 없어요. (무료 한도 절약)");
-      else
-        setMsg(
-          `${r.updated}건 갱신했어요. (이번 달 송장 ${r.used}/${usage.cap}개${r.capped ? " · 새 송장 한도 도달" : ""})`,
-        );
+      else if (r.updated === 0) setMsg("새로 갱신할 송장이 없어요.");
+      else setMsg(`${r.updated}건 갱신했어요.`);
     });
   };
 
@@ -108,7 +100,7 @@ export function ShipmentManager({
       }
       setTrackingNo("");
       setItemName("");
-      setQty("1");
+      setQty("");
       router.refresh();
     });
   };
@@ -187,11 +179,7 @@ export function ShipmentManager({
       )}
 
       <div className="shiptop">
-        <span className="shiptop__hint">
-          {refreshing
-            ? "택배 상태 조회 중…"
-            : `무료 한도 절약 — 송장별 3시간 간격 갱신 · 이번 달 송장 ${usage.used}/${usage.cap}개`}
-        </span>
+        <span className="shiptop__hint">{refreshing ? "택배 상태 조회 중…" : ""}</span>
         <button
           type="button"
           className="btn btn--xs btn--soft"
@@ -203,19 +191,17 @@ export function ShipmentManager({
       </div>
       {msg && <div className="shipmsg">{msg}</div>}
 
-      {/* 4개 섹션 */}
+      {/* 상태별 섹션 — 비어있는 섹션은 숨긴다. */}
       {STATUS_ORDER.map((st) => {
         const list = byStatus(st);
+        if (list.length === 0) return null;
         return (
           <section className={`shipsec shipsec--${st.toLowerCase()}`} key={st}>
             <div className="shipsec__head">
               <span className="shipsec__label">{STATUS_LABEL[st]}</span>
               <span className="shipsec__count">{list.length}</span>
             </div>
-            {list.length === 0 ? (
-              <div className="shipsec__empty">해당 상태의 송장이 없어요.</div>
-            ) : (
-              <div className="shipwrap">
+            <div className="shipwrap">
                 {list.map((s) => (
                   <div className="shipcard" key={s.id}>
                     <div className="shipcard__main">
@@ -242,8 +228,7 @@ export function ShipmentManager({
                     </button>
                   </div>
                 ))}
-              </div>
-            )}
+            </div>
           </section>
         );
       })}

@@ -12,6 +12,7 @@ import {
   reservationHeldByItem,
 } from "@/lib/reservation-stock";
 import { heldByItem } from "@/lib/stock-hold";
+import { kstTodayStr } from "@/lib/reservation-flat";
 import { notifyMerchantReservationEdited } from "@/lib/push";
 import { windowKeyAt } from "@/lib/schedule";
 import { logError } from "@/lib/log";
@@ -653,6 +654,198 @@ export async function adminEditReservationItemsAction(input: {
   revalidatePath(`/admin/reservations/${batchId}`);
   revalidatePath("/reservations");
   revalidatePath(`/reservations/${batchId}`);
+  revalidatePath("/inventory");
+  revalidatePath("/order");
+  revalidatePath("/vendor");
+  revalidatePath("/admin/hotdeal");
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+// ── 관리자: flat 예약상품의 특정 점포 수량 '설정'(0 포함) ──
+// (productId, userId, qty) 로 식별 — 발주를 안 넣은 지점도 여기서 수량을 넣으면 그 점주에게 예약이 생긴다.
+// 즉, 관리자가 추가한 수량은 확정(confirmedAt) 상태로 저장돼 그 점주 화면·공구·계산서에 그대로 반영된다.
+//  · qty>기존: 연동 상품이면 재고 가용으로 캡(초과판매 방지). 신규면 주문+아이템을 확정 생성.
+//  · qty=0    : 그 예약 아이템 삭제(주문이 비면 confirmed 해제).
+//  · 픽업일 지남(지난 픽업 마감)·이미 출고(stockDeductedAt)면 수정 불가.
+// 저장 후 점주 푸시 + ReservationChangeLog 기록. ⚠ 관리자 전용(requireAdmin).
+export async function adminSetReservationStoreQtyAction(input: {
+  productId: string;
+  userId: string;
+  qty: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const admin = await requireAdmin();
+  const productId = String(input?.productId ?? "");
+  const userId = String(input?.userId ?? "");
+  const qty = Math.max(0, Math.floor(Number(input?.qty) || 0));
+  if (!productId || !userId) return { ok: false, error: "잘못된 요청이에요." };
+
+  const product = await prisma.reservationProduct.findFirst({
+    where: { id: productId, active: true, closeAt: { not: null }, batch: { active: true } },
+    select: { id: true, name: true, supplyPrice: true, pickupDate: true, inventoryItemId: true, batchId: true },
+  });
+  if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
+  // 지난 픽업 마감(픽업일까지 지남)은 편집 불가 — 아카이브.
+  if (product.pickupDate < kstTodayStr()) {
+    return { ok: false, error: "픽업일이 지나 수정할 수 없어요." };
+  }
+
+  const target = await prisma.user.findFirst({
+    where: { id: userId, role: "MERCHANT_HOTDEAL", status: "APPROVED" },
+    select: { id: true, storeName: true },
+  });
+  if (!target) return { ok: false, error: "가맹점을 찾을 수 없어요." };
+
+  // 모든 판정·집계·쓰기를 하나의 트랜잭션 안에서. 연동 상품이면 재고행을 FOR UPDATE 로 잠가
+  // 점주 담기(holdFlatProductAction)·다른 관리자 편집과 직렬화(동시 초과판매 방지).
+  const iid = product.inventoryItemId;
+  let outcome: { ok: boolean; error?: string; curQty?: number; noop?: boolean };
+  try {
+    outcome = await prisma.$transaction(async (tx) => {
+      if (iid) {
+        await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${iid} FOR UPDATE`;
+      }
+      const order = await tx.reservationOrder.findUnique({
+        where: { userId_batchId: { userId, batchId: product.batchId } },
+        select: { id: true },
+      });
+      const existing = order
+        ? await tx.reservationOrderItem.findUnique({
+            where: { orderId_productId: { orderId: order.id, productId } },
+            select: { id: true, qty: true, confirmedAt: true, stockDeductedAt: true },
+          })
+        : null;
+      const curQty = existing?.qty ?? 0;
+
+      if (existing?.stockDeductedAt) {
+        return { ok: false, error: `${product.name}은(는) 이미 출고돼 수정할 수 없어요.` };
+      }
+      // 점주가 담는 중(미확정 홀드)인 예약은 본사가 덮어쓰지 않는다 — 편집 화면엔 '담는 중'으로만 뜨고
+      // 확정수량(0)과 실제 홀드 수량이 달라 조용히 뭉개질 위험이 있어 명시적으로 막는다.
+      if (existing && existing.confirmedAt == null && existing.qty > 0) {
+        return {
+          ok: false,
+          error: "점주가 담는 중(미확정)이라 지금은 수정할 수 없어요. 점주 발주 확정 후 조정해 주세요.",
+        };
+      }
+      if (qty === curQty) return { ok: true, noop: true, curQty };
+
+      // 연동 '증가'는 재고 가용으로 캡(트랜잭션 안에서 재조회 → 초과판매 방지).
+      if (iid && qty > curQty) {
+        const inv = await tx.inventoryItem.findUnique({
+          where: { id: iid },
+          select: { qty: true, deletedAt: true },
+        });
+        if (!inv || inv.deletedAt) return { ok: false, error: "재고 품목을 찾을 수 없어요." };
+        // 이 품목에 걸린 '아직 차감 안 된' 전체 예약홀드(내 현재 수량 포함) + 일일홀드.
+        const resvRows = await tx.reservationOrderItem.findMany({
+          where: {
+            inventoryItemId: iid,
+            stockDeductedAt: null,
+            qty: { gt: 0 },
+            order: { batch: { active: true } },
+          },
+          select: { qty: true },
+        });
+        let resvHeld = 0;
+        for (const r of resvRows) resvHeld += r.qty;
+        const dayAgg = await tx.stockHold.aggregate({
+          where: { itemId: iid, windowDate: windowKeyAt() },
+          _sum: { qty: true },
+        });
+        // 새 수량 최대치 = base − (내 것 제외 전체 예약홀드) − 일일홀드. resvHeld 는 curQty 포함이라 빼준다.
+        const capMax = inv.qty - (resvHeld - curQty) - (dayAgg._sum.qty ?? 0);
+        if (qty > capMax) {
+          return { ok: false, error: `${product.name} 재고가 부족해요(최대 ${Math.max(0, capMax)}개).` };
+        }
+      }
+
+      // 주문 보장 — flat 주문의 confirmed 는 건드리지 않는다(항목별 confirmedAt 가 게이트).
+      // order.confirmed=true 로 만들면 그 점주의 '담기만 한' 다른 품목까지 계산서로 새어나간다.
+      let orderId = order?.id;
+      if (!orderId) {
+        const created = await tx.reservationOrder.create({
+          data: { userId, batchId: product.batchId },
+          select: { id: true },
+        });
+        orderId = created.id;
+      }
+
+      if (qty <= 0) {
+        if (existing) await tx.reservationOrderItem.delete({ where: { id: existing.id } });
+      } else if (existing) {
+        await tx.reservationOrderItem.update({
+          where: { id: existing.id },
+          data: {
+            qty,
+            confirmedAt: new Date(), // 관리자 설정분은 확정 → 점주·공구·계산서 반영
+            name: product.name,
+            supplyPrice: product.supplyPrice,
+            pickupDate: product.pickupDate,
+            inventoryItemId: iid,
+          },
+        });
+      } else {
+        await tx.reservationOrderItem.create({
+          data: {
+            orderId,
+            productId,
+            name: product.name,
+            supplyPrice: product.supplyPrice,
+            pickupDate: product.pickupDate,
+            inventoryItemId: iid,
+            qty,
+            confirmedAt: new Date(),
+          },
+        });
+      }
+
+      // 주문이 비면 confirmed 해제(있던 경우; 신규는 애초에 false).
+      const remaining = await tx.reservationOrderItem.count({ where: { orderId } });
+      if (remaining === 0) {
+        await tx.reservationOrder.update({
+          where: { id: orderId },
+          data: { confirmed: false, confirmedAt: null },
+        });
+      }
+
+      await tx.reservationChangeLog.create({
+        data: {
+          batchId: product.batchId,
+          userId,
+          actorName: admin.storeName,
+          changes: JSON.stringify([
+            { name: product.name, op: qty <= 0 ? "removed" : "changed", before: curQty, after: qty },
+          ]),
+        },
+      });
+      return { ok: true, curQty };
+    });
+  } catch (err) {
+    logError("reservation.adminSetStoreQty", err, { productId, userId });
+    return { ok: false, error: "수정에 실패했어요. 다시 시도해 주세요." };
+  }
+
+  if (!outcome.ok) return { ok: false, error: outcome.error };
+  if (outcome.noop) return { ok: true };
+  const curQty = outcome.curQty ?? 0;
+
+  await writeAudit({
+    action: "reservation.adminSetStoreQty",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "ReservationProduct",
+    targetId: productId,
+    summary: `${target.storeName} · ${product.name} 예약 ${curQty}→${qty}개`,
+    snapshot: [{ name: product.name, before: curQty, after: qty }],
+  }).catch(() => {});
+  // flat 예약분 수정 알림은 flat 목록(/reservations)으로 딥링크 — flat 배치 id 는 레거시 상세를 깨뜨림.
+  await notifyMerchantReservationEdited(userId, product.batchId, "/reservations");
+
+  revalidatePath(`/admin/reservations/product/${productId}`);
+  revalidatePath("/admin/reservations");
+  revalidatePath("/reservations");
+  revalidatePath("/reservations/closed");
   revalidatePath("/inventory");
   revalidatePath("/order");
   revalidatePath("/vendor");

@@ -159,15 +159,17 @@ export async function notifyMerchantsReservationClosingSoon(name: string) {
 }
 
 // 관리자(새롭)가 지점 예약발주 수량을 수정 → 점주에게 알림(예약 상세로 딥링크).
+// url 을 넘기면 그 경로로(예: flat 예약은 배치 상세가 아니라 /reservations 목록으로) 딥링크.
 export async function notifyMerchantReservationEdited(
   userId: string,
   batchId: string,
+  url?: string,
 ) {
   try {
     await sendPushToUser(userId, {
       title: "본사가 예약을 수정했어요.",
       body: "수정된 예약 내역을 확인해 주세요.",
-      url: `/reservations/${batchId}`,
+      url: url ?? `/reservations/${batchId}`,
     });
   } catch (err) {
     console.error("[push] notifyMerchantReservationEdited failed:", err);
