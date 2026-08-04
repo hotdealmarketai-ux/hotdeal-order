@@ -26,6 +26,7 @@ import { MoneyInput } from "./MoneyInput";
 import { rankStockMatches } from "@/lib/stock-match";
 
 const DELIVERY_CAT = "DELIVERY";
+const WEEKLY_CAT = "WEEKLY";
 
 type Row = { id: number; name: string; qty: string; unitPrice: string; inventoryItemId: string };
 type WeeklyRow = { id: number; name: string; qty: string; unitPrice: string; unit: string };
@@ -135,6 +136,15 @@ export function InvoiceForm({
     return rows;
   });
   const [weeklySaving, startWeeklySave] = useTransition();
+  // 주간발주 확정(잠금) — 일반 카테고리/용달처럼 '확정'하면 잠기고 발행 게이트에 포함된다.
+  // (용달과 동일하게 5초 폴링으로는 동기화하지 않음 — 편집 중 잠금 탈취 방지. 서버 게이트가 정합성 보장.)
+  const [weeklyConfirmed, setWeeklyConfirmed] = useState(
+    () =>
+      confirmedCats
+        .split(",")
+        .map((s) => s.trim())
+        .includes(WEEKLY_CAT),
+  );
 
   // ── 용달 발송 ── 토글 ON → 용차비용 1줄 + '확정'(다른 카테고리처럼). 계산서 총액에 합산(재고 무관).
   const deliveryConfirmedInit = confirmedCats
@@ -178,7 +188,7 @@ export function InvoiceForm({
   // 주간발주 편집 자동저장(디바운스 900ms). 첫 렌더는 건너뜀.
   const weeklyDirty = useRef(false);
   useEffect(() => {
-    if (!invoiceId || !weeklyOn) return;
+    if (!invoiceId || !weeklyOn || weeklyConfirmed) return; // 확정(잠금) 중엔 자동저장 안 함
     if (!weeklyDirty.current) {
       weeklyDirty.current = true;
       return;
@@ -191,12 +201,14 @@ export function InvoiceForm({
       fd.set("invoiceId", invoiceId);
       fd.set("weekly", JSON.stringify(payload));
       startWeeklySave(async () => {
-        await saveWeeklyItemsAction({}, fd);
+        const res = await saveWeeklyItemsAction({}, fd);
+        // 저장 실패(예: 다른 담당자가 먼저 주간발주를 확정·잠금)를 조용히 삼키지 않고 알린다 — 편집 유실 방지.
+        if (res?.error) setLocalError(res.error);
       });
     }, 900);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weeklyRows]);
+  }, [weeklyRows, weeklyConfirmed]);
 
   const weeklyTotal = weeklyRows.reduce((n, r) => n + rowAmount(r), 0);
   const weeklyFilledCount = weeklyRows.filter(isFilled).length;
@@ -382,11 +394,14 @@ export function InvoiceForm({
     () => new Set(confirmedCats.split(",").map((s) => s.trim()).filter(Boolean)),
   );
   const allConfirmed = categories.every((c) => confirmed.has(c));
-  // 용달 발송이 켜져 있으면 확정돼야 발행 가능(다른 카테고리와 동일 게이트).
+  // 용달 발송·주간발주가 켜져 있으면 확정돼야 발행 가능(다른 카테고리와 동일 게이트).
   const deliveryReady = !deliveryOn || deliveryConfirmed;
-  const allCatsValue = deliveryOn
-    ? [...categories, DELIVERY_CAT].join(",")
-    : categories.join(",");
+  const weeklyReady = !weeklyOn || weeklyConfirmed;
+  const allCatsValue = [
+    ...categories,
+    ...(deliveryOn ? [DELIVERY_CAT] : []),
+    ...(weeklyOn ? [WEEKLY_CAT] : []),
+  ].join(",");
 
   // 동시작성 실시간 반영 — 5초마다 서버(공유 초안)의 확정분을 가져와 관찰자 화면에 반영한다.
   // 확정(잠금)된 카테고리는 서버 기준으로 갱신(다른 폰/PC가 넣은 품목이 바로 보임).
@@ -545,6 +560,63 @@ export function InvoiceForm({
       setLocalError("");
       setDeliveryConfirmed(true);
       persistDelivery({ confirmOn: true }); // 확정 — 용차비용 저장
+    }
+  }
+
+  // 주간발주 확정 전 검증 — 채워진 줄이 유효한지(서버 cleanWeeklyItems와 동일 정신).
+  function validateWeekly(): boolean {
+    for (const r of weeklyRows.filter(isFilled)) {
+      if (!r.name.trim()) {
+        setLocalError("주간발주: 품목명이 비어 있는 줄이 있어요.");
+        return false;
+      }
+      if (parseQtyStrict(r.qty) == null) {
+        setLocalError(`주간발주 '${r.name}' 수량을 확인해 주세요.`);
+        return false;
+      }
+      if (parsePriceStrict(r.unitPrice) == null) {
+        setLocalError(`주간발주 '${r.name}' 단가를 확인해 주세요.`);
+        return false;
+      }
+    }
+    setLocalError("");
+    return true;
+  }
+
+  // 주간발주 확정/수정을 서버에 저장(confirmCat=WEEKLY).
+  function persistWeeklyConfirm(on: boolean) {
+    const fd = new FormData();
+    if (invoiceId) fd.set("invoiceId", invoiceId);
+    fd.set("userId", userId);
+    fd.set("date", date);
+    // 주간발주 확정은 '카테고리' 품목을 건드리지 않는다 — 빈 payload(다른 관리자 카테고리 편집 덮어쓰기 방지).
+    fd.set("payload", "[]");
+    fd.set("confirmCat", WEEKLY_CAT);
+    fd.set("confirmOn", on ? "1" : "0");
+    // ★확정 시 '현재 주간발주 품목'을 함께 실어 같은 트랜잭션에서 저장 — 확정 클릭이 디바운스 자동저장을
+    //  취소해 마지막 편집이 유실되던 것을 막는다(용달의 deliveryFee 원자 저장과 동일).
+    if (on) {
+      const weeklyPayload = weeklyRows
+        .filter(isFilled)
+        .map((r) => ({ name: r.name, qty: r.qty, unitPrice: r.unitPrice, unit: r.unit }));
+      fd.set("weekly", JSON.stringify(weeklyPayload));
+    }
+    fd.set("allCats", allCatsValue);
+    fd.set("mode", "confirm");
+    startTransition(() => formAction(fd));
+  }
+  function toggleWeeklyConfirm() {
+    if (weeklyConfirmed) {
+      setWeeklyConfirmed(false);
+      persistWeeklyConfirm(false); // 수정 — 잠금 해제(품목 유지)
+    } else {
+      if (weeklyFilledCount === 0) {
+        setLocalError("주간발주: 확정할 품목이 없어요.");
+        return;
+      }
+      if (!validateWeekly()) return; // 확정 — 유효할 때만 잠금
+      setWeeklyConfirmed(true);
+      persistWeeklyConfirm(true);
     }
   }
 
@@ -807,21 +879,33 @@ export function InvoiceForm({
           );
         })}
 
-        {/* 주간발주 합산분 — 채움채 아래. 불러오면 편집 가능(자동저장), 발행 시 합계에 포함. */}
+        {/* 주간발주 합산분 — 채움채 아래. 불러오면 편집 가능(자동저장), 확정하면 잠기고 발행 게이트에 포함. */}
         {(weeklyAvailable || weeklyOn) && (
-          <div className="invcat">
+          <div className={`invcat ${weeklyConfirmed ? "is-locked" : ""}`}>
             <div className="invcat__head">
               <span className="chip">주간발주</span>
               {weeklyOn && weeklyTotal > 0 && (
                 <span className="invcat__sum">{fmt(weeklyTotal)}원</span>
               )}
               <div className="invcat__actions">
-                {weeklySaving && (
+                {weeklySaving && !weeklyConfirmed && (
                   <span className="hint" style={{ fontSize: 11 }}>
                     저장 중…
                   </span>
                 )}
-                {/* 폼 제출로 서버 액션 호출(불러오기=ON / 빼기=OFF) — 폼의 userId·date·invoiceId hidden 사용. */}
+                {/* 확정/수정 — 다른 카테고리와 동일. 확정하면 잠기고 발행 게이트에 포함된다. */}
+                {weeklyOn && (
+                  <button
+                    type="button"
+                    className={`btn btn--xs ${weeklyConfirmed ? "btn--soft" : "btn--primary"}`}
+                    style={{ flexShrink: 0 }}
+                    onClick={toggleWeeklyConfirm}
+                  >
+                    {weeklyConfirmed ? "수정" : "확정"}
+                  </button>
+                )}
+                {/* 폼 제출로 서버 액션 호출(불러오기=ON / 빼기=OFF) — 폼의 userId·date·invoiceId hidden 사용.
+                    확정(잠금) 중엔 끄지 못하게 비활성 — '수정'으로 잠금 해제 후에만 뺄 수 있다. */}
                 <button
                   type="submit"
                   formAction={
@@ -831,6 +915,7 @@ export function InvoiceForm({
                   aria-checked={weeklyOn}
                   aria-label="주간발주 합산"
                   className={`switch ${weeklyOn ? "is-on" : ""}`}
+                  disabled={weeklyConfirmed}
                 >
                   <span className="switch__knob" />
                 </button>
@@ -851,6 +936,7 @@ export function InvoiceForm({
                       <input
                         className="input"
                         value={r.name}
+                        disabled={weeklyConfirmed}
                         onChange={(e) => updateWeekly(r.id, "name", e.target.value)}
                         placeholder="품목"
                       />
@@ -859,6 +945,7 @@ export function InvoiceForm({
                           className="input"
                           inputMode="decimal"
                           value={r.qty}
+                          disabled={weeklyConfirmed}
                           onChange={(e) => updateWeekly(r.id, "qty", e.target.value)}
                           placeholder="수량"
                           style={{ minWidth: 0 }}
@@ -871,11 +958,12 @@ export function InvoiceForm({
                       </div>
                       <MoneyInput
                         value={r.unitPrice}
+                        disabled={weeklyConfirmed}
                         onChange={(raw) => updateWeekly(r.id, "unitPrice", raw)}
                         placeholder="단가"
                       />
                       <span className="invrow__amt">{amt > 0 ? fmt(amt) : ""}</span>
-                      {isFilled(r) && (
+                      {!weeklyConfirmed && isFilled(r) && (
                         <button
                           type="button"
                           className="invrow__x"
@@ -905,7 +993,7 @@ export function InvoiceForm({
               <button
                 type="button"
                 className="btn btn--primary btn--block"
-                disabled={!allConfirmed || !deliveryReady}
+                disabled={!allConfirmed || !deliveryReady || !weeklyReady}
                 onClick={() => {
                   if (validate()) setConfirming(true);
                 }}

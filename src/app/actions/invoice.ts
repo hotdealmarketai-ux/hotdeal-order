@@ -239,6 +239,10 @@ export async function saveInvoiceAction(
     if (inv.items.some((it) => it.category === DELIVERY_CAT) && !dbConfirmed.has(DELIVERY_CAT)) {
       return { error: "용달 발송을 확정해 주세요." };
     }
+    // 주간발주 합산분이 들어 있으면 반드시 확정돼야 발행 — 일반 카테고리와 동일 게이트(서버 권위).
+    if (inv.items.some((it) => it.category === WEEKLY_CAT) && !dbConfirmed.has(WEEKLY_CAT)) {
+      return { error: "주간발주를 확정해 주세요." };
+    }
     if (inv.items.length === 0) {
       return { error: "품목을 한 개 이상 입력하세요." };
     }
@@ -291,6 +295,29 @@ export async function saveInvoiceAction(
     return { error: "발행된 계산서는 수정할 수 없어요. 취소 후 다시 작성해 주세요." };
   }
 
+  // ── 주간발주(WEEKLY) 확정 — 확정 요청에 '현재 주간발주 품목'을 함께 실어(weekly) 같은 트랜잭션에서 원자적으로 재작성.
+  //    (자동저장 디바운스가 확정 클릭으로 취소돼 마지막 편집이 유실되던 버그 차단 — 용달 발송과 동일한 원자 패턴.)
+  //    실제 품목이 있을 때만 확정 성립(빈 토큰 방지). 수정(해제)=품목 유지·토큰만 제거.
+  const isWeeklyConfirm = confirmCat === WEEKLY_CAT;
+  let weeklyConfirmItems: {
+    name: string;
+    qty: number;
+    unitPrice: number;
+    amount: number;
+    unit: string;
+  }[] = [];
+  if (isWeeklyConfirm && confirmOn) {
+    let wraw: WeeklyRaw[] = [];
+    try {
+      wraw = JSON.parse(String(formData.get("weekly") ?? "[]"));
+    } catch {
+      wraw = [];
+    }
+    weeklyConfirmItems = cleanWeeklyItems(Array.isArray(wraw) ? wraw : []);
+  }
+  // 확정은 대상 계산서(existing)가 있고 실제 품목이 실렸을 때만 성립.
+  const weeklyHasItems = isWeeklyConfirm && !!existing && weeklyConfirmItems.length > 0;
+
   // ── 용달 발송(DELIVERY) 파라미터 — 토큰과 품목을 '같은 트랜잭션'에서 원자적으로 처리(분리 금지). ──
   const isDelivery = confirmCat === DELIVERY_CAT;
   const deliveryFee = parsePriceStrict(String(formData.get("deliveryFee") ?? "")) ?? 0;
@@ -308,6 +335,9 @@ export async function saveInvoiceAction(
   } else if (isDelivery) {
     if (deliveryConfirm) confSet.add(DELIVERY_CAT);
     else confSet.delete(DELIVERY_CAT); // 수정(unconfirm)·토글오프·무효금액 → 토큰 해제
+  } else if (isWeeklyConfirm) {
+    if (confirmOn && weeklyHasItems) confSet.add(WEEKLY_CAT);
+    else confSet.delete(WEEKLY_CAT); // 수정(해제)·품목없음 → 토큰 해제
   }
   const newConfirmed = [...confSet].join(",");
 
@@ -332,6 +362,25 @@ export async function saveInvoiceAction(
     }
   };
 
+  // 주간발주 확정 시 '함께 전송된 현재 품목'을 같은 트랜잭션에서 재작성 — 확정 클릭이 자동저장 디바운스를
+  // 취소해도 마지막 편집이 유실되지 않게(용달과 동일한 토큰-품목 원자성). 수정(unconfirm)=품목 유지.
+  const applyWeeklyConfirmTx = async (tx: Prisma.TransactionClient, invId: string) => {
+    if (!weeklyHasItems) return; // isWeeklyConfirm && confirmOn && 품목 있음일 때만
+    await tx.invoiceItem.deleteMany({ where: { invoiceId: invId, category: WEEKLY_CAT } });
+    await tx.invoiceItem.createMany({
+      data: weeklyConfirmItems.map((it, i) => ({
+        invoiceId: invId,
+        category: WEEKLY_CAT,
+        sortOrder: i,
+        name: it.name,
+        qty: it.qty,
+        unitPrice: it.unitPrice,
+        amount: it.amount,
+        unit: it.unit,
+      })),
+    });
+  };
+
   let id = invoiceId;
   try {
     if (existing) {
@@ -351,6 +400,7 @@ export async function saveInvoiceAction(
           });
         }
         await applyDeliveryTx(tx, existing.id); // 용달 품목도 같은 트랜잭션에서(토큰-품목 원자성, #1)
+        await applyWeeklyConfirmTx(tx, existing.id); // 주간발주 확정 품목도 원자적으로(디바운스 취소 유실 방지)
         const all = await tx.invoiceItem.findMany({
           where: { invoiceId: existing.id },
           select: { amount: true },
@@ -998,6 +1048,15 @@ export async function loadWeeklyIntoInvoiceAction(formData: FormData) {
         unit: boxWord(w.category),
       })),
     });
+    // 새로 불러온 주간발주는 '미확정' 상태에서 시작 — 기존 확정 토큰이 있으면 제거(내용 바뀌었으니 재확정 필요).
+    const cur = await tx.invoice.findUnique({ where: { id }, select: { confirmedCats: true } });
+    const cats = String(cur?.confirmedCats ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (cats.includes(WEEKLY_CAT)) {
+      await tx.invoice.update({
+        where: { id },
+        data: { confirmedCats: cats.filter((c) => c !== WEEKLY_CAT).join(",") },
+      });
+    }
     await recomputeInvoiceTotal(tx, id);
   });
   revalidatePath(`/admin/invoices/${id}`);
@@ -1023,9 +1082,17 @@ export async function saveWeeklyItemsAction(
     await prisma.$transaction(async (tx) => {
       const inv = await tx.invoice.findUnique({
         where: { id: invoiceId },
-        select: { status: true },
+        select: { status: true, confirmedCats: true },
       });
       if (!inv || inv.status !== "DRAFT") throw new Error("NOT_DRAFT");
+      // 주간발주가 확정(잠금)된 상태면 자동저장 거부 — '수정'으로 잠금 해제 후에만 편집(확정분 무단 변경 차단).
+      if (
+        String(inv.confirmedCats ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .includes(WEEKLY_CAT)
+      )
+        throw new Error("WEEKLY_LOCKED");
       await tx.invoiceItem.deleteMany({ where: { invoiceId, category: WEEKLY_CAT } });
       if (items.length > 0) {
         await tx.invoiceItem.createMany({
@@ -1047,6 +1114,9 @@ export async function saveWeeklyItemsAction(
     if ((e as Error)?.message === "NOT_DRAFT") {
       return { error: "발행된 계산서는 수정할 수 없어요." };
     }
+    if ((e as Error)?.message === "WEEKLY_LOCKED") {
+      return { error: "주간발주가 확정됨 — '수정'을 눌러 잠금을 해제한 뒤 편집해 주세요." };
+    }
     return { error: "저장에 실패했어요." };
   }
   revalidatePath(`/admin/invoices/${invoiceId}`);
@@ -1061,10 +1131,18 @@ export async function clearWeeklyFromInvoiceAction(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     const inv = await tx.invoice.findUnique({
       where: { id: invoiceId },
-      select: { status: true },
+      select: { status: true, confirmedCats: true },
     });
     if (!inv || inv.status !== "DRAFT") return;
     await tx.invoiceItem.deleteMany({ where: { invoiceId, category: WEEKLY_CAT } });
+    // 주간발주를 빼면 확정 토큰도 제거(빈 확정 토큰이 남아 발행 게이트를 오작동시키지 않게).
+    const cats = String(inv.confirmedCats ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (cats.includes(WEEKLY_CAT)) {
+      await tx.invoice.update({
+        where: { id: invoiceId },
+        data: { confirmedCats: cats.filter((c) => c !== WEEKLY_CAT).join(",") },
+      });
+    }
     await recomputeInvoiceTotal(tx, invoiceId);
   });
   revalidatePath(`/admin/invoices/${invoiceId}`);
