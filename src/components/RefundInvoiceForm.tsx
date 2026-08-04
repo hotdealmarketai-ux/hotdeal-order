@@ -175,9 +175,6 @@ export function RefundInvoiceForm({
       >
         {pending ? "발행 중…" : `환불계산서 발행 (${won(total)}원)`}
       </button>
-      <p className="hint" style={{ marginTop: 8 }}>
-        발행하면 이 점포의 미수에서 {won(total)}원이 차감되고, 점포의 계산서 목록에 환불계산서로 표시됩니다.
-      </p>
     </div>
   );
 }
