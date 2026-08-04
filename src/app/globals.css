@@ -5083,7 +5083,13 @@ a.resv-card:active { transform: scale(0.995); }
 }
 .rcard__info > div { font-size: 11px; color: var(--muted); line-height: 1.35; }
 .rcard__info b { color: var(--fg-soft); font-weight: 700; }
-.rcard__mine { color: var(--green-700); font-weight: 800; }
+/* '내 발주/예약 N개' — 몇 개 주문했는지 한눈에. 작은 회색 정보줄과 달리 크게·칩 배경으로 강조. */
+.rcard__mine {
+  font-size: 16px; line-height: 1.2; color: var(--green-700); font-weight: 800;
+  background: var(--green-100); border-radius: 8px;
+  padding: 5px 10px; margin-top: 4px; align-self: flex-start;
+}
+.rcard__mine b { font-size: 19px; }
 .rcard__act { width: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: auto; padding-top: 3px; }
 .rcard__act .btn { width: 100%; }
 .rcard__act .rstep { display: flex; justify-content: space-between; width: 100%; height: 32px; }

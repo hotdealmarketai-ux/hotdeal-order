@@ -94,7 +94,7 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
         </div>
         {p.myQty > 0 && (!p.myConfirmed || closed) && (
           <div className="rcard__mine">
-            {closed ? "내 발주" : "내 예약"} {p.myQty}개
+            {closed ? "내 발주" : "내 예약"} <b>{p.myQty}</b>개
           </div>
         )}
       </div>
