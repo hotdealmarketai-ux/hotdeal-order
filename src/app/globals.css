@@ -5149,3 +5149,4 @@ a.resv-card:active { transform: scale(0.995); }
   font-size: 15px; cursor: pointer; border-radius: 8px;
 }
 .shipcard__del:active { transform: scale(0.9); }
+.shipmsg { font-size: 12px; color: var(--green-700); margin: -4px 0 10px; padding: 0 2px; }

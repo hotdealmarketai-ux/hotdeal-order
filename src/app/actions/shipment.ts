@@ -5,15 +5,14 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { writeAudit } from "@/lib/audit";
 import { courierName } from "@/lib/couriers";
-import { trackShipment } from "@/lib/sweettracker";
-import { refreshActiveShipments } from "@/lib/shipment";
+import { refreshActiveShipments, type RefreshResult } from "@/lib/shipment";
 
 const toInt = (v: unknown, min = 1) => {
   const n = Math.floor(Number(String(v ?? "").replace(/[^\d]/g, "")));
   return Number.isFinite(n) && n >= min ? n : min;
 };
 
-// 송장 등록 — 등록 즉시 1회 조회해 상태를 채운다(키 있으면).
+// 송장 등록 — PRE_PICKUP으로 만들고 refreshActiveShipments로 첫 조회(월 한도 카운터 포함).
 export async function addShipmentAction(
   formData: FormData,
 ): Promise<{ error?: string }> {
@@ -27,7 +26,6 @@ export async function addShipmentAction(
   if (!trackingNo) return { error: "송장번호를 입력하세요." };
   if (!courierCode) return { error: "택배사를 선택하세요." };
 
-  const t = await trackShipment(courierCode, trackingNo);
   const created = await prisma.shipment.create({
     data: {
       trackingNo,
@@ -35,11 +33,7 @@ export async function addShipmentAction(
       courierName: courierName(courierCode),
       itemName,
       qty,
-      status: t?.status ?? "PRE_PICKUP",
-      statusText: t?.statusText ?? "",
-      level: t?.level ?? 0,
-      lastCheckedAt: t ? new Date() : null,
-      deliveredAt: t?.delivered ? new Date() : null,
+      status: "PRE_PICKUP",
     },
     select: { id: true },
   });
@@ -51,6 +45,8 @@ export async function addShipmentAction(
     targetId: created.id,
     summary: `송장 ${trackingNo}(${courierName(courierCode)}) 등록`,
   }).catch(() => {});
+  // 등록 즉시 첫 조회(월 한도 내에서). 키 없거나 한도 도달이면 조용히 스킵.
+  await refreshActiveShipments().catch(() => {});
   revalidatePath("/admin/shipments");
   return {};
 }
@@ -63,10 +59,10 @@ export async function deleteShipmentAction(formData: FormData): Promise<void> {
   revalidatePath("/admin/shipments");
 }
 
-// 활성(배송완료 아님) 송장 전체 재조회 → 상태 갱신. 새로고침 버튼·페이지 진입 시 호출.
-export async function refreshShipmentsAction(): Promise<{ ok: boolean; updated: number }> {
+// 활성 송장 재조회(3시간 이상 안 조회된 것만) → 상태 갱신. 진입 시 자동 + 새로고침 버튼 공용.
+export async function refreshShipmentsAction(): Promise<RefreshResult> {
   await requireAdmin();
-  const updated = await refreshActiveShipments();
+  const r = await refreshActiveShipments();
   revalidatePath("/admin/shipments");
-  return { ok: true, updated };
+  return r;
 }

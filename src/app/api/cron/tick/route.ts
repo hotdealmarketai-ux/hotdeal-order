@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/log";
 import { releaseStaleHolds } from "@/lib/stock-hold";
 import { releaseClosedFlatHolds } from "@/lib/reservation-flat";
-import { refreshActiveShipments } from "@/lib/shipment";
 
 // 정시 크론 디스패처 — 외부 크론(cron-job.org 등)이 '1분마다' 이 엔드포인트를 호출하면,
 // 각 잡을 정해진 KST 시각에 정확히 1회 실행한다. 한 분을 놓쳐도 다음 호출에서 캐치업.
@@ -113,16 +112,7 @@ export async function GET(request: Request) {
   // 예약발주 상품 '마감 1시간 전' 리마인더 — 매 분 확인(창 진입 즉시 1회 발송, 라우트가 멱등).
   if (await hit("/api/cron/reservation-close-reminder")) ran.push("tick:resv-warn");
 
-  // 송장 상태 갱신 — 30분마다 활성(배송완료 아님) 송장 재조회(스마트택배). 키 없으면 no-op.
-  if (now - (await lastFired("tick:shipments")) >= 30 * 60 * 1000) {
-    await markFired("tick:shipments", now);
-    try {
-      const n = await refreshActiveShipments();
-      if (n > 0) ran.push(`tick:shipments(${n})`);
-    } catch (e) {
-      logError("tick.shipments", e, {});
-    }
-  }
+  // (송장 조회는 무료 한도(월 100건) 절약 위해 백그라운드 크론 없이 관리자 페이지 진입/새로고침 때만 수행)
 
   // #12 재고 구글시트 동기화 — 매 분(시트=기준). 실패해도 다음 분 재시도.
   if (await hit("/api/cron/inventory-sync")) ran.push("tick:inventory");

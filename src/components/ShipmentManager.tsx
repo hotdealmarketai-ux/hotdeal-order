@@ -45,9 +45,11 @@ function timeLabel(iso: string | null): string {
 export function ShipmentManager({
   shipments,
   apiConfigured,
+  usage,
 }: {
   shipments: ShipmentRow[];
   apiConfigured: boolean;
+  usage: { used: number; remaining: number; cap: number };
 }) {
   const router = useRouter();
   const [courierCode, setCourierCode] = useState(COURIERS[0].code);
@@ -57,23 +59,32 @@ export function ShipmentManager({
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
   const [refreshing, setRefreshing] = useState(false);
+  const [msg, setMsg] = useState("");
   const autoDone = useRef(false);
 
-  const doRefresh = () => {
+  const doRefresh = (silent = false) => {
     setRefreshing(true);
+    if (!silent) setMsg("");
     start(async () => {
-      await refreshShipmentsAction();
+      const r = await refreshShipmentsAction();
       setRefreshing(false);
       router.refresh();
+      if (silent) return;
+      if (!r.hadKey) setMsg("택배 조회 API 키가 설정되지 않았어요.");
+      else if (r.capped && r.updated === 0)
+        setMsg(`이번 달 무료 조회 한도(${r.used}/${usage.cap})에 도달했어요. 다음 달까지 상태 갱신이 멈춰요.`);
+      else if (r.updated === 0)
+        setMsg("최근 3시간 안에 조회한 송장뿐이라 지금은 갱신할 게 없어요. (무료 한도 절약)");
+      else setMsg(`${r.updated}건 갱신했어요. (이번 달 조회 ${r.used}/${usage.cap})`);
     });
   };
 
-  // 진입 시 1회 자동 조회(키 있고, 활성 송장 있을 때) — 목록을 실시간 상태로 맞춘다.
+  // 진입 시 1회 자동 조회(키 있고, 활성 송장 있을 때) — 3시간 이상 안 조회된 것만 갱신(무료 한도 절약).
   useEffect(() => {
     if (autoDone.current) return;
     autoDone.current = true;
     if (apiConfigured && shipments.some((s) => s.status !== "DELIVERED")) {
-      doRefresh();
+      doRefresh(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -168,23 +179,26 @@ export function ShipmentManager({
 
       {!apiConfigured && (
         <div className="notice notice--ai" style={{ marginBottom: 14 }}>
-          택배 조회 API 키가 아직 설정되지 않아 상태는 자동 갱신되지 않습니다. (키 등록 후 실시간 조회)
+          택배 조회 API 키가 아직 설정되지 않아 상태가 자동 갱신되지 않습니다. (키 등록 후 조회)
         </div>
       )}
 
       <div className="shiptop">
         <span className="shiptop__hint">
-          {refreshing ? "택배 상태 조회 중…" : "등록된 송장을 실시간 조회해 4단계로 구분합니다."}
+          {refreshing
+            ? "택배 상태 조회 중…"
+            : `무료 한도 절약 — 송장별 3시간 간격 갱신 · 이번 달 ${usage.used}/${usage.cap}건`}
         </span>
         <button
           type="button"
           className="btn btn--xs btn--soft"
-          onClick={doRefresh}
+          onClick={() => doRefresh()}
           disabled={refreshing || pending}
         >
           새로고침
         </button>
       </div>
+      {msg && <div className="shipmsg">{msg}</div>}
 
       {/* 4개 섹션 */}
       {STATUS_ORDER.map((st) => {
