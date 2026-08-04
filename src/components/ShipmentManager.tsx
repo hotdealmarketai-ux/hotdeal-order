@@ -72,10 +72,13 @@ export function ShipmentManager({
       if (silent) return;
       if (!r.hadKey) setMsg("택배 조회 API 키가 설정되지 않았어요.");
       else if (r.capped && r.updated === 0)
-        setMsg(`이번 달 무료 조회 한도(${r.used}/${usage.cap})에 도달했어요. 다음 달까지 상태 갱신이 멈춰요.`);
+        setMsg(`이번 달 무료 한도(서로 다른 송장 ${usage.cap}개)를 다 써서 새 송장 조회는 다음 달에 재개돼요. (기존 송장은 계속 갱신)`);
       else if (r.updated === 0)
         setMsg("최근 3시간 안에 조회한 송장뿐이라 지금은 갱신할 게 없어요. (무료 한도 절약)");
-      else setMsg(`${r.updated}건 갱신했어요. (이번 달 조회 ${r.used}/${usage.cap})`);
+      else
+        setMsg(
+          `${r.updated}건 갱신했어요. (이번 달 송장 ${r.used}/${usage.cap}개${r.capped ? " · 새 송장 한도 도달" : ""})`,
+        );
     });
   };
 
@@ -187,7 +190,7 @@ export function ShipmentManager({
         <span className="shiptop__hint">
           {refreshing
             ? "택배 상태 조회 중…"
-            : `무료 한도 절약 — 송장별 3시간 간격 갱신 · 이번 달 ${usage.used}/${usage.cap}건`}
+            : `무료 한도 절약 — 송장별 3시간 간격 갱신 · 이번 달 송장 ${usage.used}/${usage.cap}개`}
         </span>
         <button
           type="button"

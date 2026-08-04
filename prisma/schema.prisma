@@ -592,6 +592,7 @@ model Shipment {
   status        String    @default("PRE_PICKUP")
   statusText    String    @default("") // 마지막 상세 상태(예: "배송출발")
   level         Int       @default(0) // 스마트택배 level(1~6)
+  lastQueryMonth String    @default("") // 이 송장이 마지막으로 월 카운트에 반영된 달(YYYY-MM). 재조회는 카운트 안 함.
   lastCheckedAt DateTime?
   deliveredAt   DateTime?
   createdAt     DateTime  @default(now())
