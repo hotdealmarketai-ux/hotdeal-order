@@ -53,6 +53,7 @@ export type FlatProductRow = {
   supplyPrice: number;
   inventoryItemId: string;
   closeAt: Date;
+  stockFixed: boolean; // 재고 고정(초과발주 금지)
   totalQty: number; // 취합 수량(전 점포 합)
   storeCount: number; // 예약 점포 수
 };
@@ -72,6 +73,7 @@ export async function listFlatProductsAdmin(
       supplyPrice: true,
       inventoryItemId: true,
       closeAt: true,
+      stockFixed: true,
     },
   });
   if (products.length === 0) return [];
@@ -105,6 +107,7 @@ export async function listFlatProductsAdmin(
       supplyPrice: p.supplyPrice,
       inventoryItemId: p.inventoryItemId,
       closeAt: p.closeAt as Date,
+      stockFixed: p.stockFixed,
       totalQty: a?.qty ?? 0,
       storeCount: a?.stores.size ?? 0,
     };
@@ -129,6 +132,7 @@ export type FlatMerchantRow = {
   myQty: number; // 내가 예약한 수량
   myConfirmed: boolean; // 품목별 확정(confirmedAt) 여부
   available: number; // 재고연동 상품의 남은수량(수기는 무시)
+  stockFixed: boolean; // 재고 고정(초과발주 금지) — false면 재고 넘어 담기 가능
 };
 
 // 점주 flat 상품 목록. scope "open"=마감 전(임박순), "closed"=마감 후. 재고연동 상품은 남은수량 시드.
@@ -151,6 +155,7 @@ export async function listFlatProductsMerchant(
       supplyPrice: true,
       inventoryItemId: true,
       closeAt: true,
+      stockFixed: true,
     },
   });
   if (products.length === 0) return [];
@@ -181,6 +186,7 @@ export async function listFlatProductsMerchant(
       closeAtMs: (p.closeAt as Date).getTime(),
       myQty,
       myConfirmed: !!m?.confirmedAt,
+      stockFixed: p.stockFixed,
       // 재고연동: 표시용 남은수량 = 전체가용 + 내가 이미 담은 만큼(내 수량은 내가 줄일 수 있으니 더함)
       available: p.inventoryItemId ? (availMap[p.id] ?? 0) + myQty : 0,
     };
@@ -281,12 +287,13 @@ export async function flatProductStores(
     inventoryItemId: string;
     closeAtMs: number;
     pickupPassed: boolean; // 픽업일까지 지남(=지난 픽업 마감) → 편집 불가
+    stockFixed: boolean; // 재고 고정(초과발주 금지)
   } | null;
   stores: FlatStoreRow[];
 }> {
   const product = await prisma.reservationProduct.findFirst({
     where: { id: productId, closeAt: { not: null } },
-    select: { id: true, name: true, pickupDate: true, supplyPrice: true, inventoryItemId: true, closeAt: true },
+    select: { id: true, name: true, pickupDate: true, supplyPrice: true, inventoryItemId: true, closeAt: true, stockFixed: true },
   });
   if (!product) return { product: null, stores: [] };
 
@@ -333,6 +340,7 @@ export async function flatProductStores(
       inventoryItemId: product.inventoryItemId,
       closeAtMs: (product.closeAt as Date).getTime(),
       pickupPassed: product.pickupDate < kstTodayStr(now),
+      stockFixed: product.stockFixed,
     },
     stores,
   };

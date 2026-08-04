@@ -134,10 +134,7 @@ export default async function AdminWeeklyPage({
 
         {/* 카테고리별 출고 요일 — 카테고리마다 출고 요일을 따로 설정. 그 요일 발주서(본사출고·핫딜마켓·전체)에 그 카테고리 품목만 실린다. */}
         <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>카테고리별 출고 요일</div>
-          <div className="hint" style={{ marginBottom: 6 }}>
-            계란·유제품처럼 나가는 날이 다르면 카테고리마다 요일을 따로 정하세요.
-          </div>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>카테고리별 출고 요일</div>
           {WEEKLY_CATEGORIES.map((c) => {
             const dow = shipByCat[c.key];
             const day = weeklyShipmentDayForKey(weekKey, dow);

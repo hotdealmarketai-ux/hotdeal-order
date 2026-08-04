@@ -18,6 +18,7 @@ export type FlatMerchantCard = {
   myQty: number;
   myConfirmed: boolean;
   available: number;
+  stockFixed: boolean; // 재고 고정(초과발주 금지). false면 재고 넘어 담기 가능.
 };
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -147,7 +148,9 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
   const closed = useNow() >= p.closeAtMs;
-  const max = p.available; // = 전체가용 + 내 현재수량
+  // 재고 고정이면 재고(전체가용+내수량)까지만. 기본(초과발주 허용)이면 상한 없음(큰 값).
+  const max = p.stockFixed ? p.available : 99999;
+  const stockLeft = Math.max(0, p.available - qty); // 재고 기준 남은수량(0에서 바닥)
 
   // 담기 = 재고 홀드(qty)만. 확정은 별도 버튼.
   const hold = (next: number) => {
@@ -191,11 +194,20 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
         </div>
         <div>
           공급가 <b>{won(p.supplyPrice)}원</b>
-          {!closed && (
-            <>
-              {" "}· 남은 <b>{Math.max(0, max - qty)}개</b>
-            </>
-          )}
+          {!closed &&
+            (stockLeft > 0 ? (
+              <>
+                {" "}· 남은 <b>{stockLeft}개</b>
+              </>
+            ) : p.stockFixed ? (
+              <>
+                {" "}· <b>재고 소진</b>
+              </>
+            ) : (
+              <>
+                {" "}· 재고 소진(추가 주문 가능)
+              </>
+            ))}
         </div>
         {/* 확정분만 '내 발주'로 표시 — 미확정 담기는 마감 후 자동 해제되므로 발주로 오인시키지 않는다. */}
         {closed && p.myConfirmed && p.myQty > 0 && (

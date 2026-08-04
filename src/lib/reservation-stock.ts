@@ -89,6 +89,25 @@ export async function reservationHeldByItem(): Promise<Record<string, number>> {
   return m;
 }
 
+// 품목별 '확정' 예약 합계(전 점주) — 실제 발주될(공구/계산서로 나갈) 예약분만.
+// = reservationHeldByItem 와 같되 확정 게이트(order.confirmed OR item.confirmedAt) 추가.
+// ⚠ 부족분(납품처 추가주문) 신호용으로만 쓴다. 판매가능·담기 캡은 미확정 홀드까지 세는 reservationHeldByItem 사용.
+export async function reservationConfirmedByItem(): Promise<Record<string, number>> {
+  const rows = await prisma.reservationOrderItem.findMany({
+    where: {
+      inventoryItemId: { not: "" },
+      stockDeductedAt: null,
+      qty: { gt: 0 },
+      order: { batch: { active: true } },
+      OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
+    },
+    select: { inventoryItemId: true, qty: true },
+  });
+  const m: Record<string, number> = {};
+  for (const r of rows) m[r.inventoryItemId] = (m[r.inventoryItemId] ?? 0) + r.qty;
+  return m;
+}
+
 // 연동 상품들의 남은수량(productId → available). available = base − 예약홀드 − 일일홀드.
 // (SSR 초기값 — 클라 폴링 useLiveReservationStock 이 이후 실시간 갱신)
 export async function availableForReservationProducts(

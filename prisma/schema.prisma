@@ -249,6 +249,9 @@ model ReservationProduct {
   // 예약 마감 시각(시분초, UTC 저장) — 신규 '단일 목록' 방식의 상품별 마감. 지나면 예약 잠김.
   // null = 레거시(배치 예약일자 20:00 규칙). Phase 1: 컬럼만 추가(아직 미사용).
   closeAt     DateTime?
+  // 재고 고정 — true면 이 연동 상품은 재고(base)까지만 담기 가능(하드 캡, 예전 동작).
+  // false(기본) = 초과발주 허용: 재고 넘어서 담기고 부족분은 관리자가 납품처에 추가 주문.
+  stockFixed  Boolean          @default(false)
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -414,6 +417,11 @@ model Invoice {
   // 계산서 발행 시 이 계산서의 공구(TOOL) 품목만큼 기준재고를 차감한 시각(멱등 마커).
   // null=미차감. 계산서=실제 출고 기준 재고 차감의 유일 소스(발주 마감 자동차감 대체). 취소/수정 시 복구/재조정.
   stockDeductedAt   DateTime?
+  // 실제로 차감한 재고행별 수량 스냅샷(JSON {InventoryItem.id: 차감량}). 발행 시 행별 min(청구, 그때 재고)를 기록해두고
+  // 취소/수정 때 '청구량'이 아니라 '실제 차감량'을 그 행(id)에만 되돌린다 → ①초과발주로 GREATEST(0,…)에 걸려 버려진 만큼
+  // 복구가 뻥튀기되는 것 방지 ②동명(name 중복) 재고행도 각 행을 정확히 복구(name 키면 합산돼 뻥튀기).
+  // 빈값=옛 계산서(초과발주 이전엔 실제=청구·단일행이라 이름 기준 청구량으로 폴백해도 정확).
+  stockDeductedSnap String @default("")
 
   items     InvoiceItem[]
   revisions InvoiceRevision[]

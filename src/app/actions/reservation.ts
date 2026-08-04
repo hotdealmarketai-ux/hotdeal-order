@@ -390,7 +390,7 @@ export async function holdReservationAction(input: {
   }
   const batchId = String(input.batchId ?? "");
   const productId = String(input.productId ?? "");
-  const qty = Math.max(0, Math.floor(Number(input.qty) || 0));
+  const qty = Math.min(99999, Math.max(0, Math.floor(Number(input.qty) || 0))); // 상한(오타·폭주 방지)
 
   const product = await prisma.reservationProduct.findFirst({
     where: {
@@ -677,12 +677,20 @@ export async function adminSetReservationStoreQtyAction(input: {
   const admin = await requireAdmin();
   const productId = String(input?.productId ?? "");
   const userId = String(input?.userId ?? "");
-  const qty = Math.max(0, Math.floor(Number(input?.qty) || 0));
+  const qty = Math.min(99999, Math.max(0, Math.floor(Number(input?.qty) || 0))); // 상한(오타·폭주 방지)
   if (!productId || !userId) return { ok: false, error: "잘못된 요청이에요." };
 
   const product = await prisma.reservationProduct.findFirst({
     where: { id: productId, active: true, closeAt: { not: null }, batch: { active: true } },
-    select: { id: true, name: true, supplyPrice: true, pickupDate: true, inventoryItemId: true, batchId: true },
+    select: {
+      id: true,
+      name: true,
+      supplyPrice: true,
+      pickupDate: true,
+      inventoryItemId: true,
+      batchId: true,
+      stockFixed: true,
+    },
   });
   if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
   // 지난 픽업 마감(픽업일까지 지남)은 편집 불가 — 아카이브.
@@ -730,8 +738,8 @@ export async function adminSetReservationStoreQtyAction(input: {
       }
       if (qty === curQty) return { ok: true, noop: true, curQty };
 
-      // 연동 '증가'는 재고 가용으로 캡(트랜잭션 안에서 재조회 → 초과판매 방지).
-      if (iid && qty > curQty) {
+      // 연동 '증가'는 재고 가용으로 캡 — 단 '재고 고정' 상품만. 기본(초과발주 허용)은 넘어도 저장.
+      if (iid && product.stockFixed && qty > curQty) {
         const inv = await tx.inventoryItem.findUnique({
           where: { id: iid },
           select: { qty: true, deletedAt: true },

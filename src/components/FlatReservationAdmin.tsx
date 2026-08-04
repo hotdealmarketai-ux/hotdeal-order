@@ -14,6 +14,7 @@ export type FlatAdminRow = {
   inventoryItemId: string;
   closeAtMs: number;
   closeAtLocal: string; // "YYYY-MM-DDTHH:MM:SS" (KST) — datetime-local 프리필
+  stockFixed: boolean; // 재고 고정(초과발주 금지)
   totalQty: number;
   storeCount: number;
 };
@@ -59,7 +60,15 @@ function Countdown({ ms }: { ms: number }) {
   );
 }
 
-const EMPTY = { id: "", name: "", closeAt: "", pickup: "", price: "", invId: "" };
+const EMPTY = {
+  id: "",
+  name: "",
+  closeAt: "",
+  pickup: "",
+  price: "",
+  invId: "",
+  fixed: false, // 재고 고정(초과발주 금지)
+};
 
 // 관리자 예약발주 단일 목록 — 상품 등록(상품별 마감 시분초)·수정·삭제 + 마감 임박순 목록.
 export function FlatReservationAdmin({
@@ -98,6 +107,7 @@ export function FlatReservationAdmin({
       pickup: p.pickupDate,
       price: String(p.supplyPrice),
       invId: p.inventoryItemId,
+      fixed: p.stockFixed,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -129,6 +139,7 @@ export function FlatReservationAdmin({
       fd.set("pickupDate", f.pickup);
       fd.set("supplyPrice", f.price || "0");
       fd.set("inventoryItemId", f.invId);
+      fd.set("stockFixed", f.invId && f.fixed ? "true" : "false");
       const res = await saveFlatProductAction({}, fd);
       if (res?.error) return setErr(res.error);
       reset();
@@ -277,6 +288,22 @@ export function FlatReservationAdmin({
           onChange={(v) => setF((s) => ({ ...s, price: v }))}
           placeholder="점주 공급가"
         />
+        {/* 재고 고정 — 연동 상품만. 켜면 재고까지만 담김(초과발주 금지). 끄면(기본) 재고 넘어 담기고 부족분은 본사가 조달. */}
+        {f.invId && (
+          <label className="flatfix">
+            <input
+              type="checkbox"
+              checked={f.fixed}
+              onChange={(e) => setF((s) => ({ ...s, fixed: e.target.checked }))}
+            />
+            <span>
+              <b>재고 고정</b> — 재고까지만 담기 허용(초과발주 금지)
+              <span className="flatfix__hint">
+                끄면 재고를 넘어서 담기고, 부족분은 본사가 납품처에 추가 주문
+              </span>
+            </span>
+          </label>
+        )}
         {err && (
           <div className="notice notice--error" style={{ marginTop: 8 }}>
             {err}

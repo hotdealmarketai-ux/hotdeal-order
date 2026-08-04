@@ -8,15 +8,16 @@ import { SheetImportButton } from "@/components/SheetImportButton";
 import { SheetSyncDiagnose } from "@/components/SheetSyncDiagnose";
 import { CategoryAutoAssign } from "@/components/CategoryAutoAssign";
 import { Collapsible } from "@/components/Collapsible";
-import { reservationHeldByItem } from "@/lib/reservation-stock";
+import { reservationConfirmedByItem } from "@/lib/reservation-stock";
 
 export default async function AdminInventory() {
   await requireAdmin();
   const items = await prisma.inventoryItem.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  // 실재고(base) vs 예약재고 구분 — 예약 확정으로 잡힌 수량(품목별). base는 창고 실물 그대로.
-  const reservedByItem = await reservationHeldByItem();
+  // 실재고(base) vs 예약재고 구분 — 예약 '확정'으로 잡힌 수량(품목별). base는 창고 실물 그대로.
+  // 확정분만(미확정 담기 제외) → 부족분이 헛되이 부풀지 않게(마감 후 해제될 담기는 조달 대상 아님).
+  const reservedByItem = await reservationConfirmedByItem();
   // 품목 추가/삭제로 목록 구성이 바뀌면 편집기를 새로 그린다(입력 중에는 유지).
   const idsKey = items.map((i) => i.id).join(",");
 

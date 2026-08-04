@@ -72,6 +72,8 @@ export async function saveFlatProductAction(
   const pickupDate = String(formData.get("pickupDate") ?? "").trim();
   const supplyPrice = toInt(formData.get("supplyPrice"), 0);
   const inventoryItemId = String(formData.get("inventoryItemId") ?? "").trim();
+  // 재고 고정(초과발주 금지) — 연동 상품에서만 의미. 수기 상품이면 저장돼도 캡에 안 쓰임.
+  const stockFixed = inventoryItemId ? formData.get("stockFixed") === "true" : false;
 
   if (!name) return { error: "상품명을 입력하세요." };
   if (!closeAt) return { error: "예약 마감 시각을 정확히 입력하세요." };
@@ -89,7 +91,7 @@ export async function saveFlatProductAction(
     await prisma.$transaction([
       prisma.reservationProduct.update({
         where: { id },
-        data: { name, closeAt, pickupDate, supplyPrice, inventoryItemId, active: true },
+        data: { name, closeAt, pickupDate, supplyPrice, inventoryItemId, stockFixed, active: true },
       }),
       // 픽업/이름 변경분을 미차감 예약 스냅샷에 전파(자동로드 필터 정합) — 레거시 저장 액션과 동일 규칙.
       prisma.reservationOrderItem.updateMany({
@@ -111,6 +113,7 @@ export async function saveFlatProductAction(
         pickupDate,
         supplyPrice,
         inventoryItemId,
+        stockFixed,
         sortOrder: (maxAgg._max.sortOrder ?? 0) + 1,
         active: true,
       },
@@ -144,7 +147,7 @@ export async function confirmFlatProductAction(input: {
   const user = await requireHotdealMerchant();
   if (!user) return { ok: false, error: "권한이 없어요." };
   const productId = String(input?.productId ?? "");
-  const qty = Math.max(0, Math.floor(Number(input?.qty) || 0));
+  const qty = Math.min(99999, Math.max(0, Math.floor(Number(input?.qty) || 0))); // 상한(오타·폭주 방지)
 
   const product = await prisma.reservationProduct.findFirst({
     where: { id: productId, active: true, closeAt: { not: null }, batch: { active: true } },
@@ -243,7 +246,7 @@ export async function holdFlatProductAction(input: {
   const user = await requireHotdealMerchant();
   if (!user) return { ok: false, error: "권한이 없어요." };
   const productId = String(input?.productId ?? "");
-  const qty = Math.max(0, Math.floor(Number(input?.qty) || 0));
+  const qty = Math.min(99999, Math.max(0, Math.floor(Number(input?.qty) || 0))); // 상한(오타·폭주 방지)
 
   const product = await prisma.reservationProduct.findFirst({
     where: {
@@ -260,6 +263,7 @@ export async function holdFlatProductAction(input: {
       inventoryItemId: true,
       closeAt: true,
       batchId: true,
+      stockFixed: true,
     },
   });
   if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
@@ -310,10 +314,13 @@ export async function holdFlatProductAction(input: {
           await tx.reservationOrderItem.deleteMany({ where: { orderId: order.id, productId } });
         return { ok: true, available: Math.max(0, availableForMe) };
       }
-      if (qty > availableForMe) {
+      // 재고 고정 상품만 재고까지 하드 캡. 기본(초과발주 허용)은 재고 넘어도 담긴다(부족분=관리자 조달).
+      // 단 '줄이기'(qty ≤ 내 현재수량 myThis)는 항상 허용 — 같은 재고를 쓰는 다른 상품이 초과발주해
+      // availableForMe 가 음수여도 내 수량을 낮추는 건 재고를 더 쓰지 않으므로 막지 않는다.
+      if (product.stockFixed && qty > myThis && qty > availableForMe) {
         return {
           ok: false,
-          error: `남은 수량이 부족해요. (담을 수 있는 최대 ${Math.max(0, availableForMe)}개)`,
+          error: `남은 수량이 부족해요. (담을 수 있는 최대 ${Math.max(myThis, availableForMe)}개)`,
           available: Math.max(0, availableForMe),
         };
       }

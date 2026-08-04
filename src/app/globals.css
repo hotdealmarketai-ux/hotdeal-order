@@ -3818,6 +3818,23 @@ body {
   padding: 2px 12px 4px; font-size: 12px; font-weight: 600; color: var(--green-700);
 }
 .invitem__resv b { font-weight: 800; }
+.invitem__short { color: var(--danger); }
+/* 예약상품 등록 — 재고 고정 체크박스 */
+.flatfix {
+  display: flex; gap: 8px; align-items: flex-start; margin: 8px 2px 2px;
+  font-size: 13px; color: var(--fg); cursor: pointer;
+}
+.flatfix input { margin-top: 2px; width: 16px; height: 16px; flex-shrink: 0; }
+.flatfix__hint { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+/* 예약상품 상세 — 재고/예약/부족 요약 */
+.resvstock {
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line);
+  font-size: 14px; font-weight: 600; color: var(--fg-soft);
+}
+.resvstock b { font-weight: 800; color: var(--fg); }
+.resvstock--short { color: var(--danger); }
+.resvstock__short { color: var(--danger); font-size: 16px; }
+.resvstock__note { color: var(--muted); font-weight: 600; font-size: 12px; }
 /* 접기/펼치기 섹션(관리자 '기능' 토글) */
 .collapsible { border: 1px solid var(--line); border-radius: 14px; background: var(--surface);
   margin-bottom: 14px; overflow: hidden; }
