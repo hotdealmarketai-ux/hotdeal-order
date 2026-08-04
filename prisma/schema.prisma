@@ -578,3 +578,25 @@ model WarehouseLocation {
 
   @@index([sortOrder])
 }
+
+// 송장(택배) 관리 — 관리자가 송장번호+택배사 등록 → 스마트택배(SweetTracker) API로 조회해
+// 집하전/배송준비중/배송중/배송완료 4단계로 자동 분류. status/level은 조회 캐시.
+model Shipment {
+  id            String    @id @default(cuid())
+  trackingNo    String // 송장번호
+  courierCode   String // 스마트택배 택배사 코드(t_code)
+  courierName   String // 표시용 택배사명
+  itemName      String    @default("") // 품목명
+  qty           Int       @default(1) // 수량
+  // status: PRE_PICKUP(집하전) | READY(배송준비중) | IN_TRANSIT(배송중) | DELIVERED(배송완료) | ERROR(조회실패)
+  status        String    @default("PRE_PICKUP")
+  statusText    String    @default("") // 마지막 상세 상태(예: "배송출발")
+  level         Int       @default(0) // 스마트택배 level(1~6)
+  lastCheckedAt DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}

@@ -5111,3 +5111,41 @@ a.resv-card:active { transform: scale(0.995); }
 .fpse__store { font-size: 14px; font-weight: 700; color: var(--fg); min-width: 0; }
 .fpse__out { font-size: 12px; font-weight: 700; color: var(--danger); }
 .fpse__step { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+/* ── 송장 관리 ── */
+.shiptop { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 0 10px; }
+.shiptop__hint { font-size: 12.5px; color: var(--muted); }
+.shipsec { margin-bottom: 16px; }
+.shipsec__head { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
+.shipsec__label { font-size: 14px; font-weight: 800; color: var(--fg); }
+.shipsec__count {
+  font-size: 12px; font-weight: 800; color: var(--fg-soft);
+  background: var(--surface-2, var(--chip)); border-radius: 999px; padding: 1px 9px; min-width: 20px; text-align: center;
+}
+.shipsec__empty { font-size: 12.5px; color: var(--muted); padding: 6px 2px 2px; }
+/* 섹션별 좌측 색 띠 */
+.shipsec__label::before {
+  content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 999px;
+  margin-right: 7px; vertical-align: 1px; background: var(--muted);
+}
+.shipsec--pre_pickup .shipsec__label::before { background: #888780; }
+.shipsec--ready .shipsec__label::before { background: var(--amber, #ba7517); }
+.shipsec--in_transit .shipsec__label::before { background: var(--blue, #185fa5); }
+.shipsec--delivered .shipsec__label::before { background: var(--green-700); }
+
+.shipwrap { display: flex; flex-direction: column; gap: 8px; }
+.shipcard {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+}
+.shipsec--delivered .shipcard { background: var(--surface-2, #f7f6f1); }
+.shipcard__main { flex: 1; min-width: 0; }
+.shipcard__name { font-size: 14.5px; font-weight: 800; color: var(--fg); display: flex; align-items: center; gap: 6px; }
+.shipcard__qty { font-size: 11.5px; font-weight: 800; color: var(--green-700); background: var(--green-100); border-radius: 6px; padding: 1px 7px; }
+.shipcard__meta { font-size: 12px; color: var(--muted); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.shipcard__state { font-size: 11.5px; color: var(--fg-soft); margin-top: 3px; }
+.shipcard__del {
+  flex-shrink: 0; width: 30px; height: 30px; border: 0; background: transparent; color: var(--muted);
+  font-size: 15px; cursor: pointer; border-radius: 8px;
+}
+.shipcard__del:active { transform: scale(0.9); }

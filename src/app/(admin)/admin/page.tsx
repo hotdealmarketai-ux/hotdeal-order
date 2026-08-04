@@ -87,6 +87,7 @@ export default async function AdminHome() {
         { href: "/admin/weekly", title: "주간발주", badge: weeklyCount > 0 ? weeklyCount : undefined },
         { href: "/admin/calendar", title: "예약 달력" },
         { href: "/admin/holds", title: "담기 현황" },
+        { href: "/admin/shipments", title: "송장 관리" },
       ],
     },
     {
