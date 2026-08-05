@@ -14,6 +14,10 @@ import { suggestStoresForDeposits } from "@/lib/deposit-suggest";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
+// '지금 수집' 서버액션이 팝빌 계좌조회(잡 폴링 최대 ~30초)를 기다리므로 함수 제한시간을 늘린다.
+// (크론 라우트도 동일하게 maxDuration=60. 없으면 기본 10~15초에서 잘려 결과가 안 뜬다.)
+export const maxDuration = 60;
+
 // 입금 관리 = 핫딜마켓 가맹점별 '남은 결제잔액(미입금액)' 현황. 날짜 개념 없음.
 // 점포를 누르면 그 점포의 통장식 청구/입금 내역(/admin/deposits/[userId])로.
 export default async function AdminDeposits() {
