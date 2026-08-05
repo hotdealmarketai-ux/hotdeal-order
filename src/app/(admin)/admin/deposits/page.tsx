@@ -228,9 +228,6 @@ export default async function AdminDeposits() {
         </div>
 
         <div className="section-label">입출금내역</div>
-        <p className="hint" style={{ marginTop: -6, marginBottom: 10 }}>
-          통장 입금 내역. 점포로 <b>매칭</b>하면 그 점포 미수가 그만큼 줄어들어요.
-        </p>
         {txns.length === 0 ? (
           <div className="empty">
             <p>입출금 내역이 없어요.</p>
