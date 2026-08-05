@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatKDateTime } from "@/lib/format";
 import { DepositMatchControl } from "@/components/DepositMatchControl";
+import { CollectDepositsButton } from "@/components/CollectDepositsButton";
 import { lastBankSyncAt } from "@/lib/bank";
 import { SubmitButton } from "@/components/SubmitButton";
 import { approveSplitAction, rejectSplitAction } from "@/app/actions/invoice";
@@ -112,9 +113,12 @@ export default async function AdminDeposits() {
         <p className="lead" style={{ marginTop: 0, marginBottom: 4 }}>
           미수 {dueStores}건 · 합계 {fmt(totalDue)}원
         </p>
-        <p className="hint" style={{ marginTop: 0, marginBottom: 14 }}>
+        <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
           최신 계좌 동기화 : {syncedAt ? formatKDateTime(syncedAt) : "동기화 전"}
         </p>
+
+        {/* 지금 수집 — 팝빌 계좌조회에서 최근 입금을 즉시 끌어와 자동매칭(자동수집 크론과 별개, 수동 트리거) */}
+        <CollectDepositsButton />
 
         {/* 전체 잠금해제 — ON이면 OFF할 때까지 모든 지점이 미수 있어도 일반/주간/예약 발주 가능 */}
         <div
