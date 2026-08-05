@@ -14,14 +14,11 @@ import {
 import {
   notifyMerchantInvoiceIssued,
   notifyMerchantInvoiceRevised,
-  notifyMerchantInvoicePaid,
   notifyMerchantSplitApproved,
   notifyMerchantSplitRejected,
 } from "@/lib/push";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
-import { clearOrderUnlockIfSettled } from "@/lib/bank";
 import {
-  clearWeeklyUnlockIfSettled,
   getWeeklyItemsForStoreShipment,
   weeklyKeyForAnyShipmentDay,
 } from "@/lib/weekly";
@@ -764,105 +761,15 @@ export async function voidInvoiceAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
-// 입금 확인(수동) — 분할입금·차액 등 자동매칭이 못 잡는 건을 관리자가 확정.
-// manualPaid=true로 표시해 이후 자동매칭이 되돌리지 못하게 한다.
-export async function markInvoicePaidAction(formData: FormData) {
+// [폐지됨, 2026-08-05] 계산서 개별 '입금확인'은 제거됐다. 미수 감소 창구는 '입금 매칭·수동조정'(ReceivableAdjustment)뿐.
+// 계산서를 PAID로 바꾸면 매칭 조정과 이중차감되므로, 실수로 다시 연결되더라도 동작하지 않게 no-op으로 막는다.
+// (UI 호출자 없음. 레거시 PAID 계산서 되돌리기는 unmarkInvoicePaidAction 유지.)
+export async function markInvoicePaidAction(_formData: FormData) {
   await requireAdmin();
-  const id = String(formData.get("invoiceId") ?? "");
-  if (!id) return;
-  const upd = await prisma.invoice.updateMany({
-    where: { id, status: "ISSUED" },
-    data: { status: "PAID", paidAt: new Date(), manualPaid: true },
-  });
-  if (upd.count === 0) return;
-  const inv = await prisma.invoice.findUnique({
-    where: { id },
-    select: {
-      userId: true,
-      date: true,
-      total: true,
-      issuedAt: true,
-      _count: { select: { items: true } },
-    },
-  });
-  if (inv) {
-    // 이 점포의 '미소진 매칭 입금'을 이 계산서에 귀속(소진)한다.
-    //  · 옛 버그#7/#11: inv.date '하루'로만 찾아 '발행 다음날' 실입금을 놓치고 합성입금을 전액
-    //    만들어 통장이 2배로 부풀었다 → 발행(issuedAt) 이후 도착분 전체를 후보로.
-    //  · 옛 버그#8/#12: 금액 상한이 없어 큰 실입금이 작은 계산서에 통째로 묻혔다 → 금액 정확일치
-    //    1건 우선, 없으면 합이 total을 넘지 않게 오래된 순으로만 흡수.
-    const cands = await prisma.deposit.findMany({
-      where: {
-        matchedUserId: inv.userId,
-        appliedInvoiceId: null,
-        matchStatus: { in: ["AUTO", "MANUAL"] },
-        txAt: { gte: inv.issuedAt ?? new Date(0) },
-      },
-      orderBy: { txAt: "asc" },
-      select: { id: true, amount: true },
-    });
-    let attributed = 0;
-    const applyIds: string[] = [];
-    const exact = cands.find((d) => d.amount === inv.total);
-    if (exact) {
-      applyIds.push(exact.id);
-      attributed = exact.amount;
-    } else {
-      for (const d of cands) {
-        if (attributed + d.amount > inv.total) continue; // 넘치면 다른 계산서 몫일 수 있어 손대지 않음
-        applyIds.push(d.id);
-        attributed += d.amount;
-        if (attributed >= inv.total) break;
-      }
-    }
-    if (applyIds.length > 0) {
-      await prisma.deposit.updateMany({
-        where: { id: { in: applyIds } },
-        data: { appliedInvoiceId: id },
-      });
-    }
-    // 실입금으로 못 채운 잔액만 '수동입금확인' 합성입금으로 기록(통장 완결성). 전액 충당됐으면
-    // 이전에 남았을 합성입금을 제거해 이중계상 방지.
-    const shortfall = inv.total - attributed;
-    if (shortfall > 0) {
-      const now = new Date();
-      await prisma.deposit.upsert({
-        where: { bankTid: `manual-${id}` },
-        create: {
-          bankTid: `manual-${id}`,
-          txAt: now,
-          amount: shortfall,
-          payerName: "수동 입금확인",
-          memo: "관리자 수동 입금확인",
-          matchStatus: "MANUAL",
-          matchedUserId: inv.userId,
-          matchedAt: now,
-          appliedInvoiceId: id,
-        },
-        update: {
-          amount: shortfall,
-          txAt: now,
-          matchStatus: "MANUAL",
-          matchedUserId: inv.userId,
-          matchedAt: now,
-          appliedInvoiceId: id,
-        },
-      });
-    } else {
-      await prisma.deposit.deleteMany({ where: { bankTid: `manual-${id}` } });
-    }
-    await notifyMerchantInvoicePaid(inv.userId, inv.date, inv._count.items, inv.total);
-    await clearOrderUnlockIfSettled(inv.userId);
-    await clearWeeklyUnlockIfSettled(inv.userId);
-    revalidatePath(`/order/day/${inv.date}`);
-  }
-  revalidatePath("/admin/deposits");
-  revalidatePath("/admin/invoices");
-  revalidatePath(`/admin/invoices/${id}`);
-  revalidatePath("/admin");
+  // 폐지(2026-08-05) — 아무 동작도 하지 않는다. 미수 감소는 입금 매칭·수동조정으로만.
+  void _formData;
 }
 
-// 입금 확인 취소(실수 복구) — PAID → ISSUED
 export async function unmarkInvoicePaidAction(formData: FormData) {
   await requireAdmin();
   const id = String(formData.get("invoiceId") ?? "");

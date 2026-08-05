@@ -2,71 +2,36 @@
 
 import { useState } from "react";
 import {
-  markInvoicePaidAction,
   unmarkInvoicePaidAction,
   voidInvoiceAction,
 } from "@/app/actions/invoice";
 import { SubmitButton } from "./SubmitButton";
 
-const fmt = (n: number) => n.toLocaleString("ko-KR");
-
-// 발행된 계산서의 관리자 액션 — 입금 확인(수동) / 계산서 취소 / 입금확인 취소
+// 발행된 계산서의 관리자 액션 — 계산서 취소 / (레거시)입금확인 취소.
+// 입금(미수 정산)은 '입금 관리 > 입출금내역 매칭'으로만 처리한다(계산서 개별 입금확인 폐지, 2026-08-05).
 export function InvoiceAdminActions({
   invoiceId,
   status,
-  total,
 }: {
   invoiceId: string;
   status: string;
-  total: number;
 }) {
-  const [confirmPaid, setConfirmPaid] = useState(false);
   const [confirmVoid, setConfirmVoid] = useState(false);
   const [confirmUnpay, setConfirmUnpay] = useState(false);
 
   if (status === "ISSUED") {
     return (
       <div style={{ marginTop: 18 }}>
-        {!confirmPaid && !confirmVoid && (
+        {!confirmVoid && (
           <div className="confirm__actions">
             <button
               type="button"
-              className="btn btn--primary"
-              style={{ flex: 1.4 }}
-              onClick={() => setConfirmPaid(true)}
-            >
-              수동입금확인
-            </button>
-            <button
-              type="button"
-              className="btn btn--danger"
+              className="btn btn--danger btn--block"
               onClick={() => setConfirmVoid(true)}
             >
               계산서 취소
             </button>
           </div>
-        )}
-
-        {confirmPaid && (
-          <form action={markInvoicePaidAction} className="confirm">
-            <input type="hidden" name="invoiceId" value={invoiceId} />
-            <div className="confirm__title">
-              정말 입금 확인 처리할까요? · {fmt(total)}원
-            </div>
-            <p className="confirm__hint">
-              점주에게 &lsquo;입금이 확인되었습니다&rsquo; 알림이 갑니다.
-            </p>
-            <div className="confirm__actions">
-              <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={() => setConfirmPaid(false)}
-              >
-                취소
-              </button>
-              <SubmitButton pendingText="처리 중…">네, 입금 확인</SubmitButton>
-            </div>
-          </form>
         )}
 
         {confirmVoid && (

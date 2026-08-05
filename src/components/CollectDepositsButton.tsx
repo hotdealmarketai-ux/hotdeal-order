@@ -7,7 +7,7 @@ import {
 } from "@/app/actions/deposit";
 import { SubmitButton } from "./SubmitButton";
 
-// 관리자 '지금 수집' 버튼 — 팝빌 계좌조회에서 최근 입금을 즉시 가져와 자동매칭
+// 관리자 '지금 수집' 버튼 — 팝빌 계좌조회에서 최근 입금을 즉시 가져온다(자동매칭 없음 → 입출금내역에서 수동 매칭)
 export function CollectDepositsButton() {
   const [state, formAction] = useActionState<CollectState, FormData>(
     collectDepositsAction,
@@ -29,7 +29,7 @@ export function CollectDepositsButton() {
         >
           {r.accounts === 0
             ? "등록된 계좌가 없어요. 계좌 등록 후 다시 수집해 주세요."
-            : `✓ 입금 ${r.created}건 새로 수집 · 점포 매칭 ${r.matchedStores}건`}
+            : `✓ 입금 ${r.created}건 새로 수집 (입출금내역에서 점포로 매칭하세요)`}
           {r.errors.length > 0 && ` · 오류: ${r.errors.join(", ")}`}
         </div>
       )}

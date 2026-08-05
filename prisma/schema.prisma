@@ -444,6 +444,9 @@ model ReceivableAdjustment {
   adminId   String // 실행 관리자 id
   adminName String   @default("") // 실행 관리자 상호(사후 표시용 비정규화 스냅샷)
   createdAt DateTime @default(now())
+  // 입금 매칭으로 생성된 조정이면 그 입금(Deposit.id). 매칭 해제 시 이 조정을 지워 원복.
+  // unique = 한 입금당 조정 1건(멱등). 수동 미수조정은 null.
+  depositId String?  @unique
 
   @@index([userId, createdAt])
 }

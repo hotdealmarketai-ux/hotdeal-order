@@ -86,10 +86,14 @@ export function BottomNav({
           >
             <span className="bottomnav__ic">
               {it.icon}
+              {/* 미수(입금요청)가 남아 있으면 '점(dot)'으로만 표시. 계산서가 결제돼도 ISSUED로 남아
+                  건수는 무의미(누적 증가)하므로 숫자 대신 점으로 '미수 있음'만 알린다(2026-08-05~). */}
               {it.badge > 0 && (
-                <span className="bottomnav__badge">
-                  {it.badge > 99 ? "+99" : it.badge}
-                </span>
+                <span
+                  className="bottomnav__badge"
+                  style={{ width: 9, minWidth: 9, height: 9, padding: 0, borderRadius: 999 }}
+                  aria-label="미수 있음"
+                />
               )}
             </span>
             <span>{it.label}</span>

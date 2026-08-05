@@ -242,7 +242,8 @@ export async function notifyMerchantWeeklyInvoiceOverdue(
 ) {
   try {
     await sendPushToUser(userId, {
-      title: `주간발주 입금 ${total.toLocaleString("ko-KR")}원이 아직 확인되지 않았습니다. 토요일 전 입금 부탁드립니다.`,
+      // total = '지점 전체 미수'(주간분만이 아님). 토요일 마감 전 리마인더.
+      title: `전체 미수 ${total.toLocaleString("ko-KR")}원이 남아 있어요. 토요일 전 입금 부탁드립니다.`,
       body: "",
       url: "/invoices",
     });
@@ -327,10 +328,11 @@ export async function notifyMerchantInvoiceOverdue(
   total: number,
 ) {
   try {
+    // total = '지점 전체 미수'(2026-08-05~). 낱장 금액이 아니라 전체 미수임을 명확히 하고 입금요청서로 유도.
     await sendPushToUser(userId, {
-      title: `${total.toLocaleString("ko-KR")}원 입금이 아직 확인되지 않았습니다.`,
+      title: `전체 미수 ${total.toLocaleString("ko-KR")}원이 아직 입금 확인되지 않았어요. 입금 부탁드립니다.`,
       body: "",
-      url: `/order/day/${date}?view=invoice`,
+      url: "/invoices",
     });
   } catch (err) {
     logError("push.notifyMerchantInvoiceOverdue", err, { userId, date });

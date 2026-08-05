@@ -8,6 +8,7 @@ import {
   isWeeklyOpen,
 } from "@/lib/schedule";
 import { orderLockOverride } from "@/lib/order-open";
+import { receivableOf } from "@/lib/receivable";
 import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
 // 주간발주 상품(DB 카탈로그) 한 줄
 export type WeeklyProductRow = {
@@ -143,12 +144,16 @@ export async function weeklyLockOf(
       issuedAt: { lt: windowStart },
     },
     orderBy: { issuedAt: "asc" },
-    select: { date: true, total: true },
+    select: { id: true },
   });
+  if (!past) return { locked: false, unpaidDate: null, unpaidTotal: 0 };
+  // 계산서 개별 '입금확인'을 없애(2026-08-05~) 결제 후에도 ISSUED로 남으므로, '낱장 정산'이 아니라 '지점 총미수
+  // (receivableOf)'로 판정한다(매칭이 지점 단위 → 낱장 추정은 부정확·이중납부 위험이라 폐기). 안내 금액도 지점 총미수.
+  const { balance } = await receivableOf(userId);
   return {
-    locked: !!past && !unlockedThisWeek,
-    unpaidDate: past?.date ?? null,
-    unpaidTotal: past?.total ?? 0,
+    locked: !unlockedThisWeek && balance > 0,
+    unpaidDate: null,
+    unpaidTotal: Math.max(0, balance),
   };
 }
 

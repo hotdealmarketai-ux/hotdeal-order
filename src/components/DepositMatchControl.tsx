@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
 import {
   matchDepositManuallyAction,
-  ignoreDepositAction,
+  unmatchDepositAction,
   deleteDepositAction,
 } from "@/app/actions/deposit";
 import { SubmitButton } from "./SubmitButton";
@@ -13,27 +13,46 @@ type StoreOpt = { id: string; label: string };
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
-// 미매칭 입금 1건을 관리자가 점포로 수동 매칭하거나 '무시' 처리.
-// 목록에서는 제안 점포 버튼 + '매칭'만 노출하고, 자세한 선택은 바텀시트로 분리(화면 정리).
+// 입출금내역 1건 컨트롤 — 관리자가 점포로 '수동' 매칭(그 점포 미수가 그만큼 차감)하거나,
+// 이미 매칭된 건 매칭 해제, 미매칭 건은 목록에서 삭제. 자동매칭은 없음(사용자 결정, 위험).
 export function DepositMatchControl({
   depositId,
   payerName,
   amount,
   stores,
-  suggestion,
+  matched = false,
 }: {
   depositId: string;
   payerName: string;
   amount?: number;
   stores: StoreOpt[];
-  suggestion?: {
-    userId: string;
-    storeName: string;
-    reason: string;
-    remember: boolean;
-  };
+  matched?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [unmatchState, unmatchAction] = useActionState<{ error?: string }, FormData>(
+    async (_prev, fd) => (await unmatchDepositAction(fd)) || {},
+    {},
+  );
+
+  // 이미 매칭된 입금 → '매칭 해제'만(해제하면 그 점포 미수가 다시 그만큼 늘어남).
+  if (matched) {
+    return (
+      <form action={unmatchAction} style={{ textAlign: "right" }}>
+        <input type="hidden" name="depositId" value={depositId} />
+        {unmatchState.error && (
+          <div
+            className="row__sub"
+            style={{ color: "var(--danger)", marginBottom: 6, maxWidth: 220 }}
+          >
+            {unmatchState.error}
+          </div>
+        )}
+        <SubmitButton className="btn btn--xs btn--soft" pendingText="해제 중…">
+          매칭 해제
+        </SubmitButton>
+      </form>
+    );
+  }
 
   return (
     <>
@@ -46,29 +65,14 @@ export function DepositMatchControl({
           justifyContent: "flex-end",
         }}
       >
-        {suggestion && (
-          <form action={matchDepositManuallyAction}>
-            <input type="hidden" name="depositId" value={depositId} />
-            <input type="hidden" name="userId" value={suggestion.userId} />
-            {suggestion.remember && (
-              <input type="hidden" name="remember" value="true" />
-            )}
-            <SubmitButton
-              className="btn btn--xs btn--primary"
-              pendingText="처리 중…"
-            >
-              → {suggestion.storeName}
-            </SubmitButton>
-          </form>
-        )}
         <button
           type="button"
-          className="btn btn--xs btn--soft"
+          className="btn btn--xs btn--primary"
           onClick={() => setOpen(true)}
         >
-          {suggestion ? "다른 점포" : "매칭"}
+          매칭
         </button>
-        {/* 목록에서 삭제 — 한 번에 삭제(확인 없음). 입금확인·미수와 무관. */}
+        {/* 목록에서 삭제 — 한 번에 삭제(확인 없음). 미수와 무관. */}
         <form action={deleteDepositAction}>
           <input type="hidden" name="depositId" value={depositId} />
           <button
@@ -106,9 +110,13 @@ export function DepositMatchControl({
               </button>
             </div>
             <p className="sheet__hint">
-              {payerName ? `입금자 '${payerName}'` : "입금자명 없음"}
-              {typeof amount === "number" && ` · ${won(amount)}원`} 을(를) 어느
-              점포로 처리할까요?
+              {payerName ? `입금자 ‘${payerName}’` : "입금자명 없음"}
+              {typeof amount === "number" && ` · ${won(amount)}원`} 을(를) 어느 점포로
+              매칭할까요?
+              <br />
+              <span style={{ color: "var(--muted-2)" }}>
+                매칭하면 그 점포 미수가 이 금액만큼 줄어듭니다.
+              </span>
             </p>
 
             <form action={matchDepositManuallyAction} className="stack" style={{ gap: 12 }}>
@@ -123,29 +131,10 @@ export function DepositMatchControl({
                   </option>
                 ))}
               </select>
-              {payerName && (
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    fontSize: 14,
-                    color: "var(--muted)",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    name="remember"
-                    value="true"
-                    defaultChecked
-                    style={{ width: 18, height: 18 }}
-                  />
-                  <span>
-                    입금자명 &lsquo;{payerName}&rsquo; 을(를) 이 점포로 기억(다음부터 자동매칭)
-                  </span>
-                </label>
-              )}
-              <div className="sheet__foot" style={{ borderTop: "none", paddingTop: 0, marginTop: 0 }}>
+              <div
+                className="sheet__foot"
+                style={{ borderTop: "none", paddingTop: 0, marginTop: 0 }}
+              >
                 <button
                   type="button"
                   className="btn btn--ghost"
@@ -158,20 +147,9 @@ export function DepositMatchControl({
                 </SubmitButton>
               </div>
             </form>
-
-            <form
-              action={ignoreDepositAction}
-              style={{ marginTop: 14, textAlign: "center" }}
-            >
-              <input type="hidden" name="depositId" value={depositId} />
-              <button type="submit" className="linkbtn linkbtn--danger">
-                점포 입금 아님 (무시)
-              </button>
-            </form>
           </div>
         </Sheet>
       )}
-
     </>
   );
 }

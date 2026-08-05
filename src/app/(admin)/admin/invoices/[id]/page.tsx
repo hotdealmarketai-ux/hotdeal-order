@@ -370,11 +370,7 @@ export default async function AdminInvoiceDetail(props: {
           <b>{fmt(inv.total)}원</b>
         </div>
 
-        <InvoiceAdminActions
-          invoiceId={inv.id}
-          status={inv.status}
-          total={inv.total}
-        />
+        <InvoiceAdminActions invoiceId={inv.id} status={inv.status} />
 
         <InvoiceRevisionHistory revisions={revisions} />
 

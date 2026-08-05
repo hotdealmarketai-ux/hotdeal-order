@@ -16,21 +16,54 @@ export async function GET(request: Request) {
   const invoices = await prisma.invoice.findMany({
     where: { kind: "WEEKLY", status: "ISSUED", overdueRemindedAt: null },
     select: { id: true, userId: true, total: true },
+    orderBy: { issuedAt: "asc" }, // 오래된 미납부터(정산 안 된 점포가 take:500에 밀리지 않게)
     take: 500,
   });
 
-  let sent = 0;
+  // 계산서 개별 '입금확인' 폐지(2026-08-05~)로 결제 후에도 ISSUED로 남으므로, '낱장'이 아니라 '지점 총미수'로 안내:
+  //  점포별 미수 잔액(발행 + 조정)이 0 이하면 정산된 것 → 생략. 남아 있으면 그 점포에 '미수 {잔액}' 1회만 안내하고
+  //  그 점포의 주간 후보 전부에 마커. (계산서마다 각각 독촉/금액 부풀림 방지)
+  const userIds = [...new Set(invoices.map((i) => i.userId))];
+  const [billed, adj] = await Promise.all([
+    prisma.invoice.groupBy({
+      by: ["userId"],
+      where: { userId: { in: userIds }, status: "ISSUED" },
+      _sum: { total: true },
+    }),
+    prisma.receivableAdjustment.groupBy({
+      by: ["userId"],
+      where: { userId: { in: userIds } },
+      _sum: { amount: true },
+    }),
+  ]);
+  const bal = new Map<string, number>();
+  for (const b of billed) bal.set(b.userId, b._sum.total ?? 0);
+  for (const a of adj) bal.set(a.userId, (bal.get(a.userId) ?? 0) + (a._sum.amount ?? 0));
+
+  const byUser = new Map<string, typeof invoices>();
   for (const inv of invoices) {
+    const arr = byUser.get(inv.userId);
+    if (arr) arr.push(inv);
+    else byUser.set(inv.userId, [inv]);
+  }
+
+  let sent = 0;
+  let skipped = 0;
+  for (const [uid, invs] of byUser) {
+    if ((bal.get(uid) ?? 0) <= 0) {
+      skipped += invs.length;
+      continue;
+    }
     try {
-      await notifyMerchantWeeklyInvoiceOverdue(inv.userId, inv.total);
+      await notifyMerchantWeeklyInvoiceOverdue(uid, bal.get(uid) ?? 0);
       await prisma.invoice.updateMany({
-        where: { id: inv.id, overdueRemindedAt: null },
+        where: { id: { in: invs.map((i) => i.id) } },
         data: { overdueRemindedAt: new Date() },
       });
       sent += 1;
     } catch (e) {
-      logError("cron.weekly-overdue", e, { id: inv.id });
+      logError("cron.weekly-overdue", e, { userId: uid });
     }
   }
-  return Response.json({ ok: true, sent, scanned: invoices.length });
+  return Response.json({ ok: true, sent, skipped, scanned: invoices.length, stores: byUser.size });
 }

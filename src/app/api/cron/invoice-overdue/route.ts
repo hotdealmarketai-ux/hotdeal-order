@@ -35,6 +35,7 @@ export async function GET(request: Request) {
       issuedAt: { gte: floor, lte: cutoff },
     },
     select: { id: true, userId: true, date: true, total: true },
+    orderBy: { issuedAt: "asc" }, // 오래된 미납부터(정산 안 된 점포가 take:500에 밀리지 않게)
     take: 500,
   });
 
@@ -42,18 +43,53 @@ export async function GET(request: Request) {
     return Response.json({ ok: true, dryrun: true, days, candidates: invoices.length });
   }
 
-  let sent = 0;
+  // 계산서 개별 '입금확인'을 없애(2026-08-05~) 결제돼도 ISSUED로 남으므로, '낱장'이 아니라 '지점 총미수'로 안내한다:
+  //  · 점포별로 미수 잔액(발행 ISSUED + 조정)을 구해, 0 이하면 다 갚은 것 → 안내 생략(마커도 안 남김).
+  //  · 남아 있으면 그 점포에 '미수 {잔액}원' 1회만 안내(계산서마다 각각 독촉/금액 부풀림 방지)하고,
+  //    이 점포의 후보 계산서 전부에 overdueRemindedAt 마커를 찍어 재독촉을 막는다.
+  const userIds = [...new Set(invoices.map((i) => i.userId))];
+  const [billed, adj] = await Promise.all([
+    prisma.invoice.groupBy({
+      by: ["userId"],
+      where: { userId: { in: userIds }, status: "ISSUED" },
+      _sum: { total: true },
+    }),
+    prisma.receivableAdjustment.groupBy({
+      by: ["userId"],
+      where: { userId: { in: userIds } },
+      _sum: { amount: true },
+    }),
+  ]);
+  const bal = new Map<string, number>();
+  for (const b of billed) bal.set(b.userId, b._sum.total ?? 0);
+  for (const a of adj) bal.set(a.userId, (bal.get(a.userId) ?? 0) + (a._sum.amount ?? 0));
+
+  const byUser = new Map<string, typeof invoices>();
   for (const inv of invoices) {
+    const arr = byUser.get(inv.userId);
+    if (arr) arr.push(inv);
+    else byUser.set(inv.userId, [inv]);
+  }
+
+  let sent = 0;
+  let skipped = 0;
+  for (const [uid, invs] of byUser) {
+    if ((bal.get(uid) ?? 0) <= 0) {
+      skipped += invs.length;
+      continue; // 다 갚은 점포 — 안내 생략(마커 안 남김 → 이후 미수 생기면 정상 안내)
+    }
+    // 대표 날짜 = 가장 오래된 미납 계산서. 금액은 지점 총미수.
+    const oldest = invs.reduce((a, b) => (a.date <= b.date ? a : b));
     try {
-      await notifyMerchantInvoiceOverdue(inv.userId, inv.date, inv.total);
-      await prisma.invoice.update({
-        where: { id: inv.id },
+      await notifyMerchantInvoiceOverdue(uid, oldest.date, bal.get(uid) ?? 0);
+      await prisma.invoice.updateMany({
+        where: { id: { in: invs.map((i) => i.id) } },
         data: { overdueRemindedAt: new Date() },
       });
-      sent++;
+      sent += 1;
     } catch (err) {
-      logError("cron.invoiceOverdue.notify", err, { invoiceId: inv.id });
+      logError("cron.invoiceOverdue.notify", err, { userId: uid });
     }
   }
-  return Response.json({ ok: true, days, candidates: invoices.length, sent });
+  return Response.json({ ok: true, days, candidates: invoices.length, stores: byUser.size, sent, skipped });
 }

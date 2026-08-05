@@ -144,7 +144,7 @@ export async function collectDeposits(days = 3): Promise<CollectResult> {
             .join(" ");
           const balance = parseInt(String(tx.balance ?? "").replace(/[^0-9]/g, ""), 10);
           try {
-            const dep = await prisma.deposit.create({
+            await prisma.deposit.create({
               data: {
                 bankTid: String(tx.tid),
                 txAt: parseTrdt(tx.trdt),
@@ -155,9 +155,8 @@ export async function collectDeposits(days = 3): Promise<CollectResult> {
               },
             });
             out.created += 1;
-            const r = await autoMatchDeposit(dep.id);
-            if (r.storeMatched) out.matchedStores += 1;
-            if (r.invoicePaid) out.paidInvoices += 1;
+            // 자동매칭 없음(사용자 결정, 2026-08-05, 위험) — 수집분은 UNMATCHED로 남고
+            // 관리자가 입출금내역에서 직접 점포로 매칭한다.
           } catch (err) {
             if ((err as { code?: string })?.code === "P2002") continue; // 이미 수집된 거래
             throw err;

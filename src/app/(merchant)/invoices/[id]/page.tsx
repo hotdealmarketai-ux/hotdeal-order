@@ -1,13 +1,9 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import {
-  SAEROP_BANK_ACCOUNT,
-  SAEROP_ACCOUNT_HOLDER,
-  CATEGORIES,
-  CATEGORY_ORDER,
-} from "@/lib/constants";
+import { CATEGORIES, CATEGORY_ORDER } from "@/lib/constants";
 import { labelDate, labelDateLong } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
@@ -18,11 +14,6 @@ import { parseRevisionChanges } from "@/lib/invoice-revision";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 const KIND: Record<string, string> = { DAILY: "일반발주", WEEKLY: "주간발주" };
-const STATUS: Record<string, { label: string; cls: string }> = {
-  ISSUED: { label: "입금대기", cls: "badge--wait" },
-  PAID: { label: "입금완료", cls: "badge--ok" },
-  VOID: { label: "취소됨", cls: "badge--mute" },
-};
 
 export default async function MerchantInvoiceDetailPage({
   params,
@@ -89,7 +80,6 @@ export default async function MerchantInvoiceDetailPage({
     })
   ).map((r) => ({ ...r, changes: parseRevisionChanges(r.changes) }));
 
-  const s = STATUS[inv.status] ?? STATUS.ISSUED;
   const receipt = inv.items.map((it) => ({
     category: it.category,
     name: it.name,
@@ -116,12 +106,9 @@ export default async function MerchantInvoiceDetailPage({
     <>
       <Topbar backHref="/invoices" title="입금요청서" right={<TopbarChip>{user.storeName}</TopbarChip>} />
       <div className="page">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <h1 className="h1" style={{ margin: 0 }}>
-            입금요청서
-          </h1>
-          <span className={`badge ${s.cls}`}>{s.label}</span>
-        </div>
+        <h1 className="h1" style={{ margin: 0 }}>
+          입금요청서
+        </h1>
         <p className="lead">
           {labelDateLong(inv.date)} · {KIND[inv.kind] ?? "계산서"}
         </p>
@@ -134,15 +121,11 @@ export default async function MerchantInvoiceDetailPage({
 
         <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" cats={invCats} />
 
-        {inv.status === "ISSUED" && (
-          <div className="payband">
-            <div className="payband__label">입금하실 금액</div>
-            <div className="payband__amt">{won(inv.total)}원</div>
-            <div className="payband__acct">
-              {SAEROP_BANK_ACCOUNT} 예금주 {SAEROP_ACCOUNT_HOLDER}
-            </div>
-          </div>
-        )}
+        {/* 이 계산서는 '내역(영수증)'만 보여준다. 입금하실 금액·계좌는 지점 전체 미수 기준이라 입금요청서에서 확인
+            (계산서 낱장 결제 여부는 매칭이 지점 단위라 알 수 없어, 낱장에 '입금하세요'를 띄우면 이중납부 위험). */}
+        <Link href="/invoices" className="btn btn--soft" style={{ marginTop: 12 }}>
+          입금하실 금액(지점 미수)은 입금요청서에서 확인
+        </Link>
 
         <InvoiceRevisionHistory revisions={revisions} />
 

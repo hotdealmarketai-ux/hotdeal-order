@@ -11,7 +11,6 @@ import {
   isUnlockActiveThisWindow,
 } from "@/lib/receivable";
 import { setOrderUnlockAction } from "@/app/actions/deposit";
-import { ManualPayButton } from "@/components/ManualPayButton";
 import { ReceivableAdjustControl } from "@/components/ReceivableAdjustControl";
 import { ReceivableAdjustDeleteButton } from "@/components/ReceivableAdjustDeleteButton";
 
@@ -75,8 +74,10 @@ export default async function AdminDepositStore(props: {
     }),
     receivableOf(userId),
     orderLockOf(userId, user.orderUnlock, user.orderUnlockAt),
+    // 미수 조정 '내역'은 수동 조정만 보여준다(depositId: null). 입금 매칭으로 생긴 조정은 아래
+    // 입출금 내역에 그 입금(−입금)으로 이미 나오므로, 여기 또 나오면 이중 표시가 된다.
     prisma.receivableAdjustment.findMany({
-      where: { userId },
+      where: { userId, depositId: null },
       orderBy: { createdAt: "desc" },
       select: { id: true, amount: true, memo: true, adminName: true, createdAt: true },
     }),
@@ -278,11 +279,6 @@ export default async function AdminDepositStore(props: {
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div className="ledger__req">+{fmt(r.amount)}원</div>
-                        {r.status === "ISSUED" && (
-                          <div style={{ marginTop: 6 }}>
-                            <ManualPayButton invoiceId={r.id} />
-                          </div>
-                        )}
                       </div>
                     </div>
                   ) : (

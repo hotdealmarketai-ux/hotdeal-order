@@ -58,14 +58,15 @@ export default async function MyPage(props: {
       }),
       receivableOf(user.id),
     ]);
-
-  // 날짜별 입금요청서 상태 (ISSUED=입금요청, PAID=입금완료)
-  // 같은 날짜에 계산서가 여러 장일 수 있으므로(무한발행), 미입금(ISSUED)이 하나라도 있으면
-  // '입금 요청'을 우선 표시(다중 시 마지막 값으로 덮여 '완료'로 오표시되던 것 방지).
+  // 날짜별 입금요청서 배지(ISSUED=입금요청, PAID=입금완료). 낱장 결제 여부는 매칭이 지점 단위라 알 수 없으므로
+  // '지점 총미수'로만 판단(2026-08-05~): 미수가 남아 있으면 미입금 청구 날짜는 '입금 요청', 다 냈으면 '입금 완료'.
+  // (레거시로 status가 PAID인 계산서 날짜는 그대로 '완료'. 낱장 추정 = 이중납부 위험이라 하지 않는다)
+  const storePaid = ar.balance <= 0;
   const invByDate = new Map<string, "ISSUED" | "PAID">();
   for (const inv of invoices) {
-    if (invByDate.get(inv.date) === "ISSUED") continue;
-    invByDate.set(inv.date, inv.status as "ISSUED" | "PAID");
+    const st = inv.status === "PAID" || storePaid ? "PAID" : "ISSUED";
+    if (invByDate.get(inv.date) === "ISSUED") continue; // '입금 요청'을 우선 표시
+    invByDate.set(inv.date, st);
   }
 
   const today = kstToday();

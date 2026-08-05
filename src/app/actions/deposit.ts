@@ -7,6 +7,7 @@ import { isMerchant, type Role } from "@/lib/constants";
 import { collectDeposits, type CollectResult } from "@/lib/bank";
 import { setOrderLockOverride } from "@/lib/order-open";
 import { receivableOf } from "@/lib/receivable";
+import { formatKDate } from "@/lib/format";
 import { writeAudit } from "@/lib/audit";
 
 // 미수 수정 잠금 비밀번호 — 화면 잠금해제와 별개로 서버에서도 반드시 검증(방어).
@@ -14,10 +15,14 @@ const RECEIVABLE_EDIT_PASSWORD = "1234";
 
 export type CollectState = { result?: CollectResult; error?: string };
 
-// 미수 수동 조정 후 미수를 읽는 모든 화면 갱신(관리자 입금관리 + 점주 배지/마이/입금요청서).
+// 미수를 읽는 모든 화면 갱신 — 매칭·수동조정으로 미수가 바뀌면 관리자(입금관리·계산서 발행·계산서/미수)와
+// 점주(배지/마이/입금요청서)가 같은 값을 보게 한다. 미수는 여러 화면이 각자 집계하므로 전부 무효화.
 function revalidateReceivable(userId: string) {
   revalidatePath("/admin/deposits");
   revalidatePath(`/admin/deposits/${userId}`);
+  revalidatePath("/admin/billing");
+  revalidatePath(`/admin/billing/${userId}`);
+  revalidatePath("/admin/invoices");
   revalidatePath("/admin");
   revalidatePath("/order");
   revalidatePath("/mypage");
@@ -129,53 +134,77 @@ function revalidateDeposit() {
   revalidatePath("/admin");
 }
 
-// 미매칭 입금을 관리자가 특정 점포로 수동 매칭.
-// remember=true면 그 입금자명을 점포에 기억(다음부턴 자동매칭).
-// 자동 입금확인은 '입금자명이 일치하는' 매칭에서 금액 일치 계산서가 1장일 때만(강한 근거).
-// 금액만 우연히 일치한 매칭은 점포 귀속까지만 — 입금확정은 관리자가 계산서에서 별도 확인.
+// 미매칭 입금을 관리자가 특정 점포로 '수동' 매칭(자동매칭 폐지, 2026-08-05).
+// 매칭 = 그 입금을 점포 것으로 표시 + 같은 금액의 −미수조정(ReceivableAdjustment, depositId 링크) 생성.
+// → receivableOf(=발행+조정)와 미수를 보는 모든 화면이 이 입금만큼 미수를 자동으로 줄인다.
+// 계산서에는 귀속(appliedInvoiceId)하지 않는다 → 계산서 '입금확인'과 이중차감되지 않음(입금확인 자체를 폐지).
+// depositId 유니크로 한 입금당 조정 1건(멱등). 매칭 해제 시 이 조정을 삭제해 원복.
 export async function matchDepositManuallyAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const depositId = String(formData.get("depositId") ?? "");
   const userId = String(formData.get("userId") ?? "");
-  const remember = formData.get("remember") === "true";
   if (!depositId || !userId) return;
 
   const [dep, store] = await Promise.all([
     prisma.deposit.findUnique({ where: { id: depositId } }),
-    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { role: true, storeName: true } }),
   ]);
   if (!dep || !store || !isMerchant(store.role as Role)) return;
   if (dep.matchStatus === "AUTO" || dep.matchStatus === "MANUAL") return; // 이미 매칭됨
 
-  await prisma.deposit.update({
-    where: { id: depositId },
-    data: { matchStatus: "MANUAL", matchedUserId: userId, matchedAt: new Date() },
-  });
-
-  // 입금자명 기억 — 다음 동일 입금자명은 자동매칭
-  if (remember && dep.payerName && !store.payerNames.includes(dep.payerName)) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { payerNames: { set: [...store.payerNames, dep.payerName].slice(0, 20) } },
+  const memo = `입금 매칭 · ${dep.payerName || "입금자명 없음"} · ${formatKDate(dep.txAt)}`;
+  // 원자적: 미매칭/무시 상태일 때만 매칭으로 '선점'(동시 매칭 방지) + 조정 upsert(depositId 멱등).
+  let matched = false;
+  await prisma.$transaction(async (tx) => {
+    const claim = await tx.deposit.updateMany({
+      where: { id: depositId, matchStatus: { in: ["UNMATCHED", "IGNORED"] } },
+      data: { matchStatus: "MANUAL", matchedUserId: userId, matchedAt: new Date() },
     });
+    if (claim.count === 0) return; // 이미 다른 요청이 매칭함 → 조정 만들지 않음
+    matched = true;
+    await tx.receivableAdjustment.upsert({
+      where: { depositId },
+      create: {
+        userId,
+        amount: -dep.amount,
+        memo,
+        adminId: admin.id,
+        adminName: admin.storeName,
+        depositId,
+      },
+      update: {}, // 이미 있으면 그대로(멱등)
+    });
+  });
+  if (matched) {
+    await writeAudit({
+      action: "deposit.match",
+      actorId: admin.id,
+      actorName: admin.storeName,
+      targetType: "store",
+      targetId: userId,
+      summary: `${store.storeName} 입금 매칭 −${dep.amount.toLocaleString("ko-KR")}원 (입금자 ${dep.payerName || "미상"})`,
+    }).catch(() => {});
   }
-
-  // 조회 전용(사용자 결정, 2026-08-05) — 매칭은 '어느 점포 입금인지' 라벨링까지만.
-  // 계산서 입금확인/미수 차감은 하지 않는다(미수·결제는 계산서 화면에서 직접 관리).
-  revalidateDeposit();
+  revalidateReceivable(userId);
 }
 
 // 매칭 해제 — 다시 미매칭으로(오매칭 복구).
-// 이미 계산서에 '귀속(입금확인)'된 입금은 그냥 풀면(옛 버그#9) 원장에서 입금이 사라지는데
-// 계산서는 PAID로 남아 잔액/미수가 어긋난다 → 귀속된 입금은 먼저 계산서 '입금확인 취소'를 하도록 차단.
-// (unmarkInvoicePaidAction이 appliedInvoiceId 정리 + 합성입금 삭제 + PAID→ISSUED 원복을 한 번에 처리)
+// 매칭 시 만든 −미수조정(depositId 링크)을 지워 미수를 원복한다.
+// (레거시) 옛 자동매칭이 계산서에 '귀속(appliedInvoiceId)'한 입금은 그냥 풀면 계산서는 PAID로 남아
+// 잔액/미수가 어긋난다 → 먼저 계산서 '입금확인 취소'를 하도록 차단(unmarkInvoicePaidAction이 원복 처리).
 export async function unmatchDepositAction(formData: FormData): Promise<{ error?: string } | void> {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const depositId = String(formData.get("depositId") ?? "");
   if (!depositId) return;
   const dep = await prisma.deposit.findUnique({
     where: { id: depositId },
-    select: { matchStatus: true, appliedInvoiceId: true },
+    select: {
+      matchStatus: true,
+      appliedInvoiceId: true,
+      matchedUserId: true,
+      amount: true,
+      payerName: true,
+    },
   });
   if (!dep || (dep.matchStatus !== "AUTO" && dep.matchStatus !== "MANUAL")) return;
   if (dep.appliedInvoiceId) {
@@ -184,11 +213,27 @@ export async function unmatchDepositAction(formData: FormData): Promise<{ error?
         "이 입금은 계산서 대금으로 반영돼 있어요. 먼저 해당 계산서에서 '입금확인 취소'를 한 뒤 매칭을 해제해 주세요.",
     };
   }
-  await prisma.deposit.updateMany({
-    where: { id: depositId, matchStatus: { in: ["AUTO", "MANUAL"] } },
-    data: { matchStatus: "UNMATCHED", matchedUserId: null, matchedAt: null },
-  });
-  revalidateDeposit();
+  const matchedUserId = dep.matchedUserId;
+  // 원자적: 매칭으로 만든 −조정 삭제 + 입금 UNMATCHED 원복.
+  // deleteMany라 링크 조정이 없어도(레거시 자동매칭 등) 조용히 통과 — 미수는 원래대로.
+  await prisma.$transaction([
+    prisma.receivableAdjustment.deleteMany({ where: { depositId } }),
+    prisma.deposit.updateMany({
+      where: { id: depositId, matchStatus: { in: ["AUTO", "MANUAL"] } },
+      data: { matchStatus: "UNMATCHED", matchedUserId: null, matchedAt: null },
+    }),
+  ]);
+  if (matchedUserId) {
+    await writeAudit({
+      action: "deposit.unmatch",
+      actorId: admin.id,
+      actorName: admin.storeName,
+      targetType: "store",
+      targetId: matchedUserId,
+      summary: `입금 매칭 해제 +${dep.amount.toLocaleString("ko-KR")}원 미수 복원 (입금자 ${dep.payerName || "미상"})`,
+    }).catch(() => {});
+    revalidateReceivable(matchedUserId);
+  } else revalidateDeposit();
 }
 
 // 무시 — 점포 입금이 아닌 건(이자·본사 자금이동 등). 큐에서 제외.

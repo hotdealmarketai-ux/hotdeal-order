@@ -10,7 +10,6 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { approveSplitAction, rejectSplitAction } from "@/app/actions/invoice";
 import { setOrderLockOverrideAction } from "@/app/actions/deposit";
 import { orderLockOverride } from "@/lib/order-open";
-import { suggestStoresForDeposits } from "@/lib/deposit-suggest";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -23,7 +22,7 @@ export const maxDuration = 60;
 export default async function AdminDeposits() {
   await requireAdmin();
 
-  const [stores, balances, splitReqs, unmatched, syncedAt, pendingSplits, adjustments] =
+  const [stores, balances, splitReqs, txns, syncedAt, pendingSplits, adjustments] =
     await Promise.all([
     prisma.user.findMany({
       where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
@@ -43,10 +42,12 @@ export default async function AdminDeposits() {
       select: { userId: true },
       distinct: ["userId"],
     }),
+    // 입출금내역 — 매칭·미매칭 전부(삭제분 제외). 매칭된 건 어느 점포인지 함께 표시.
     prisma.deposit.findMany({
-      where: { matchStatus: "UNMATCHED" },
+      where: { matchStatus: { not: "DELETED" } },
       orderBy: { txAt: "desc" },
-      take: 100,
+      take: 300,
+      include: { matchedUser: { select: { storeName: true } } },
     }),
     lastBankSyncAt(),
     // 미처리 분할 입금 요청(승인/반려 대기) — 계산서 단위
@@ -60,7 +61,8 @@ export default async function AdminDeposits() {
       },
       orderBy: { splitRequestedAt: "asc" },
     }),
-    // 미수 수동 조정(ReceivableAdjustment) 점포별 합계 — 파생 미수에 가산.
+    // 미수 조정(ReceivableAdjustment) 점포별 합계 — 파생 미수에 가산.
+    // 조정에는 수동 조정 + 입금 매칭 조정(−금액)이 함께 들어가므로, 매칭된 입금은 여기서 자동으로 미수를 줄인다.
     prisma.receivableAdjustment.groupBy({
       by: ["userId"],
       _sum: { amount: true },
@@ -80,6 +82,7 @@ export default async function AdminDeposits() {
       id: s.id,
       storeName: s.storeName,
       payer: s.payerNames[0] ?? "미등록",
+      // 미수 = 발행(ISSUED) + 조정(수동 + 입금매칭). receivableOf와 동일 기준.
       balance: (balByUser.get(s.id)?.sum ?? 0) + (adjByUser.get(s.id) ?? 0),
       count: balByUser.get(s.id)?.count ?? 0,
       split: splitSet.has(s.id),
@@ -101,11 +104,6 @@ export default async function AdminDeposits() {
     orderBy: { storeName: "asc" },
   });
   const storeOpts = merchants.map((m) => ({ id: m.id, label: m.storeName }));
-
-  // 미매칭 입금 → 점포 자동 제안(유일하게 특정될 때만)
-  const suggestions = await suggestStoresForDeposits(
-    unmatched.map((d) => ({ id: d.id, payerName: d.payerName, amount: d.amount })),
-  );
 
   // 전체 잠금해제 토글 상태(전역)
   const lockOverride = await orderLockOverride();
@@ -229,14 +227,20 @@ export default async function AdminDeposits() {
           ))}
         </div>
 
-        <div className="section-label">미매칭 입금</div>
-        {unmatched.length === 0 ? (
+        <div className="section-label">입출금내역</div>
+        <p className="hint" style={{ marginTop: -6, marginBottom: 10 }}>
+          통장 입금 내역. 점포로 <b>매칭</b>하면 그 점포 미수가 그만큼 줄어들어요.
+        </p>
+        {txns.length === 0 ? (
           <div className="empty">
-            <p>매칭할 미매칭 입금이 없어요.</p>
+            <p>입출금 내역이 없어요.</p>
           </div>
         ) : (
           <div className="list">
-            {unmatched.map((d) => (
+            {txns.map((d) => {
+              const matched = d.matchStatus === "AUTO" || d.matchStatus === "MANUAL";
+              const storeName = d.matchedUser?.storeName ?? null;
+              return (
                 <div className="deprow" key={d.id}>
                   <div className="deprow__head">
                     <div className="row__main">
@@ -245,9 +249,12 @@ export default async function AdminDeposits() {
                       </div>
                       <div className="row__sub">
                         {formatKDateTime(d.txAt)}
-                        {suggestions.get(d.id) && (
-                          <span style={{ color: "var(--black)", marginLeft: 6 }}>
-                            · {suggestions.get(d.id)!.reason}
+                        {matched && storeName && (
+                          <span
+                            className="badge badge--ok"
+                            style={{ marginLeft: 6 }}
+                          >
+                            → {storeName}
                           </span>
                         )}
                       </div>
@@ -257,11 +264,12 @@ export default async function AdminDeposits() {
                       payerName={d.payerName}
                       amount={d.amount}
                       stores={storeOpts}
-                      suggestion={suggestions.get(d.id)}
+                      matched={matched}
                     />
                   </div>
                 </div>
-              ))}
+              );
+            })}
           </div>
         )}
       </div>

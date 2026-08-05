@@ -41,7 +41,7 @@ export default async function OrderPage(props: {
 
   // 1일 미수 잠금 — 지난 날짜 미입금 계산서가 있으면 발주 잠금(관리자 해제 시 예외)
   const receivableLock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
-  // 현재 미수 요약(발행·미입금 계산서 전체) — 발주 화면 상단 카드로 노출
+  // 현재 미수 요약(지점 총미수) — 발주 화면 상단 카드로 노출
   const receivable = await receivableOf(user.id);
 
   // 가맹점: 이번 발주 창에 이미 넣은 발주가 있으면 새 발주는 잠그고 수정만.
@@ -174,10 +174,8 @@ export default async function OrderPage(props: {
             <div className="notice notice--error" style={{ marginBottom: 16 }}>
               <b>지난 발주가 결제되지 않았습니다. 미수금 결제 부탁드립니다.</b>
               <br />
-              {receivableLock.unpaidDate
-                ? `${labelDate(receivableLock.unpaidDate)} 입금요청서 ${receivableLock.unpaidTotal.toLocaleString("ko-KR")}원`
-                : ""}{" "}
-              입금이 확인되면 발주가 다시 활성화 됩니다.
+              미수 {receivableLock.unpaidTotal.toLocaleString("ko-KR")}원 (지점 전체) 입금이
+              확인되면 발주가 다시 활성화 됩니다.
             </div>
             <Link href="/invoices" className="btn btn--primary">
               입금요청서 보기

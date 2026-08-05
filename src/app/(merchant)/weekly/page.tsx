@@ -4,6 +4,7 @@ import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { canOrderWeekly } from "@/lib/constants";
+import { receivableOf } from "@/lib/receivable";
 import { WEEKLY_CLOSE_LABEL } from "@/lib/schedule";
 import { labelDateLong } from "@/lib/date";
 import {
@@ -105,7 +106,13 @@ export default async function WeeklyOrderPage({
   ]);
 
   const weeks = [...new Set([currentWeek, ...historyRows.map((h) => h.weekKey)])];
-  const status = weeklyStatusOf(order, invoice);
+  let status = weeklyStatusOf(order, invoice);
+  // 계산서 개별 '입금확인'을 없애 결제돼도 ISSUED로 남으므로, 점주 화면 배지는 '지점 총미수'로 판단(2026-08-05~):
+  // 발행된 주간 계산서라도 지점 미수가 0 이하면 '입금완료'로 표시(낱장 추정 = 이중납부 위험이라 하지 않음).
+  if (invoice && invoice.status === "ISSUED") {
+    const { balance } = await receivableOf(user.id);
+    if (balance <= 0) status = { label: "입금완료", cls: "badge--ok" };
+  }
   const initialQty: Record<string, string> = {};
   for (const it of order?.items ?? []) initialQty[it.code] = String(it.qty);
   const receiptItems = (order?.items ?? []).map((it) => ({
