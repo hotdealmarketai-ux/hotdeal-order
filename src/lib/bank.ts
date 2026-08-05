@@ -186,9 +186,8 @@ export async function lastBankSyncAt(): Promise<Date | null> {
   return m?.syncedAt ?? null;
 }
 
-// 입금 1건 자동매칭 — 입금자명이 정확히 한 점포의 payerNames와 일치할 때만.
-// 그 점포의 '입금 대기(ISSUED)' 계산서 중 금액이 정확히 일치하는 게 1장이면 자동 입금확인.
-// 조금이라도 모호하면(0곳/2곳 이상, 금액 불일치/중복) 사람 확인으로 남긴다.
+// 입금 1건 자동'라벨링' — 입금자명이 정확히 한 점포의 payerNames와 일치하면 그 점포로 귀속 표시만 한다.
+// (조회 전용: 계산서 입금확인/미수 차감은 하지 않음.) 0곳/2곳 이상이면 미매칭으로 남긴다.
 export async function autoMatchDeposit(
   depositId: string,
 ): Promise<{ storeMatched: boolean; invoicePaid: boolean }> {
@@ -214,19 +213,9 @@ export async function autoMatchDeposit(
     data: { matchStatus: "AUTO", matchedUserId: userId, matchedAt: new Date() },
   });
 
-  const paidId = await tryAutoPayInvoice(userId, dep.amount, dep.txAt);
-  if (paidId) {
-    // 이 입금을 그 계산서 대금으로 소진 처리(다른 계산서 차액에 중복 계산 방지)
-    await prisma.deposit.update({
-      where: { id: dep.id },
-      data: { appliedInvoiceId: paidId },
-    });
-  } else {
-    // 자동확정 대상이 없으면, 관리자가 이미 '수동 입금확인'해 둔 계산서의 합성입금을
-    // 이 실입금으로 대체(이중계상 방지). 정확일치 없으면 그대로 미소진으로 남긴다.
-    await replaceManualPlaceholderWithReal(userId, dep.id);
-  }
-  return { storeMatched: true, invoicePaid: !!paidId };
+  // 조회 전용(사용자 결정, 2026-08-05) — 입금 목록은 '어느 점포 입금인지' 라벨링까지만.
+  // 계산서 입금확인/미수 차감은 하지 않는다(미수·결제는 계산서 화면에서 직접 관리).
+  return { storeMatched: true, invoicePaid: false };
 }
 
 // 금액이 정확히 일치하는 '입금 대기(ISSUED)' 계산서가 딱 1장일 때만 자동 입금확인.

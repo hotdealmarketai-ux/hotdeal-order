@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   matchDepositManuallyAction,
   ignoreDepositAction,
+  deleteDepositAction,
 } from "@/app/actions/deposit";
 import { SubmitButton } from "./SubmitButton";
 import { Sheet } from "./Sheet";
@@ -33,6 +34,7 @@ export function DepositMatchControl({
   };
 }) {
   const [open, setOpen] = useState(false);
+  const [delOpen, setDelOpen] = useState(false);
 
   return (
     <>
@@ -66,6 +68,25 @@ export function DepositMatchControl({
           onClick={() => setOpen(true)}
         >
           {suggestion ? "다른 점포" : "매칭"}
+        </button>
+        {/* 목록에서 삭제 — 조회 목록에서만 제거(입금확인·미수와 무관) */}
+        <button
+          type="button"
+          aria-label="목록에서 삭제"
+          title="목록에서 삭제"
+          onClick={() => setDelOpen(true)}
+          style={{
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            color: "var(--muted-2)",
+            fontSize: 16,
+            lineHeight: 1,
+            padding: "2px 5px",
+            flexShrink: 0,
+          }}
+        >
+          ✕
         </button>
       </div>
 
@@ -145,6 +166,50 @@ export function DepositMatchControl({
               <button type="submit" className="linkbtn linkbtn--danger">
                 점포 입금 아님 (무시)
               </button>
+            </form>
+          </div>
+        </Sheet>
+      )}
+
+      {delOpen && (
+        <Sheet onClose={() => setDelOpen(false)}>
+          <div className="sheet__panel" style={{ maxWidth: 420 }}>
+            <div className="sheet__head">
+              <div className="sheet__title">입금 내역 삭제</div>
+              <button
+                type="button"
+                className="sheet__close"
+                aria-label="닫기"
+                onClick={() => setDelOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="sheet__hint">
+              {payerName ? `입금자 ‘${payerName}’` : "입금자명 없음"}
+              {typeof amount === "number" && ` · ${won(amount)}원`} 을(를) 목록에서
+              지울까요?
+              <br />
+              <span style={{ color: "var(--muted-2)" }}>
+                계산서 입금확인·미수와는 무관하게, 조회 목록에서만 제거됩니다.
+              </span>
+            </p>
+            <form
+              action={deleteDepositAction}
+              className="sheet__foot"
+              style={{ borderTop: "none", paddingTop: 0, marginTop: 4 }}
+            >
+              <input type="hidden" name="depositId" value={depositId} />
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => setDelOpen(false)}
+              >
+                닫기
+              </button>
+              <SubmitButton className="btn btn--danger" pendingText="삭제 중…">
+                삭제
+              </SubmitButton>
             </form>
           </div>
         </Sheet>

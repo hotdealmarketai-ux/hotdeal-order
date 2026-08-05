@@ -4,12 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { isMerchant, type Role } from "@/lib/constants";
-import {
-  collectDeposits,
-  tryAutoPayInvoice,
-  replaceManualPlaceholderWithReal,
-  type CollectResult,
-} from "@/lib/bank";
+import { collectDeposits, type CollectResult } from "@/lib/bank";
 import { setOrderLockOverride } from "@/lib/order-open";
 import { receivableOf } from "@/lib/receivable";
 import { writeAudit } from "@/lib/audit";
@@ -165,31 +160,8 @@ export async function matchDepositManuallyAction(formData: FormData) {
     });
   }
 
-  // 자동 입금확인은 '강한 근거(입금자명 일치)'일 때만 — 금액만 우연히 일치한 매칭으로는
-  // 결제를 확정하지 않는다(오확정 + 점주에게 잘못된 '입금완료' 알림 방지).
-  // 금액만 맞는 건은 점포 '귀속'까지만 하고, 입금확정은 관리자가 계산서에서 한 번 더 확인.
-  // (자동매칭 경로(bank.ts)는 등록 입금자명 정확일치라 이미 강한 근거 — 그대로 유지.)
-  const norm = (s: string) => (s ?? "").replace(/\s+/g, "").toLowerCase();
-  const dp = norm(dep.payerName ?? "");
-  const payerMatched =
-    !!dp &&
-    store.payerNames.some((p) => {
-      const np = norm(p);
-      return np.length >= 3 && (dp.includes(np) || np.includes(dp));
-    });
-
-  const paidId = payerMatched
-    ? await tryAutoPayInvoice(userId, dep.amount, dep.txAt)
-    : null;
-  if (paidId) {
-    await prisma.deposit.update({
-      where: { id: depositId },
-      data: { appliedInvoiceId: paidId },
-    });
-  } else {
-    // 관리자가 미리 '수동 입금확인'해 둔 계산서가 있으면 합성입금을 이 실입금으로 대체(이중계상 방지).
-    await replaceManualPlaceholderWithReal(userId, depositId);
-  }
+  // 조회 전용(사용자 결정, 2026-08-05) — 매칭은 '어느 점포 입금인지' 라벨링까지만.
+  // 계산서 입금확인/미수 차감은 하지 않는다(미수·결제는 계산서 화면에서 직접 관리).
   revalidateDeposit();
 }
 
@@ -227,6 +199,24 @@ export async function ignoreDepositAction(formData: FormData) {
   await prisma.deposit.updateMany({
     where: { id: depositId, matchStatus: "UNMATCHED" },
     data: { matchStatus: "IGNORED" },
+  });
+  revalidateDeposit();
+}
+
+// 미매칭 입금을 '목록에서 삭제' — 순수하게 조회 목록에서만 제거. 계산서·입금확인·미수와 전혀 무관.
+//  · 소프트 삭제(matchStatus=DELETED): bankTid를 보존해 다음 수집에서 되살아나지 않게 한다(하드 삭제면 재수집됨).
+//  · 어떤 계산서에도 귀속(appliedInvoiceId) 안 된 미매칭/무시 입금만 대상 — 매칭·미수를 절대 건드리지 않는 안전장치.
+export async function deleteDepositAction(formData: FormData) {
+  await requireAdmin();
+  const depositId = String(formData.get("depositId") ?? "");
+  if (!depositId) return;
+  await prisma.deposit.updateMany({
+    where: {
+      id: depositId,
+      matchStatus: { in: ["UNMATCHED", "IGNORED"] },
+      appliedInvoiceId: null,
+    },
+    data: { matchStatus: "DELETED" },
   });
   revalidateDeposit();
 }
