@@ -2,17 +2,17 @@
 //   수기로 한 번만 처리하기 위한 임시 라우트. CRON_SECRET 보호. 사용 후 즉시 제거(다음 배포에서 삭제).
 //   mode=inspect: 읽기 전용(배치·상품·점포·기존주문 확인). mode=commit: 지정 id로 예약주문/품목 1건 upsert.
 import { prisma } from "@/lib/prisma";
-
-function forbidden() {
-  return new Response("forbidden", { status: 403 });
-}
+import { getCurrentUser } from "@/lib/session";
+import { isAdmin } from "@/lib/constants";
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  const auth = request.headers.get("authorization");
-  if (!secret || auth !== `Bearer ${secret}`) return forbidden();
-
   const url = new URL(request.url);
+  // 관리자 세션 가드 — 로그인한 관리자(ADMIN_SAEROP)만. 비밀키 불필요(라이브는 관리자 세션 경로로).
+  const me = await getCurrentUser();
+  if (!me || !isAdmin(me.role)) {
+    return Response.json({ ok: false, error: "관리자 로그인 필요" }, { status: 403 });
+  }
+
   const mode = url.searchParams.get("mode") ?? "inspect";
   const reserveDate = url.searchParams.get("reserveDate") ?? "";
   const productQ = url.searchParams.get("product") ?? "";
