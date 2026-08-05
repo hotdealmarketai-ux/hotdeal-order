@@ -33,7 +33,9 @@ async function getService(): Promise<any> {
     popbill.config({
       LinkID,
       SecretKey,
-      IsTest: process.env.POPBILL_IS_TEST !== "false",
+      // 팝빌 운영(Production) 전환 완료 → 운영 서버가 기본. 로컬/테스트에서만 POPBILL_IS_TEST="true" 로 명시.
+      // (운영 전환 후엔 테스트 서버로 붙으면 실계좌 데이터가 안 나온다.)
+      IsTest: process.env.POPBILL_IS_TEST === "true",
       IPRestrictOnOff: true,
       UseStaticIP: false,
       UseLocalTimeYN: true,
