@@ -110,7 +110,8 @@ export async function GET(request: Request) {
       const order = await tx.reservationOrder.upsert({
         where: { userId_batchId: { userId, batchId } },
         create: { batchId, userId, confirmed: true, confirmedAt: now },
-        update: { confirmed: true, confirmedAt: now },
+        // 기존 주문이 있으면 확정만 보장하고 confirmedAt(원래 확정시각)은 보존 — 기존 발주는 그대로 둠.
+        update: { confirmed: true },
         select: { id: true },
       });
       // 품목(주문×상품) upsert — 스냅샷은 상품에서 복사, 확정시각도 채워 신·구 게이트 모두 통과.
