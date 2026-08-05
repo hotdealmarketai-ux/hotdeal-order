@@ -12,6 +12,7 @@ import {
 } from "@/lib/receivable";
 import { setOrderUnlockAction } from "@/app/actions/deposit";
 import { ReceivableAdjustControl } from "@/components/ReceivableAdjustControl";
+import { DepositUnmatchButton } from "@/components/DepositUnmatchButton";
 import { ReceivableAdjustDeleteButton } from "@/components/ReceivableAdjustDeleteButton";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
@@ -33,6 +34,7 @@ type LedgerRow =
       payer: string;
       via: string;
       manual: boolean;
+      depositId: string;
     };
 
 // 점포 입출금 내역 — 통장 거래내역처럼 날짜순으로 '입금 요청(청구)'와 '입금'을 나열.
@@ -112,6 +114,7 @@ export default async function AdminDepositStore(props: {
         payer: d.payerName || "(입금자명 없음)",
         via: d.matchStatus === "AUTO" ? "자동" : "수동",
         manual: d.bankTid.startsWith("manual-"),
+        depositId: d.id,
       }),
     ),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
@@ -291,7 +294,14 @@ export default async function AdminDepositStore(props: {
                           {r.manual ? "관리자 확인" : `${r.via} 매칭`}
                         </div>
                       </div>
-                      <div className="ledger__pay">−{fmt(r.amount)}원</div>
+                      <div style={{ textAlign: "right" }}>
+                        <div className="ledger__pay">−{fmt(r.amount)}원</div>
+                        {!r.manual && (
+                          <div style={{ marginTop: 6 }}>
+                            <DepositUnmatchButton depositId={r.depositId} />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ),
                 )}

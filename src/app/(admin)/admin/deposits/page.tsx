@@ -42,12 +42,12 @@ export default async function AdminDeposits() {
       select: { userId: true },
       distinct: ["userId"],
     }),
-    // 입출금내역 — 매칭·미매칭 전부(삭제분 제외). 매칭된 건 어느 점포인지 함께 표시.
+    // 입출금내역(처리 대기 큐) — 아직 매칭 안 된 미매칭 입금만. 매칭하면 이 목록에서 사라지고
+    // 그 지점 상세 원장으로 이동(거기서 '매칭 해제'로 되돌릴 수 있음).
     prisma.deposit.findMany({
-      where: { matchStatus: { not: "DELETED" } },
+      where: { matchStatus: "UNMATCHED" },
       orderBy: { txAt: "desc" },
       take: 300,
-      include: { matchedUser: { select: { storeName: true } } },
     }),
     lastBankSyncAt(),
     // 미처리 분할 입금 요청(승인/반려 대기) — 계산서 단위
@@ -235,8 +235,6 @@ export default async function AdminDeposits() {
         ) : (
           <div className="list">
             {txns.map((d) => {
-              const matched = d.matchStatus === "AUTO" || d.matchStatus === "MANUAL";
-              const storeName = d.matchedUser?.storeName ?? null;
               return (
                 <div className="deprow" key={d.id}>
                   <div className="deprow__head">
@@ -244,24 +242,13 @@ export default async function AdminDeposits() {
                       <div className="row__title">
                         {d.payerName || "(입금자명 없음)"} · {fmt(d.amount)}원
                       </div>
-                      <div className="row__sub">
-                        {formatKDateTime(d.txAt)}
-                        {matched && storeName && (
-                          <span
-                            className="badge badge--ok"
-                            style={{ marginLeft: 6 }}
-                          >
-                            → {storeName}
-                          </span>
-                        )}
-                      </div>
+                      <div className="row__sub">{formatKDateTime(d.txAt)}</div>
                     </div>
                     <DepositMatchControl
                       depositId={d.id}
                       payerName={d.payerName}
                       amount={d.amount}
                       stores={storeOpts}
-                      matched={matched}
                     />
                   </div>
                 </div>
