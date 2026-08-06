@@ -3,11 +3,18 @@ import { notFound } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
+import { CATEGORIES, CATEGORY_ORDER } from "@/lib/constants";
+import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
 import { normalizeDateStr, labelDate } from "@/lib/date";
 import { sumQty } from "@/lib/qty";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
+
+// 일반(FRUIT/VEG/TOOL/TOFU) + 주간(SNACK/DAIRY/DRIED/EGG) 카테고리를 한 번에 표시하기 위한 순서·라벨.
+const ALL_CATS: string[] = [...CATEGORY_ORDER, ...WEEKLY_CATEGORIES.map((c) => c.key)];
+const WEEKLY_LABEL = new Map<string, string>(WEEKLY_CATEGORIES.map((c) => [c.key, c.label]));
+const catLabelOf = (c: string): string =>
+  (CATEGORIES as Record<string, { label: string }>)[c]?.label ?? WEEKLY_LABEL.get(c) ?? c;
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: "작성중", cls: "badge--onbrand" },
@@ -62,7 +69,8 @@ export default async function BillingByDateStorePage(props: {
           <div className="stack">
             {invoices.map((inv) => {
               const badge = STATUS_BADGE[inv.status] ?? STATUS_BADGE.DRAFT;
-              const cats = CATEGORY_ORDER.filter((c) =>
+              // 일반 4종 + 주간 4종 중 이 계산서에 실제로 있는 카테고리만(주간 계산서면 과자류·유제품 등이 잡힌다).
+              const cats = ALL_CATS.filter((c) =>
                 inv.items.some((it) => it.category === c),
               );
               return (
@@ -84,7 +92,7 @@ export default async function BillingByDateStorePage(props: {
                     return (
                       <div className="invcat" key={c}>
                         <div className="invcat__head">
-                          <span className="chip">{CATEGORIES[c].label}</span>
+                          <span className="chip">{catLabelOf(c)}</span>
                           <span className="invcat__sum">
                             총 {fmt(sumQty(items.map((it) => String(it.qty))))}개 ·{" "}
                             {fmt(sum)}원

@@ -4,11 +4,18 @@ import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { normalizeDateStr } from "@/lib/date";
 import { BillingDateBar } from "@/components/BillingDateBar";
-import { CATEGORIES, CATEGORY_ORDER, type Category } from "@/lib/constants";
+import { CATEGORIES, CATEGORY_ORDER } from "@/lib/constants";
+import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 // 수량 표시 — 부동소수 정리(소수 둘째자리까지).
 const fmtQty = (n: number) => String(Math.round(n * 100) / 100);
+
+// 집계 대상 카테고리 = 일반 4종(FRUIT/VEG/TOOL/TOFU) + 주간 4종(SNACK/DAIRY/DRIED/EGG). 용달·환불은 제외.
+const AGG_CATS: string[] = [...CATEGORY_ORDER, ...WEEKLY_CATEGORIES.map((c) => c.key)];
+const WEEKLY_LABEL = new Map<string, string>(WEEKLY_CATEGORIES.map((c) => [c.key, c.label]));
+const catLabelOf = (c: string): string =>
+  (CATEGORIES as Record<string, { label: string }>)[c]?.label ?? WEEKLY_LABEL.get(c) ?? c;
 
 // 날짜별 계산서 보기(#7·N4) — 선택한 출고일에 계산서가 있는 '지점 목록'.
 // 지점 버튼을 누르면 그 지점의 계산서 상세로 이동. 기본 오늘, 상단 날짜선택.
@@ -65,13 +72,13 @@ export default async function BillingByDatePage(props: {
   const issuedTotal = stores.reduce((n, s) => n + s.total, 0);
   const issuedCount = stores.reduce((n, s) => n + s.issued, 0);
 
-  // 총 집계 — 전 지점 계산서의 출고 품목을 카테고리별·품목명별로 수량 합산(원래 있던 총 집계처럼).
-  // status VOID 제외분(작성중 포함) 전체 대상. 주간(WEEKLY) 품목은 일일 출고 집계와 분리(자동 제외).
-  const aggMap = new Map<string, { category: Category; name: string; unit: string; qty: number }>();
+  // 총 집계 — 전 지점 계산서의 출고 품목을 카테고리별·품목명별로 수량 합산.
+  // status VOID 제외분(작성중 포함) 전체 대상. 일반 4종 + 주간 4종을 함께 집계(주간 품목도 그 출고일에 포함).
+  const aggMap = new Map<string, { category: string; name: string; unit: string; qty: number }>();
   for (const inv of invoices) {
     for (const it of inv.items) {
-      const cat = it.category as Category;
-      if (!CATEGORY_ORDER.includes(cat)) continue; // FRUIT|VEG|TOOL|TOFU 만
+      const cat = it.category;
+      if (!AGG_CATS.includes(cat)) continue; // 일반 4종 + 주간 4종만(용달·환불 제외)
       const name = it.name.trim();
       if (!name) continue;
       const key = `${cat}::${name}::${it.unit}`;
@@ -80,9 +87,9 @@ export default async function BillingByDatePage(props: {
       else aggMap.set(key, { category: cat, name, unit: it.unit, qty: it.qty });
     }
   }
-  const aggByCat = CATEGORY_ORDER.map((c) => ({
+  const aggByCat = AGG_CATS.map((c) => ({
     key: c,
-    label: CATEGORIES[c].label,
+    label: catLabelOf(c),
     items: [...aggMap.values()]
       .filter((a) => a.category === c)
       .sort((a, b) => a.name.localeCompare(b.name, "ko")),
