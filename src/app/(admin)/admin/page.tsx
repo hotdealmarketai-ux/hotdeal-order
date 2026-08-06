@@ -95,6 +95,7 @@ export default async function AdminHome() {
       items: [
         { href: "/admin/deposits", title: "입금 관리" },
         { href: "/admin/billing", title: "계산서 발행" },
+        { href: "/admin/sales", title: "매출" },
       ],
       closing: true, // 마감 백업(ClosingCard) = 시트 확인창 카드, 이 그룹 끝에 렌더
     },
