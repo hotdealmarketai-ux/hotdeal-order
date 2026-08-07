@@ -54,6 +54,7 @@ model User {
   notifications   Notification[]
   chatThread      ChatThread?
   onboardingItems OnboardingItem[]
+  onboardingChecks OnboardingCheck[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -656,5 +657,52 @@ model OnboardingItem {
   updatedAt      DateTime       @updatedAt
 
   @@unique([userId, stepId])
+  @@index([userId])
+}
+
+// ── 튜토리얼(편집형) — 단일 공용 템플릿 ────────────────────────────
+// 분류 트리(대/중/소). parentId=null 이면 대분류. 관리자가 자유 편집, 전 지점 공용.
+model OnboardingNode {
+  id        String   @id @default(cuid())
+  parentId  String?
+  parent    OnboardingNode?  @relation("OnbTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  OnboardingNode[] @relation("OnbTree")
+  order     Int      @default(0)
+  title     String   @default("")
+  blocks    OnboardingBlock[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId, order])
+}
+
+// 노드 안의 콘텐츠 블록 — 제목/텍스트/이미지/체크박스. colSpan 으로 그리드 배치(12칸).
+model OnboardingBlock {
+  id        String   @id @default(cuid())
+  nodeId    String
+  node      OnboardingNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  order     Int      @default(0)
+  type      String   @default("TEXT") // HEADING | TEXT | IMAGE | CHECK
+  text      String   @default("")     // HEADING/TEXT/CHECK 라벨
+  imageUrl  String   @default("")     // IMAGE
+  colSpan   Int      @default(12)     // 1..12 (12=한 줄 전체, 6=½, 4=⅓, 3=¼)
+  checks    OnboardingCheck[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nodeId, order])
+}
+
+// 지점별 체크 상태 — 체크박스 블록 × 점주. 진행률(체크수/전체 체크박스수)의 소스.
+model OnboardingCheck {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  blockId   String
+  block     OnboardingBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  checkedAt DateTime @default(now())
+  checkedBy String   @default("") // 표시용(누가 체크)
+
+  @@unique([userId, blockId])
   @@index([userId])
 }

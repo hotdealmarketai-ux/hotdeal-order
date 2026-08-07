@@ -1,9 +1,9 @@
-// 관리자 가맹 온보딩 현황판 — 점포별 진행률, 시작/열람. 점포 클릭 시 단계별 확인.
+// 관리자 튜토리얼 현황판 — 점포별 진행률(체크박스 기준), 시작/열람.
 import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getOnboardingView } from "@/lib/onboarding";
+import { getProgress } from "@/lib/onboarding";
 import { StartOnboardingButton } from "@/components/AdminOnboardingControls";
 
 export default async function AdminOnboardingPage() {
@@ -30,8 +30,8 @@ export default async function AdminOnboardingPage() {
   const progress = new Map<string, { percent: number; c: number; t: number }>();
   await Promise.all(
     inProgress.map(async (m) => {
-      const v = await getOnboardingView(m.id);
-      progress.set(m.id, { percent: v.percent, c: v.confirmedCount, t: v.total });
+      const v = await getProgress(m.id);
+      progress.set(m.id, { percent: v.percent, c: v.done, t: v.total });
     }),
   );
 
@@ -42,7 +42,7 @@ export default async function AdminOnboardingPage() {
         title="튜토리얼"
         right={
           <Link href="/admin/onboarding/template" className="btn btn--xs btn--soft">
-            체크리스트 편집
+            편집
           </Link>
         }
       />
@@ -64,7 +64,7 @@ export default async function AdminOnboardingPage() {
                   <div className="row__main">
                     <div className="row__title">{m.storeName}</div>
                     <div className="row__sub">
-                      {p ? `${p.c}/${p.t} 단계 확정` : ""}
+                      {p ? `${p.c}/${p.t} 체크` : ""}
                     </div>
                   </div>
                   <span

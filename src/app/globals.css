@@ -5344,3 +5344,274 @@ a.resv-card:active { transform: scale(0.995); }
   border-radius: var(--radius-md);
   border: 1px solid var(--line);
 }
+
+/* ============================================================
+   튜토리얼(편집형) — 트리 편집기 + 블록 그리드 + 체크박스
+   ============================================================ */
+/* 경로(브레드크럼) */
+.onbcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.onbcrumb__seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.onbcrumb__sep {
+  color: var(--muted-3);
+  margin: 0 4px;
+}
+.onbcrumb__link {
+  color: var(--green-700);
+  text-decoration: none;
+  font-weight: 600;
+}
+.onbcrumb__cur {
+  color: var(--fg);
+  font-weight: 700;
+}
+
+/* 현재 분류 제목 입력 */
+.onbtitle {
+  font-size: 20px;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+/* 아이콘 버튼(순서·이름·삭제) */
+.onbrow__tools {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.onbicon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg-2);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.onbicon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.onbicon--danger {
+  color: #c0392b;
+  border-color: #f0c9c3;
+}
+
+/* 블록 추가 바 */
+.onbadd {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.onbadd__label {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+/* 블록 그리드(편집기) — 12칸 */
+.onbgrid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 10px;
+}
+.onbblock {
+  grid-column: span 12;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 10px;
+  min-width: 0;
+}
+.onbblock__body {
+  min-width: 0;
+}
+.onbblock__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.onbblock__widths {
+  display: inline-flex;
+  gap: 4px;
+}
+.onbchip {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.onbchip.is-on {
+  background: var(--green-700);
+  border-color: var(--green-700);
+  color: #fff;
+}
+
+/* 블록 편집 필드 */
+.onbheadinput {
+  font-size: 17px;
+  font-weight: 800;
+}
+.onbtypetag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--green-700);
+  background: var(--ok-bg);
+  border-radius: 6px;
+  padding: 1px 7px;
+  margin-bottom: 6px;
+}
+.onbcheckedit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.onbcheckedit__box {
+  font-size: 20px;
+  color: var(--muted-3);
+  flex-shrink: 0;
+}
+.onbsaved {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--ok);
+  margin-top: 4px;
+}
+
+/* 이미지 블록 */
+.onbimg img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  display: block;
+  margin-bottom: 8px;
+}
+.onbdrop {
+  border: 1.5px dashed var(--muted-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 16px 12px;
+  cursor: pointer;
+  outline: none;
+}
+.onbdrop:focus {
+  border-color: var(--green-700);
+  color: var(--green-700);
+}
+
+/* ── 읽기 뷰(점주/관리자) ── */
+.onbgrid--view {
+  gap: 12px;
+  margin-top: 4px;
+}
+.onbv {
+  grid-column: span 12;
+  min-width: 0;
+}
+.onbv--h {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--fg);
+  margin: 4px 0 0;
+}
+.onbv--t {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--fg-2);
+  white-space: pre-wrap;
+  margin: 0;
+}
+.onbv--img img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  display: block;
+}
+
+/* 체크박스(토글 버튼) */
+.onbcheck {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 12px 14px;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--fg);
+}
+.onbcheck.is-on {
+  background: var(--ok-bg);
+  border-color: var(--green-700);
+}
+.onbcheck:disabled {
+  opacity: 0.6;
+}
+.onbcheck__box {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  border: 2px solid var(--muted-3);
+  background: var(--surface);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.onbcheck.is-on .onbcheck__box {
+  background: var(--green-700);
+  border-color: var(--green-700);
+}
+.onbcheck__label {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* 좁은 화면 — 그리드 1열로 */
+@media (max-width: 640px) {
+  .onbblock,
+  .onbv {
+    grid-column: span 12 !important;
+  }
+}

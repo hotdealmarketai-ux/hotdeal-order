@@ -7,7 +7,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 
-const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "pdf"]);
+const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif", "pdf"]);
 const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
 // 화이트리스트 밖 확장자는 .bin 으로 저장 → HTML/SVG 등 브라우저 실행형 파일 차단(저장형 XSS 방지)
@@ -17,17 +17,32 @@ function safeExt(name: string, type: string): string {
   if (type.includes("png")) return "png";
   if (type.includes("jpeg") || type.includes("jpg")) return "jpg";
   if (type.includes("webp")) return "webp";
+  if (type.includes("gif")) return "gif";
   if (type.includes("pdf")) return "pdf";
   return "bin";
 }
 
+const IMAGE_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
 /** 파일을 저장하고 접근 가능한 URL/경로를 반환. 실패하면 null. */
 export async function saveBusinessCert(file: File | null): Promise<string | null> {
+  return saveFile(file, false);
+}
+
+/** 튜토리얼 편집기 이미지 저장 — 이미지 확장자만 허용. 실패하면 null. */
+export async function saveOnboardingImage(file: File | null): Promise<string | null> {
+  return saveFile(file, true);
+}
+
+/** 공통 저장 로직. imageOnly=true 면 이미지 확장자만 통과. */
+async function saveFile(file: File | null, imageOnly: boolean): Promise<string | null> {
   if (!file || typeof file.arrayBuffer !== "function" || file.size === 0) return null;
   if (file.size > MAX_BYTES) return null;
 
   const buf = Buffer.from(await file.arrayBuffer());
   const ext = safeExt(file.name, file.type);
+  // 이미지 전용인데 화이트리스트 밖(=bin/pdf)이면 거부 → 브라우저 실행형 파일 차단
+  if (imageOnly && !IMAGE_EXT.has(ext)) return null;
   const key = `${randomUUID()}.${ext}`;
 
   // 운영: Supabase Storage
