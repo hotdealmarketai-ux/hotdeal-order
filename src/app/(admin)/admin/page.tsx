@@ -113,7 +113,7 @@ export default async function AdminHome() {
       items: [
         { href: "/admin/approvals", title: "가입 대기", badge: pending > 0 ? pending : undefined },
         { href: "/admin/members", title: "회원 관리" },
-        { href: "/admin/onboarding", title: "오픈 튜토리얼" },
+        { href: "/admin/onboarding", title: "튜토리얼" },
         { href: "/admin/audit", title: "로그" },
       ],
       patch: true, // 패치(유지보수) 토글 카드 = 로그 옆, 이 그룹 끝에 렌더

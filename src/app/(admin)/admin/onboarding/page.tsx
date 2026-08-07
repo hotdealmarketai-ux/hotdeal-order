@@ -37,7 +37,7 @@ export default async function AdminOnboardingPage() {
 
   return (
     <>
-      <Topbar backHref="/admin" title="오픈 튜토리얼" />
+      <Topbar backHref="/admin" title="튜토리얼" />
       <div className="page">
         <div className="notice notice--mute" style={{ marginBottom: 16 }}>
           오픈 전 준비 체크리스트. 점주 완료 + 본사 확인이 모두 되면 그 단계가 확정되고,

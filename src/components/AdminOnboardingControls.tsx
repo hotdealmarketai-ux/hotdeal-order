@@ -66,7 +66,7 @@ export function StartOnboardingButton({ userId }: { userId: string }) {
   );
 }
 
-// 온보딩(오픈 튜토리얼) 취소 — 발주 잠금 해제. 잘못 시작했을 때 되돌린다.
+// 온보딩(튜토리얼) 취소 — 발주 잠금 해제. 잘못 시작했을 때 되돌린다.
 export function CancelOnboardingButton({ userId }: { userId: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -74,7 +74,7 @@ export function CancelOnboardingButton({ userId }: { userId: string }) {
     start(async () => {
       if (
         !confirm(
-          "오픈 튜토리얼을 취소할까요? 발주 잠금이 풀리고 바로 발주할 수 있게 됩니다. (완료한 단계 기록은 남아 다시 시작하면 이어져요.)",
+          "튜토리얼을 취소할까요? 발주 잠금이 풀리고 바로 발주할 수 있게 됩니다. (완료한 단계 기록은 남아 다시 시작하면 이어져요.)",
         )
       )
         return;
@@ -92,7 +92,7 @@ export function CancelOnboardingButton({ userId }: { userId: string }) {
       onClick={go}
       disabled={pending}
     >
-      {pending ? "취소 중…" : "오픈 튜토리얼 취소 (발주 잠금 해제)"}
+      {pending ? "취소 중…" : "튜토리얼 취소 (발주 잠금 해제)"}
     </button>
   );
 }

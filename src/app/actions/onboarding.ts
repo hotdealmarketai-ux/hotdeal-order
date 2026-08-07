@@ -26,7 +26,7 @@ async function announceCompletionIfJust(userId: string) {
       type: "system",
     });
     await sendPushToRole("ADMIN_SAEROP", {
-      title: "오픈 튜토리얼 완료",
+      title: "튜토리얼 완료",
       body: `${u?.storeName ?? "가맹점"} 오픈 준비 100% 완료 — 발주가 열렸어요.`,
       url: "/admin/onboarding",
       type: "system",
@@ -225,7 +225,7 @@ export async function startOnboardingAction(input: {
     actorName: admin.storeName,
     targetType: "User",
     targetId: userId,
-    summary: `${u.storeName} 오픈 튜토리얼 시작(발주 잠금)`,
+    summary: `${u.storeName} 튜토리얼 시작(발주 잠금)`,
   });
   try {
     await sendPushToUser(userId, {
@@ -241,7 +241,7 @@ export async function startOnboardingAction(input: {
   return { ok: true };
 }
 
-// [관리자] 온보딩(오픈 튜토리얼) 취소 — 잘못 시작했을 때 되돌린다. 발주 잠금 해제(발주 오픈).
+// [관리자] 온보딩(튜토리얼) 취소 — 잘못 시작했을 때 되돌린다. 발주 잠금 해제(발주 오픈).
 // 단계 진행상태(OnboardingItem)는 지우지 않고 남겨둔다(다시 시작하면 이어짐).
 export async function cancelOnboardingAction(input: {
   userId: string;
@@ -266,7 +266,7 @@ export async function cancelOnboardingAction(input: {
     actorName: admin.storeName,
     targetType: "User",
     targetId: userId,
-    summary: `${u.storeName} 오픈 튜토리얼 취소(발주 잠금 해제)`,
+    summary: `${u.storeName} 튜토리얼 취소(발주 잠금 해제)`,
   });
   try {
     await sendPushToUser(userId, {
