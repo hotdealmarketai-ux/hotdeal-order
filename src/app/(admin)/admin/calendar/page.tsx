@@ -1,45 +1,29 @@
-import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { kstToday, shiftDate, dowOf } from "@/lib/date";
+import { kstToday, labelDate, dowOf } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
-const MONTH_RE = /^\d{4}-\d{2}$/;
-const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-
-function monthLabel(m: string): string {
-  const [y, mo] = m.split("-");
-  return `${y}년 ${Number(mo)}월`;
-}
-
-// 예약 픽업 달력 — 예약발주에서 등록한 '수기 예약상품(재고 연동 아님)'을 픽업일자별로 표시.
-export default async function AdminCalendarPage(props: {
-  searchParams: Promise<{ m?: string }>;
-}) {
+// 예약 픽업 일정 — 달력 그리드 대신, 예약발주(수기 예약상품)가 잡힌 '픽업일자'만 리스트로.
+// 오늘 이후 예정된 픽업일만, 날짜별로 그 날 픽업할 품목을 함께 보여준다.
+export default async function AdminCalendarPage() {
   await requireAdmin();
-  const { m } = await props.searchParams;
   const today = kstToday();
-  const month = m && MONTH_RE.test(m) ? m : today.slice(0, 7);
 
-  // 이 달의 1일이 걸린 주의 일요일부터 6주(42칸) 그리드.
-  const first = `${month}-01`;
-  const gridStart = shiftDate(first, -dowOf(first));
-  const cells = Array.from({ length: 42 }, (_, i) => shiftDate(gridStart, i));
-  const gridEnd = cells[cells.length - 1];
-
-  // 수기 예약상품만(inventoryItemId 빈값 = 재고 연동 아님) · 활성 배치 · 그리드 범위 픽업일.
+  // 수기 예약상품만(inventoryItemId 빈값 = 재고 연동 아님) · 활성 배치 · 오늘 이후 픽업.
   const products = await prisma.reservationProduct.findMany({
     where: {
       active: true,
       inventoryItemId: "",
       batch: { active: true },
-      pickupDate: { gte: gridStart, lte: gridEnd },
+      pickupDate: { gte: today },
     },
     orderBy: [{ pickupDate: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
     select: { name: true, pickupDate: true },
   });
+
+  // 픽업일자별로 묶기(예약이 잡힌 날짜만 남는다).
   const byDate = new Map<string, string[]>();
   for (const p of products) {
     if (!p.pickupDate) continue;
@@ -47,70 +31,62 @@ export default async function AdminCalendarPage(props: {
     list.push(p.name);
     byDate.set(p.pickupDate, list);
   }
-
-  const prevMonth = shiftDate(first, -1).slice(0, 7); // 전월 말일 → 전월
-  const nextMonth = shiftDate(first, 32).slice(0, 7); // 1일+32일 → 항상 다음달
-  const weeks: string[][] = [];
-  for (let i = 0; i < 42; i += 7) weeks.push(cells.slice(i, i + 7));
+  const days = [...byDate.entries()]
+    .map(([date, names]) => ({ date, names }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
 
   return (
     <>
-      <Topbar backHref="/admin" title="예약 픽업 달력" />
+      <Topbar backHref="/admin" title="예약 픽업 일정" />
       <div className="page">
-        <div className="calbar">
-          <Link className="btn btn--soft btn--sm" href={`/admin/calendar?m=${prevMonth}`}>
-            ‹ 이전
-          </Link>
-          <b className="calbar__title">{monthLabel(month)}</b>
-          <Link className="btn btn--soft btn--sm" href={`/admin/calendar?m=${nextMonth}`}>
-            다음 ›
-          </Link>
-        </div>
-
-        <div className="cal">
-          <div className="cal__dow">
-            {WEEKDAYS.map((w, i) => (
-              <span
-                key={w}
-                className={`cal__dowc ${i === 0 ? "is-sun" : ""} ${i === 6 ? "is-sat" : ""}`}
-              >
-                {w}
-              </span>
-            ))}
+        {days.length === 0 ? (
+          <div className="empty">
+            <p>예정된 예약 픽업이 없어요.</p>
           </div>
-          {weeks.map((week, wi) => (
-            <div className="cal__week" key={wi}>
-              {week.map((d) => {
-                const inMonth = d.slice(0, 7) === month;
-                const isToday = d === today;
-                const names = byDate.get(d) ?? [];
-                const day = Number(d.slice(8, 10));
-                const dow = dowOf(d);
-                return (
-                  <div
-                    key={d}
-                    className={`cal__cell ${inMonth ? "" : "is-out"} ${isToday ? "is-today" : ""}`}
-                  >
-                    <span
-                      className={`cal__day ${dow === 0 ? "is-sun" : ""} ${dow === 6 ? "is-sat" : ""}`}
+        ) : (
+          <div className="stack" style={{ gap: 10 }}>
+            {days.map((d) => {
+              const dow = dowOf(d.date);
+              return (
+                <div className="card" key={d.date} style={{ padding: 14 }}>
+                  <div className="spread" style={{ alignItems: "center", marginBottom: 10 }}>
+                    <b
+                      style={{
+                        fontSize: 16,
+                        color:
+                          dow === 0
+                            ? "var(--danger)"
+                            : dow === 6
+                              ? "var(--blue, #2563eb)"
+                              : "var(--fg)",
+                      }}
                     >
-                      {day}
+                      {labelDate(d.date)}
+                      {d.date === today && (
+                        <span
+                          className="badge badge--onbrand"
+                          style={{ marginLeft: 8, verticalAlign: "middle" }}
+                        >
+                          오늘
+                        </span>
+                      )}
+                    </b>
+                    <span className="row__sub" style={{ flexShrink: 0 }}>
+                      {d.names.length}개 품목
                     </span>
-                    {names.length > 0 && (
-                      <div className="cal__items">
-                        {names.map((n, i) => (
-                          <span className="cal__item" key={i} title={n}>
-                            {n}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {d.names.map((n, i) => (
+                      <span className="chip" key={i}>
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </>
   );
