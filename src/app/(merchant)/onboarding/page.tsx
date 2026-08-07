@@ -28,9 +28,6 @@ export default async function OnboardingPage() {
       <div className="page">
         <div className="onbhead">
           <h1 className="h1">오픈 준비</h1>
-          <p className="onbhead__sub">
-            아래 준비가 모두 끝나면 발주가 열려요. 완료한 항목을 눌러 체크해 주세요.
-          </p>
         </div>
 
         <div className="onbprog">
