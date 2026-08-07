@@ -13,11 +13,9 @@ import {
   allowedCategoriesFor,
   needsFulfillment,
   needsPickupTime,
-  CATEGORIES,
 } from "@/lib/constants";
 import {
   hasOrderWindow,
-  isOrderOpen,
   currentWindowStartUtc,
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
@@ -48,7 +46,6 @@ export default async function OrderPage(props: {
   // 취소(CANCELLED)된 발주는 제외 → 취소되면 발주창이 자동으로 다시 열린다.
   let existingOrderDate: string | null = null;
   let cancelPending = false;
-  const orderedCats = new Set<string>(); // 이번 창에 이미 넣은 카테고리(#6 추가발주 판별)
   if (windowed && open) {
     // 서버(createOrderAction)와 동일 기준 — 강제오픈으로 정오 이전에 넣은 발주도 잡아
     // '수정 모드'로 전환되게 한다(둘이 어긋나면 화면은 새 발주, 서버는 거부로 혼란).
@@ -62,21 +59,15 @@ export default async function OrderPage(props: {
         status: { not: "CANCELLED" },
       },
       orderBy: { createdAt: "desc" },
-      select: { createdAt: true, cancelRequested: true, category: true },
+      select: { createdAt: true, cancelRequested: true },
     });
     if (existing.length > 0) {
       existingOrderDate = kstDateOf(existing[0].createdAt);
       cancelPending = existing[0].cancelRequested;
-      for (const o of existing) orderedCats.add(o.category);
     }
   }
   const lockedToEdit = !!existingOrderDate;
-  // 아직 안 넣은 종류(공구 제외 — 담기 기반). 있으면 '발주 추가'로 덧붙이기 가능(#6).
-  const missingToAdd = lockedToEdit
-    ? allowedCategoriesFor(user.role).filter(
-        (c) => !orderedCats.has(c) && c !== "TOOL",
-      )
-    : [];
+  // 빠뜨린 종류는 '발주 수정'(통합)에서 추가 — 별도 '발주 추가' 화면 폐지(#6 대체).
 
   // 공구 자동로드 — 오늘이 '픽업 전날'인 확정 예약분(읽기전용, 단일출처). 핫딜마켓만.
   const orderDay = kstToday();
@@ -191,9 +182,8 @@ export default async function OrderPage(props: {
               </div>
             ) : (
               <div className="notice notice--mute" style={{ marginBottom: 16 }}>
-                이미 주문이 진행됐으므로, 발주 수정만 가능합니다.
-                {missingToAdd.length > 0 &&
-                  " 빠뜨린 종류는 아래에서 추가로 발주할 수 있어요."}
+                이미 주문이 진행됐으므로, 발주 수정만 가능합니다. 빠뜨린 종류(과일·야채·공구·채움채)도
+                발주 수정에서 함께 추가할 수 있어요.
               </div>
             )}
             <Link
@@ -202,14 +192,6 @@ export default async function OrderPage(props: {
             >
               발주 수정하러 가기
             </Link>
-            {!cancelPending && missingToAdd.length > 0 && (
-              <div style={{ marginTop: 10 }}>
-                <Link href="/order/add" className="btn btn--soft">
-                  ＋ 빠뜨린 종류 추가 발주 (
-                  {missingToAdd.map((c) => CATEGORIES[c].label).join("·")})
-                </Link>
-              </div>
-            )}
             {!cancelPending && (
               <div style={{ marginTop: 12 }}>
                 <RequestCancelButton />

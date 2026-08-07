@@ -20,6 +20,7 @@
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   createOrderAction,
+  updateDayOrderAction,
   previewGridOrderAction,
   type OrderFormState,
 } from "@/app/actions/order";
@@ -67,6 +68,11 @@ export function OrderForm({
   reservedLabel = "",
   toolCart = [],
   windowKey = "",
+  editDate = "",
+  initialRowsByCat,
+  initialTofuQty,
+  initialPickup = "",
+  initialFulfillment = "",
 }: {
   categories: Category[];
   needsPickup: boolean;
@@ -83,7 +89,17 @@ export function OrderForm({
   toolCart?: ToolHold[];
   /** 현재 발주창 키 — 입력 초안(임시저장)의 유효 범위. 창이 바뀌면(다음날) 초안 자동 폐기. */
   windowKey?: string;
+  /** 수정 모드 — 값(발주일 YYYY-MM-DD)이 있으면 '발주 수정'(updateDayOrderAction). 아니면 신규 발주. */
+  editDate?: string;
+  /** 수정 모드 시드 — 종류별 기존 발주 품목 */
+  initialRowsByCat?: Record<string, { name: string; qty: string; note: string }[]>;
+  /** 수정 모드 시드 — 채움채 수량(catalog seq → qty) */
+  initialTofuQty?: Record<string, string>;
+  initialPickup?: string;
+  initialFulfillment?: "" | Fulfillment;
 }) {
+  // 수정 모드 = editDate 존재. 저장은 updateDayOrderAction, 초안(localStorage)·채팅 진입 비활성.
+  const editMode = !!editDate;
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
 
@@ -91,20 +107,38 @@ export function OrderForm({
   const [active, setActive] = useState<Category>(categories[0]);
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
     const init: Record<string, Row[]> = {};
-    for (const c of categories) init[c] = [newRow()];
-    // 공구(TOOL)는 서버 담기원장(toolCart)이 단일 소스 — rowsByCat 에 담지 않는다.
+    for (const c of categories) {
+      // 공구(TOOL)는 서버 담기원장(toolCart)이 단일 소스 — rowsByCat 에 담지 않는다(빈 줄 유지).
+      const seed = c !== "TOOL" ? initialRowsByCat?.[c] : undefined;
+      init[c] =
+        seed && seed.length
+          ? [
+              ...seed.map((r) => ({
+                id: ++uid.current,
+                name: r.name,
+                qty: r.qty,
+                note: r.note,
+              })),
+              newRow(),
+            ]
+          : [newRow()];
+    }
     return init;
   });
-  const [pickup, setPickup] = useState("");
-  const [fulfillment, setFulfillment] = useState<"" | Fulfillment>("");
-  const [tofuQty, setTofuQty] = useState<Record<string, string>>({});
+  const [pickup, setPickup] = useState(initialPickup);
+  const [fulfillment, setFulfillment] = useState<"" | Fulfillment>(
+    initialFulfillment,
+  );
+  const [tofuQty, setTofuQty] = useState<Record<string, string>>(
+    () => initialTofuQty ?? {},
+  );
   const [confirming, setConfirming] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [confirmTab, setConfirmTab] = useState<Category>(categories[0]);
   const [localError, setLocalError] = useState("");
   const live = useLiveStock(); // 공구 담은 재고 남은수량 실시간
   const [state, formAction] = useActionState<OrderFormState, FormData>(
-    createOrderAction,
+    editMode ? updateDayOrderAction : createOrderAction,
     {},
   );
 
@@ -355,23 +389,26 @@ export function OrderForm({
           저장 시 재정규화하지 않고 그대로 저장(승인=저장 보장). */}
       <input type="hidden" name="preNormalized" value="1" />
       {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
+      {editMode && <input type="hidden" name="date" value={editDate} />}
 
-      {/* 채팅 발주 진입 카드 (미수 카드 아래 풀폭) */}
-      <button
-        type="button"
-        className="entrycard"
-        onClick={() => setMode("chat")}
-      >
-        <span className="entrycard__ic">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 5h16v11H8l-4 4V5Z" />
-          </svg>
-        </span>
-        <span className="entrycard__main">
-          <span className="entrycard__title">채팅으로 발주하기</span>
-        </span>
-        <span className="entrycard__chev">›</span>
-      </button>
+      {/* 채팅 발주 진입 카드 — 수정 모드에선 숨김(수정은 칸으로만) */}
+      {!editMode && (
+        <button
+          type="button"
+          className="entrycard"
+          onClick={() => setMode("chat")}
+        >
+          <span className="entrycard__ic">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 5h16v11H8l-4 4V5Z" />
+            </svg>
+          </span>
+          <span className="entrycard__main">
+            <span className="entrycard__title">채팅으로 발주하기</span>
+          </span>
+          <span className="entrycard__chev">›</span>
+        </button>
+      )}
 
       {locked && (
         <div className="notice notice--mute" style={{ marginBottom: 14 }}>
@@ -597,7 +634,7 @@ export function OrderForm({
           >
             {previewing
               ? "AI가 정리 중…"
-              : `발주 확정${totalItems > 0 ? ` · ${totalItems}건` : ""}`}
+              : `${editMode ? "수정 확정" : "발주 확정"}${totalItems > 0 ? ` · ${totalItems}건` : ""}`}
           </button>
         </div>
 
@@ -613,7 +650,9 @@ export function OrderForm({
           >
             <div className="sheet__panel">
               <div className="sheet__head">
-                <div className="sheet__title">이대로 발주할까요?</div>
+                <div className="sheet__title">
+                  {editMode ? "이대로 수정할까요?" : "이대로 발주할까요?"}
+                </div>
                 <button
                   type="button"
                   className="sheet__close"
@@ -763,8 +802,8 @@ export function OrderForm({
 
               <div className="sheet__foot">
                 <div className="sheet__count">총 {totalItems}건</div>
-                <SubmitButton pendingText="발주 넣는 중…">
-                  네, 발주할게요
+                <SubmitButton pendingText={editMode ? "수정 중…" : "발주 넣는 중…"}>
+                  {editMode ? "네, 수정할게요" : "네, 발주할게요"}
                 </SubmitButton>
               </div>
             </div>

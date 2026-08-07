@@ -64,6 +64,13 @@ export default async function DayReceiptPage(props: {
   const canEditOrder = (createdAt: Date) =>
     !hasOrderWindow(user.role) ||
     (isOrderOpen() && createdAt.getTime() >= windowStart);
+  // 통합 '발주 수정' 진입 가능 여부 — 이번 창의 발주가 하나라도 수정 가능하면(핫딜마켓만).
+  const canEditDay =
+    hasOrderWindow(user.role) &&
+    !allCancelled &&
+    orders.some(
+      (o) => o.status !== "CANCELLED" && canEditOrder(o.createdAt),
+    );
 
   // 계산서(입금요청서) 조회는 통합 페이지(/invoices)로 일원화 — 이 화면엔 발주 목록만.
   const showInvoiceTab = false;
@@ -198,6 +205,19 @@ export default async function DayReceiptPage(props: {
                 발주 {labelDate(date)} · 출고 {labelDate(shipmentDayOf(date))}
               </div>
             </div>
+            {canEditDay && (
+              <div style={{ marginBottom: 20 }}>
+                <Link
+                  href={`/order/day/${date}/edit`}
+                  className="btn btn--primary btn--block"
+                >
+                  발주 수정
+                </Link>
+                <p className="hint" style={{ marginTop: 6, textAlign: "center" }}>
+                  넣지 않은 종류(과일·야채·공구·채움채)도 여기서 추가할 수 있어요.
+                </p>
+              </div>
+            )}
             {sorted.map((order) => {
             const cat = CATEGORIES[order.category as Category];
             return (
@@ -212,15 +232,6 @@ export default async function DayReceiptPage(props: {
                     ) : order.confirmed ? (
                       <span className="badge badge--ok">확인됨 · 준비 중</span>
                     ) : null}
-                    {canEditOrder(order.createdAt) &&
-                      order.status !== "CANCELLED" && (
-                        <Link
-                          href={`/order/${order.id}/edit`}
-                          className="btn btn--xs btn--soft"
-                        >
-                          수정
-                        </Link>
-                      )}
                   </div>
                 </div>
                 <ReceiptCard

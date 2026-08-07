@@ -20,7 +20,14 @@ import {
   ORDER_OPEN_LABEL,
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
-import { kstToday, kstDateOf, kstDayRange, fullKLabel, shipmentDayOf } from "@/lib/date";
+import {
+  kstToday,
+  kstDateOf,
+  kstDayRange,
+  fullKLabel,
+  shipmentDayOf,
+  normalizeDateStr,
+} from "@/lib/date";
 import { currentWindowStartUtc, windowKeyAt } from "@/lib/schedule";
 import { myHolds } from "@/lib/stock-hold";
 import { displayQty } from "@/lib/qty";
@@ -839,4 +846,333 @@ export async function adminUpdateOrderAction(
   await notifyVendorOrderEdited(vendorRoleForCategory(category), order.user.storeName);
 
   redirect(`/admin/orders/${orderId}?edited=1`);
+}
+
+// ============================================================
+//  점주 '발주 수정'(통합) — 그 날짜의 전 카테고리를 한 폼에서 upsert.
+//  안 넣었던 종류를 여기서 추가할 수 있어 별도 '발주 추가' 화면을 대체한다.
+//  · 종류별로: 기존 발주 있으면 수정, 없으면 신규 생성. payload에 없는 종류는 그대로 둔다
+//    (품목을 통째로 비워 저장해도 그 종류는 유지 — 종류 제거는 기존 '발주 취소'로).
+//  · 공구(TOOL)는 클라 payload 무시하고 담기원장(myHolds)으로 재구성(담기↔주문 정합).
+//  · 창/미수/계산서발행 게이트는 단일 수정과 동일.
+// ============================================================
+export async function updateDayOrderAction(
+  _prev: OrderFormState,
+  formData: FormData,
+): Promise<OrderFormState> {
+  const user = await requireMerchant();
+  const date = normalizeDateStr(String(formData.get("date") ?? ""));
+  if (!date) return { error: "잘못된 요청이에요." };
+
+  // 발주 운영시간 가드
+  if (!(await orderOpenNow(user.role))) {
+    return {
+      error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
+    };
+  }
+
+  // 1일 미수 잠금
+  const lock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
+  if (lock.locked) {
+    return { error: "지난 발주가 결제되지 않아 발주가 잠겨 있어요. 입금 확인 후 가능해요." };
+  }
+
+  // 그 날짜의 기존 발주(취소 제외). 반드시 존재해야 함(이 화면은 '기존 날짜 수정' 전용).
+  // orderBy로 종류별 '첫 건'을 결정적으로 고정(같은 종류 중복 Order 정리 기준). items는 변경 diff용.
+  const { start, end } = kstDayRange(date);
+  const existing = await prisma.order.findMany({
+    where: {
+      userId: user.id,
+      createdAt: { gte: start, lt: end },
+      status: { not: "CANCELLED" },
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      category: true,
+      createdAt: true,
+      items: {
+        orderBy: { sortOrder: "asc" },
+        select: { name: true, qty: true, note: true },
+      },
+    },
+  });
+  if (existing.length === 0) return { error: "수정할 발주가 없어요." };
+
+  // 이번 발주창 소속만 수정 가능(핫딜마켓) — 지난 창(이미 출고 준비) 발주 차단.
+  if (hasOrderWindow(user.role)) {
+    if (!isOrderOpen()) {
+      return { error: `지금은 수정 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL})` };
+    }
+    if (existing.some((o) => o.createdAt.getTime() < currentWindowStartUtc())) {
+      return { error: "지난 발주는 수정할 수 없어요. 본사에 문의해 주세요." };
+    }
+  }
+
+  // 계산서 발행분은 잠금(청구액↔발주 정합). Invoice.date=출고일 기준.
+  const issuedInv = await prisma.invoice.findFirst({
+    where: {
+      userId: user.id,
+      kind: "DAILY",
+      date: shipmentDayOf(date),
+      status: { in: ["ISSUED", "PAID"] },
+    },
+    select: { id: true },
+  });
+  if (issuedInv) {
+    return { error: "입금요청서가 발행된 발주는 수정할 수 없어요. 본사에 문의해 주세요." };
+  }
+
+  const allowed = allowedCategoriesFor(user.role);
+
+  // payload: 멀티 카테고리(공구는 여기서 무시 — 아래 myHolds로 재구성)
+  let payload: { category?: string; items?: RawRow[] }[] = [];
+  try {
+    payload = JSON.parse(String(formData.get("payload") ?? "[]"));
+  } catch {
+    payload = [];
+  }
+  const groups: Group[] = [];
+  for (const g of payload) {
+    const category = String(g.category ?? "") as Category;
+    if (!allowed.includes(category) || category === "TOOL") continue;
+    const items = cleanItems(Array.isArray(g.items) ? g.items : []);
+    if (items.length === 0) continue;
+    if (!items.some((r) => r.name)) {
+      return { error: `${CATEGORIES[category].label} 품목명을 입력하세요.` };
+    }
+    const badQty = findBadQtyItem(items);
+    if (badQty) return { error: `‘${badQty}’ 수량을 입력해 주세요.` };
+    groups.push({ category, items });
+  }
+  remapBenijimin(groups); // #5 베니지민 고구마 → 과일
+  mergeSameItems(groups); // R1 같은 품목+설명 합산
+
+  // 공구(TOOL) = 담기원장(myHolds)로 재구성. 담은 게 없으면 공구는 손대지 않음(그대로 둠).
+  const holds = await myHolds(user.id, windowKeyAt());
+  const toolItems = holds.map((h) => ({ name: h.name, qty: String(h.qty), note: "" }));
+
+  if (groups.length === 0 && toolItems.length === 0) {
+    return { error: "발주할 품목을 한 개 이상 입력하세요." };
+  }
+
+  const pickupTime = await buildPickup(user.role, formData, date);
+  const ful = readFulfillment(user.role, formData);
+  if (ful.error) return { error: ful.error };
+
+  // 채팅/칸 미리보기(previewGridOrderAction)에서 이미 정리·확인했으면 재정규화 생략.
+  const preNormalized = String(formData.get("preNormalized") ?? "") === "1";
+
+  // 비-공구 그룹 정규화(TOFU는 원본 보존). createOrderAction과 동일 규칙.
+  const normalized = await Promise.all(
+    groups.map((g) => {
+      if (g.category === "TOFU") {
+        return Promise.resolve({
+          engine: "rule" as const,
+          items: g.items,
+          summary: `채움채 발주 ${g.items.length}건`,
+        });
+      }
+      if (preNormalized) {
+        const noteTags = [...new Set(g.items.map((it) => it.note).filter(Boolean))];
+        return Promise.resolve({
+          engine: "claude" as const,
+          items: g.items,
+          summary: noteTags.join(" · "),
+        });
+      }
+      return normalizeOrder({
+        categoryLabel: CATEGORIES[g.category].label,
+        items: g.items,
+        pickupTime: pickupTime || undefined,
+      });
+    }),
+  );
+
+  // 카테고리별 저장용 데이터 산출(create/update 공용)
+  type Prepared = {
+    category: Category;
+    rawText: string;
+    summary: string;
+    engine: "claude" | "rule";
+    itemRows: {
+      sortOrder: number;
+      rawName: string;
+      rawQty: string;
+      rawNote: string;
+      name: string;
+      qty: string;
+      note: string;
+    }[];
+  };
+  const prepared: Prepared[] = groups.map((g, gi) => {
+    const result = normalized[gi];
+    const aligned = result.items.length === g.items.length;
+    const clean = aligned ? result.items : g.items;
+    const engine = aligned ? result.engine : "rule";
+    const rawText = g.items
+      .map((r, i) => `${i + 1}. ${[r.name, r.qty, r.note].filter(Boolean).join(" ")}`)
+      .join("\n");
+    return {
+      category: g.category,
+      rawText,
+      summary: result.summary,
+      engine,
+      itemRows: g.items.map((r, i) => ({
+        sortOrder: i,
+        rawName: r.name,
+        rawQty: r.qty,
+        rawNote: r.note,
+        name: clean[i]?.name ?? r.name,
+        qty: displayQty(clean[i]?.qty ?? r.qty),
+        note: clean[i]?.note ?? r.note,
+      })),
+    };
+  });
+
+  // 공구 그룹(담기원장, 정규화 없음 — 이름 보존)
+  if (toolItems.length > 0) {
+    prepared.push({
+      category: "TOOL",
+      rawText: toolItems.map((r, i) => `${i + 1}. ${r.name} ${r.qty}`).join("\n"),
+      summary: `공구 발주 ${toolItems.length}건`,
+      engine: "rule",
+      itemRows: toolItems.map((r, i) => ({
+        sortOrder: i,
+        rawName: r.name,
+        rawQty: r.qty,
+        rawNote: r.note,
+        name: r.name,
+        qty: displayQty(r.qty),
+        note: r.note,
+      })),
+    });
+  }
+
+  // 종류별 upsert — 없던 종류=생성, 있고 내용이 바뀐 종류=수정(확정해제·알림),
+  // 내용이 그대로면 손대지 않음(그 업체 확정·알림 유지). 같은 종류 중복 Order(레이스 잔재)는
+  // 첫 건만 남기고 나머지 삭제(정리). 변경 없는 종류를 재확정·재알림하던 문제 방지.
+  const existingByCat = new Map<
+    string,
+    {
+      id: string;
+      items: { name: string; qty: string; note: string }[];
+      extraIds: string[];
+    }
+  >();
+  for (const o of existing) {
+    const cur = existingByCat.get(o.category);
+    if (!cur) existingByCat.set(o.category, { id: o.id, items: o.items, extraIds: [] });
+    else cur.extraIds.push(o.id); // 같은 종류 중복 → 정리 대상
+  }
+  const sameItems = (
+    a: { name: string; qty: string; note: string }[],
+    b: { name: string; qty: string; note: string }[],
+  ) =>
+    a.length === b.length &&
+    a.every(
+      (x, i) =>
+        x.name === b[i].name &&
+        String(x.qty) === String(b[i].qty) &&
+        (x.note ?? "") === (b[i].note ?? ""),
+    );
+
+  const createdCats: Category[] = [];
+  const editedCats: Category[] = [];
+  const ops = prepared.flatMap((p) => {
+    const common = {
+      pickupTime: pickupTime || null,
+      fulfillment: ful.value,
+      rawText: p.rawText,
+      aiSummary: p.summary,
+      aiProcessed: true,
+      aiEngine: p.engine,
+    };
+    const ex = existingByCat.get(p.category);
+    // 같은 종류 중복(레이스) 정리 — 첫 건 외 삭제
+    const cleanup =
+      ex && ex.extraIds.length > 0
+        ? [
+            prisma.orderItem.deleteMany({ where: { orderId: { in: ex.extraIds } } }),
+            prisma.order.deleteMany({ where: { id: { in: ex.extraIds } } }),
+          ]
+        : [];
+    if (ex) {
+      const newItems = p.itemRows.map((r) => ({
+        name: r.name,
+        qty: r.qty,
+        note: r.note,
+      }));
+      if (sameItems(newItems, ex.items)) return cleanup; // 변경 없음 → 확정·알림 유지
+      editedCats.push(p.category);
+      return [
+        ...cleanup,
+        prisma.orderItem.deleteMany({ where: { orderId: ex.id } }),
+        prisma.order.update({
+          where: { id: ex.id },
+          data: {
+            ...common,
+            edited: true,
+            editedAt: new Date(),
+            confirmed: false,
+            confirmedAt: null,
+            items: { create: p.itemRows },
+          },
+        }),
+      ];
+    }
+    createdCats.push(p.category);
+    return [
+      prisma.order.create({
+        data: {
+          userId: user.id,
+          category: p.category,
+          vendorRole: vendorRoleForCategory(p.category),
+          ...common,
+          items: { create: p.itemRows },
+        },
+      }),
+    ];
+  });
+
+  if (ops.length > 0) {
+    try {
+      await prisma.$transaction(ops);
+    } catch (err) {
+      console.error("[order] day update failed:", err);
+      return { error: "수정 저장에 실패했어요. 잠시 후 다시 시도해 주세요." };
+    }
+  }
+
+  // 수령 방식은 그 날 발주 전체에 동일 적용(안 건드린 종류까지). confirmed는 건드리지 않음.
+  if (needsFulfillment(user.role)) {
+    try {
+      await prisma.order.updateMany({
+        where: {
+          userId: user.id,
+          createdAt: { gte: start, lt: end },
+          status: { not: "CANCELLED" },
+        },
+        data: { fulfillment: ful.value },
+      });
+    } catch (e) {
+      logError("order.dayFulfillmentSync", e, { userId: user.id, date });
+    }
+  }
+
+  // 알림 — 새로 추가된 종류는 '새 발주', 내용이 바뀐 종류만 '발주 수정'. 변경 없는 종류는 알림 없음.
+  const createdVendors = [...new Set(createdCats.map(vendorRoleForCategory))];
+  const editedVendors = [...new Set(editedCats.map(vendorRoleForCategory))];
+  await Promise.all(createdVendors.map((r) => notifyVendorNewOrder(r, user.storeName)));
+  await Promise.all(editedVendors.map((r) => notifyVendorOrderEdited(r, user.storeName)));
+  if (createdCats.length > 0) await notifyAdminNewOrder(user.storeName);
+  if (editedCats.length > 0) await notifyAdminOrderEdited(user.storeName);
+  if (createdCats.length > 0) {
+    const placed = prepared
+      .filter((p) => createdCats.includes(p.category))
+      .reduce((n, p) => n + p.itemRows.length, 0);
+    await notifyMerchantOrderPlaced(user.id, placed);
+  }
+
+  redirect(`/order/day/${date}?edited=1`);
 }
