@@ -92,6 +92,8 @@ export async function GET(request: Request) {
   await timed("tick:deadline", 20, 0, [1, 2, 3, 4, 5, 0], "/api/cron/notify?type=deadline", 30);
   await timed("tick:chaeumchae", 20, 5, [1, 2, 3, 4, 5, 0], "/api/cron/submit-chaeumchae", 180);
   await timed("tick:overdue", 10, 0, [0, 1, 2, 3, 4, 5, 6], "/api/cron/invoice-overdue?days=1", 720);
+  // 상품 소싱 크롤 — 매일 아침 8시(로컬 업체 + 밀키트). 라우트가 트랙별 일일 dedup.
+  await timed("tick:sourcing", 8, 0, [0, 1, 2, 3, 4, 5, 6], "/api/cron/sourcing", 720);
   // 창고 실물재고 동기화 — 매일 오전 10시(출고 끝난 시점, 재고=실물). 재고현황을 창고 수량 스냅샷으로.
   await timed("tick:wh-stock", 10, 0, [0, 1, 2, 3, 4, 5, 6], "/api/cron/warehouse-stock-sync", 720);
 

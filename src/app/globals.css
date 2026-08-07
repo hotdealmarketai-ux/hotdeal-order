@@ -5809,3 +5809,56 @@ a.resv-card:active { transform: scale(0.995); }
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
+
+/* 상품 소싱 */
+.srcrow {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+.srcrow__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.srcrow__title {
+  font-weight: 800;
+  color: var(--fg);
+  line-height: 1.35;
+  min-width: 0;
+}
+.srcrow__score {
+  flex-shrink: 0;
+  font-weight: 900;
+  font-size: 15px;
+  color: var(--green-700);
+  font-variant-numeric: tabular-nums;
+}
+.srcrow__sub {
+  font-size: 13px;
+  color: var(--muted);
+}
+.srcrow__reason {
+  font-size: 14px;
+  color: var(--fg-2);
+  line-height: 1.5;
+}
+.srcrow__links {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+.srcrow__links a {
+  color: var(--green-700);
+  font-weight: 700;
+}
+.srcbtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}

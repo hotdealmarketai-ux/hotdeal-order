@@ -726,3 +726,80 @@ model OnboardingCheck {
   @@unique([userId, blockId])
   @@index([userId])
 }
+
+// ── 상품 소싱(크롤링) ─────────────────────────────────────────
+// 매일 아침 자동 수집·선별. 두 트랙: LOCAL(로컬 베이커리·떡·디저트 컨택 후보) / MEALKIT(냉동·밀키트 수요 후보).
+// 소스별 어댑터가 원자료를 가져오면 정규화→중복제거(key)→필터→AI선별 후 여기에 upsert.
+
+// 로컬 업체 컨택 후보(Track A)
+model SourcingLead {
+  id          String   @id @default(cuid())
+  key         String   @unique // 정규화 상호(+지역) — 소스 간 중복 병합 기준
+  source      String   @default("") // naver-local | firecrawl | manual ...
+  sourceRef   String   @default("") // 외부 id/url
+  name        String
+  region      String   @default("") // 지역(성수/연남 등)
+  category    String   @default("") // 베이커리 | 디저트 | 떡
+  storeCount  Int? // 호점 수(모르면 null)
+  isFranchise Boolean  @default(false)
+  reviewCount Int?
+  trendScore  Float    @default(0) // 랭킹용 종합 점수
+  instagram   String   @default("")
+  phone       String   @default("")
+  url         String   @default("")
+  reason      String   @default("") // AI 추천 이유 한 줄
+  note        String   @default("") // 관리자 메모
+  status      String   @default("NEW") // NEW | CONTACTED | REJECTED | DEAL | IGNORED
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, trendScore])
+  @@index([lastSeenAt])
+}
+
+// 밀키트/냉동 수요 후보(Track B)
+model SourcingProduct {
+  id             String   @id @default(cuid())
+  key            String   @unique // 정규화 제품명(+브랜드)
+  source         String   @default("")
+  sourceRef      String   @default("")
+  name           String
+  brand          String   @default("")
+  category       String   @default("")
+  price          Int?
+  reviewCount    Int?
+  prevReviewCount Int? // 리뷰속도 계산용(직전 스냅샷)
+  reviewVelocity Float    @default(0) // 최근 리뷰 증가속도(수요 프록시)
+  demandScore    Float    @default(0)
+  isBigBrand     Boolean  @default(false)
+  marginEst      Int? // 예상 마진(있으면)
+  url            String   @default("")
+  imageUrl       String   @default("")
+  reason         String   @default("")
+  note           String   @default("")
+  status         String   @default("NEW") // NEW | PICKED | IGNORED
+  firstSeenAt    DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, demandScore])
+  @@index([lastSeenAt])
+}
+
+// 수집 실행 로그(관측용)
+model SourcingRun {
+  id         String   @id @default(cuid())
+  track      String // LOCAL | MEALKIT
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  found      Int      @default(0) // 수집 원자료 수
+  kept       Int      @default(0) // 필터 후 저장 수
+  ok         Boolean  @default(true)
+  error      String   @default("")
+  detail     String   @default("") // 소스별 요약(json)
+
+  @@index([startedAt])
+}

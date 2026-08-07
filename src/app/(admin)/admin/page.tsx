@@ -88,6 +88,7 @@ export default async function AdminHome() {
         { href: "/admin/calendar", title: "예약 일정" },
         { href: "/admin/holds", title: "담기 현황" },
         { href: "/admin/shipments", title: "송장 관리" },
+        { href: "/admin/sourcing", title: "상품 소싱" },
       ],
     },
     {
