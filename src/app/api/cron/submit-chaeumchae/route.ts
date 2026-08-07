@@ -6,7 +6,7 @@ import {
   type SubmitItem,
 } from "@/lib/chaeumchae-submit";
 import { sendPushToRole } from "@/lib/push";
-import { currentWindowStartUtc } from "@/lib/schedule";
+import { currentWindowStartUtc, windowKeyAt } from "@/lib/schedule";
 import { kstDateOf } from "@/lib/date";
 import { logError } from "@/lib/log";
 
@@ -126,7 +126,9 @@ export async function GET(request: Request) {
   // 멱등: 같은 출고일엔 한 번만 제출(디스패처+GH Actions 동시 실행에도 중복 제출 방지).
   // 원자적 claim(create) — 동시 두 호출 중 하나만 성공(@id 유니크). ?force=1 은 수동 재실행(claim 무시).
   const force = url.searchParams.get("force") === "1";
-  const claimKey = `chaeumchae:${orderDay}`;
+  // 발주 창 단위로 1회 제출(멱등). 주말(토12시~일20시)은 하나의 창이라 키도 하나(토요일자) →
+  // 토·일이 묶여도 절대 두 번 제출되지 않음. 계산한 출고일 대신 창 키를 써서 날짜 어긋남에도 안전.
+  const claimKey = `chaeumchae:${windowKeyAt(now)}`;
   if (!force) {
     try {
       await prisma.appMeta.create({ data: { key: claimKey } });
