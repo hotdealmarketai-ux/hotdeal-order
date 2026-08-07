@@ -174,7 +174,9 @@ export default async function OrderPage(props: {
           </>
         ) : lockedToEdit ? (
           <>
-            <h1 className="h1">발주하기</h1>
+            <h1 className="h1" style={{ marginBottom: 24 }}>
+              발주하기
+            </h1>
             {cancelPending && (
               <div className="notice notice--edit" style={{ marginBottom: 16 }}>
                 <b>취소 요청됨</b> · 관리자 승인 대기중이에요. 승인되면 발주가
