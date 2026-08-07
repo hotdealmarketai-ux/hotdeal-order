@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
+import { needsOnboarding } from "@/lib/onboarding";
 import { prisma } from "@/lib/prisma";
 import { canOrderWeekly } from "@/lib/constants";
 import { receivableOf } from "@/lib/receivable";
@@ -45,6 +46,7 @@ export default async function WeeklyOrderPage({
   searchParams: Promise<{ date?: string; edit?: string; ok?: string; cancelled?: string; err?: string }>;
 }) {
   const user = await requireMerchant();
+  if (needsOnboarding(user)) redirect("/onboarding");
   if (!canOrderWeekly(user.role)) redirect("/order");
 
   const sp = await searchParams;

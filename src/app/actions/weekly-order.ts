@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireMerchant, requireAdmin } from "@/lib/session";
+import { needsOnboarding } from "@/lib/onboarding";
 import { canOrderWeekly } from "@/lib/constants";
 import { WEEKLY_OPEN_LABEL, WEEKLY_CLOSE_LABEL } from "@/lib/schedule";
 import { weeklyKeyAt, weeklyLockOf, weeklyOpenNow, weeklyProductMap } from "@/lib/weekly";
@@ -17,6 +18,7 @@ export async function createWeeklyOrderAction(
   formData: FormData,
 ): Promise<WeeklyOrderState> {
   const user = await requireMerchant();
+  if (needsOnboarding(user)) return { error: "오픈 준비를 먼저 완료해 주세요." };
   if (!canOrderWeekly(user.role)) {
     return { error: "주간발주 대상 점포가 아니에요." };
   }

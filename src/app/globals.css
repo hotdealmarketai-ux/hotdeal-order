@@ -5615,3 +5615,173 @@ a.resv-card:active { transform: scale(0.995); }
     grid-column: span 12 !important;
   }
 }
+
+/* ============================================================
+   튜토리얼 v2 — 예쁜 승인제 체크박스 + 중첩 트리 + 편집기 필드
+   ============================================================ */
+/* 체크박스 박스 */
+.onbx {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 900;
+  color: #fff;
+  transition: background .16s ease, border-color .16s ease, transform .12s ease, box-shadow .16s ease;
+}
+.onbx--none {
+  background: var(--surface);
+  border: 2px solid var(--muted-3);
+}
+.onbx--pending {
+  background: var(--warn-bg);
+  border: 2px solid var(--warn);
+  box-shadow: 0 0 0 3px rgba(138, 100, 0, 0.12);
+}
+.onbx--pending::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+.onbx--partial {
+  background: var(--ok-bg);
+  border: 2px solid var(--green-700);
+}
+.onbx--done {
+  background: var(--green-700);
+  border: 2px solid var(--green-700);
+  box-shadow: 0 4px 12px rgba(28, 74, 47, 0.28);
+  transform: scale(1);
+}
+
+/* 행(체크 + 제목) */
+.onbrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.onbrow--leaf {
+  cursor: pointer;
+}
+.onbrow--leaf:active {
+  transform: scale(0.995);
+}
+.onbrow--leaf.is-approved {
+  background: var(--ok-bg);
+  border-color: rgba(28, 74, 47, 0.35);
+  cursor: default;
+}
+.onbrow--leaf:disabled {
+  opacity: 1;
+}
+.onbrow--branch {
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+.onbrow__title {
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1.35;
+  flex: 1;
+  min-width: 0;
+}
+.onbrow__tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.onbrow__tag--wait {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
+
+/* 중첩 트리 */
+.onbtree {
+  display: grid;
+  gap: 10px;
+}
+.onbnode {
+  display: grid;
+  gap: 8px;
+}
+.onbnode--d0 > .onbrow--branch .onbrow__title {
+  font-size: 16px;
+  font-weight: 800;
+}
+.onbnode__desc {
+  margin: 0;
+  padding-left: 4px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg-2);
+  white-space: pre-wrap;
+}
+.onbnode__imgs {
+  display: grid;
+  gap: 8px;
+}
+.onbnode__imgs img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  display: block;
+}
+.onbnode__kids {
+  display: grid;
+  gap: 10px;
+  margin-left: 14px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+
+/* 편집기 필드 */
+.onbfield {
+  display: grid;
+  gap: 5px;
+}
+.onbfield__k {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.onbimg--edit {
+  position: relative;
+}
+.onbimg--edit img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  display: block;
+}
+.onbimg__del {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}

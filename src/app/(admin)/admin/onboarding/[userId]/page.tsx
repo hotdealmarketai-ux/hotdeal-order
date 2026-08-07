@@ -1,11 +1,11 @@
-// 관리자 — 한 점포의 튜토리얼 진행. 진행률 + 전체 체크박스(분류 경로 표시) 대리 체크 + 취소.
+// 관리자 — 한 점포의 튜토리얼 승인. 최하위 항목(경로 표시)별 승인/해제 + 진행률 + 취소.
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { getProgress, getAllCheckBlocks, getUserChecks } from "@/lib/onboarding";
-import { OnbCheckbox } from "@/components/onboarding/OnbCheckbox";
+import { getProgress, getLeafApprovals } from "@/lib/onboarding";
+import { AdminApproveButton } from "@/components/onboarding/AdminApproveButton";
 import { CancelOnboardingButton } from "@/components/AdminOnboardingControls";
 
 export default async function AdminOnboardingMerchantPage(props: {
@@ -16,23 +16,12 @@ export default async function AdminOnboardingMerchantPage(props: {
 
   const merchant = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      storeName: true,
-      role: true,
-      onboardingStartedAt: true,
-      onboardingCompletedAt: true,
-    },
+    select: { storeName: true, role: true, onboardingStartedAt: true, onboardingCompletedAt: true },
   });
   if (!merchant || merchant.role !== "MERCHANT_HOTDEAL") notFound();
 
-  const [progress, checks] = await Promise.all([
-    getProgress(userId),
-    getAllCheckBlocks(),
-  ]);
-  const checked = await getUserChecks(
-    userId,
-    checks.map((c) => c.id),
-  );
+  const [progress, leaves] = await Promise.all([getProgress(userId), getLeafApprovals(userId)]);
+  const waiting = leaves.filter((l) => l.requestedAt && !l.approvedAt).length;
 
   return (
     <>
@@ -42,41 +31,46 @@ export default async function AdminOnboardingMerchantPage(props: {
           <div className="spread" style={{ alignItems: "baseline" }}>
             <b>진행률</b>
             <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 800 }}>
-              {progress.done}/{progress.total} · {progress.percent}%
+              {progress.percent}%
             </span>
           </div>
           <div className="row__sub" style={{ marginTop: 6 }}>
             {merchant.onboardingCompletedAt
               ? "오픈 완료 — 발주가 열렸습니다."
               : merchant.onboardingStartedAt
-                ? "튜토리얼 진행 중 — 발주 잠금."
+                ? `튜토리얼 진행 중 — 발주 잠금${waiting > 0 ? ` · 승인 대기 ${waiting}건` : ""}.`
                 : "기존 지점 — 발주 정상."}
           </div>
         </div>
 
-        {checks.length === 0 ? (
+        {leaves.length === 0 ? (
           <div className="empty">
             체크 항목이 없어요.{" "}
             <Link href="/admin/onboarding/template">튜토리얼 편집</Link>에서 추가하세요.
           </div>
         ) : (
           <div className="list">
-            {checks.map((c) => (
-              <div key={c.id} className="row" style={{ alignItems: "center", gap: 10 }}>
-                <div className="row__main">
-                  {c.path && <div className="row__sub">{c.path}</div>}
-                  <div className="row__title">{c.text || "(제목 없음)"}</div>
+            {leaves.map((l) => {
+              const waitingItem = l.requestedAt && !l.approvedAt;
+              return (
+                <div key={l.id} className="row" style={{ alignItems: "center", gap: 10 }}>
+                  <div className="row__main">
+                    {l.path && <div className="row__sub">{l.path}</div>}
+                    <div className="row__title">
+                      {l.title || "(제목 없음)"}
+                      {l.approvedAt ? (
+                        <span className="badge badge--ok" style={{ marginLeft: 6 }}>승인됨</span>
+                      ) : waitingItem ? (
+                        <span className="badge badge--wait" style={{ marginLeft: 6 }}>승인 대기</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    <AdminApproveButton userId={userId} nodeId={l.id} approved={!!l.approvedAt} />
+                  </div>
                 </div>
-                <div style={{ flexShrink: 0 }}>
-                  <OnbCheckbox
-                    blockId={c.id}
-                    label=""
-                    checked={checked.has(c.id)}
-                    userId={userId}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

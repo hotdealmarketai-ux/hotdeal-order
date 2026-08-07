@@ -1,39 +1,33 @@
-// 튜토리얼(편집형) — 게이트·진행률·트리 로더.
-// 진행률 = 체크한 체크박스 수 / 전체 체크박스 수. 100%면 onboardingCompletedAt 세팅 → 발주 오픈.
-// 게이트는 startedAt/completedAt 만 본다 → 기존 점주(startedAt=null)는 절대 잠기지 않음.
+// 튜토리얼(오픈 준비) — 분류 트리 = 체크박스. 최하위(자식 없는) 노드만 실제 체크 대상.
+// 점주가 누르면 '승인 대기', 관리자가 승인하면 '활성(완료)'. 하위가 모두 완료면 상위가 롤업 완료.
+// 진행률 = 승인된 최하위 / 전체 최하위. 100%면 발주 오픈. 게이트는 startedAt/completedAt 만 본다.
 import { prisma } from "@/lib/prisma";
 
-export const BLOCK_TYPES = ["HEADING", "TEXT", "IMAGE", "CHECK"] as const;
-export type BlockType = (typeof BLOCK_TYPES)[number];
-
-export type NodeBlock = {
+export type RawNode = {
   id: string;
+  parentId: string | null;
   order: number;
-  type: string; // HEADING | TEXT | IMAGE | CHECK
-  text: string;
-  imageUrl: string;
-  colSpan: number; // 1..12
+  title: string;
+  description: string;
+  images: string[];
 };
 
-export type ChildNode = { id: string; title: string; order: number };
-export type Crumb = { id: string; title: string };
+export type TreeNode = RawNode & { children: TreeNode[]; isLeaf: boolean };
 
-export type NodeLoad = {
-  node: { id: string; title: string; parentId: string | null };
-  breadcrumb: Crumb[]; // 루트(대분류)부터 현재까지
-  level: number; // 1=대, 2=중, 3=소
-  children: ChildNode[];
-  blocks: NodeBlock[];
+// 한 노드의 지점별 상태.
+export type NodeState = {
+  complete: boolean; // 완료(활성). 최하위=승인됨 / 상위=모든 자식 완료
+  pending: boolean; // 최하위=승인 대기 / 상위=진행 중이나 미완료
 };
 
 export type ProgressView = {
-  total: number; // 전체 체크박스 수
-  done: number; // 체크된 수
-  percent: number; // 0~100
-  complete: boolean; // total>0 && done>=total
+  total: number; // 전체 최하위(체크 대상) 수
+  done: number; // 승인 완료된 최하위 수
+  percent: number;
+  complete: boolean;
 };
 
-// 온보딩 게이트 대상인가 — 핫딜마켓 & 승인 & 시작됨 & 아직 미완료.
+// 게이트 대상 — 핫딜마켓 & 승인 & 시작됨 & 미완료.
 export function needsOnboarding(user: {
   role: string;
   status: string;
@@ -48,19 +42,51 @@ export function needsOnboarding(user: {
   );
 }
 
-// 진행률 — 전체 체크박스 대비 그 점주가 체크한 수.
-export async function getProgress(userId: string): Promise<ProgressView> {
-  const [total, done] = await Promise.all([
-    prisma.onboardingBlock.count({ where: { type: "CHECK" } }),
-    prisma.onboardingCheck.count({ where: { userId, block: { type: "CHECK" } } }),
-  ]);
-  // 체크박스가 하나도 없으면(초기 구성 중/빈 템플릿) 잠글 게 없으므로 완료로 본다.
-  const percent = total === 0 ? 100 : Math.min(100, Math.round((done / total) * 100));
-  return { total, done, percent, complete: total === 0 ? true : done >= total };
+async function loadAllNodes(): Promise<RawNode[]> {
+  return prisma.onboardingNode.findMany({
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    select: { id: true, parentId: true, order: true, title: true, description: true, images: true },
+  });
 }
 
-// 완료 판정 — 전체 체크박스를 다 체크했으면 onboardingCompletedAt 세팅(멱등, sticky).
-// 방금 완료됐으면 true. 완료 후 관리자가 체크박스를 추가해도 completedAt은 유지(발주 계속 오픈).
+function buildTree(nodes: RawNode[]) {
+  const byId = new Map<string, TreeNode>();
+  for (const n of nodes) byId.set(n.id, { ...n, children: [], isLeaf: true });
+  const roots: TreeNode[] = [];
+  for (const n of nodes) {
+    const node = byId.get(n.id)!;
+    if (n.parentId && byId.get(n.parentId)) {
+      const p = byId.get(n.parentId)!;
+      p.children.push(node);
+      p.isLeaf = false;
+    } else {
+      roots.push(node);
+    }
+  }
+  return { roots, byId };
+}
+
+function leavesOf(byId: Map<string, TreeNode>): TreeNode[] {
+  return [...byId.values()].filter((n) => n.isLeaf);
+}
+
+// 진행률 — 승인된 최하위 / 전체 최하위.
+export async function getProgress(userId: string): Promise<ProgressView> {
+  const { byId } = buildTree(await loadAllNodes());
+  const leaves = leavesOf(byId);
+  const total = leaves.length;
+  if (total === 0) return { total: 0, done: 0, percent: 100, complete: true };
+  const approved = await prisma.onboardingApproval.findMany({
+    where: { userId, approvedAt: { not: null } },
+    select: { nodeId: true },
+  });
+  const approvedSet = new Set(approved.map((a) => a.nodeId));
+  const done = leaves.filter((n) => approvedSet.has(n.id)).length;
+  const percent = Math.min(100, Math.floor((done / total) * 100));
+  return { total, done, percent, complete: done >= total };
+}
+
+// 완료 판정(멱등, sticky). 승인된 최하위가 전부면 completedAt 세팅.
 export async function maybeCompleteOnboarding(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -78,96 +104,146 @@ export async function maybeCompleteOnboarding(userId: string): Promise<boolean> 
   return true;
 }
 
-// 대분류(최상위) 목록.
-export async function getRootNodes(): Promise<ChildNode[]> {
-  return prisma.onboardingNode.findMany({
-    where: { parentId: null },
-    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    select: { id: true, title: true, order: true },
-  });
+// 전체 최하위(체크 대상) 개수 — 시작 가드용.
+export async function countLeaves(): Promise<number> {
+  const { byId } = buildTree(await loadAllNodes());
+  return leavesOf(byId).length;
 }
 
-// 루트→현재까지의 경로(브레드크럼). 깊이 ≤ 3이라 짧은 루프.
-export async function getBreadcrumb(nodeId: string): Promise<Crumb[]> {
-  const chain: Crumb[] = [];
-  let cur = await prisma.onboardingNode.findUnique({
-    where: { id: nodeId },
-    select: { id: true, title: true, parentId: true },
+// 트리 + 지점별 롤업 상태(점주/관리자 뷰).
+export async function getTreeWithState(userId: string): Promise<{
+  roots: TreeNode[];
+  state: Map<string, NodeState>;
+  progress: ProgressView;
+}> {
+  const { roots, byId } = buildTree(await loadAllNodes());
+  const approvals = await prisma.onboardingApproval.findMany({
+    where: { userId },
+    select: { nodeId: true, approvedAt: true },
   });
-  let guard = 0;
-  while (cur && guard++ < 10) {
-    chain.unshift({ id: cur.id, title: cur.title });
-    if (!cur.parentId) break;
-    cur = await prisma.onboardingNode.findUnique({
-      where: { id: cur.parentId },
-      select: { id: true, title: true, parentId: true },
-    });
-  }
-  return chain;
+  const appByNode = new Map(approvals.map((a) => [a.nodeId, a]));
+  const state = new Map<string, NodeState>();
+
+  const compute = (node: TreeNode): NodeState => {
+    let st: NodeState;
+    if (node.isLeaf) {
+      const a = appByNode.get(node.id);
+      st = { complete: !!a?.approvedAt, pending: !!a && !a.approvedAt };
+    } else {
+      const cs = node.children.map(compute);
+      const complete = node.children.length > 0 && cs.every((s) => s.complete);
+      const pending = !complete && cs.some((s) => s.complete || s.pending);
+      st = { complete, pending };
+    }
+    state.set(node.id, st);
+    return st;
+  };
+  roots.forEach(compute);
+
+  const leaves = leavesOf(byId);
+  const total = leaves.length;
+  const done = leaves.filter((n) => state.get(n.id)?.complete).length;
+  const percent = total === 0 ? 100 : Math.min(100, Math.floor((done / total) * 100));
+  return { roots, state, progress: { total, done, percent, complete: total === 0 ? true : done >= total } };
 }
 
-// 한 노드의 자식·블록·경로. 없으면 null.
-export async function loadNode(nodeId: string): Promise<NodeLoad | null> {
-  const node = await prisma.onboardingNode.findUnique({
-    where: { id: nodeId },
-    select: { id: true, title: true, parentId: true },
+// 관리자 점포별 승인 화면 — 전체 최하위 + 경로 + 그 지점 상태(요청/승인).
+export type LeafApproval = {
+  id: string;
+  title: string;
+  path: string; // 상위 분류 경로(자기 제외)
+  requestedAt: Date | null;
+  approvedAt: Date | null;
+};
+export async function getLeafApprovals(userId: string): Promise<LeafApproval[]> {
+  const nodes = await loadAllNodes();
+  const { byId } = buildTree(nodes);
+  const leaves = leavesOf(byId);
+  const approvals = await prisma.onboardingApproval.findMany({
+    where: { userId },
+    select: { nodeId: true, requestedAt: true, approvedAt: true },
   });
-  if (!node) return null;
-  const [children, blocks, breadcrumb] = await Promise.all([
-    prisma.onboardingNode.findMany({
-      where: { parentId: nodeId },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: { id: true, title: true, order: true },
-    }),
-    prisma.onboardingBlock.findMany({
-      where: { nodeId },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: { id: true, order: true, type: true, text: true, imageUrl: true, colSpan: true },
-    }),
-    getBreadcrumb(nodeId),
-  ]);
-  return { node, breadcrumb, level: breadcrumb.length, children, blocks };
-}
-
-// 템플릿 전체 체크박스를 분류 경로와 함께 평면으로(관리자 점포별 확인용).
-export type CheckBlockFlat = { id: string; text: string; path: string };
-export async function getAllCheckBlocks(): Promise<CheckBlockFlat[]> {
-  const [nodes, blocks] = await Promise.all([
-    prisma.onboardingNode.findMany({
-      select: { id: true, title: true, parentId: true },
-    }),
-    prisma.onboardingBlock.findMany({
-      where: { type: "CHECK" },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: { id: true, text: true, nodeId: true, order: true },
-    }),
-  ]);
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const pathOf = (nodeId: string) => {
+  const appByNode = new Map(approvals.map((a) => [a.nodeId, a]));
+  const pathOf = (node: TreeNode) => {
     const parts: string[] = [];
-    let cur: (typeof nodes)[number] | undefined = byId.get(nodeId);
-    let guard = 0;
-    while (cur && guard++ < 10) {
+    let cur: TreeNode | undefined = node.parentId ? byId.get(node.parentId) : undefined;
+    let g = 0;
+    while (cur && g++ < 10) {
       parts.unshift(cur.title || "(제목 없음)");
       cur = cur.parentId ? byId.get(cur.parentId) : undefined;
     }
     return parts.join(" › ");
   };
-  return blocks
-    .map((b) => ({ id: b.id, text: b.text, path: pathOf(b.nodeId), order: b.order }))
-    .sort((a, b) => a.path.localeCompare(b.path, "ko") || a.order - b.order)
-    .map(({ id, text, path }) => ({ id, text, path }));
+  // 트리 순서(대→소)를 유지하기 위해 DFS로 최하위 수집.
+  const ordered: TreeNode[] = [];
+  const dfs = (n: TreeNode) => {
+    if (n.isLeaf) ordered.push(n);
+    else n.children.forEach(dfs);
+  };
+  buildTree(nodes).roots.forEach(dfs);
+  return ordered.map((n) => {
+    const a = appByNode.get(n.id);
+    return {
+      id: n.id,
+      title: n.title,
+      path: pathOf(byId.get(n.id)!),
+      requestedAt: a?.requestedAt ?? null,
+      approvedAt: a?.approvedAt ?? null,
+    };
+  });
 }
 
-// 그 점주가 체크한 blockId 집합(주어진 후보 중).
-export async function getUserChecks(
-  userId: string,
-  blockIds: string[],
-): Promise<Set<string>> {
-  if (blockIds.length === 0) return new Set();
-  const rows = await prisma.onboardingCheck.findMany({
-    where: { userId, blockId: { in: blockIds } },
-    select: { blockId: true },
-  });
-  return new Set(rows.map((r) => r.blockId));
+// 대분류(루트) 목록 — 편집기용.
+export async function getRootNodes(): Promise<
+  { id: string; title: string; order: number; isLeaf: boolean }[]
+> {
+  const { roots, byId } = buildTree(await loadAllNodes());
+  return roots.map((r) => ({ id: r.id, title: r.title, order: r.order, isLeaf: byId.get(r.id)!.isLeaf }));
+}
+
+export type Crumb = { id: string; title: string };
+export type NodeEdit = {
+  node: { id: string; title: string; description: string; images: string[]; parentId: string | null };
+  breadcrumb: Crumb[];
+  level: number; // 1=대,2=중,3=소
+  children: { id: string; title: string; order: number; isLeaf: boolean }[];
+};
+
+// 편집기 — 한 노드(설명·이미지) + 자식 + 경로.
+export async function loadNode(nodeId: string): Promise<NodeEdit | null> {
+  const nodes = await loadAllNodes();
+  const { byId } = buildTree(nodes);
+  const cur = byId.get(nodeId);
+  if (!cur) return null;
+  const breadcrumb: Crumb[] = [];
+  let walk: TreeNode | undefined = cur;
+  let g = 0;
+  while (walk && g++ < 10) {
+    breadcrumb.unshift({ id: walk.id, title: walk.title });
+    walk = walk.parentId ? byId.get(walk.parentId) : undefined;
+  }
+  const children = cur.children.map((c) => ({
+    id: c.id,
+    title: c.title,
+    order: c.order,
+    isLeaf: c.isLeaf,
+  }));
+  return {
+    node: {
+      id: cur.id,
+      title: cur.title,
+      description: cur.description,
+      images: cur.images,
+      parentId: cur.parentId,
+    },
+    breadcrumb,
+    level: breadcrumb.length,
+    children,
+  };
+}
+
+// 노드가 최하위(체크 대상)인지 — 서버 액션 가드용.
+export async function isLeafNode(nodeId: string): Promise<boolean> {
+  const has = await prisma.onboardingNode.count({ where: { parentId: nodeId } });
+  return has === 0;
 }

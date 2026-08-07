@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
+import { needsOnboarding } from "@/lib/onboarding";
 import { listFlatProductsMerchant } from "@/lib/reservation-flat";
 import { FlatReservationMerchant } from "@/components/FlatReservationMerchant";
 
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function ReservationsPage() {
   const user = await requireMerchant();
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
+  if (needsOnboarding(user)) redirect("/onboarding");
   const products = await listFlatProductsMerchant(user.id, "open");
 
   return (

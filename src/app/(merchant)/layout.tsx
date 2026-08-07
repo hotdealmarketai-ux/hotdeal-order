@@ -21,8 +21,9 @@ export default async function MerchantLayout({
       </div>
     );
   }
-  // 가맹 오픈 온보딩 중이면 발주 네비 숨김 — '오픈 준비' 퀘스트만 보이게(발주 잠금).
-  // 기존 점주는 needsOnboarding=false 라 영향 없음. 각 발주 페이지도 /onboarding 으로 리다이렉트.
+  // 튜토리얼(오픈 준비) 중이면 발주 네비 숨김. 기존 점주는 needsOnboarding=false 라 영향 없음.
+  // 잠금의 실제 강제는 각 발주 페이지 리다이렉트(order/day·weekly·reservations) + 발주 생성 액션 가드에서 한다.
+  // (여기서 리다이렉트하면 /onboarding 자체도 이 레이아웃을 거쳐 무한 루프가 되므로 네비만 숨긴다.)
   if (needsOnboarding(user)) {
     return <div className="app">{children}</div>;
   }

@@ -4,6 +4,7 @@
 import { redirect } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
+import { needsOnboarding } from "@/lib/onboarding";
 import { prisma } from "@/lib/prisma";
 import {
   allowedCategoriesFor,
@@ -36,6 +37,7 @@ export default async function EditDayOrderPage(props: {
   params: Promise<{ date: string }>;
 }) {
   const user = await requireMerchant();
+  if (needsOnboarding(user)) redirect("/onboarding");
   const { date: rawDate } = await props.params;
   const date = normalizeDateStr(rawDate);
   const backHref = `/order/day/${date}`;

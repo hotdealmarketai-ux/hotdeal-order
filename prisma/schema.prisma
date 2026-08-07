@@ -55,6 +55,7 @@ model User {
   chatThread      ChatThread?
   onboardingItems OnboardingItem[]
   onboardingChecks OnboardingCheck[]
+  onboardingApprovals OnboardingApproval[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -663,17 +664,36 @@ model OnboardingItem {
 // ── 튜토리얼(편집형) — 단일 공용 템플릿 ────────────────────────────
 // 분류 트리(대/중/소). parentId=null 이면 대분류. 관리자가 자유 편집, 전 지점 공용.
 model OnboardingNode {
-  id        String   @id @default(cuid())
-  parentId  String?
-  parent    OnboardingNode?  @relation("OnbTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  OnboardingNode[] @relation("OnbTree")
-  order     Int      @default(0)
-  title     String   @default("")
-  blocks    OnboardingBlock[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  parentId    String?
+  parent      OnboardingNode?  @relation("OnbTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    OnboardingNode[] @relation("OnbTree")
+  order       Int      @default(0)
+  title       String   @default("")   // 체크박스 라벨(=분류명)
+  description String   @default("")    // 설명(텍스트)
+  images      String[] @default([])    // 설명 이미지 URL
+  blocks      OnboardingBlock[]        // (구버전 미사용)
+  approvals   OnboardingApproval[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([parentId, order])
+}
+
+// 지점별 체크(승인제). 각 분류(노드)가 곧 체크박스. 최하위(자식 없는) 노드만 실제 체크 대상.
+// 점주가 누르면 requestedAt(승인 대기), 관리자가 승인하면 approvedAt(=활성). 진행률은 approvedAt 기준.
+model OnboardingApproval {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nodeId      String
+  node        OnboardingNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  requestedAt DateTime @default(now()) // 점주가 누른 시각(승인 대기)
+  approvedAt  DateTime?                // 관리자 승인 시각(=활성/완료)
+  approvedBy  String   @default("")
+
+  @@unique([userId, nodeId])
+  @@index([userId])
 }
 
 // 노드 안의 콘텐츠 블록 — 제목/텍스트/이미지/체크박스. colSpan 으로 그리드 배치(12칸).

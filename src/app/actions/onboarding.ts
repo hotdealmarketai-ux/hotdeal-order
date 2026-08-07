@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireMerchant, requireAdmin } from "@/lib/session";
-import { maybeCompleteOnboarding, getBreadcrumb, BLOCK_TYPES } from "@/lib/onboarding";
+import { maybeCompleteOnboarding, countLeaves, isLeafNode } from "@/lib/onboarding";
 import { saveOnboardingImage } from "@/lib/storage";
 import { sendPushToUser, sendPushToRole } from "@/lib/push";
 import { writeAudit } from "@/lib/audit";
@@ -17,14 +17,11 @@ function revalidateTemplate() {
   revalidatePath("/onboarding");
 }
 
-// 완료 순간(100%) 알림 — 점주에겐 '발주 오픈', 관리자에겐 완료 보고.
+// 완료 순간(100%) 알림 — 점주 발주 오픈 + 관리자 보고.
 async function announceCompletionIfJust(userId: string) {
   const just = await maybeCompleteOnboarding(userId);
   if (!just) return;
-  const u = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { storeName: true },
-  });
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { storeName: true } });
   try {
     await sendPushToUser(userId, {
       title: "오픈 준비가 모두 끝났어요! 🎉",
@@ -43,8 +40,7 @@ async function announceCompletionIfJust(userId: string) {
   }
 }
 
-// 템플릿이 축소되면(체크박스 삭제 등) 진행 중 점포들이 100%에 도달할 수 있으므로 완료를 재판정.
-// maybeCompleteOnboarding은 멱등(완료/미완료 모두 안전)이라 미완료 점포엔 부작용 없음.
+// 템플릿이 바뀌면(분류 삭제 등) 진행 중 점포 완료 재판정(멱등).
 async function reevaluateInProgress() {
   const users = await prisma.user.findMany({
     where: {
@@ -58,8 +54,8 @@ async function reevaluateInProgress() {
   for (const u of users) await announceCompletionIfJust(u.id);
 }
 
-// ── 분류(노드) ────────────────────────────────────────────────
-// [관리자] 분류 추가. parentId=null 이면 대분류. 깊이는 소분류(3단계)까지.
+// ── 분류(노드) 편집 ───────────────────────────────────────────
+// [관리자] 분류 추가. parentId=null 이면 대분류. 소분류(3단계)까지.
 export async function addNodeAction(input: {
   parentId?: string | null;
   title?: string;
@@ -67,14 +63,18 @@ export async function addNodeAction(input: {
   await requireAdmin();
   const parentId = input.parentId ? String(input.parentId) : null;
   const title = String(input.title ?? "").trim().slice(0, 200);
-
   if (parentId) {
-    const parent = await prisma.onboardingNode.findUnique({
-      where: { id: parentId },
-      select: { id: true },
-    });
+    const parent = await prisma.onboardingNode.findUnique({ where: { id: parentId }, select: { id: true } });
     if (!parent) return { error: "상위 분류를 찾을 수 없어요." };
-    const depth = (await getBreadcrumb(parentId)).length; // 1=대,2=중,3=소
+    // 깊이 계산
+    let depth = 1;
+    let cur = parent.id as string | null;
+    let g = 0;
+    while (cur && g++ < 10) {
+      const p = await prisma.onboardingNode.findUnique({ where: { id: cur }, select: { parentId: true } });
+      cur = p?.parentId ?? null;
+      if (cur) depth++;
+    }
     if (depth >= 3) return { error: "소분류까지만 만들 수 있어요." };
   }
   const last = await prisma.onboardingNode.findFirst({
@@ -82,39 +82,68 @@ export async function addNodeAction(input: {
     orderBy: { order: "desc" },
     select: { order: true },
   });
-  await prisma.onboardingNode.create({
-    data: { parentId, title, order: (last?.order ?? -1) + 1 },
-  });
+  await prisma.onboardingNode.create({ data: { parentId, title, order: (last?.order ?? -1) + 1 } });
   revalidateTemplate();
   return { ok: true };
 }
 
-// [관리자] 분류 이름 변경.
-export async function renameNodeAction(input: {
+// [관리자] 분류 제목/설명 수정.
+export async function updateNodeAction(input: {
   id: string;
-  title: string;
+  title?: string;
+  description?: string;
 }): Promise<OnbState> {
   await requireAdmin();
   const id = String(input.id ?? "");
   if (!id) return { error: "잘못된 요청이에요." };
-  await prisma.onboardingNode.updateMany({
+  const data: { title?: string; description?: string } = {};
+  if (typeof input.title === "string") data.title = input.title.slice(0, 200);
+  if (typeof input.description === "string") data.description = input.description.slice(0, 5000);
+  if (Object.keys(data).length === 0) return { ok: true };
+  await prisma.onboardingNode.updateMany({ where: { id }, data });
+  revalidateTemplate();
+  return { ok: true };
+}
+
+// [관리자] 분류 설명 이미지 추가(붙여넣기/업로드). FormData: nodeId + file.
+export async function uploadNodeImageAction(formData: FormData): Promise<OnbState & { url?: string }> {
+  await requireAdmin();
+  const id = String(formData.get("nodeId") ?? "");
+  const file = formData.get("file");
+  if (!id) return { error: "잘못된 요청이에요." };
+  if (!(file instanceof File)) return { error: "이미지를 찾을 수 없어요." };
+  const node = await prisma.onboardingNode.findUnique({ where: { id }, select: { images: true } });
+  if (!node) return { error: "분류를 찾을 수 없어요." };
+  const url = await saveOnboardingImage(file);
+  if (!url) return { error: "이미지 저장에 실패했어요. (이미지 파일, 10MB 이하)" };
+  await prisma.onboardingNode.update({ where: { id }, data: { images: [...node.images, url] } });
+  revalidateTemplate();
+  return { ok: true, url };
+}
+
+// [관리자] 분류 설명 이미지 제거.
+export async function removeNodeImageAction(input: { id: string; url: string }): Promise<OnbState> {
+  await requireAdmin();
+  const id = String(input.id ?? "");
+  const url = String(input.url ?? "");
+  if (!id || !url) return { error: "잘못된 요청이에요." };
+  const node = await prisma.onboardingNode.findUnique({ where: { id }, select: { images: true } });
+  if (!node) return { ok: true };
+  await prisma.onboardingNode.update({
     where: { id },
-    data: { title: String(input.title ?? "").slice(0, 200) },
+    data: { images: node.images.filter((u) => u !== url) },
   });
   revalidateTemplate();
   return { ok: true };
 }
 
-// [관리자] 분류 삭제(하위 분류·블록·체크 모두 함께 삭제=cascade).
+// [관리자] 분류 삭제(하위 분류·승인 모두 cascade).
 export async function deleteNodeAction(input: { id: string }): Promise<OnbState> {
   const admin = await requireAdmin();
   const id = String(input.id ?? "");
   if (!id) return { error: "잘못된 요청이에요." };
-  const node = await prisma.onboardingNode.findUnique({
-    where: { id },
-    select: { title: true },
-  });
-  await prisma.onboardingNode.deleteMany({ where: { id } }); // 하위 분류·블록·체크 cascade, 없으면 no-op
+  const node = await prisma.onboardingNode.findUnique({ where: { id }, select: { title: true } });
+  await prisma.onboardingNode.deleteMany({ where: { id } });
   await writeAudit({
     action: "onboarding.deleteNode",
     actorId: admin.id,
@@ -123,17 +152,13 @@ export async function deleteNodeAction(input: { id: string }): Promise<OnbState>
     targetId: id,
     summary: `분류 삭제: ${node?.title || "(제목 없음)"}`,
   });
-  // 하위 체크박스가 함께 삭제되면 진행 중 점포가 100%에 도달할 수 있음 → 완료 재판정.
-  await reevaluateInProgress();
+  await reevaluateInProgress(); // 삭제로 남은 항목이 전부 완료되면 발주 오픈
   revalidateTemplate();
   return { ok: true };
 }
 
-// [관리자] 분류 순서 이동(형제와 order 교환).
-export async function moveNodeAction(input: {
-  id: string;
-  dir: "up" | "down";
-}): Promise<OnbState> {
+// [관리자] 분류 순서 이동.
+export async function moveNodeAction(input: { id: string; dir: "up" | "down" }): Promise<OnbState> {
   await requireAdmin();
   const id = String(input.id ?? "");
   const node = await prisma.onboardingNode.findUnique({
@@ -149,7 +174,7 @@ export async function moveNodeAction(input: {
     orderBy: { order: input.dir === "up" ? "desc" : "asc" },
     select: { id: true, order: true },
   });
-  if (!neighbor) return { ok: true }; // 이미 끝
+  if (!neighbor) return { ok: true };
   await prisma.$transaction([
     prisma.onboardingNode.update({ where: { id: node.id }, data: { order: neighbor.order } }),
     prisma.onboardingNode.update({ where: { id: neighbor.id }, data: { order: node.order } }),
@@ -158,216 +183,128 @@ export async function moveNodeAction(input: {
   return { ok: true };
 }
 
-// ── 블록(콘텐츠) ──────────────────────────────────────────────
-// [관리자] 블록 추가. type: HEADING | TEXT | IMAGE | CHECK.
-export async function addBlockAction(input: {
-  nodeId: string;
-  type: string;
-}): Promise<OnbState> {
-  await requireAdmin();
-  const nodeId = String(input.nodeId ?? "");
-  const type = BLOCK_TYPES.includes(input.type as (typeof BLOCK_TYPES)[number])
-    ? input.type
-    : "TEXT";
-  const node = await prisma.onboardingNode.findUnique({
-    where: { id: nodeId },
-    select: { id: true },
-  });
-  if (!node) return { error: "분류를 찾을 수 없어요." };
-  const last = await prisma.onboardingBlock.findFirst({
-    where: { nodeId },
-    orderBy: { order: "desc" },
-    select: { order: true },
-  });
-  await prisma.onboardingBlock.create({
-    data: { nodeId, type, order: (last?.order ?? -1) + 1, colSpan: 12 },
-  });
-  revalidateTemplate();
-  return { ok: true };
-}
-
-// [관리자] 블록 내용/폭 수정.
-export async function updateBlockAction(input: {
-  id: string;
-  text?: string;
-  colSpan?: number;
-}): Promise<OnbState> {
-  await requireAdmin();
-  const id = String(input.id ?? "");
-  if (!id) return { error: "잘못된 요청이에요." };
-  const data: { text?: string; colSpan?: number } = {};
-  if (typeof input.text === "string") data.text = input.text.slice(0, 5000);
-  if (typeof input.colSpan === "number") {
-    data.colSpan = Math.min(12, Math.max(1, Math.round(input.colSpan)));
-  }
-  if (Object.keys(data).length === 0) return { ok: true };
-  await prisma.onboardingBlock.updateMany({ where: { id }, data }); // 없으면 no-op(동시편집 안전)
-  revalidateTemplate();
-  return { ok: true };
-}
-
-// [관리자] 블록 이미지 업로드(붙여넣기/파일). FormData: blockId + file.
-export async function uploadBlockImageAction(
-  formData: FormData,
-): Promise<OnbState & { url?: string }> {
-  await requireAdmin();
-  const id = String(formData.get("blockId") ?? "");
-  const file = formData.get("file");
-  if (!id) return { error: "잘못된 요청이에요." };
-  if (!(file instanceof File)) return { error: "이미지를 찾을 수 없어요." };
-  const url = await saveOnboardingImage(file);
-  if (!url) return { error: "이미지 저장에 실패했어요. (이미지 파일, 10MB 이하)" };
-  await prisma.onboardingBlock.update({ where: { id }, data: { imageUrl: url } });
-  revalidateTemplate();
-  return { ok: true, url };
-}
-
-// [관리자] 블록 순서 이동.
-export async function moveBlockAction(input: {
-  id: string;
-  dir: "up" | "down";
-}): Promise<OnbState> {
-  await requireAdmin();
-  const id = String(input.id ?? "");
-  const block = await prisma.onboardingBlock.findUnique({
-    where: { id },
-    select: { id: true, nodeId: true, order: true },
-  });
-  if (!block) return { error: "블록을 찾을 수 없어요." };
-  const neighbor = await prisma.onboardingBlock.findFirst({
-    where:
-      input.dir === "up"
-        ? { nodeId: block.nodeId, order: { lt: block.order } }
-        : { nodeId: block.nodeId, order: { gt: block.order } },
-    orderBy: { order: input.dir === "up" ? "desc" : "asc" },
-    select: { id: true, order: true },
-  });
-  if (!neighbor) return { ok: true };
-  await prisma.$transaction([
-    prisma.onboardingBlock.update({ where: { id: block.id }, data: { order: neighbor.order } }),
-    prisma.onboardingBlock.update({ where: { id: neighbor.id }, data: { order: block.order } }),
-  ]);
-  revalidateTemplate();
-  return { ok: true };
-}
-
-// [관리자] 블록 삭제(그 체크박스의 체크 기록도 cascade 삭제).
-export async function deleteBlockAction(input: { id: string }): Promise<OnbState> {
-  await requireAdmin();
-  const id = String(input.id ?? "");
-  if (!id) return { error: "잘못된 요청이에요." };
-  await prisma.onboardingBlock.deleteMany({ where: { id } }); // 없으면 no-op(동시편집 안전)
-  // 체크박스 삭제로 전체 수가 줄어 진행 중 점포가 100%에 도달할 수 있음 → 완료 재판정.
-  await reevaluateInProgress();
-  revalidateTemplate();
-  return { ok: true };
-}
-
-// ── 체크박스 진행 ─────────────────────────────────────────────
-// 내부: 체크 토글 후 완료 판정. checkedBy = 표시용 이름.
-async function toggleCheck(userId: string, blockId: string, checked: boolean, by: string) {
-  const block = await prisma.onboardingBlock.findUnique({
-    where: { id: blockId },
-    select: { id: true, type: true },
-  });
-  if (!block || block.type !== "CHECK") return { error: "체크 항목이 아니에요." };
-  if (checked) {
-    await prisma.onboardingCheck.upsert({
-      where: { userId_blockId: { userId, blockId } },
-      create: { userId, blockId, checkedBy: by.slice(0, 100) },
-      update: { checkedBy: by.slice(0, 100) },
-    });
-  } else {
-    await prisma.onboardingCheck.deleteMany({ where: { userId, blockId } });
-  }
-  await announceCompletionIfJust(userId);
-  return { ok: true as const };
-}
-
-// [점주] 자기 체크박스 토글.
+// ── 체크(승인제) ──────────────────────────────────────────────
+// [점주] 최하위 분류 체크 요청 토글. 승인 전까지 '승인 대기'.
 export async function merchantToggleCheckAction(input: {
-  blockId: string;
-  checked: boolean;
+  nodeId: string;
+  on: boolean;
 }): Promise<OnbState> {
   const user = await requireMerchant();
   if (user.onboardingStartedAt == null) return { error: "튜토리얼 대상이 아니에요." };
-  const res = await toggleCheck(user.id, String(input.blockId ?? ""), !!input.checked, user.storeName);
-  if (res.error) return res;
+  const nodeId = String(input.nodeId ?? "");
+  if (!(await isLeafNode(nodeId))) return { error: "하위 항목이 있는 분류는 직접 체크할 수 없어요." };
+
+  const existing = await prisma.onboardingApproval.findUnique({
+    where: { userId_nodeId: { userId: user.id, nodeId } },
+    select: { approvedAt: true },
+  });
+  if (input.on) {
+    if (existing) return { ok: true }; // 이미 요청/승인됨
+    await prisma.onboardingApproval.create({ data: { userId: user.id, nodeId } });
+    try {
+      const node = await prisma.onboardingNode.findUnique({ where: { id: nodeId }, select: { title: true } });
+      await sendPushToRole("ADMIN_SAEROP", {
+        title: "승인 요청",
+        body: `${user.storeName} · '${node?.title ?? "항목"}' 체크 승인 요청`,
+        url: `/admin/onboarding/${user.id}`,
+        type: "system",
+      });
+    } catch (e) {
+      logError("onboarding.notifyRequest", e, { userId: user.id });
+    }
+  } else {
+    if (existing?.approvedAt) return { error: "승인된 항목은 본사만 해제할 수 있어요." };
+    await prisma.onboardingApproval.deleteMany({ where: { userId: user.id, nodeId } });
+  }
   revalidatePath("/onboarding");
   return { ok: true };
 }
 
-// [관리자] 특정 점포의 체크박스 토글(대신 확인/도움).
-export async function adminToggleCheckAction(input: {
+// [관리자] 특정 점포의 최하위 항목 승인/해제.
+export async function adminApproveAction(input: {
   userId: string;
-  blockId: string;
-  checked: boolean;
+  nodeId: string;
+  approve: boolean;
 }): Promise<OnbState> {
   const admin = await requireAdmin();
   const userId = String(input.userId ?? "");
-  const target = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
+  const nodeId = String(input.nodeId ?? "");
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
   if (!target || target.role !== "MERCHANT_HOTDEAL") return { error: "대상 점포가 아니에요." };
-  const res = await toggleCheck(userId, String(input.blockId ?? ""), !!input.checked, `본사·${admin.storeName}`);
-  if (res.error) return res;
+  if (!(await isLeafNode(nodeId))) return { error: "하위 항목이 있는 분류는 승인 대상이 아니에요." };
+
+  if (input.approve) {
+    await prisma.onboardingApproval.upsert({
+      where: { userId_nodeId: { userId, nodeId } },
+      create: { userId, nodeId, approvedAt: new Date(), approvedBy: admin.storeName },
+      update: { approvedAt: new Date(), approvedBy: admin.storeName },
+    });
+  } else {
+    // 승인 해제 — 요청 기록은 남기고 승인만 취소
+    await prisma.onboardingApproval.updateMany({
+      where: { userId, nodeId },
+      data: { approvedAt: null, approvedBy: "" },
+    });
+  }
+  const before = await prisma.user.findUnique({ where: { id: userId }, select: { onboardingCompletedAt: true } });
+  await announceCompletionIfJust(userId);
+  const after = await prisma.user.findUnique({ where: { id: userId }, select: { onboardingCompletedAt: true } });
+  // 방금 완료가 아니면 개별 승인 알림
+  if (input.approve && before?.onboardingCompletedAt == null && after?.onboardingCompletedAt == null) {
+    try {
+      const node = await prisma.onboardingNode.findUnique({ where: { id: nodeId }, select: { title: true } });
+      await sendPushToUser(userId, {
+        title: "항목이 승인됐어요",
+        body: `'${node?.title ?? "항목"}' 본사 승인 완료.`,
+        url: "/onboarding",
+        type: "system",
+      });
+    } catch (e) {
+      logError("onboarding.notifyApprove", e, { userId });
+    }
+  }
   revalidatePath(`/admin/onboarding/${userId}`);
   return { ok: true };
 }
 
 // ── 시작 / 취소 ───────────────────────────────────────────────
-// [관리자] 한 점포의 튜토리얼 시작(수동). 승인된 핫딜마켓만. 시작하면 100%까지 발주 잠금.
+// [관리자] 튜토리얼 시작(신규/재시작). 진행 중이 아니면 언제든. 시작 시 그 지점 체크 초기화.
 export async function startOnboardingAction(input: { userId: string }): Promise<OnbState> {
   const admin = await requireAdmin();
   const userId = String(input.userId ?? "");
   const u = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      role: true,
-      status: true,
-      storeName: true,
-      onboardingStartedAt: true,
-    },
+    select: { role: true, status: true, storeName: true, onboardingStartedAt: true, onboardingCompletedAt: true },
   });
   if (!u || u.role !== "MERCHANT_HOTDEAL" || u.status !== "APPROVED") {
     return { error: "승인된 핫딜마켓 가맹점만 튜토리얼을 시작할 수 있어요." };
   }
-  if (u.onboardingStartedAt != null) return { error: "이미 튜토리얼 진행 중이에요." };
-  // 체크 항목이 하나도 없는 템플릿으로 시작하면 100%에 도달할 방법이 없어 발주가 잠긴다 → 차단.
-  const nCheck = await prisma.onboardingBlock.count({ where: { type: "CHECK" } });
-  if (nCheck === 0) return { error: "먼저 체크 항목이 있는 템플릿을 만들어 주세요." };
+  // 진행 중(시작됨 & 미완료)이면 중복 시작 금지. 완료 지점은 다시 시작 가능.
+  if (u.onboardingStartedAt != null && u.onboardingCompletedAt == null) {
+    return { error: "이미 튜토리얼 진행 중이에요." };
+  }
+  if ((await countLeaves()) === 0) return { error: "먼저 체크 항목이 있는 템플릿을 만들어 주세요." };
+
+  await prisma.onboardingApproval.deleteMany({ where: { userId } }); // 재시작 = 처음부터
   await prisma.user.update({
     where: { id: userId },
     data: { onboardingStartedAt: new Date(), onboardingCompletedAt: null },
   });
-  // 취소→재시작 등으로 이미 전 항목이 체크돼 있으면 즉시 완료 처리(잠금 방지).
-  const justCompleted = await maybeCompleteOnboarding(userId);
   await writeAudit({
     action: "onboarding.start",
     actorId: admin.id,
     actorName: admin.storeName,
     targetType: "User",
     targetId: userId,
-    summary: `${u.storeName} 튜토리얼 시작${justCompleted ? "(이미 완료 — 발주 오픈)" : "(발주 잠금)"}`,
+    summary: `${u.storeName} 튜토리얼 시작(발주 잠금)`,
   });
   try {
-    await sendPushToUser(
-      userId,
-      justCompleted
-        ? {
-            title: "발주가 열렸어요",
-            body: "오픈 준비가 이미 완료돼 바로 발주할 수 있어요.",
-            url: "/order",
-            type: "system",
-          }
-        : {
-            title: "오픈 준비 체크리스트가 열렸어요",
-            body: "오픈 전 준비 사항을 하나씩 완료해 주세요.",
-            url: "/onboarding",
-            type: "system",
-          },
-    );
+    await sendPushToUser(userId, {
+      title: "오픈 준비 체크리스트가 열렸어요",
+      body: "오픈 전 준비 사항을 하나씩 완료해 주세요.",
+      url: "/onboarding",
+      type: "system",
+    });
   } catch (e) {
     logError("onboarding.notifyStart", e, { userId });
   }
@@ -375,7 +312,7 @@ export async function startOnboardingAction(input: { userId: string }): Promise<
   return { ok: true };
 }
 
-// [관리자] 튜토리얼 취소 — 발주 잠금 해제(발주 오픈). 체크 기록은 남겨둔다(다시 시작 시 이어짐).
+// [관리자] 튜토리얼 취소 — 발주 잠금 해제.
 export async function cancelOnboardingAction(input: { userId: string }): Promise<OnbState> {
   const admin = await requireAdmin();
   const userId = String(input.userId ?? "");

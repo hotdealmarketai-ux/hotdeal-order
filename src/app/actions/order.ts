@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireMerchant, requireAdmin } from "@/lib/session";
+import { needsOnboarding } from "@/lib/onboarding";
 import { writeAudit } from "@/lib/audit";
 import {
   allowedCategoriesFor,
@@ -337,6 +338,7 @@ export async function createOrderAction(
   formData: FormData,
 ): Promise<OrderFormState> {
   const user = await requireMerchant();
+  if (needsOnboarding(user)) return { error: "오픈 준비를 먼저 완료해 주세요." };
 
   // 발주 운영시간 가드 — 핫딜마켓 가맹점만 (낮 12시~오후 8시, 또는 관리자 임시 오픈)
   if (!(await orderOpenNow(user.role))) {
@@ -528,6 +530,7 @@ export async function updateOrderAction(
   formData: FormData,
 ): Promise<OrderFormState> {
   const user = await requireMerchant();
+  if (needsOnboarding(user)) return { error: "오픈 준비를 먼저 완료해 주세요." };
   const orderId = String(formData.get("orderId") ?? "");
   if (!orderId) return { error: "잘못된 요청이에요." };
 
@@ -861,6 +864,7 @@ export async function updateDayOrderAction(
   formData: FormData,
 ): Promise<OrderFormState> {
   const user = await requireMerchant();
+  if (needsOnboarding(user)) return { error: "오픈 준비를 먼저 완료해 주세요." };
   const date = normalizeDateStr(String(formData.get("date") ?? ""));
   if (!date) return { error: "잘못된 요청이에요." };
 

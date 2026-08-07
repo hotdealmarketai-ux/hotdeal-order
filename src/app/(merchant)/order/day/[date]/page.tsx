@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
+import { needsOnboarding } from "@/lib/onboarding";
 import { prisma } from "@/lib/prisma";
 import {
   CATEGORIES,
@@ -34,6 +35,7 @@ export default async function DayReceiptPage(props: {
   searchParams: Promise<{ new?: string; edited?: string; view?: string }>;
 }) {
   const user = await requireMerchant();
+  if (needsOnboarding(user)) redirect("/onboarding");
   const { date: rawDate } = await props.params;
   const { new: isNew, edited, view } = await props.searchParams;
   const date = normalizeDateStr(rawDate);

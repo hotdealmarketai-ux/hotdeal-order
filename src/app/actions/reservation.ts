@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireMerchant, getCurrentUser } from "@/lib/session";
+import { needsOnboarding } from "@/lib/onboarding";
 import { writeAudit } from "@/lib/audit";
 import { validateBatchDates, isReservationClosed } from "@/lib/reservation";
 import {
@@ -268,6 +269,7 @@ export async function purgeHiddenReservationsAction(): Promise<{
 export async function confirmReservationAction(formData: FormData) {
   const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
+  if (needsOnboarding(user)) redirect("/onboarding");
   const batchId = String(formData.get("batchId") ?? "");
   let raw: { productId?: string; qty?: number | string }[] = [];
   try {
