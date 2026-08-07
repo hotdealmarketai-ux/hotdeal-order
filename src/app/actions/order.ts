@@ -21,7 +21,8 @@ import {
   ORDER_DEADLINE_LABEL,
 } from "@/lib/deadline";
 import { kstToday, kstDateOf, kstDayRange, fullKLabel, shipmentDayOf } from "@/lib/date";
-import { currentWindowStartUtc } from "@/lib/schedule";
+import { currentWindowStartUtc, windowKeyAt } from "@/lib/schedule";
+import { myHolds } from "@/lib/stock-hold";
 import { displayQty } from "@/lib/qty";
 import { orderOpenNow } from "@/lib/order-open";
 import { logError } from "@/lib/log";
@@ -571,17 +572,29 @@ export async function updateOrderAction(
 
   const category = order.category as Category;
 
-  let parsed: RawRow[] = [];
-  try {
-    parsed = JSON.parse(String(formData.get("items") ?? "[]"));
-  } catch {
-    parsed = [];
+  // 공구(TOOL) 수정 = 담기원장(StockHold)이 단일 소스. 점주는 수정 화면에서 실시간으로 담기/빼기 하고,
+  // 저장 시 그 담은 상태(myHolds)로 주문 품목을 재구성한다(클라이언트 items 무시 → 담기와 주문이 어긋나지 않음).
+  // 수정은 항상 '이번 발주창'으로 게이트되므로 windowKeyAt()=발주 당시 창 → myHolds가 그 공구 담기와 일치.
+  let items: { name: string; qty: string; note: string }[];
+  if (category === "TOOL") {
+    const holds = await myHolds(user.id, windowKeyAt());
+    items = holds.map((h) => ({ name: h.name, qty: String(h.qty), note: "" }));
+    if (items.length === 0) {
+      return { error: "담은 공구가 없어요. 재고에서 담아 주세요." };
+    }
+  } else {
+    let parsed: RawRow[] = [];
+    try {
+      parsed = JSON.parse(String(formData.get("items") ?? "[]"));
+    } catch {
+      parsed = [];
+    }
+    items = cleanItems(parsed);
+    if (items.length === 0) return { error: "발주할 품목을 한 개 이상 입력하세요." };
+    if (!items.some((r) => r.name)) return { error: "품목명을 입력하세요." };
+    const badQtyItem = findBadQtyItem(items);
+    if (badQtyItem) return { error: `‘${badQtyItem}’ 수량을 입력해 주세요.` };
   }
-  const items = cleanItems(parsed);
-  if (items.length === 0) return { error: "발주할 품목을 한 개 이상 입력하세요." };
-  if (!items.some((r) => r.name)) return { error: "품목명을 입력하세요." };
-  const badQtyItem = findBadQtyItem(items);
-  if (badQtyItem) return { error: `‘${badQtyItem}’ 수량을 입력해 주세요.` };
 
   const orderDate = kstDateOf(order.createdAt);
   const pickupTime = await buildPickup(user.role, formData, orderDate);
@@ -590,13 +603,17 @@ export async function updateOrderAction(
   const ful = readFulfillment(user.role, formData);
   if (ful.error) return { error: ful.error };
 
-  // 채움채(TOFU)는 정규화 없이 정확한 이름 보존(자동제출 매핑용)
+  // 채움채(TOFU)·공구(TOOL)는 정규화 없이 정확한 이름 보존
+  // (공구는 재고 매칭·취소 복구가 이름 기준이라 AI 개명 시 어긋남 → 원본 그대로).
   const result =
-    category === "TOFU"
+    category === "TOFU" || category === "TOOL"
       ? {
           engine: "rule" as const,
           items,
-          summary: `채움채 발주 ${items.length}건`,
+          summary:
+            category === "TOFU"
+              ? `채움채 발주 ${items.length}건`
+              : `공구 발주 ${items.length}건`,
         }
       : await normalizeOrder({
           categoryLabel: CATEGORIES[category].label,

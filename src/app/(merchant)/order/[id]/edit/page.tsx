@@ -15,9 +15,11 @@ import {
   currentWindowStartUtc,
 } from "@/lib/deadline";
 import { kstDateOf } from "@/lib/date";
-import { heldByItem } from "@/lib/stock-hold";
+import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
 import { EditOrderForm } from "@/components/EditOrderForm";
+import type { ToolHold } from "@/components/OrderForm";
+import type { StockPickItem } from "@/components/StockPickerSheet";
 
 export default async function EditOrderPage(props: {
   params: Promise<{ id: string }>;
@@ -48,17 +50,46 @@ export default async function EditOrderPage(props: {
     note: it.rawNote,
   }));
 
-  // 공구(TOOL) 수정 — 재고 검색 팝업용 재고현황 품목(남은 재고 = base − Σ담기홀드). 담기(홀드)는 안 씀.
-  let invOptions: { id: string; name: string; available: number }[] = [];
+  // 공구(TOOL) 수정 = 실시간 담기. toolCart(내 담기, 발주 당시 창)를 실시간 스테퍼로 조절하고,
+  // 없는 품목은 재고 검색 팝업(invOptions)으로 담는다(holdStockAction). 저장 시 서버가 myHolds로 재구성.
+  // 남은수량 = base − Σ담기홀드. 수정은 항상 이번 발주창이라 windowKeyAt()=발주 당시 창.
+  let toolCart: ToolHold[] = [];
+  let invOptions: StockPickItem[] = [];
   if (order.category === "TOOL") {
-    const [invItems, held] = await Promise.all([
+    const holdKey = windowKeyAt();
+    const [mine, held, invItems] = await Promise.all([
+      myHolds(user.id, holdKey),
+      heldByItem(holdKey),
       prisma.inventoryItem.findMany({
         where: { deletedAt: null },
         orderBy: { sortOrder: "asc" },
-        select: { id: true, name: true, qty: true },
+        select: {
+          id: true,
+          name: true,
+          qty: true,
+          supplyPrice: true,
+          expiry: true,
+          majorCat: true,
+          minorCat: true,
+        },
       }),
-      heldByItem(windowKeyAt()),
     ]);
+    const invById = new Map(invItems.map((i) => [i.id, i]));
+    toolCart = mine.map((h) => {
+      const inv = invById.get(h.itemId);
+      const base = inv?.qty ?? 0;
+      return {
+        itemId: h.itemId,
+        name: h.name,
+        qty: String(h.qty),
+        mine: h.qty,
+        available: Math.max(0, base - (held[h.itemId] ?? 0)),
+        supplyPrice: inv?.supplyPrice ?? 0,
+        expiry: inv?.expiry ?? "",
+        majorCat: inv?.majorCat ?? "",
+        minorCat: inv?.minorCat ?? "",
+      };
+    });
     invOptions = invItems.map((it) => ({
       id: it.id,
       name: it.name,
@@ -83,6 +114,7 @@ export default async function EditOrderPage(props: {
           needsFulfillment={needsFulfillment(user.role)}
           initialFulfillment={(order.fulfillment as Fulfillment | null) ?? ""}
           address={user.address ?? ""}
+          toolCart={toolCart}
           invOptions={invOptions}
         />
       </div>

@@ -1,15 +1,20 @@
 "use client";
 
 import { useActionState, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   updateOrderAction,
   adminUpdateOrderAction,
   type OrderFormState,
 } from "@/app/actions/order";
+import { holdStockAction } from "@/app/actions/stock";
+import { refreshLiveStock } from "@/lib/useLiveStock";
 import { SubmitButton } from "./SubmitButton";
 import { FulfillmentPicker } from "./FulfillmentPicker";
 import { StockPickerSheet, type StockPickItem } from "./StockPickerSheet";
+import { InlineStockStepper } from "./InlineStockStepper";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
+import type { ToolHold } from "./OrderForm";
 import type { Category, Fulfillment } from "@/lib/constants";
 
 type Row = { id: number; name: string; qty: string; note: string };
@@ -29,6 +34,7 @@ export function EditOrderForm({
   initialFulfillment = "",
   address = "",
   admin = false,
+  toolCart = [],
   invOptions = [],
 }: {
   orderId: string;
@@ -44,12 +50,18 @@ export function EditOrderForm({
   // ⚠ 서버 액션을 prop 함수로 넘기면 제출이 서버까지 안 가는 케이스가 있어(관리자 수정 무반응 버그),
   //   boolean으로만 받고 두 액션을 여기서 직접 import·선택한다.
   admin?: boolean;
-  // 공구(TOOL) 수정 전용 — 재고 검색 팝업용 재고현황 품목(남은 재고 포함). 담기(홀드) 안 씀.
+  // 공구(TOOL) 수정 — 점주는 실시간 담기(toolCart=내 담기, 스테퍼로 +/-), 관리자는 검색 팝업(invOptions).
+  toolCart?: ToolHold[];
   invOptions?: StockPickItem[];
 }) {
   const saveAction = admin ? adminUpdateOrderAction : updateOrderAction;
+  const router = useRouter();
   const isTofu = category === "TOFU";
   const isTool = category === "TOOL";
+  // 공구 수정: 점주 = 실시간 담기(홀드), 관리자 = 검색 팝업(주문 직접). 지난 창 홀드는 이미 해제돼
+  // 관리자(창 제약 없음)에게 홀드 재사용은 위험하므로 관리자는 팝업 유지.
+  const isToolHold = isTool && !admin;
+  const isToolPicker = isTool && admin;
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -106,7 +118,7 @@ export function EditOrderForm({
     setRows((prev) => normalizeRows(prev.filter((r) => r.id !== id)));
   }
 
-  // 공구 재고 검색 팝업에서 품목 선택 → 발주에 바로 추가(담기/홀드 안 씀). 이미 있으면 중복 추가 안 함.
+  // [관리자] 공구 재고 검색 팝업에서 품목 선택 → 발주에 바로 추가(담기/홀드 안 씀). 이미 있으면 중복 추가 안 함.
   function addPickedTool(item: StockPickItem) {
     setConfirming(false);
     setRows((prev) => {
@@ -116,16 +128,40 @@ export function EditOrderForm({
     });
   }
 
+  // [점주] 공구 재고 검색 팝업에서 품목 선택 → 담기원장(StockHold)에 +1 실시간 담기(전 지점 반영).
+  // 이후 그 자리 스테퍼로 수량 조절. 저장 시 서버가 myHolds로 주문을 재구성.
+  async function addHold(item: StockPickItem) {
+    setConfirming(false);
+    const res = await holdStockAction({ itemId: item.id, qty: 1 });
+    if (!res.ok) {
+      setLocalError(res.error ?? "담기에 실패했어요.");
+      return;
+    }
+    setLocalError("");
+    refreshLiveStock();
+    router.refresh(); // toolCart 재조회 → 담은 품목이 스테퍼로 나타남
+  }
+
+  // 이미 담은 품목은 아래 스테퍼로 조절하므로, 추가 팝업에는 아직 안 담은 재고만 노출.
+  const addableInv = useMemo(
+    () => invOptions.filter((o) => !toolCart.some((t) => t.itemId === o.id)),
+    [invOptions, toolCart],
+  );
+
   const items = useMemo(() => {
     if (isTofu) {
       return CHAEUMCHAE_CATALOG.filter((p) => (tofuQty[p.seq] ?? "").trim()).map(
         (p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }),
       );
     }
+    // 공구(점주 담기): 서버 담기원장(toolCart)이 소스 — 개수 표시·저장 검증용(서버는 myHolds로 재구성).
+    if (isToolHold) {
+      return toolCart.map((t) => ({ name: t.name, qty: t.qty, note: "" }));
+    }
     return rows
       .filter(isFilled)
       .map((r) => ({ name: r.name, qty: r.qty, note: r.note }));
-  }, [isTofu, rows, tofuQty]);
+  }, [isTofu, isToolHold, toolCart, rows, tofuQty]);
 
   return (
     <form action={formAction}>
@@ -188,7 +224,64 @@ export function EditOrderForm({
             );
           })}
         </div>
-      ) : isTool ? (
+      ) : isToolHold ? (
+        /* 점주 공구 수정 = 실시간 담기. 담은 재고는 스테퍼로 +/-(전 지점 즉시 반영),
+           없는 품목은 '재고에서 검색·담기' 팝업으로 담는다. 저장 시 서버가 담기 기준으로 재구성. */
+        <div className="toolro">
+          {toolCart.length > 0 ? (
+            <div className="toolro__group">
+              <div className="toolro__head">
+                <span className="chip">담은 재고</span>
+                <span className="toolro__hint">담기·빼기가 실시간으로 반영돼요</span>
+              </div>
+              {toolCart.map((t) => (
+                <div className="stockline" key={t.itemId}>
+                  <div className="stockline__info">
+                    <span className="stockline__name">
+                      {t.name}
+                      {t.majorCat && (
+                        <span className="stockcat">
+                          {t.majorCat}
+                          {t.minorCat ? ` · ${t.minorCat}` : ""}
+                        </span>
+                      )}
+                    </span>
+                    <span className="stockmeta">
+                      <span className="stockmeta__qty">남은 수량 {t.available}개</span>
+                    </span>
+                  </div>
+                  <InlineStockStepper
+                    itemId={t.itemId}
+                    available={t.available}
+                    mine={t.mine}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty">
+              담은 공구가 없어요.
+              <br />
+              아래에서 재고를 검색해 담아 주세요.
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn btn--soft btn--block"
+            style={{ marginTop: 4 }}
+            onClick={() => setPickerOpen(true)}
+          >
+            + 재고에서 검색·담기
+          </button>
+          {pickerOpen && (
+            <StockPickerSheet
+              items={addableInv}
+              onPick={addHold}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
+        </div>
+      ) : isToolPicker ? (
         <div className="oitems">
           {rows.filter(isFilled).map((r, i) => (
             <div className="oitem is-filled" key={r.id}>
@@ -290,7 +383,11 @@ export function EditOrderForm({
             className="btn btn--primary btn--block"
             onClick={() => {
               if (items.length === 0) {
-                setLocalError("발주할 품목을 한 개 이상 입력하세요.");
+                setLocalError(
+                  isToolHold
+                    ? "담은 공구가 없어요. 재고에서 담아 주세요."
+                    : "발주할 품목을 한 개 이상 입력하세요.",
+                );
                 return;
               }
               if (needsFulfillment && !fulfillment) {
