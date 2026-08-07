@@ -36,7 +36,7 @@ export default async function OnboardingStepPage(props: {
     <>
       <Topbar backHref="/onboarding" title="오픈 준비" />
       <div className="page">
-        <div className="spread" style={{ marginBottom: 8, alignItems: "center" }}>
+        <div className="onbdetail__meta">
           <span className="chip">담당 {ACTOR_LABEL[step.actor] ?? "점주·본사"}</span>
           {confirmed ? (
             <span className="badge badge--ok">완료</span>
@@ -44,13 +44,13 @@ export default async function OnboardingStepPage(props: {
             <span className="badge badge--wait">진행 중</span>
           )}
         </div>
-        <h1 className="h1" style={{ marginBottom: 12 }}>
+        <h1 className="h1" style={{ marginBottom: 14 }}>
           {step.order}. {step.title}
         </h1>
 
         {step.body && (
-          <div className="card" style={{ whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
-            {step.body}
+          <div className="card">
+            <div className="onbdetail__body">{step.body}</div>
           </div>
         )}
 
@@ -59,19 +59,18 @@ export default async function OnboardingStepPage(props: {
             {step.images.map((src, i) => (
               <Image
                 key={i}
+                className="onbdetail__img"
                 src={src}
                 alt={`${step.title} 안내 이미지 ${i + 1}`}
                 width={900}
                 height={600}
-                style={{ width: "100%", height: "auto", borderRadius: 12 }}
                 unoptimized
               />
             ))}
           </div>
         )}
 
-        {/* 확인 상태 */}
-        <div className="card" style={{ marginTop: 14 }}>
+        <div className="card" style={{ marginTop: 12 }}>
           <div className="kv">
             <span className="kv__k">내 완료</span>
             <span className="kv__v">{merchantDone ? "✓ 완료" : "대기"}</span>

@@ -5180,3 +5180,167 @@ a.resv-card:active { transform: scale(0.995); }
 }
 .shipcard__del:active { transform: scale(0.9); }
 .shipmsg { font-size: 12px; color: var(--green-700); margin: -4px 0 10px; padding: 0 2px; }
+
+/* ============================================================
+   가맹 오픈 온보딩(퀘스트) — 브랜드 톤 진행바 + 타임라인
+   ============================================================ */
+.onbhead {
+  margin: 2px 0 16px;
+}
+.onbhead__sub {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 4px;
+}
+
+/* 진행률 히어로 — 딥그린 그라데이션 카드 */
+.onbprog {
+  background: var(--header-grad);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 22px;
+  box-shadow: var(--shadow-card);
+}
+.onbprog__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+.onbprog__label {
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+.onbprog__pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 14px;
+  opacity: 0.92;
+}
+.onbprog__pct b {
+  font-size: 27px;
+  font-weight: 800;
+  margin-right: 2px;
+}
+.onbprog__bar {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  overflow: hidden;
+}
+.onbprog__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #fff;
+  transition: width 0.35s ease;
+}
+.onbprog__hint {
+  margin-top: 11px;
+  font-size: 12.5px;
+  opacity: 0.82;
+  line-height: 1.5;
+}
+.onbprog--done {
+  text-align: center;
+}
+.onbprog--done .onbprog__big {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* 타임라인 — 세로 연결선 + 단계 노드 + 카드 */
+.onbtl {
+  position: relative;
+}
+.onbtl::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 26px;
+  bottom: 26px;
+  width: 2px;
+  background: var(--line);
+  z-index: 0;
+}
+.onbstep {
+  display: flex;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--fg);
+  margin-bottom: 10px;
+}
+.onbstep__node {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 7px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--muted);
+  border: 2px solid var(--line);
+  box-shadow: 0 0 0 4px var(--bg); /* 연결선 위로 노드가 깔끔히 얹히게 */
+}
+.onbstep__node.is-done {
+  background: var(--green-700);
+  color: #fff;
+  border-color: var(--green-700);
+}
+.onbstep__card {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+}
+.onbstep__card:active {
+  transform: translateY(1px);
+}
+.onbstep__title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
+}
+.onbstep__chev {
+  flex-shrink: 0;
+  color: var(--muted-3);
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* 상세 — 담당/상태 헤더 + 본문 + 확인 상태 */
+.onbdetail__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.onbdetail__body {
+  white-space: pre-wrap;
+  line-height: 1.75;
+  font-size: 15px;
+  color: var(--fg-2);
+}
+.onbdetail__img {
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+}
