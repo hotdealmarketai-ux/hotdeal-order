@@ -30,6 +30,7 @@ import { myHolds, heldByItem } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 import { OrderForm, type ToolHold } from "@/components/OrderForm";
+import { type StockPickItem } from "@/components/StockPickerSheet";
 
 export default async function EditDayOrderPage(props: {
   params: Promise<{ date: string }>;
@@ -119,8 +120,10 @@ export default async function EditDayOrderPage(props: {
     heldByItem(holdKey),
     prisma.inventoryItem.findMany({
       where: { deletedAt: null },
+      orderBy: { sortOrder: "asc" },
       select: {
         id: true,
+        name: true,
         qty: true,
         supplyPrice: true,
         expiry: true,
@@ -130,6 +133,12 @@ export default async function EditDayOrderPage(props: {
     }),
   ]);
   const invById = new Map(invItems.map((i) => [i.id, i]));
+  // 공구 '재고에서 검색·담기' 팝업용 — 남은 재고(base − Σ담기홀드) 포함.
+  const invOptions: StockPickItem[] = invItems.map((it) => ({
+    id: it.id,
+    name: it.name,
+    available: Math.max(0, it.qty - (held[it.id] ?? 0)),
+  }));
   const toolCart: ToolHold[] = mine.map((h) => {
     const inv = invById.get(h.itemId);
     const base = inv?.qty ?? 0;
@@ -154,10 +163,6 @@ export default async function EditDayOrderPage(props: {
         right={<TopbarChip>{user.storeName}</TopbarChip>}
       />
       <div className="page">
-        <div className="notice notice--mute" style={{ marginBottom: 14 }}>
-          넣지 않은 종류도 여기서 추가할 수 있어요. 저장하면 ‘발주 수정’으로
-          표시됩니다. (종류 전체를 빼려면 발주 취소를 이용해 주세요.)
-        </div>
         <OrderForm
           categories={categories}
           needsPickup={needsPickupTime(user.role)}
@@ -171,6 +176,7 @@ export default async function EditDayOrderPage(props: {
           initialRowsByCat={initialRowsByCat}
           initialTofuQty={initialTofuQty}
           initialFulfillment={initialFulfillment}
+          invOptions={invOptions}
         />
       </div>
     </>

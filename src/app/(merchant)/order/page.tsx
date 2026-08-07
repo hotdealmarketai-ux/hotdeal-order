@@ -175,15 +175,10 @@ export default async function OrderPage(props: {
         ) : lockedToEdit ? (
           <>
             <h1 className="h1">발주하기</h1>
-            {cancelPending ? (
+            {cancelPending && (
               <div className="notice notice--edit" style={{ marginBottom: 16 }}>
                 <b>취소 요청됨</b> · 관리자 승인 대기중이에요. 승인되면 발주가
                 취소되고 발주창이 다시 활성화 됩니다.
-              </div>
-            ) : (
-              <div className="notice notice--mute" style={{ marginBottom: 16 }}>
-                이미 주문이 진행됐으므로, 발주 수정만 가능합니다. 빠뜨린 종류(과일·야채·공구·채움채)도
-                발주 수정에서 함께 추가할 수 있어요.
               </div>
             )}
             <Link

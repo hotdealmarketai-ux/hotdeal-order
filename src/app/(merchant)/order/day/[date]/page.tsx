@@ -213,9 +213,6 @@ export default async function DayReceiptPage(props: {
                 >
                   발주 수정
                 </Link>
-                <p className="hint" style={{ marginTop: 6, textAlign: "center" }}>
-                  넣지 않은 종류(과일·야채·공구·채움채)도 여기서 추가할 수 있어요.
-                </p>
               </div>
             )}
             {sorted.map((order) => {

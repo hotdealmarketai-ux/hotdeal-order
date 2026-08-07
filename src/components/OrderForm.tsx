@@ -18,17 +18,20 @@
 "use client";
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   createOrderAction,
   updateDayOrderAction,
   previewGridOrderAction,
   type OrderFormState,
 } from "@/app/actions/order";
+import { holdStockAction } from "@/app/actions/stock";
 import { SubmitButton } from "./SubmitButton";
 import { ChatOrder } from "./ChatOrder";
 import { FulfillmentPicker } from "./FulfillmentPicker";
 import { InlineStockStepper } from "./InlineStockStepper";
-import { useLiveStock } from "@/lib/useLiveStock";
+import { StockPickerSheet, type StockPickItem } from "./StockPickerSheet";
+import { useLiveStock, refreshLiveStock } from "@/lib/useLiveStock";
 import { expiryInfo } from "@/lib/date";
 import {
   CATEGORIES,
@@ -73,6 +76,7 @@ export function OrderForm({
   initialTofuQty,
   initialPickup = "",
   initialFulfillment = "",
+  invOptions = [],
 }: {
   categories: Category[];
   needsPickup: boolean;
@@ -97,9 +101,13 @@ export function OrderForm({
   initialTofuQty?: Record<string, string>;
   initialPickup?: string;
   initialFulfillment?: "" | Fulfillment;
+  /** 공구 '재고에서 검색·담기' 팝업용 재고현황 품목(남은 재고 포함). 없으면 팝업 숨김. */
+  invOptions?: StockPickItem[];
 }) {
   // 수정 모드 = editDate 존재. 저장은 updateDayOrderAction, 초안(localStorage)·채팅 진입 비활성.
   const editMode = !!editDate;
+  const router = useRouter();
+  const [toolPickerOpen, setToolPickerOpen] = useState(false);
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
 
@@ -137,6 +145,22 @@ export function OrderForm({
   const [confirmTab, setConfirmTab] = useState<Category>(categories[0]);
   const [localError, setLocalError] = useState("");
   const live = useLiveStock(); // 공구 담은 재고 남은수량 실시간
+
+  // 공구 '재고에서 검색·담기' 팝업 — 이미 담은 품목은 스테퍼로 조절하므로 아직 안 담은 재고만 노출.
+  const addableInv = useMemo(
+    () => invOptions.filter((o) => !toolCart.some((t) => t.itemId === o.id)),
+    [invOptions, toolCart],
+  );
+  async function addHoldFromPicker(item: StockPickItem) {
+    const res = await holdStockAction({ itemId: item.id, qty: 1 });
+    if (!res.ok) {
+      setLocalError(res.error ?? "담기에 실패했어요.");
+      return;
+    }
+    setLocalError("");
+    refreshLiveStock();
+    router.refresh(); // toolCart 재조회 → 담은 품목이 스테퍼로 나타남
+  }
   const [state, formAction] = useActionState<OrderFormState, FormData>(
     editMode ? updateDayOrderAction : createOrderAction,
     {},
@@ -568,10 +592,36 @@ export function OrderForm({
             )}
             {reservedTool.length === 0 && toolCart.length === 0 && (
               <div className="empty">
-                공구는 직접 적을 수 없어요.
-                <br />
-                재고 현황에서 ‘담기’로 담아주세요. 예약분은 픽업 전날 자동으로 표시됩니다.
+                {invOptions.length > 0 ? (
+                  <>담은 공구가 없어요. 아래 ‘재고에서 검색·담기’로 담아주세요.</>
+                ) : (
+                  <>
+                    공구는 직접 적을 수 없어요.
+                    <br />
+                    재고 현황에서 ‘담기’로 담아주세요. 예약분은 픽업 전날 자동으로
+                    표시됩니다.
+                  </>
+                )}
               </div>
+            )}
+            {invOptions.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--soft btn--block"
+                  style={{ marginTop: 8 }}
+                  onClick={() => setToolPickerOpen(true)}
+                >
+                  + 재고에서 검색·담기
+                </button>
+                {toolPickerOpen && (
+                  <StockPickerSheet
+                    items={addableInv}
+                    onPick={addHoldFromPicker}
+                    onClose={() => setToolPickerOpen(false)}
+                  />
+                )}
+              </>
             )}
           </div>
         ) : (
