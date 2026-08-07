@@ -135,14 +135,20 @@ export default async function AdminInvoiceDetail(props: {
         unitPrice: String(it.unitPrice),
         inventoryItemId: it.inventoryItemId,
       }));
-    // 예약분 자동채움 — 아직 이 계산서에 안 들어간 확정 예약분만 공구(TOOL)에 덧붙인다
-    // (초안을 다시 열어도 예약분이 사라지지 않게).
+    // 예약분 자동채움 — '공구를 아직 한 번도 확정/저장하지 않은 새 초안'에만 예약 확정분을 공구(TOOL)에 채운다.
+    // ⚠ 한 번이라도 공구를 확정하면 그 계산서의 공구 목록(InvoiceItem)이 진실 소스가 된다. 그래야 관리자가 재고부족으로
+    //   X 삭제한 예약분을, 예약 레코드가 남아있다는 이유로 매 렌더마다 다시 끌어와 '총 N개'에 되살리지 않는다.
+    //   (새 초안에선 그대로 자동 채워 편의 유지 — 확정 안 하고 다시 열어도 예약분이 사라지지 않음.)
+    const toolConfirmed = inv.confirmedCats
+      .split(",")
+      .map((s) => s.trim())
+      .includes("TOOL");
     const billedTool = new Set(
       inv.items.filter((it) => it.category === "TOOL").map((it) => it.name.trim()),
     );
-    const reserved = await getReservationInvoiceItems(inv.userId, inv.date);
-    for (const r of reserved) {
-      if (!billedTool.has(r.name.trim())) {
+    if (billedTool.size === 0 && !toolConfirmed) {
+      const reserved = await getReservationInvoiceItems(inv.userId, inv.date);
+      for (const r of reserved) {
         initialItems.push({
           category: "TOOL" as Category,
           name: r.name,
