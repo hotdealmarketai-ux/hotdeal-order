@@ -3,6 +3,7 @@ import { receivableOf } from "@/lib/receivable";
 import { weeklyReceivableOf } from "@/lib/weekly";
 import { canOrderWeekly } from "@/lib/constants";
 import { maintenanceOn } from "@/lib/maintenance";
+import { needsOnboarding } from "@/lib/onboarding";
 import { BottomNav } from "@/components/BottomNav";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
 
@@ -19,6 +20,11 @@ export default async function MerchantLayout({
         <MaintenanceGate />
       </div>
     );
+  }
+  // 가맹 오픈 온보딩 중이면 발주 네비 숨김 — '오픈 준비' 퀘스트만 보이게(발주 잠금).
+  // 기존 점주는 needsOnboarding=false 라 영향 없음. 각 발주 페이지도 /onboarding 으로 리다이렉트.
+  if (needsOnboarding(user)) {
+    return <div className="app">{children}</div>;
   }
   // 탭 배지는 '지점 총미수(receivableOf)가 남아 있을 때만' 표시한다(2026-08-05~). 매칭·수동조정으로 다 갚으면
   // 배지가 사라진다. 계산서 status는 결제돼도 ISSUED로 남아(입금확인 폐지) count만으로는 완납 후에도 안 사라지므로,

@@ -6,8 +6,10 @@
 // ============================================================
 
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
+import { needsOnboarding } from "@/lib/onboarding";
 import { prisma } from "@/lib/prisma";
 import {
   allowedCategoriesFor,
@@ -34,6 +36,8 @@ export default async function OrderPage(props: {
 }) {
   const { cancelReq, cancelErr } = await props.searchParams;
   const user = await requireMerchant();
+  // 가맹 오픈 온보딩 중이면 발주 대신 '오픈 준비' 퀘스트로.
+  if (needsOnboarding(user)) redirect("/onboarding");
   const windowed = hasOrderWindow(user.role);
   const open = await orderOpenNow(user.role); // 운영시간 또는 관리자 임시 오픈
 

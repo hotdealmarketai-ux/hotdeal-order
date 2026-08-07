@@ -17,6 +17,8 @@ export type AppUser = {
   orderUnlockAt: Date | null;
   weeklyOrderUnlock: boolean;
   weeklyOrderUnlockAt: Date | null;
+  onboardingStartedAt: Date | null;
+  onboardingCompletedAt: Date | null;
 };
 
 export async function getCurrentUser(): Promise<AppUser | null> {
@@ -39,6 +41,8 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       orderUnlockAt: u.orderUnlockAt,
       weeklyOrderUnlock: u.weeklyOrderUnlock,
       weeklyOrderUnlockAt: u.weeklyOrderUnlockAt,
+      onboardingStartedAt: u.onboardingStartedAt,
+      onboardingCompletedAt: u.onboardingCompletedAt,
     };
   } catch (err) {
     // DB 미연결/장애 시 앱이 죽지 않고 비로그인으로 처리(로그인 화면 표시)

@@ -159,6 +159,56 @@ async function main() {
     });
   }
 
+  // ---- 가맹 오픈 온보딩(퀘스트) 마스터 체크리스트 — 없을 때만 생성(관리자 편집분 보존) ----
+  if ((await prisma.onboardingStep.count()) === 0) {
+    const steps = [
+      {
+        order: 1,
+        actor: "BOTH",
+        title: "가맹계약 절차",
+        body: "정보공개서·가맹계약서 교부(계약 예정일 최소 15일 전, 이메일 또는 서면) 후 15일 경과 시 가맹계약 체결.",
+      },
+      {
+        order: 2,
+        actor: "MERCHANT",
+        title: "사업자등록 및 인허가",
+        body: "임대차계약 + 개인사업자 등록(간이과세·소매업, 종목: 청과/야채/수산물/건어물/떡). 추가 인허가: 통신판매업 신고, 식품 영업신고(위생교육 이수).",
+      },
+      {
+        order: 3,
+        actor: "BOTH",
+        title: "인테리어 및 시설 구축",
+        body: "인테리어 약 1주 + 시설 설치·세팅 약 1주.",
+      },
+      {
+        order: 4,
+        actor: "BOTH",
+        title: "POS 및 결제 시스템 구축",
+        body: "지오아이앤씨: POS·카드단말기·키오스크·라벨프린터 설치, 카드승인 등록. 나우페이(Toss Payments) PG 승인 — 제출: 신분증·통신판매업 신고증(약 1~2주).",
+      },
+      {
+        order: 5,
+        actor: "BOTH",
+        title: "점주 교육",
+        body: "현장 교육 + 온라인 교육(1~3주). 운영 시스템·공동구매·상품 등록·고객응대(CS)·재고 및 발주관리·매출관리. 오픈 비품 구매(비품리스트 별도 제공).",
+      },
+      {
+        order: 6,
+        actor: "BOTH",
+        title: "오픈 행사 운영",
+        body: "오픈 행사 기획·전단지 배포·커뮤니티 공유 이벤트·사전 증정 이벤트·리뷰 이벤트.",
+      },
+      {
+        order: 7,
+        actor: "ADMIN",
+        title: "정식 오픈 및 사후관리",
+        body: "KPI 점검(일 매출·카카오톡방 유입 수·나우페이 주문 건수·방문 고객 수·구매 고객 수·객단가). 담당 슈퍼바이저가 오픈 후 운영 현황 점검·개선.",
+      },
+    ];
+    for (const s of steps) await prisma.onboardingStep.create({ data: s });
+    console.log("✅ 온보딩 단계 7개 시드 완료");
+  }
+
   console.log("✅ Seed 완료 — 계정 비밀번호는 모두:", PASSWORD);
 }
 
