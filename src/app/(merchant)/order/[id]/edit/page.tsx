@@ -15,6 +15,8 @@ import {
   currentWindowStartUtc,
 } from "@/lib/deadline";
 import { kstDateOf } from "@/lib/date";
+import { heldByItem } from "@/lib/stock-hold";
+import { windowKeyAt } from "@/lib/schedule";
 import { EditOrderForm } from "@/components/EditOrderForm";
 
 export default async function EditOrderPage(props: {
@@ -46,6 +48,24 @@ export default async function EditOrderPage(props: {
     note: it.rawNote,
   }));
 
+  // 공구(TOOL) 수정 — 재고 검색 팝업용 재고현황 품목(남은 재고 = base − Σ담기홀드). 담기(홀드)는 안 씀.
+  let invOptions: { id: string; name: string; available: number }[] = [];
+  if (order.category === "TOOL") {
+    const [invItems, held] = await Promise.all([
+      prisma.inventoryItem.findMany({
+        where: { deletedAt: null },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, name: true, qty: true },
+      }),
+      heldByItem(windowKeyAt()),
+    ]);
+    invOptions = invItems.map((it) => ({
+      id: it.id,
+      name: it.name,
+      available: Math.max(0, it.qty - (held[it.id] ?? 0)),
+    }));
+  }
+
   return (
     <>
       <Topbar backHref={backHref} title="발주 수정" />
@@ -63,6 +83,7 @@ export default async function EditOrderPage(props: {
           needsFulfillment={needsFulfillment(user.role)}
           initialFulfillment={(order.fulfillment as Fulfillment | null) ?? ""}
           address={user.address ?? ""}
+          invOptions={invOptions}
         />
       </div>
     </>

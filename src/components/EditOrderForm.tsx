@@ -8,6 +8,7 @@ import {
 } from "@/app/actions/order";
 import { SubmitButton } from "./SubmitButton";
 import { FulfillmentPicker } from "./FulfillmentPicker";
+import { StockPickerSheet, type StockPickItem } from "./StockPickerSheet";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 import type { Category, Fulfillment } from "@/lib/constants";
 
@@ -28,6 +29,7 @@ export function EditOrderForm({
   initialFulfillment = "",
   address = "",
   admin = false,
+  invOptions = [],
 }: {
   orderId: string;
   category: Category;
@@ -42,11 +44,15 @@ export function EditOrderForm({
   // ⚠ 서버 액션을 prop 함수로 넘기면 제출이 서버까지 안 가는 케이스가 있어(관리자 수정 무반응 버그),
   //   boolean으로만 받고 두 액션을 여기서 직접 import·선택한다.
   admin?: boolean;
+  // 공구(TOOL) 수정 전용 — 재고 검색 팝업용 재고현황 품목(남은 재고 포함). 담기(홀드) 안 씀.
+  invOptions?: StockPickItem[];
 }) {
   const saveAction = admin ? adminUpdateOrderAction : updateOrderAction;
   const isTofu = category === "TOFU";
+  const isTool = category === "TOOL";
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const [rows, setRows] = useState<Row[]>(() => {
     const seed = initialItems.map((it) => ({
@@ -98,6 +104,16 @@ export function EditOrderForm({
 
   function removeRow(id: number) {
     setRows((prev) => normalizeRows(prev.filter((r) => r.id !== id)));
+  }
+
+  // 공구 재고 검색 팝업에서 품목 선택 → 발주에 바로 추가(담기/홀드 안 씀). 이미 있으면 중복 추가 안 함.
+  function addPickedTool(item: StockPickItem) {
+    setConfirming(false);
+    setRows((prev) => {
+      if (prev.some((r) => r.name.trim() === item.name.trim())) return prev;
+      const filled = prev.filter(isFilled);
+      return [...filled, { id: ++uid.current, name: item.name, qty: "1", note: "" }, newRow()];
+    });
   }
 
   const items = useMemo(() => {
@@ -171,6 +187,57 @@ export function EditOrderForm({
               </div>
             );
           })}
+        </div>
+      ) : isTool ? (
+        <div className="oitems">
+          {rows.filter(isFilled).map((r, i) => (
+            <div className="oitem is-filled" key={r.id}>
+              <span className="oitem__num">{String(i + 1).padStart(2, "0")}</span>
+              <div className="oitem__fields">
+                <div className="oitem__row1">
+                  <span
+                    className="input"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      background: "var(--surface, #f5f6f5)",
+                    }}
+                  >
+                    {r.name}
+                  </span>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    value={r.qty}
+                    onChange={(e) => updateRow(r.id, "qty", e.target.value)}
+                    placeholder="수량"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                className="oitem__del"
+                onClick={() => removeRow(r.id)}
+              >
+                삭제
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            className="btn btn--soft btn--block"
+            style={{ marginTop: 4 }}
+            onClick={() => setPickerOpen(true)}
+          >
+            + 재고에서 검색·추가
+          </button>
+          {pickerOpen && (
+            <StockPickerSheet
+              items={invOptions}
+              onPick={addPickedTool}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
         </div>
       ) : (
         <div className="oitems">

@@ -12,6 +12,8 @@ import {
   type Role,
 } from "@/lib/constants";
 import { kstDateOf, shipmentDayOf } from "@/lib/date";
+import { heldByItem } from "@/lib/stock-hold";
+import { windowKeyAt } from "@/lib/schedule";
 import { EditOrderForm } from "@/components/EditOrderForm";
 
 // 관리자(새롭) 발주 수정 — 아무 지점 발주나. 발주창 제한 없음.
@@ -53,6 +55,24 @@ export default async function AdminEditOrderPage(props: {
     note: it.rawNote,
   }));
 
+  // 공구(TOOL) 수정 — 재고 검색 팝업용 재고현황 품목(남은 재고 = base − Σ담기홀드).
+  let invOptions: { id: string; name: string; available: number }[] = [];
+  if (order.category === "TOOL") {
+    const [invItems, held] = await Promise.all([
+      prisma.inventoryItem.findMany({
+        where: { deletedAt: null },
+        orderBy: { sortOrder: "asc" },
+        select: { id: true, name: true, qty: true },
+      }),
+      heldByItem(windowKeyAt()),
+    ]);
+    invOptions = invItems.map((it) => ({
+      id: it.id,
+      name: it.name,
+      available: Math.max(0, it.qty - (held[it.id] ?? 0)),
+    }));
+  }
+
   return (
     <>
       <Topbar backHref={backHref} title="발주 수정 (관리자)" />
@@ -72,6 +92,7 @@ export default async function AdminEditOrderPage(props: {
           initialFulfillment={(order.fulfillment as Fulfillment | null) ?? ""}
           address={order.user.address ?? ""}
           admin
+          invOptions={invOptions}
         />
       </div>
     </>
