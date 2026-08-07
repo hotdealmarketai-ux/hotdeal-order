@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
+import { LogoutButton } from "@/components/LogoutButton";
 import { requireMerchant } from "@/lib/session";
 import { needsOnboarding, getOnboardingView } from "@/lib/onboarding";
 
@@ -42,9 +43,6 @@ export default async function OnboardingPage() {
           <div className="onbprog__bar">
             <div className="onbprog__fill" style={{ width: `${view.percent}%` }} />
           </div>
-          <p className="onbprog__hint">
-            점주 완료 + 본사 확인이 모두 되면 그 단계가 완료돼요.
-          </p>
         </div>
 
         <div className="section-label">준비 단계</div>
@@ -69,6 +67,10 @@ export default async function OnboardingPage() {
               </Link>
             );
           })}
+        </div>
+
+        <div style={{ marginTop: 24, textAlign: "center" }}>
+          <LogoutButton className="btn btn--ghost btn--sm" label="로그아웃" />
         </div>
       </div>
     </>
