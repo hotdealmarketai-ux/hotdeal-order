@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { formatKDateTime } from "@/lib/format";
 import { DepositMatchControl } from "@/components/DepositMatchControl";
 import { CollectDepositsButton } from "@/components/CollectDepositsButton";
-import { lastBankSyncAt } from "@/lib/bank";
 import { SubmitButton } from "@/components/SubmitButton";
 import { approveSplitAction, rejectSplitAction } from "@/app/actions/invoice";
 import { setOrderLockOverrideAction } from "@/app/actions/deposit";
@@ -22,7 +21,7 @@ export const maxDuration = 60;
 export default async function AdminDeposits() {
   await requireAdmin();
 
-  const [stores, balances, splitReqs, txns, syncedAt, pendingSplits, adjustments] =
+  const [stores, balances, splitReqs, txns, pendingSplits, adjustments] =
     await Promise.all([
     prisma.user.findMany({
       where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
@@ -49,7 +48,6 @@ export default async function AdminDeposits() {
       orderBy: { txAt: "desc" },
       take: 300,
     }),
-    lastBankSyncAt(),
     // 미처리 분할 입금 요청(승인/반려 대기) — 계산서 단위
     prisma.invoice.findMany({
       where: { status: "ISSUED", splitRequested: true, splitApprovedAt: null },
@@ -92,7 +90,6 @@ export default async function AdminDeposits() {
     );
 
   const totalDue = rows.reduce((n, r) => n + r.balance, 0);
-  const dueStores = rows.filter((r) => r.balance > 0).length;
 
   // 미매칭 입금(예금주 미등록) 매칭용 점포 옵션
   const merchants = await prisma.user.findMany({
@@ -112,12 +109,15 @@ export default async function AdminDeposits() {
     <>
       <Topbar backHref="/admin" title="입금 관리" />
       <div className="page">
-        <p className="lead" style={{ marginTop: 0, marginBottom: 4 }}>
-          미수 {dueStores}건 · 합계 {fmt(totalDue)}원
-        </p>
-        <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
-          최신 계좌 동기화 : {syncedAt ? formatKDateTime(syncedAt) : "동기화 전"}
-        </p>
+        <div className="deptotal">
+          <span className="deptotal__k">전체 미수</span>
+          <span
+            className="deptotal__v"
+            style={totalDue > 0 ? { color: "var(--danger)" } : undefined}
+          >
+            {fmt(totalDue)}원
+          </span>
+        </div>
 
         {/* 지금 수집 — 팝빌 계좌조회에서 최근 입금을 즉시 끌어와 자동매칭(자동수집 크론과 별개, 수동 트리거) */}
         <CollectDepositsButton />
