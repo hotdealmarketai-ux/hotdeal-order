@@ -11,9 +11,13 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 // 수량 표시 — 부동소수 정리(소수 둘째자리까지).
 const fmtQty = (n: number) => String(Math.round(n * 100) / 100);
 
-// 집계 대상 카테고리 = 일반 4종(FRUIT/VEG/TOOL/TOFU) + 주간 4종(SNACK/DAIRY/DRIED/EGG). 용달·환불은 제외.
-const AGG_CATS: string[] = [...CATEGORY_ORDER, ...WEEKLY_CATEGORIES.map((c) => c.key)];
-const WEEKLY_LABEL = new Map<string, string>(WEEKLY_CATEGORIES.map((c) => [c.key, c.label]));
+// 집계 대상 = 일반 4종(FRUIT/VEG/TOOL/TOFU) + 주간발주(계산서에 불러온 주간분은 단일 카테고리 "WEEKLY")
+// + 주간 카탈로그 4종(SNACK/DAIRY/DRIED/EGG, 별도 주간 계산서용). 용달(DELIVERY)·환불(REFUND)은 제외.
+const AGG_CATS: string[] = [...CATEGORY_ORDER, "WEEKLY", ...WEEKLY_CATEGORIES.map((c) => c.key)];
+const WEEKLY_LABEL = new Map<string, string>([
+  ["WEEKLY", "주간발주"],
+  ...WEEKLY_CATEGORIES.map((c): [string, string] => [c.key, c.label]),
+]);
 const catLabelOf = (c: string): string =>
   (CATEGORIES as Record<string, { label: string }>)[c]?.label ?? WEEKLY_LABEL.get(c) ?? c;
 

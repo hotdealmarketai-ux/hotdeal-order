@@ -10,9 +10,13 @@ import { sumQty } from "@/lib/qty";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
-// 일반(FRUIT/VEG/TOOL/TOFU) + 주간(SNACK/DAIRY/DRIED/EGG) 카테고리를 한 번에 표시하기 위한 순서·라벨.
-const ALL_CATS: string[] = [...CATEGORY_ORDER, ...WEEKLY_CATEGORIES.map((c) => c.key)];
-const WEEKLY_LABEL = new Map<string, string>(WEEKLY_CATEGORIES.map((c) => [c.key, c.label]));
+// 표시 순서·라벨: 일반 4종(FRUIT/VEG/TOOL/TOFU) + 주간발주(계산서에 불러온 주간분=단일 "WEEKLY")
+// + 주간 카탈로그 4종(SNACK/DAIRY/DRIED/EGG, 별도 주간 계산서용).
+const ALL_CATS: string[] = [...CATEGORY_ORDER, "WEEKLY", ...WEEKLY_CATEGORIES.map((c) => c.key)];
+const WEEKLY_LABEL = new Map<string, string>([
+  ["WEEKLY", "주간발주"],
+  ...WEEKLY_CATEGORIES.map((c): [string, string] => [c.key, c.label]),
+]);
 const catLabelOf = (c: string): string =>
   (CATEGORIES as Record<string, { label: string }>)[c]?.label ?? WEEKLY_LABEL.get(c) ?? c;
 
