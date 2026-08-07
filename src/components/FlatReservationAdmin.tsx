@@ -13,7 +13,7 @@ export type FlatAdminRow = {
   supplyPrice: number;
   inventoryItemId: string;
   closeAtMs: number;
-  closeAtLocal: string; // "YYYY-MM-DDTHH:MM:SS" (KST) — datetime-local 프리필
+  closeAtLocal: string; // "YYYY-MM-DDTHH:MM" (KST) — datetime-local 프리필(시·분)
   stockFixed: boolean; // 재고 고정(초과발주 금지)
   totalQty: number;
   storeCount: number;
@@ -266,11 +266,10 @@ export function FlatReservationAdmin({
           disabled={!!f.invId}
           style={{ marginBottom: 8 }}
         />
-        <label className="resvflat__flabel">예약 마감 (시·분·초)</label>
+        <label className="resvflat__flabel">예약 마감 (시·분)</label>
         <input
           className="input"
           type="datetime-local"
-          step={1}
           value={f.closeAt}
           onChange={(e) => setF((s) => ({ ...s, closeAt: e.target.value }))}
           style={{ marginBottom: 8 }}

@@ -24,7 +24,7 @@ export default async function AdminReservationsPage() {
     closeAtMs: p.closeAt.getTime(),
     closeAtLocal: new Date(p.closeAt.getTime() + 9 * 3600 * 1000)
       .toISOString()
-      .slice(0, 19),
+      .slice(0, 16),
     stockFixed: p.stockFixed,
     totalQty: p.totalQty,
     storeCount: p.storeCount,
