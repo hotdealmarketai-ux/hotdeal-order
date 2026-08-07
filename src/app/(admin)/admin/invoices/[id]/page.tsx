@@ -247,7 +247,16 @@ export default async function AdminInvoiceDetail(props: {
       name: it.name,
       qty: String(it.qty),
       unitPrice: String(it.unitPrice),
+      inventoryItemId: it.inventoryItemId,
     }));
+  // 공구칸 재고현황 연동 드롭다운용 — 수정 폼도 계산서 발행처럼 재고 검색·연동 가능하게.
+  const reviseInvOptions = canRevise
+    ? await prisma.inventoryItem.findMany({
+        where: { deletedAt: null },
+        select: { id: true, name: true, supplyPrice: true, qty: true },
+        orderBy: { sortOrder: "asc" },
+      })
+    : [];
   // 주간발주 합산분(읽기 전용 표시) — 발행된 계산서 영수증에 별도 섹션으로.
   const weeklyBilled = inv.items.filter((it) => it.category === "WEEKLY");
   const deliveryBilled = inv.items.filter((it) => it.category === "DELIVERY");
@@ -386,6 +395,7 @@ export default async function AdminInvoiceDetail(props: {
             date={inv.date}
             categories={reviseCategories}
             initialItems={reviseItems}
+            invOptions={reviseInvOptions}
           />
         )}
       </div>

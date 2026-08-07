@@ -6,14 +6,24 @@ import { SubmitButton } from "./SubmitButton";
 import { MoneyInput } from "./MoneyInput";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
+import { rankStockMatches } from "@/lib/stock-match";
 
-type Row = { id: number; name: string; qty: string; unitPrice: string };
+type Row = {
+  id: number;
+  name: string;
+  qty: string;
+  unitPrice: string;
+  inventoryItemId: string; // 공구칸 재고현황 연동 상품 id(있으면)
+};
+
+export type InvOption = { id: string; name: string; supplyPrice: number; qty: number };
 
 export type ReviseInitialItem = {
   category: Category;
   name: string;
   qty: string;
   unitPrice: string;
+  inventoryItemId?: string;
 };
 
 function isFilled(r: Row) {
@@ -32,23 +42,33 @@ const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 // 입금대기(ISSUED) 계산서를 제자리에서 고쳐 재발송. '계산서 수정' 버튼 → 편집 → 확인 → 재발송.
 // 기존 계산서를 지우지 않고 같은 계산서를 갱신한다(점주 알림/링크 유지·중복 없음).
+// 공구(TOOL)는 계산서 발행과 동일하게 재고현황 검색·연동(이름·공급가 자동채움 + 연동 id 유지) 지원.
 export function ReviseInvoiceForm({
   invoiceId,
   date,
   categories,
   initialItems,
+  invOptions = [],
 }: {
   invoiceId: string;
   date: string;
   categories: Category[];
   initialItems: ReviseInitialItem[];
+  invOptions?: InvOption[];
 }) {
   const uid = useRef(0);
-  const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", unitPrice: "" });
+  const newRow = (): Row => ({
+    id: ++uid.current,
+    name: "",
+    qty: "",
+    unitPrice: "",
+    inventoryItemId: "",
+  });
 
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState("");
+  const [acRow, setAcRow] = useState<number | null>(null); // 공구 자동완성 드롭다운 열린 행
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
     const init: Record<string, Row[]> = {};
     for (const c of categories) init[c] = [];
@@ -59,6 +79,7 @@ export function ReviseInvoiceForm({
         name: it.name,
         qty: it.qty,
         unitPrice: it.unitPrice,
+        inventoryItemId: it.inventoryItemId ?? "",
       });
     }
     for (const c of categories) init[c].push(newRow());
@@ -68,6 +89,20 @@ export function ReviseInvoiceForm({
     reviseInvoiceAction,
     {},
   );
+
+  // 재고연동 행의 현재 실물 재고(출고 후 잔량 표시용) — inventoryItemId → qty.
+  const stockById = useMemo(
+    () => new Map(invOptions.map((o) => [o.id, o.qty])),
+    [invOptions],
+  );
+  // 이름 유사매칭(계산서 발행과 동일 rankStockMatches). 1글자↑부터.
+  function invMatches(q: string): InvOption[] {
+    const query = q.trim();
+    if (query.length < 1 || invOptions.length === 0) return [];
+    const ranked = rankStockMatches(query, invOptions, 8).filter((r) => r.score >= 8);
+    const byId = new Map(invOptions.map((o) => [o.id, o]));
+    return ranked.map((r) => byId.get(r.id)).filter((o): o is InvOption => !!o);
+  }
 
   // 채운 줄 + 편집 중 줄만 남기고 후행 빈 줄 하나 유지(빈 칸 자동 축소, 최소 1줄).
   function normalizeRows(list: Row[], editingId?: number): Row[] {
@@ -81,6 +116,32 @@ export function ReviseInvoiceForm({
     setConfirming(false);
     setRowsByCat((prev) => {
       const list = prev[cat].map((r) => (r.id === id ? { ...r, [field]: value } : r));
+      return { ...prev, [cat]: normalizeRows(list, id) };
+    });
+  }
+
+  // 공구 이름 직접 입력 — 연동 해제(수기), 자동완성 후보 갱신.
+  function onToolName(cat: Category, id: number, value: string) {
+    setConfirming(false);
+    setAcRow(value.trim() ? id : null);
+    setRowsByCat((prev) => {
+      const list = prev[cat].map((r) =>
+        r.id === id ? { ...r, name: value, inventoryItemId: "" } : r,
+      );
+      return { ...prev, [cat]: normalizeRows(list, id) };
+    });
+  }
+
+  // 드롭다운에서 상품 선택 — 이름·점주공급가·연동 id를 한 번에 채운다.
+  function pickInvOption(cat: Category, id: number, opt: InvOption) {
+    setConfirming(false);
+    setAcRow(null);
+    setRowsByCat((prev) => {
+      const list = prev[cat].map((r) =>
+        r.id === id
+          ? { ...r, name: opt.name, unitPrice: String(opt.supplyPrice), inventoryItemId: opt.id }
+          : r,
+      );
       return { ...prev, [cat]: normalizeRows(list, id) };
     });
   }
@@ -99,7 +160,13 @@ export function ReviseInvoiceForm({
       categories.flatMap((c) =>
         (rowsByCat[c] ?? [])
           .filter(isFilled)
-          .map((r) => ({ category: c, name: r.name, qty: r.qty, unitPrice: r.unitPrice })),
+          .map((r) => ({
+            category: c,
+            name: r.name,
+            qty: r.qty,
+            unitPrice: r.unitPrice,
+            inventoryItemId: r.inventoryItemId,
+          })),
       ),
     [categories, rowsByCat],
   );
@@ -202,12 +269,55 @@ export function ReviseInvoiceForm({
               const amt = rowAmount(r);
               return (
                 <div className="invrow" key={r.id}>
-                  <input
-                    className="input"
-                    value={r.name}
-                    onChange={(e) => updateRow(c, r.id, "name", e.target.value)}
-                    placeholder="품목"
-                  />
+                  {c === "TOOL" ? (
+                    <div className="invac">
+                      <input
+                        className="input"
+                        value={r.name}
+                        onChange={(e) => onToolName(c, r.id, e.target.value)}
+                        onFocus={() => r.name.trim() && setAcRow(r.id)}
+                        onBlur={() =>
+                          setTimeout(
+                            () => setAcRow((cur) => (cur === r.id ? null : cur)),
+                            150,
+                          )
+                        }
+                        placeholder="품목(재고 검색)"
+                        autoComplete="off"
+                      />
+                      {acRow === r.id &&
+                        (() => {
+                          const ms = invMatches(r.name);
+                          return ms.length > 0 ? (
+                            <div className="invac__list">
+                              {ms.map((o) => (
+                                <button
+                                  type="button"
+                                  key={o.id}
+                                  className="invac__item"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    pickInvOption(c, r.id, o);
+                                  }}
+                                >
+                                  <span className="invac__name">{o.name}</span>
+                                  <span className="invac__price">
+                                    {o.supplyPrice.toLocaleString("ko-KR")}원
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null;
+                        })()}
+                    </div>
+                  ) : (
+                    <input
+                      className="input"
+                      value={r.name}
+                      onChange={(e) => updateRow(c, r.id, "name", e.target.value)}
+                      placeholder="품목"
+                    />
+                  )}
                   <input
                     className="input"
                     inputMode="decimal"
@@ -232,6 +342,33 @@ export function ReviseInvoiceForm({
                       ✕
                     </button>
                   )}
+                  {/* 재고연동 행 — 입력칸 밑에 현재 재고 + 이 수량 출고 시 잔량. */}
+                  {c === "TOOL" &&
+                    r.inventoryItemId &&
+                    stockById.has(r.inventoryItemId) &&
+                    (() => {
+                      const base = stockById.get(r.inventoryItemId) ?? 0;
+                      const entered = parseQtyStrict(r.qty);
+                      const after = entered != null ? base - entered : null;
+                      return (
+                        <div className="invrow__stock">
+                          남은 재고 <b>{base.toLocaleString("ko-KR")}개</b>
+                          {after != null && (
+                            <>
+                              {" · 출고 시 "}
+                              <b
+                                className={
+                                  after < 0 ? "invrow__stock--over" : "invrow__stock--after"
+                                }
+                              >
+                                {after.toLocaleString("ko-KR")}개
+                              </b>
+                              {" 남음"}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })()}
                 </div>
               );
             })}
