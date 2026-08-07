@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { CHAEUMCHAE_CATALOG, seqForName } from "@/lib/chaeumchae";
-import { submitChaeumchae, type SubmitItem } from "@/lib/chaeumchae-submit";
+import {
+  submitChaeumchae,
+  fetchChaeumchaeState,
+  type SubmitItem,
+} from "@/lib/chaeumchae-submit";
 import { sendPushToRole } from "@/lib/push";
 import { currentWindowStartUtc } from "@/lib/schedule";
 import { kstDateOf } from "@/lib/date";
@@ -31,6 +35,17 @@ export async function GET(request: Request) {
   const auth = request.headers.get("authorization");
   if (!secret || auth !== `Bearer ${secret}`) {
     return new Response("forbidden", { status: 403 });
+  }
+
+  // 읽기 전용 상태 확인 — 채움채에 현재 잡힌 출고일 주문(품목별 수량)을 조회만 한다(발주 안 넣음).
+  // 자동제출 후 정상 반영 검증용. GET ...?state=1
+  if (url.searchParams.get("state") === "1") {
+    try {
+      const state = await fetchChaeumchaeState();
+      return Response.json({ ok: true, state });
+    } catch (err) {
+      return Response.json({ ok: false, error: String(err) }, { status: 502 });
+    }
   }
 
   const dryrun = url.searchParams.get("dryrun") === "1";
@@ -103,6 +118,11 @@ export async function GET(request: Request) {
     return Response.json({ ok: true, dryrun: true, orderDay, items, unmapped, skipped });
   }
 
+  // 킬 스위치 — 환경변수 CHAEUMCHAE_PAUSED=1 이면 실제 제출을 멈춘다(문제 시 즉시 정지용).
+  if (process.env.CHAEUMCHAE_PAUSED === "1") {
+    return Response.json({ ok: true, submitted: false, paused: true, orderDay, items, unmapped });
+  }
+
   // 멱등: 같은 출고일엔 한 번만 제출(디스패처+GH Actions 동시 실행에도 중복 제출 방지).
   // 원자적 claim(create) — 동시 두 호출 중 하나만 성공(@id 유니크). ?force=1 은 수동 재실행(claim 무시).
   const force = url.searchParams.get("force") === "1";
@@ -117,11 +137,11 @@ export async function GET(request: Request) {
   }
 
   try {
-    const results = await submitChaeumchae(orderDay, items);
+    const { orderDay: usedDay, results } = await submitChaeumchae(orderDay, items);
     const failed = results.filter((r) => r.result === "ERR");
     if (failed.length > 0) {
       logError("cron.chaeumchae.itemsFailed", new Error("일부 채움채 자동제출 실패"), {
-        orderDay,
+        orderDay: usedDay,
         failedCount: failed.length,
         total: results.length,
       });
@@ -130,7 +150,7 @@ export async function GET(request: Request) {
     return Response.json({
       ok: failed.length === 0,
       submitted: true,
-      orderDay,
+      orderDay: usedDay,
       results,
       unmapped,
     });
