@@ -1,5 +1,7 @@
 // 마감(일일 백업) — 전체 핵심 데이터를 xlsx 워크북으로 만든다(파일은 관리자가 다운로드, DB엔 요약 로그만).
-// 시트: 요약 / 미수 / 출고 계산서 / 재고현황. 데이터 유실 대비용 스냅샷.
+// 시트: 요약 / 미수 / 입출금 원장(시점별 미수 잔액) / 지점별 출고 계산서 / 재고현황. 데이터 유실 대비용 스냅샷.
+// 입출금 원장 = 관리자 입금관리 상세와 동일한 running-balance(계산서 발행 +미수, 입금 −미수, 조정 ±)를 담아
+// '그 작업 직후 미수가 얼마였는지'를 사건마다 남긴다. 주간발주(WEEKLY)·환불(REFUND)도 미수 전 종류로 포함.
 import ExcelJS from "exceljs";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES } from "@/lib/constants";
@@ -26,7 +28,8 @@ export type ClosingSummary = {
 export async function buildClosingWorkbook(
   now: Date,
 ): Promise<{ buffer: Buffer; summary: ClosingSummary }> {
-  const [stores, arGroups, adjGroups, invoices, inventory] = await Promise.all([
+  const [stores, arGroups, adjGroups, invoices, inventory, deposits, adjustmentsAll] =
+    await Promise.all([
     prisma.user.findMany({
       where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
       orderBy: { storeName: "asc" },
@@ -48,9 +51,14 @@ export async function buildClosingWorkbook(
       where: { status: { in: ["ISSUED", "PAID"] } },
       orderBy: [{ date: "asc" }],
       select: {
+        id: true,
+        userId: true,
         date: true,
         kind: true,
         status: true,
+        total: true,
+        issuedAt: true,
+        createdAt: true,
         user: { select: { storeName: true } },
         items: {
           orderBy: { sortOrder: "asc" },
@@ -74,6 +82,30 @@ export async function buildClosingWorkbook(
         majorCat: true,
         minorCat: true,
         expiry: true,
+      },
+    }),
+    // 입출금 원장(running balance)용 — 매칭된 입금 전체 + 미수 조정 전체.
+    prisma.deposit.findMany({
+      where: { matchStatus: { in: ["AUTO", "MANUAL"] } },
+      select: {
+        id: true,
+        matchedUserId: true,
+        txAt: true,
+        amount: true,
+        payerName: true,
+        matchStatus: true,
+        bankTid: true,
+      },
+    }),
+    prisma.receivableAdjustment.findMany({
+      select: {
+        id: true,
+        userId: true,
+        amount: true,
+        memo: true,
+        adminName: true,
+        createdAt: true,
+        depositId: true,
       },
     }),
   ]);
@@ -137,6 +169,111 @@ export async function buildClosingWorkbook(
   const arTotal = wsAr.addRow({ store: "합계", balance: receivableTotal });
   arTotal.font = { bold: true };
 
+  // ── 입출금 원장 (running balance) — 각 사건 반영 '직후'의 미수 잔액. 관리자 입금관리 상세와 동일 계산.
+  //   · 입금요청(계산서 발행, ISSUED, 전 종류): +total (환불 REFUND은 음수라 자동 차감)
+  //   · 입금(미수에 반영된 매칭분): 매칭 조정액(정상 = −입금액)
+  //   · 미수 조정(수동): ±amount
+  //   openingBalance = 현재 미수 − Σdelta (앱 도입 전 이월분, 정합이면 0).
+  const balByUser = new Map<string, number>(
+    allUserIds.map((id) => [
+      id,
+      (arByUser.get(id)?.sum ?? 0) + (adjByUser.get(id) ?? 0),
+    ]),
+  );
+  const depositMatchAmt = new Map<string, number>();
+  for (const a of adjustmentsAll)
+    if (a.depositId) depositMatchAmt.set(a.depositId, a.amount);
+
+  type LedgerEvt = { at: Date; kind: string; detail: string; delta: number };
+  const ledgerByUser = new Map<string, LedgerEvt[]>();
+  const pushEvt = (uid: string, e: LedgerEvt) => {
+    const arr = ledgerByUser.get(uid);
+    if (arr) arr.push(e);
+    else ledgerByUser.set(uid, [e]);
+  };
+  for (const inv of invoices) {
+    if (inv.status !== "ISSUED") continue; // 미수 반영은 발행분만(레거시 PAID 제외)
+    const knd =
+      inv.kind === "REFUND" ? "환불" : inv.kind === "WEEKLY" ? "주간발주" : "일반";
+    pushEvt(inv.userId, {
+      at: inv.issuedAt ?? inv.createdAt,
+      kind: inv.kind === "REFUND" ? "환불" : "입금요청",
+      detail: `${knd} · 출고 ${inv.date}`,
+      delta: inv.total,
+    });
+  }
+  for (const d of deposits) {
+    if (!d.matchedUserId) continue;
+    const delta = depositMatchAmt.get(d.id);
+    if (delta === undefined) continue; // 미수에 반영된(조정 있는) 입금만
+    const via = d.bankTid.startsWith("manual-")
+      ? "수동입금확인"
+      : `${d.matchStatus === "AUTO" ? "자동" : "수동"} · ${d.payerName || "입금자명 없음"}`;
+    pushEvt(d.matchedUserId, { at: d.txAt, kind: "입금", detail: via, delta });
+  }
+  for (const a of adjustmentsAll) {
+    if (a.depositId) continue; // 입금매칭 조정은 위 입금 행에 이미 반영
+    pushEvt(a.userId, {
+      at: a.createdAt,
+      kind: "미수조정",
+      detail: `${a.memo || "사유 없음"} · ${a.adminName || "관리자"}`,
+      delta: a.amount,
+    });
+  }
+
+  const wsLedger = wb.addWorksheet("입출금 원장");
+  wsLedger.columns = [
+    { header: "가맹점", key: "store", width: 22 },
+    { header: "일시", key: "at", width: 20 },
+    { header: "구분", key: "kind", width: 12 },
+    { header: "상세", key: "detail", width: 30 },
+    { header: "증감(원)", key: "delta", width: 14, style: { numFmt: "#,##0" } },
+    {
+      header: "미수 잔액(원)",
+      key: "balance",
+      width: 16,
+      style: { numFmt: "#,##0" },
+    },
+  ];
+  const ledgerUserIds = [...ledgerByUser.keys()].sort((x, y) =>
+    (nameById.get(x) ?? x).localeCompare(nameById.get(y) ?? y, "ko"),
+  );
+  for (const uid of ledgerUserIds) {
+    const evts = (ledgerByUser.get(uid) ?? []).sort(
+      (a, b) => a.at.getTime() - b.at.getTime(),
+    );
+    if (evts.length === 0) continue;
+    const store = nameById.get(uid) ?? uid;
+    const bal = balByUser.get(uid) ?? 0;
+    const deltaSum = evts.reduce((n, e) => n + e.delta, 0);
+    const opening = bal - deltaSum;
+    if (opening !== 0) {
+      const r = wsLedger.addRow({
+        store,
+        kind: "이전 이월",
+        detail: "앱 도입 전 누적(낱건 없음)",
+        delta: opening,
+        balance: opening,
+      });
+      r.font = { italic: true, color: { argb: "FF888888" } };
+    }
+    let run = opening;
+    for (const e of evts) {
+      run += e.delta;
+      wsLedger.addRow({
+        store,
+        at: formatKDateTime(e.at),
+        kind: e.kind,
+        detail: e.detail,
+        delta: e.delta,
+        balance: run,
+      });
+    }
+    const fr = wsLedger.addRow({ store, kind: "현재 미수", balance: bal });
+    fr.font = { bold: true };
+    wsLedger.addRow({}); // 점포 구분 빈 줄
+  }
+
   // ── 출고 계산서 — 지점별 탭. 각 탭: 품목 + 카테고리별 총 금액 + 지점 전체 총 금액. ──
   const invByStore = new Map<string, typeof invoices>();
   for (const inv of invoices) {
@@ -154,7 +291,7 @@ export async function buildClosingWorkbook(
   };
   // 시트명 규칙(엑셀): 31자 · [ ] * ? / \ : 금지 · 앞뒤 작은따옴표 금지 · "History" 예약 · 중복(대소문자 무시) 금지.
   // exceljs는 중복을 대소문자 무시로 판정하므로(예: "Cafe"/"cafe") 소문자 키로 중복을 막는다.
-  const usedLower = new Set<string>(["요약", "미수", "재고현황"]);
+  const usedLower = new Set<string>(["요약", "미수", "입출금 원장", "재고현황"]);
   const sheetName = (raw: string) => {
     let base =
       raw
@@ -236,7 +373,7 @@ export async function buildClosingWorkbook(
       expiry: it.expiry,
     });
 
-  for (const ws of [wsSum, wsAr, ...storeSheets, wsStock]) {
+  for (const ws of [wsSum, wsAr, wsLedger, ...storeSheets, wsStock]) {
     ws.getRow(1).font = { bold: true };
     ws.views = [{ state: "frozen", ySplit: 1 }];
   }
