@@ -26,7 +26,7 @@ async function announceCompletionIfJust(userId: string) {
       type: "system",
     });
     await sendPushToRole("ADMIN_SAEROP", {
-      title: "가맹 온보딩 완료",
+      title: "오픈 튜토리얼 완료",
       body: `${u?.storeName ?? "가맹점"} 오픈 준비 100% 완료 — 발주가 열렸어요.`,
       url: "/admin/onboarding",
       type: "system",
@@ -43,7 +43,7 @@ export async function setMerchantStepDoneAction(input: {
 }): Promise<OnboardingActionState> {
   const user = await requireMerchant();
   if (user.onboardingStartedAt == null) {
-    return { error: "온보딩 대상이 아니에요." };
+    return { error: "튜토리얼 대상이 아니에요." };
   }
   const stepId = String(input.stepId ?? "");
   const step = await prisma.onboardingStep.findUnique({ where: { id: stepId } });
@@ -212,9 +212,9 @@ export async function startOnboardingAction(input: {
     },
   });
   if (!u || u.role !== "MERCHANT_HOTDEAL" || u.status !== "APPROVED") {
-    return { error: "승인된 핫딜마켓 가맹점만 온보딩을 시작할 수 있어요." };
+    return { error: "승인된 핫딜마켓 가맹점만 튜토리얼을 시작할 수 있어요." };
   }
-  if (u.onboardingStartedAt != null) return { error: "이미 온보딩 중이에요." };
+  if (u.onboardingStartedAt != null) return { error: "이미 튜토리얼 진행 중이에요." };
   await prisma.user.update({
     where: { id: userId },
     data: { onboardingStartedAt: new Date(), onboardingCompletedAt: null },
@@ -225,7 +225,7 @@ export async function startOnboardingAction(input: {
     actorName: admin.storeName,
     targetType: "User",
     targetId: userId,
-    summary: `${u.storeName} 가맹 온보딩 시작(발주 잠금)`,
+    summary: `${u.storeName} 오픈 튜토리얼 시작(발주 잠금)`,
   });
   try {
     await sendPushToUser(userId, {
@@ -238,5 +238,47 @@ export async function startOnboardingAction(input: {
     logError("onboarding.notifyStart", e, { userId });
   }
   revalidatePath("/admin/onboarding");
+  return { ok: true };
+}
+
+// [관리자] 온보딩(오픈 튜토리얼) 취소 — 잘못 시작했을 때 되돌린다. 발주 잠금 해제(발주 오픈).
+// 단계 진행상태(OnboardingItem)는 지우지 않고 남겨둔다(다시 시작하면 이어짐).
+export async function cancelOnboardingAction(input: {
+  userId: string;
+}): Promise<OnboardingActionState> {
+  const admin = await requireAdmin();
+  const userId = String(input.userId ?? "");
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, storeName: true, onboardingStartedAt: true },
+  });
+  if (!u || u.role !== "MERCHANT_HOTDEAL") return { error: "대상 점포가 아니에요." };
+  if (u.onboardingStartedAt == null) {
+    return { error: "진행 중인 튜토리얼이 없어요." };
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    data: { onboardingStartedAt: null, onboardingCompletedAt: null },
+  });
+  await writeAudit({
+    action: "onboarding.cancel",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "User",
+    targetId: userId,
+    summary: `${u.storeName} 오픈 튜토리얼 취소(발주 잠금 해제)`,
+  });
+  try {
+    await sendPushToUser(userId, {
+      title: "발주가 열렸어요",
+      body: "오픈 준비 단계가 해제되어 바로 발주할 수 있어요.",
+      url: "/order",
+      type: "system",
+    });
+  } catch (e) {
+    logError("onboarding.notifyCancel", e, { userId });
+  }
+  revalidatePath("/admin/onboarding");
+  revalidatePath(`/admin/onboarding/${userId}`);
   return { ok: true };
 }

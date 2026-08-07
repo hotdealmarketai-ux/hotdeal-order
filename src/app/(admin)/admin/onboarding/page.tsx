@@ -37,7 +37,7 @@ export default async function AdminOnboardingPage() {
 
   return (
     <>
-      <Topbar backHref="/admin" title="가맹 온보딩" />
+      <Topbar backHref="/admin" title="오픈 튜토리얼" />
       <div className="page">
         <div className="notice notice--mute" style={{ marginBottom: 16 }}>
           오픈 전 준비 체크리스트. 점주 완료 + 본사 확인이 모두 되면 그 단계가 확정되고,
@@ -47,7 +47,7 @@ export default async function AdminOnboardingPage() {
           <Link href="/admin/onboarding/template">체크리스트 편집</Link>에서.
         </div>
 
-        <div className="section-label">온보딩 중 ({inProgress.length})</div>
+        <div className="section-label">튜토리얼 진행 중 ({inProgress.length})</div>
         {inProgress.length === 0 ? (
           <div className="empty">진행 중인 점포가 없어요.</div>
         ) : (
@@ -79,16 +79,16 @@ export default async function AdminOnboardingPage() {
           </div>
         )}
 
-        <div className="section-label">온보딩 미시작 ({notStarted.length})</div>
+        <div className="section-label">튜토리얼 미시작 ({notStarted.length})</div>
         {notStarted.length === 0 ? (
-          <div className="empty">모든 승인 점포가 온보딩을 시작했어요.</div>
+          <div className="empty">모든 승인 점포가 튜토리얼을 시작했어요.</div>
         ) : (
           <div className="list" style={{ marginBottom: 18 }}>
             {notStarted.map((m) => (
               <div key={m.id} className="row" style={{ alignItems: "center" }}>
                 <div className="row__main">
                   <div className="row__title">{m.storeName}</div>
-                  <div className="row__sub">발주 정상(온보딩 대상 아님)</div>
+                  <div className="row__sub">발주 정상(튜토리얼 대상 아님)</div>
                 </div>
                 <StartOnboardingButton userId={m.id} />
               </div>

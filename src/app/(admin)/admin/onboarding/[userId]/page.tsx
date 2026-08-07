@@ -5,7 +5,10 @@ import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOnboardingView } from "@/lib/onboarding";
-import { AdminConfirmButton } from "@/components/AdminOnboardingControls";
+import {
+  AdminConfirmButton,
+  CancelOnboardingButton,
+} from "@/components/AdminOnboardingControls";
 
 const ACTOR_LABEL: Record<string, string> = {
   MERCHANT: "점주",
@@ -47,8 +50,8 @@ export default async function AdminOnboardingMerchantPage(props: {
             {merchant.onboardingCompletedAt
               ? "오픈 완료 — 발주가 열렸습니다."
               : merchant.onboardingStartedAt
-                ? "온보딩 진행 중 — 발주 잠금."
-                : "온보딩 미시작(발주 정상)."}
+                ? "튜토리얼 진행 중 — 발주 잠금."
+                : "튜토리얼 미시작(발주 정상)."}
           </div>
         </div>
 
@@ -76,10 +79,13 @@ export default async function AdminOnboardingMerchantPage(props: {
           ))}
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
           <Link href="/admin/onboarding/template" className="btn btn--soft btn--block">
             체크리스트 내용 편집
           </Link>
+          {merchant.onboardingStartedAt && !merchant.onboardingCompletedAt && (
+            <CancelOnboardingButton userId={userId} />
+          )}
         </div>
       </div>
     </>
