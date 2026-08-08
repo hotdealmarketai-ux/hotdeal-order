@@ -37,6 +37,19 @@ export default async function MerchantInvoiceDetailPage({
       unitPrice: it.unitPrice,
       amount: it.amount,
     }));
+    const refundRevisions = (
+      await prisma.invoiceRevision.findMany({
+        where: { invoiceId: id },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          createdAt: true,
+          totalBefore: true,
+          totalAfter: true,
+          changes: true,
+        },
+      })
+    ).map((r) => ({ ...r, changes: parseRevisionChanges(r.changes) }));
     return (
       <>
         <Topbar backHref="/invoices" title="환불계산서" right={<TopbarChip>{user.storeName}</TopbarChip>} />
@@ -47,6 +60,11 @@ export default async function MerchantInvoiceDetailPage({
             </h1>
             <span className="badge badge--refund">환불</span>
           </div>
+          {inv.revisedAt && inv.status !== "VOID" && (
+            <div className="notice notice--ai" style={{ margin: "10px 0" }}>
+              이 환불계산서는 {formatKDateTime(inv.revisedAt)}에 수정되었어요. 아래 내용이 최신이에요.
+            </div>
+          )}
           <RefundReceipt
             storeName={user.storeName}
             dateLabel={labelDate(inv.date)}
@@ -57,6 +75,7 @@ export default async function MerchantInvoiceDetailPage({
                 : "이 금액만큼 미수(입금하실 금액)에서 차감되었습니다."
             }
           />
+          <InvoiceRevisionHistory revisions={refundRevisions} isRefund />
           <div style={{ marginTop: 16 }}>
             <PrintButton label="환불계산서 인쇄" />
           </div>

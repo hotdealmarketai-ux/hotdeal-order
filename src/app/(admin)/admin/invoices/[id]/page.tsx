@@ -27,6 +27,7 @@ import { parseRevisionChanges } from "@/lib/invoice-revision";
 import { DeleteDraftButton } from "@/components/DeleteDraftButton";
 import { RefundReceipt } from "@/components/RefundReceipt";
 import { RefundVoidButton } from "@/components/RefundVoidButton";
+import { ReviseRefundForm } from "@/components/ReviseRefundForm";
 import {
   ReviseInvoiceForm,
   type ReviseInitialItem,
@@ -43,11 +44,16 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 
 export default async function AdminInvoiceDetail(props: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ issued?: string; saved?: string; revised?: string }>;
+  searchParams: Promise<{
+    issued?: string;
+    saved?: string;
+    revised?: string;
+    refundRevised?: string;
+  }>;
 }) {
   await requireAdmin();
   const { id } = await props.params;
-  const { issued, saved, revised } = await props.searchParams;
+  const { issued, saved, revised, refundRevised } = await props.searchParams;
 
   const inv = await prisma.invoice.findUnique({
     where: { id },
@@ -58,7 +64,7 @@ export default async function AdminInvoiceDetail(props: {
   });
   if (!inv) notFound();
 
-  // 환불계산서 — 카테고리·재고·발주 참고 없이 단순 조회(+취소). 일반 계산서 편집 흐름과 분리.
+  // 환불계산서 — 카테고리·재고·발주 참고 없이 단순 조회 + 제자리 수정(+취소). 일반 계산서 편집 흐름과 분리.
   if (inv.kind === "REFUND") {
     const items = inv.items.map((it) => ({
       name: it.name,
@@ -66,10 +72,29 @@ export default async function AdminInvoiceDetail(props: {
       unitPrice: it.unitPrice,
       amount: it.amount,
     }));
+    const refundRevisions = (
+      await prisma.invoiceRevision.findMany({
+        where: { invoiceId: inv.id },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          createdAt: true,
+          totalBefore: true,
+          totalAfter: true,
+          changes: true,
+        },
+      })
+    ).map((r) => ({ ...r, changes: parseRevisionChanges(r.changes) }));
     return (
       <>
         <Topbar backHref={`/admin/billing/${inv.userId}`} title="환불계산서" />
         <div className="page">
+          {refundRevised === "1" && (
+            <div className="notice notice--ok" style={{ marginBottom: 14 }}>
+              ✓ 환불계산서를 수정해서 다시 보냈어요. 점주에게 &lsquo;환불계산서가
+              수정되었습니다&rsquo; 알림을 보냈어요.
+            </div>
+          )}
           <div
             style={{
               display: "flex",
@@ -96,6 +121,26 @@ export default async function AdminInvoiceDetail(props: {
                 : "취소된 환불계산서입니다. (미수 복구됨)"
             }
           />
+          {inv.revisedAt && (
+            <p className="hint center" style={{ marginTop: 8 }}>
+              {formatKDateTime(inv.revisedAt)} 수정됨
+            </p>
+          )}
+
+          <InvoiceRevisionHistory revisions={refundRevisions} isRefund />
+
+          {inv.status === "ISSUED" && (
+            <ReviseRefundForm
+              invoiceId={inv.id}
+              storeName={inv.user.storeName}
+              defaultDate={inv.date}
+              initialItems={inv.items.map((it) => ({
+                name: it.name,
+                qty: it.qty,
+                unitPrice: it.unitPrice,
+              }))}
+            />
+          )}
         </div>
       </>
     );

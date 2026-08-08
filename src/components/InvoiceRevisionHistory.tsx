@@ -28,26 +28,33 @@ function detail(ch: RevChange) {
 
 // 계산서 수정 내역 — 재발송 시점별로 무엇이 추가/변경/제거됐는지 + 결제요청(미수) 금액 변화.
 // 점주·관리자 공용(서버 컴포넌트). 수정 이력이 없으면 아무것도 렌더하지 않는다.
+// isRefund: 환불계산서는 total이 음수(미수 차감)라, 영수증과 같은 '양수(환불액)'로 표시하고
+//   증감 배지(빚 늘고 줆의 색)는 생략한다 — 음수·역방향 색으로 오해되지 않게.
 export function InvoiceRevisionHistory({
   revisions,
+  isRefund = false,
 }: {
   revisions: RevisionView[];
+  isRefund?: boolean;
 }) {
   if (!revisions || revisions.length === 0) return null;
   return (
     <div className="revhist">
       <div className="revhist__title">수정 내역 ({revisions.length})</div>
       {revisions.map((rev) => {
-        const delta = rev.totalAfter - rev.totalBefore;
+        const before = isRefund ? Math.abs(rev.totalBefore) : rev.totalBefore;
+        const after = isRefund ? Math.abs(rev.totalAfter) : rev.totalAfter;
+        const delta = after - before;
         return (
           <div className="revcard" key={rev.id}>
             <div className="revcard__head">
               <span className="revcard__time">{formatKDateTime(rev.createdAt)}</span>
               <span className="revcard__amt">
-                <span className="revcard__was">{won(rev.totalBefore)}</span>
+                {isRefund && <span className="revcard__was">환불</span>}
+                <span className="revcard__was">{won(before)}</span>
                 <span className="revcard__arrow">→</span>
-                <b>{won(rev.totalAfter)}원</b>
-                {delta !== 0 && (
+                <b>{won(after)}원</b>
+                {!isRefund && delta !== 0 && (
                   <span
                     className={`revcard__delta ${delta > 0 ? "is-up" : "is-down"}`}
                   >

@@ -284,6 +284,24 @@ export async function notifyMerchantRefundIssued(
   }
 }
 
+// 점주에게 '환불계산서 수정 재발송' 알림 — 같은 환불계산서로 이동, 바뀐 환불액 포함(미수 차감).
+export async function notifyMerchantRefundRevised(
+  userId: string,
+  invoiceId: string,
+  amount: number,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: `환불계산서가 수정되었습니다. 변경된 금액 ${amount.toLocaleString("ko-KR")}원 (미수 차감)`,
+      body: "",
+      url: `/invoices/${invoiceId}`,
+      type: "invoice",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantRefundRevised failed:", err);
+  }
+}
+
 // 점주에게 '계산서(입금요청서) 수정 재발송' 알림 — 같은 계산서로 이동, 바뀐 금액 포함
 export async function notifyMerchantInvoiceRevised(
   userId: string,
