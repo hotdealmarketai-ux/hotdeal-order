@@ -13,6 +13,9 @@ import {
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
+// '지금 수집' 서버액션이 Firecrawl 여러 콜을 기다리므로 함수 제한시간을 늘린다(플랜 한도까지).
+export const maxDuration = 300;
+
 const LEAD_BADGE: Record<string, { label: string; cls: string }> = {
   CONTACTED: { label: "컨택함", cls: "badge--wait" },
   DEAL: { label: "성사", cls: "badge--ok" },
