@@ -1,5 +1,5 @@
 // 채움채(두부/콩나물) 취급 품목 — 고정 5종. 발주 체크리스트 + 자동제출 매핑에 사용.
-// seq = 채움채 사이트의 product_seq (api_customer_order_product_insert 용)
+// seq = 채움채 사이트의 product_seq (api_customer_order_product_insert2 용, 2026-08 개편)
 export interface ChaeumchaeProduct {
   seq: string;
   name: string;
