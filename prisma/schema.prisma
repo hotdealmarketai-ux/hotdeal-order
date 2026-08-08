@@ -748,6 +748,7 @@ model SourcingLead {
   phone       String   @default("")
   url         String   @default("")
   reason      String   @default("") // AI 추천 이유 한 줄
+  mentions    Int      @default(1) // 서로 다른 매체/소스가 언급한 수(근거 강도)
   note        String   @default("") // 관리자 메모
   status      String   @default("NEW") // NEW | CONTACTED | REJECTED | DEAL | IGNORED
   firstSeenAt DateTime @default(now())
@@ -778,6 +779,7 @@ model SourcingProduct {
   url            String   @default("")
   imageUrl       String   @default("")
   reason         String   @default("")
+  mentions       Int      @default(1)
   note           String   @default("")
   status         String   @default("NEW") // NEW | PICKED | IGNORED
   firstSeenAt    DateTime @default(now())

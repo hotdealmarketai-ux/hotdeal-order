@@ -53,9 +53,12 @@ async function fcScrapeJson<T>(url: string, prompt: string): Promise<T | null> {
 
 // ── Track A: 로컬 업체 발굴 ──
 const LEAD_QUERIES = [
-  "요즘 뜨는 수도권 디저트 맛집 웨이팅 인스타",
+  "오픈런 웨이팅 디저트 맛집 수도권",
+  "품절대란 인스타 화제 베이커리 서울 경기",
+  "요즘 난리난 수제 떡 디저트 전문점",
   "성수 연남 익선 망원 신상 베이커리 추천",
-  "입소문 난 수제 떡집 서울 경기 유명",
+  "줄서서 먹는 빵집 디저트 수도권",
+  "입소문 웨이팅 떡집 서울 경기 유명",
 ];
 const LEAD_PROMPT =
   "이 페이지가 소개하는 '개별' 베이커리/디저트/떡집을 뽑아 JSON으로: " +
@@ -72,7 +75,7 @@ export const firecrawlLeadAdapter: LeadAdapter = {
     const out: RawLead[] = [];
     for (const q of LEAD_QUERIES) {
       if (out.length >= ctx.limit) break;
-      const results = await fcSearchJson<LeadShape>(q, LEAD_PROMPT, 4);
+      const results = await fcSearchJson<LeadShape>(q, LEAD_PROMPT, 5);
       for (const r of results) {
         for (const s of r.json?.shops ?? []) {
           if (!s.name) continue;
@@ -98,9 +101,10 @@ export const firecrawlLeadAdapter: LeadAdapter = {
 // COUPANG_BEST_URLS 지정하면 그 베스트 페이지 직접 추출, 없으면 검색으로.
 const COUPANG_BEST_URLS = (process.env.COUPANG_BEST_URLS || "").split(",").map((s) => s.trim()).filter(Boolean);
 const MEALKIT_QUERIES = [
-  "쿠팡 냉동 간편식 밀키트 베스트셀러 인기순위",
-  "스마트스토어 잘 팔리는 냉동 밀키트 국 탕 찌개",
-  "요즘 인기 밀키트 냉동식품 순위",
+  "쿠팡 냉동 간편식 밀키트 베스트셀러 판매량 순위",
+  "품절대란 리뷰폭발 밀키트 냉동식품",
+  "스마트스토어 잘 팔리는 냉동 국 탕 찌개 밀키트",
+  "요즘 인기 급상승 밀키트 순위 후기",
 ];
 const PRODUCT_PROMPT =
   "이 페이지의 냉동·냉장·밀키트·간편식 인기 제품을 뽑아 JSON으로: " +

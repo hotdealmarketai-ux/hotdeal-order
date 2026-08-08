@@ -1,5 +1,5 @@
-// 소싱 엔진 — 수집(어댑터) → 정규화 → 중복제거(key) → 필터 → AI선별 → upsert(상태 보존).
-// 크론과 관리자 '지금 수집'이 이걸 호출. 어댑터가 하나도 안 켜져 있으면 수집 0(관리자 수동 추가는 별도).
+// 소싱 엔진 — 수집(어댑터) → 정규화 → 중복제거(key) → 필터 → 근거집계(언급 매체 수) → AI선별 → upsert(상태 보존).
+// 크론이 호출. 어댑터가 하나도 안 켜져 있으면 수집 0.
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/log";
 import type { RawLead, RawProduct } from "./types";
@@ -11,41 +11,28 @@ const norm = (s: string) => s.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
 const leadKey = (name: string) => "L:" + norm(name);
 const productKey = (name: string, brand: string) => "P:" + norm(brand) + ":" + norm(name);
 const DAY = 24 * 60 * 60 * 1000;
+const srcOf = (r: { url?: string; sourceRef?: string; source: string }) =>
+  (r.url || r.sourceRef || r.source || "").split("#")[0]; // 언급 '매체(페이지)' 식별
 
-function pick<T>(a: T | null | undefined, b: T | null | undefined): T | null {
-  return a ?? b ?? null;
-}
 function mergeLead(a: RawLead, b: RawLead): RawLead {
   return {
-    source: a.source,
-    sourceRef: a.sourceRef || b.sourceRef,
-    name: a.name,
-    region: a.region || b.region,
-    category: a.category || b.category,
+    source: a.source, sourceRef: a.sourceRef || b.sourceRef, name: a.name,
+    region: a.region || b.region, category: a.category || b.category,
     reviewCount: Math.max(a.reviewCount ?? 0, b.reviewCount ?? 0) || (a.reviewCount ?? b.reviewCount ?? null),
-    instagram: a.instagram || b.instagram,
-    phone: a.phone || b.phone,
-    url: a.url || b.url,
-    note: a.note || b.note,
+    instagram: a.instagram || b.instagram, phone: a.phone || b.phone, url: a.url || b.url, note: a.note || b.note,
   };
 }
 function mergeProduct(a: RawProduct, b: RawProduct): RawProduct {
   return {
-    source: a.source,
-    sourceRef: a.sourceRef || b.sourceRef,
-    name: a.name,
-    brand: a.brand || b.brand,
-    category: a.category || b.category,
-    price: pick(a.price, b.price) ?? null,
+    source: a.source, sourceRef: a.sourceRef || b.sourceRef, name: a.name, brand: a.brand || b.brand,
+    category: a.category || b.category, price: a.price ?? b.price ?? null,
     reviewCount: Math.max(a.reviewCount ?? 0, b.reviewCount ?? 0) || (a.reviewCount ?? b.reviewCount ?? null),
-    url: a.url || b.url,
-    imageUrl: a.imageUrl || b.imageUrl,
-    note: a.note || b.note,
+    url: a.url || b.url, imageUrl: a.imageUrl || b.imageUrl, note: a.note || b.note,
   };
 }
 
 // ── Track A: 로컬 업체 발굴 ──
-export async function runLocalSourcing(limit = 40): Promise<{ found: number; kept: number }> {
+export async function runLocalSourcing(limit = 60): Promise<{ found: number; kept: number }> {
   const run = await prisma.sourcingRun.create({ data: { track: "LOCAL" } });
   const raws: RawLead[] = [];
   const detail: Record<string, number> = {};
@@ -60,23 +47,32 @@ export async function runLocalSourcing(limit = 40): Promise<{ found: number; kep
       detail[a.id] = -1;
     }
   }
-  // 프랜차이즈 제외 + key로 병합
+  // 프랜차이즈 제외 + key로 병합 + 언급 매체(페이지) 집계
   const byKey = new Map<string, RawLead>();
+  const srcByKey = new Map<string, Set<string>>();
   for (const r of raws) {
     if (!r.name?.trim() || isFranchiseName(r.name)) continue;
     const k = leadKey(r.name);
-    const prev = byKey.get(k);
-    byKey.set(k, prev ? mergeLead(prev, r) : r);
+    byKey.set(k, byKey.has(k) ? mergeLead(byKey.get(k)!, r) : r);
+    const set = srcByKey.get(k) ?? new Set<string>();
+    if (srcOf(r)) set.add(srcOf(r));
+    srcByKey.set(k, set);
   }
   const entries = [...byKey.entries()];
+  const mentionsOf = (k: string) => Math.max(1, srcByKey.get(k)?.size ?? 1);
   const scored = await curateLeads(
-    entries.map(([, r]) => ({ name: r.name, region: r.region || "", category: r.category || "", reviewCount: r.reviewCount ?? null, note: r.note || "" })),
+    entries.map(([k, r]) => ({
+      name: r.name, region: r.region || "", category: r.category || "",
+      reviewCount: r.reviewCount ?? null, mentions: mentionsOf(k), note: r.note || "",
+    })),
   );
 
   let kept = 0;
   for (let i = 0; i < entries.length; i++) {
     const [k, r] = entries[i];
     const s = scored[i] ?? { score: 0, reason: "" };
+    const mentions = mentionsOf(k);
+    const trendScore = Math.min(100, s.score + Math.min(25, (mentions - 1) * 10)); // 근거 강할수록 가점
     try {
       await prisma.sourcingLead.upsert({
         where: { key: k },
@@ -84,14 +80,13 @@ export async function runLocalSourcing(limit = 40): Promise<{ found: number; kep
           key: k, source: r.source, sourceRef: r.sourceRef || "", name: r.name,
           region: r.region || "", category: r.category || "", reviewCount: r.reviewCount ?? null,
           instagram: r.instagram || "", phone: r.phone || "", url: r.url || "",
-          trendScore: s.score, reason: s.reason,
+          trendScore, reason: s.reason, mentions,
         },
         update: {
-          source: r.source, sourceRef: r.sourceRef || undefined,
-          region: r.region || undefined, category: r.category || undefined,
-          reviewCount: r.reviewCount ?? undefined, instagram: r.instagram || undefined,
-          phone: r.phone || undefined, url: r.url || undefined,
-          trendScore: s.score, reason: s.reason, lastSeenAt: new Date(),
+          source: r.source, sourceRef: r.sourceRef || undefined, region: r.region || undefined,
+          category: r.category || undefined, reviewCount: r.reviewCount ?? undefined,
+          instagram: r.instagram || undefined, phone: r.phone || undefined, url: r.url || undefined,
+          trendScore, reason: s.reason, mentions, lastSeenAt: new Date(),
         },
       });
       kept++;
@@ -106,8 +101,8 @@ export async function runLocalSourcing(limit = 40): Promise<{ found: number; kep
   return { found: raws.length, kept };
 }
 
-// ── Track B: 밀키트 수요 소싱 ──
-export async function runMealkitSourcing(limit = 60): Promise<{ found: number; kept: number }> {
+// ── Track B: 밀키트 수요 소싱(주간) ──
+export async function runMealkitSourcing(limit = 80): Promise<{ found: number; kept: number }> {
   const run = await prisma.sourcingRun.create({ data: { track: "MEALKIT" } });
   const raws: RawProduct[] = [];
   const detail: Record<string, number> = {};
@@ -122,56 +117,64 @@ export async function runMealkitSourcing(limit = 60): Promise<{ found: number; k
       detail[a.id] = -1;
     }
   }
-  // 대기업 제외 + 밀키트류만 + key로 병합
+  // 대기업 제외 + 밀키트류만 + key로 병합 + 언급 집계
   const byKey = new Map<string, RawProduct>();
+  const srcByKey = new Map<string, Set<string>>();
   for (const r of raws) {
     if (!r.name?.trim()) continue;
     if (isBigBrand(r.brand || "") || isBigBrand(r.name)) continue;
     if (!looksLikeMealkit(r.name, r.category || "")) continue;
     const k = productKey(r.name, r.brand || "");
-    const prev = byKey.get(k);
-    byKey.set(k, prev ? mergeProduct(prev, r) : r);
+    byKey.set(k, byKey.has(k) ? mergeProduct(byKey.get(k)!, r) : r);
+    const set = srcByKey.get(k) ?? new Set<string>();
+    if (srcOf(r)) set.add(srcOf(r));
+    srcByKey.set(k, set);
   }
   const entries = [...byKey.entries()];
+  const mentionsOf = (k: string) => Math.max(1, srcByKey.get(k)?.size ?? 1);
 
-  // 리뷰 증가속도 계산용 — 기존 스냅샷 로드
+  // 리뷰 증가속도(주간) 계산용 — 기존 스냅샷 로드
   const existing = await prisma.sourcingProduct.findMany({
     where: { key: { in: entries.map(([k]) => k) } },
     select: { key: true, reviewCount: true, lastSeenAt: true },
   });
   const exMap = new Map(existing.map((e) => [e.key, e]));
+  const velOf = (k: string, rc: number | null | undefined) => {
+    const ex = exMap.get(k);
+    if (!ex || rc == null || ex.reviewCount == null) return 0;
+    const days = Math.max(1, (Date.now() - ex.lastSeenAt.getTime()) / DAY);
+    return Math.max(0, (rc - ex.reviewCount) / days) * 7; // 주간 환산
+  };
 
   const scored = await curateProducts(
-    entries.map(([k, r]) => {
-      const ex = exMap.get(k);
-      const days = ex ? Math.max(0.5, (Date.now() - ex.lastSeenAt.getTime()) / DAY) : 1;
-      const vel = ex && r.reviewCount != null && ex.reviewCount != null ? Math.max(0, (r.reviewCount - ex.reviewCount) / days) : 0;
-      return { name: r.name, brand: r.brand || "", price: r.price ?? null, reviewCount: r.reviewCount ?? null, reviewVelocity: vel, note: r.note || "" };
-    }),
+    entries.map(([k, r]) => ({
+      name: r.name, brand: r.brand || "", price: r.price ?? null, reviewCount: r.reviewCount ?? null,
+      reviewVelocity: velOf(k, r.reviewCount), mentions: mentionsOf(k), note: r.note || "",
+    })),
   );
 
   let kept = 0;
   for (let i = 0; i < entries.length; i++) {
     const [k, r] = entries[i];
     const s = scored[i] ?? { score: 0, reason: "" };
-    const ex = exMap.get(k);
-    const days = ex ? Math.max(0.5, (Date.now() - ex.lastSeenAt.getTime()) / DAY) : 1;
-    const vel = ex && r.reviewCount != null && ex.reviewCount != null ? Math.max(0, (r.reviewCount - ex.reviewCount) / days) : 0;
+    const mentions = mentionsOf(k);
+    const vel = velOf(k, r.reviewCount);
+    const demandScore = Math.min(100, s.score + Math.min(20, (mentions - 1) * 8));
     try {
       await prisma.sourcingProduct.upsert({
         where: { key: k },
         create: {
           key: k, source: r.source, sourceRef: r.sourceRef || "", name: r.name, brand: r.brand || "",
           category: r.category || "", price: r.price ?? null, reviewCount: r.reviewCount ?? null,
-          reviewVelocity: vel, demandScore: s.score, isBigBrand: false, url: r.url || "",
-          imageUrl: r.imageUrl || "", reason: s.reason,
+          reviewVelocity: vel, demandScore, isBigBrand: false, url: r.url || "",
+          imageUrl: r.imageUrl || "", reason: s.reason, mentions,
         },
         update: {
           source: r.source, sourceRef: r.sourceRef || undefined, brand: r.brand || undefined,
           category: r.category || undefined, price: r.price ?? undefined,
-          prevReviewCount: ex?.reviewCount ?? undefined, reviewCount: r.reviewCount ?? undefined,
-          reviewVelocity: vel, demandScore: s.score, url: r.url || undefined,
-          imageUrl: r.imageUrl || undefined, reason: s.reason, lastSeenAt: new Date(),
+          prevReviewCount: exMap.get(k)?.reviewCount ?? undefined, reviewCount: r.reviewCount ?? undefined,
+          reviewVelocity: vel, demandScore, url: r.url || undefined, imageUrl: r.imageUrl || undefined,
+          reason: s.reason, mentions, lastSeenAt: new Date(),
         },
       });
       kept++;
