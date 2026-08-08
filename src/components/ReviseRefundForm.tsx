@@ -107,10 +107,6 @@ export function ReviseRefundForm({
         >
           환불계산서 수정
         </button>
-        <p className="hint center" style={{ marginTop: 8 }}>
-          발행된 환불계산서를 고쳐 다시 보냅니다. 같은 계산서가 갱신되고 점주에게
-          &lsquo;환불계산서가 수정되었습니다&rsquo; 알림이 가요.
-        </p>
       </div>
     );
   }
