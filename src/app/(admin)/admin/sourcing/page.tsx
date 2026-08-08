@@ -3,10 +3,7 @@
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { RunButton, LeadStatusButtons, ProductStatusButtons } from "@/components/sourcing/SourcingControls";
-
-// '지금 수집'(수동 트리거)이 Firecrawl 여러 콜을 기다리므로 함수 제한시간을 늘린다(플랜 한도까지).
-export const maxDuration = 300;
+import { LeadStatusButtons, ProductStatusButtons } from "@/components/sourcing/SourcingControls";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const kstStamp = (d: Date | null | undefined) =>
@@ -65,14 +62,11 @@ export default async function AdminSourcingPage(props: {
           </a>
         </div>
 
-        <div className="srchead">
+        <div className="srchead" style={{ marginBottom: 12 }}>
           <span className="srchead__date">{stamp ? `${stamp} 수집` : "아직 수집 전"}</span>
           <span className="srchead__auto">
-            {active === "local" ? "매일 자동" : "매주 월요일 자동"}
+            {active === "local" ? "매일 아침 자동" : "매주 월요일 아침 자동"}
           </span>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <RunButton track={active === "mealkit" ? "mealkit" : "local"} />
         </div>
 
         {active === "local" ? (
