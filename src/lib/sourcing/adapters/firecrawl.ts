@@ -62,8 +62,10 @@ const LEAD_QUERIES = [
 ];
 const LEAD_PROMPT =
   "이 페이지가 소개하는 '개별' 베이커리/디저트/떡집을 뽑아 JSON으로: " +
-  "{shops:[{name(상호), region(지역/동네), category(베이커리|디저트|떡 중 하나), instagram(있으면 URL), why(왜 유명/뜨는지 한 줄)}]}. " +
-  "대형 프랜차이즈 체인·대형마트는 제외.";
+  "{shops:[{name(고유 상호명), region(지역/동네), category(베이커리|디저트|떡 중 하나), instagram(있으면 URL), why(왜 유명/뜨는지 한 줄)}]}. " +
+  "조건: (1) 반드시 수도권(서울·경기·인천)에 있는 곳만. 부산·대구·광주·대전·강원·제주 등 지방 업체는 절대 넣지 마. " +
+  "(2) name은 반드시 실제 고유 상호명. '떡집'·'베이커리'·'디저트'처럼 업종 일반명만 있으면 넣지 마. " +
+  "(3) 대형 프랜차이즈 체인·대형마트는 제외.";
 
 type LeadShape = { shops?: { name?: string; region?: string; category?: string; instagram?: string; why?: string }[] };
 

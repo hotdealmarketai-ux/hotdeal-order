@@ -29,6 +29,27 @@ export function isBigBrand(nameOrBrand: string): boolean {
   return BIGBRAND_BLOCKLIST.some((b) => n.includes(lower(b)));
 }
 
+// 수도권(서울·경기·인천)만 — 타 지역(부산·제주·강원·광주 등)은 제외.
+const METRO_POS = /서울|경기|인천|수도권/;
+const NON_METRO = /부산|대구|광주|대전|울산|세종|강원|충청|충북|충남|전라|전북|전남|경상|경북|경남|제주|강릉|원주|춘천|청주|천안|전주|여수|포항|창원|김해|양산|목포|순천/;
+export function isMetroRegion(region: string): boolean {
+  const s = region || "";
+  if (METRO_POS.test(s)) return true; // 서울/경기/인천 명시 → 수도권
+  if (NON_METRO.test(s)) return false; // 타 지역 명시 → 제외
+  return true; // 지역 불명(동네만: 성수/연남 등) → 수도권으로 간주(대부분 서울)
+}
+
+// 고유 상호가 아닌 일반명('떡집','베이커리' 등)은 제외.
+const GENERIC_NAMES = new Set([
+  "떡집", "방앗간", "베이커리", "제과점", "빵집", "디저트", "카페", "케이크", "제과",
+  "디저트카페", "떡", "빵",
+]);
+export function isGenericName(name: string): boolean {
+  const n = (name || "").trim();
+  if (n.length < 2) return true;
+  return GENERIC_NAMES.has(n);
+}
+
 // 밀키트 카테고리 추정(냉동/냉장/밀키트/간편식만 통과) — 명백히 무관한 건 거른다.
 const MEALKIT_HINTS = [
   "밀키트", "간편식", "냉동", "냉장", "가정간편식", "hmr", "국", "탕", "찌개", "전골",

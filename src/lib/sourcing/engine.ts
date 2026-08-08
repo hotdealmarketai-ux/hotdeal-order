@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/log";
 import type { RawLead, RawProduct } from "./types";
 import { leadAdapters, productAdapters } from "./adapters";
-import { isFranchiseName, isBigBrand, looksLikeMealkit } from "./filters";
+import { isFranchiseName, isBigBrand, looksLikeMealkit, isMetroRegion, isGenericName } from "./filters";
 import { curateLeads, curateProducts } from "./curate";
 
 const norm = (s: string) => s.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
@@ -52,6 +52,8 @@ export async function runLocalSourcing(limit = 60): Promise<{ found: number; kep
   const srcByKey = new Map<string, Set<string>>();
   for (const r of raws) {
     if (!r.name?.trim() || isFranchiseName(r.name)) continue;
+    if (isGenericName(r.name)) continue; // '떡집' 같은 일반명 제외(고유 상호만)
+    if (!isMetroRegion(r.region || "")) continue; // 수도권(서울·경기·인천)만
     const k = leadKey(r.name);
     byKey.set(k, byKey.has(k) ? mergeLead(byKey.get(k)!, r) : r);
     const set = srcByKey.get(k) ?? new Set<string>();
@@ -94,6 +96,21 @@ export async function runLocalSourcing(limit = 60): Promise<{ found: number; kep
       logError("sourcing.leadUpsert", e, { key: k });
     }
   }
+  // 자기치유 정리: 아직 손대지 않은(NEW) 후보 중 지금 기준(수도권·고유명·비프랜차이즈)을 벗어난 과거 잔재 제거.
+  // 관리자가 컨택/성사/거절 등으로 손댄 건은 절대 건드리지 않는다.
+  try {
+    const news = await prisma.sourcingLead.findMany({
+      where: { status: "NEW" },
+      select: { id: true, name: true, region: true },
+    });
+    const stale = news
+      .filter((l) => isFranchiseName(l.name) || isGenericName(l.name) || !isMetroRegion(l.region || ""))
+      .map((l) => l.id);
+    if (stale.length) await prisma.sourcingLead.deleteMany({ where: { id: { in: stale } } });
+  } catch (e) {
+    logError("sourcing.leadPrune", e);
+  }
+
   await prisma.sourcingRun.update({
     where: { id: run.id },
     data: { finishedAt: new Date(), found: raws.length, kept, detail: JSON.stringify(detail) },
