@@ -8,8 +8,9 @@ import { logError } from "@/lib/log";
 
 export type SourcingState = { ok?: boolean; error?: string; msg?: string };
 
+// 로컬·밀키트 동일 상태 흐름(둘 다 직접 컨택하므로).
 const LEAD_STATUS = ["NEW", "CONTACTED", "REJECTED", "DEAL", "IGNORED"];
-const PRODUCT_STATUS = ["NEW", "PICKED", "IGNORED"];
+const PRODUCT_STATUS = LEAD_STATUS;
 const norm = (s: string) => s.toLowerCase().replace(/[^0-9a-z가-힣]/g, "");
 
 // [관리자] 로컬 후보 상태 변경.

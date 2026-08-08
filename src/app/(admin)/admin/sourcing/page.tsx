@@ -3,9 +3,10 @@
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { LeadStatusButtons, ProductStatusButtons } from "@/components/sourcing/SourcingControls";
+import { RunButton, LeadStatusButtons, ProductStatusButtons } from "@/components/sourcing/SourcingControls";
 
-export const maxDuration = 60;
+// '지금 수집'(수동 트리거)이 Firecrawl 여러 콜을 기다리므로 함수 제한시간을 늘린다(플랜 한도까지).
+export const maxDuration = 300;
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 const kstStamp = (d: Date | null | undefined) =>
@@ -70,6 +71,9 @@ export default async function AdminSourcingPage(props: {
             {active === "local" ? "매일 자동" : "매주 월요일 자동"}
           </span>
         </div>
+        <div style={{ marginBottom: 12 }}>
+          <RunButton track={active === "mealkit" ? "mealkit" : "local"} />
+        </div>
 
         {active === "local" ? (
           leads.length === 0 ? (
@@ -115,12 +119,14 @@ export default async function AdminSourcingPage(props: {
           <div className="empty">아직 수집된 후보가 없어요. (매주 월요일 자동 수집)</div>
         ) : (
           <div className="list">
-            {products.map((p) => (
+            {products.map((p) => {
+              const pb = LEAD_BADGE[p.status];
+              return (
               <div key={p.id} className="srcrow">
                 <div className="srcrow__top">
                   <div className="srcrow__title">
                     {p.name}
-                    {p.status === "PICKED" && <span className="badge badge--ok" style={{ marginLeft: 6 }}>담음</span>}
+                    {pb && <span className={`badge ${pb.cls}`} style={{ marginLeft: 6 }}>{pb.label}</span>}
                   </div>
                   <span className="srcrow__score">{Math.round(p.demandScore)}</span>
                 </div>
@@ -143,7 +149,8 @@ export default async function AdminSourcingPage(props: {
                 )}
                 <ProductStatusButtons id={p.id} status={p.status} />
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

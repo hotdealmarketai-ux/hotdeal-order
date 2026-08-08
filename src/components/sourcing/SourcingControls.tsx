@@ -73,6 +73,7 @@ export function LeadStatusButtons({ id, status }: { id: string; status: string }
   );
 }
 
+// 밀키트도 로컬과 동일한 컨택 흐름(어차피 직접 컨택하므로).
 export function ProductStatusButtons({ id, status }: { id: string; status: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -89,12 +90,16 @@ export function ProductStatusButtons({ id, status }: { id: string; status: strin
     });
   return (
     <div className="srcbtns">
-      <button className={`btn btn--xs ${status === "PICKED" ? "btn--primary" : "btn--soft"}`} onClick={() => set("PICKED")} disabled={pending}>
-        담기
-      </button>
-      <button className={`btn btn--xs ${status === "IGNORED" ? "btn--primary" : "btn--soft"}`} onClick={() => set("IGNORED")} disabled={pending}>
-        무시
-      </button>
+      {LEAD_ACTIONS.map((a) => (
+        <button
+          key={a.s}
+          className={`btn btn--xs ${status === a.s ? "btn--primary" : "btn--soft"}`}
+          onClick={() => set(a.s)}
+          disabled={pending}
+        >
+          {a.label}
+        </button>
+      ))}
       <button className="btn btn--xs btn--ghost" onClick={remove} disabled={pending} aria-label="삭제">
         ✕
       </button>
