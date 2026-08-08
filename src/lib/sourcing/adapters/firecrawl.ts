@@ -82,16 +82,31 @@ export const firecrawlLeadAdapter: LeadAdapter = {
   },
 };
 
-// 쿠팡 베스트셀러(냉동/간편식) URL — env로 덮어쓰기 가능. 기본은 간편식/냉동 카테고리 예시.
+// 쿠팡 베스트셀러(냉동/간편식) URL — env COUPANG_BEST_URLS로 지정하면 그 페이지를 직접 추출.
+// 없으면 아래 검색어로 URL을 스스로 찾아 추출(Firecrawl 키만으로 동작).
 const COUPANG_BEST_URLS = (process.env.COUPANG_BEST_URLS || "").split(",").map((s) => s.trim()).filter(Boolean);
+const MEALKIT_QUERIES = [
+  "쿠팡 냉동 간편식 밀키트 베스트셀러 인기순위",
+  "스마트스토어 잘 팔리는 냉동 밀키트 국 탕 찌개",
+  "요즘 인기 밀키트 냉동식품 순위",
+];
+async function gatherMealkitUrls(): Promise<string[]> {
+  const urls: string[] = [];
+  for (const q of MEALKIT_QUERIES) {
+    urls.push(...(await fcSearch(q, 3)));
+    if (urls.length >= 6) break;
+  }
+  return [...new Set(urls)].slice(0, 6);
+}
 
 export const firecrawlProductAdapter: ProductAdapter = {
   id: "firecrawl-product",
   track: "MEALKIT",
-  enabled: () => !!key() && COUPANG_BEST_URLS.length > 0,
+  enabled: () => !!key(),
   async run(ctx: AdapterCtx): Promise<RawProduct[]> {
     const out: RawProduct[] = [];
-    for (const url of COUPANG_BEST_URLS) {
+    const urls = COUPANG_BEST_URLS.length > 0 ? COUPANG_BEST_URLS : await gatherMealkitUrls();
+    for (const url of urls) {
       if (out.length >= ctx.limit) break;
       const data = await fcExtract<{ products?: { name?: string; brand?: string; price?: number; reviewCount?: number; url?: string; imageUrl?: string }[] }>(
         url,
