@@ -9,9 +9,12 @@ import { ClosingCard } from "@/components/ClosingCard";
 import { MaintenanceToggleCard } from "@/components/MaintenanceToggleCard";
 import { maintenanceOn } from "@/lib/maintenance";
 import { getAdminSeen } from "@/lib/admin-seen";
+import { getCronHealth } from "@/lib/cron-health";
+import { formatKDateTime } from "@/lib/format";
 
 export default async function AdminHome() {
   const user = await requireAdmin();
+  const cron = await getCronHealth();
 
   // 발주 건수는 '오늘(KST)' 들어온 것만 집계
   const { start, end } = kstDayRange(kstToday());
@@ -125,6 +128,14 @@ export default async function AdminHome() {
     <>
       <Topbar brand="새롭 · 관리자" right={<TopbarChip>{user.storeName}</TopbarChip>} />
       <div className="page">
+        {!cron.ok && (
+          <div className="notice notice--error" style={{ marginBottom: 12 }}>
+            ⚠️ 예약 자동화(크론)가 {cron.staleMinutes != null ? `${cron.staleMinutes}분째 ` : ""}
+            멈춰 있어요. 채움채 자동발주·마감 알림·입금 수집 등이 실행되지 않습니다. cron-job.org에서{" "}
+            <b>/api/cron/tick</b> 매분 호출 작업을 확인·재가동하세요.
+            {cron.lastBeat ? ` (마지막 동작 ${formatKDateTime(cron.lastBeat)})` : " (아직 한 번도 동작 안 함)"}
+          </div>
+        )}
         <div className="admhome">
           {groups.map((g) => {
             const count =
