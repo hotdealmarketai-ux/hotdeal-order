@@ -50,6 +50,15 @@ export async function GET(request: Request) {
   const p = kstParts(now);
   const ran: string[] = [];
 
+  // 하트비트 — 디스패처가 살아있음을 매 호출마다 기록(잡이 안 떠도). 크론 정지 감지·모니터링용.
+  await prisma.appMeta
+    .upsert({
+      where: { key: "tick:heartbeat" },
+      create: { key: "tick:heartbeat", syncedAt: new Date(now) },
+      update: { syncedAt: new Date(now) },
+    })
+    .catch((e) => logError("tick.heartbeat", e));
+
   // 기존 엔드포인트를 그대로 호출(로직 재사용, 헤더 인증). 엔드포인트들은 멱등이라 중복 안전.
   async function hit(path: string): Promise<boolean> {
     try {
