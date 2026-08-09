@@ -26,16 +26,23 @@ export async function GET(request: Request) {
   const rows = await prisma.appMeta.findMany({
     where: {
       OR: [
+        { key: { startsWith: "tick:" } },
         { key: { contains: "chaeumchae" } },
-        { key: { startsWith: "tick:chaeumchae" } },
-        { key: { startsWith: "tick:deadline" } },
+        { key: { contains: "sourcing" } },
       ],
     },
-    orderBy: { key: "asc" },
+    orderBy: { syncedAt: "desc" },
   });
   return Response.json({
     ok: true,
     now: new Date().toISOString(),
-    rows: rows.map((r) => ({ key: r.key, syncedAt: r.syncedAt?.toISOString() ?? null })),
+    nowKst: new Date(Date.now() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 16) + " KST",
+    rows: rows.map((r) => ({
+      key: r.key,
+      syncedAt: r.syncedAt?.toISOString() ?? null,
+      syncedKst: r.syncedAt
+        ? new Date(r.syncedAt.getTime() + 9 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 16) + " KST"
+        : null,
+    })),
   });
 }
