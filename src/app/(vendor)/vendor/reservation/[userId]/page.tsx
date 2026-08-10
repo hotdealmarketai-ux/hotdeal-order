@@ -11,7 +11,8 @@ export default async function VendorReservationReceipt(props: {
   params: Promise<{ userId: string }>;
   searchParams: Promise<{ date?: string }>;
 }) {
-  await requireVendor();
+  const user = await requireVendor();
+  if (user.role !== "ADMIN_SAEROP") notFound();
   const { userId } = await props.params;
   const { date: dateParam } = await props.searchParams;
   const date = normalizeDateStr(dateParam);

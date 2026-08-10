@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useRef, useState } from "react";
 import {
   matchDepositManuallyAction,
   unmatchDepositAction,
@@ -8,6 +8,7 @@ import {
 } from "@/app/actions/deposit";
 import { SubmitButton } from "./SubmitButton";
 import { Sheet } from "./Sheet";
+import { ConfirmSheet } from "./ConfirmSheet";
 
 type StoreOpt = { id: string; label: string };
 
@@ -29,6 +30,8 @@ export function DepositMatchControl({
   matched?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false); // 삭제 확인 대기
+  const delFormRef = useRef<HTMLFormElement>(null);
   const [unmatchState, unmatchAction] = useActionState<{ error?: string }, FormData>(
     async (_prev, fd) => (await unmatchDepositAction(fd)) || {},
     {},
@@ -72,13 +75,14 @@ export function DepositMatchControl({
         >
           매칭
         </button>
-        {/* 목록에서 삭제 — 한 번에 삭제(확인 없음). 미수와 무관. */}
-        <form action={deleteDepositAction}>
+        {/* 목록에서 삭제 — 확인 후 삭제. 미수와 무관. */}
+        <form action={deleteDepositAction} ref={delFormRef}>
           <input type="hidden" name="depositId" value={depositId} />
           <button
-            type="submit"
+            type="button"
             aria-label="목록에서 삭제"
             title="목록에서 삭제"
+            onClick={() => setConfirmDel(true)}
             style={{
               border: "none",
               background: "transparent",
@@ -149,6 +153,13 @@ export function DepositMatchControl({
             </form>
           </div>
         </Sheet>
+      )}
+
+      {confirmDel && (
+        <ConfirmSheet
+          onConfirm={() => delFormRef.current?.requestSubmit()}
+          onClose={() => setConfirmDel(false)}
+        />
       )}
     </>
   );
