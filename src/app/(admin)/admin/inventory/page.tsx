@@ -7,6 +7,7 @@ import { InventoryBulkImport } from "@/components/InventoryBulkImport";
 import { SheetImportButton } from "@/components/SheetImportButton";
 import { SheetSyncDiagnose } from "@/components/SheetSyncDiagnose";
 import { CategoryAutoAssign } from "@/components/CategoryAutoAssign";
+import { InventoryBackupControl } from "@/components/InventoryBackupControl";
 import { Collapsible } from "@/components/Collapsible";
 import { reservationConfirmedByItem } from "@/lib/reservation-stock";
 
@@ -26,7 +27,8 @@ export default async function AdminInventory() {
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
         {/* 잘 안 쓰는 기능은 '기능' 토글 안에 숨겨 스크롤을 줄인다(기본 닫힘) */}
-        <Collapsible title="기능" hint="카테고리 · 시트 · 엑셀">
+        <Collapsible title="기능" hint="백업 · 카테고리 · 시트 · 엑셀">
+          <InventoryBackupControl />
           <CategoryAutoAssign />
           <SheetSyncDiagnose />
           <SheetImportButton />

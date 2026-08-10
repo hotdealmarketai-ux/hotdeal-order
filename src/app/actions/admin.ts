@@ -16,6 +16,12 @@ import {
 import { getServiceAccount } from "@/lib/google-auth";
 import { categorizeInventory, type CatGroup } from "@/lib/inventory-category";
 import {
+  snapshotInventory,
+  listInventorySnapshots,
+  restoreInventorySnapshot,
+  type SnapshotMeta,
+} from "@/lib/inventory-backup";
+import {
   currentWindowStartUtc,
   currentDeadlineUtc,
 } from "@/lib/schedule";
@@ -358,6 +364,9 @@ export async function bulkReplaceInventoryAction(
   if (clean.length === 0) {
     return { ok: false, error: "붙여넣은 품목이 없어요. (안전을 위해 전체 삭제는 막았어요)" };
   }
+
+  // 감사 #2: 붙여넣기(대량 교체)는 삭제/덮어쓰기가 크므로 실행 전 자동 백업.
+  await snapshotInventory("자동 · 붙여넣기 전").catch(() => {});
 
   const current = await prisma.inventoryItem.findMany({
     select: { id: true, name: true },
@@ -747,6 +756,11 @@ export async function autosaveInventoryAction(payloadJson: string) {
   if (!Array.isArray(rows)) return;
 
   const keepIds = rows.map((r) => String(r.id ?? "")).filter(Boolean);
+  // 감사 #2/H2: 삭제가 발생할 때(현재 품목 수 > 남길 수)는 지우기 전에 자동 백업 → 실수로 날아가도 복구 가능.
+  const currentCount = await prisma.inventoryItem.count({ where: { deletedAt: null } });
+  if (currentCount > keepIds.length) {
+    await snapshotInventory("자동 · 재고 삭제 전").catch(() => {});
+  }
   await prisma.$transaction(async (tx) => {
     // 편집기에서 제거된(목록에 없는) 항목 삭제
     await tx.inventoryItem.deleteMany({
@@ -781,6 +795,48 @@ export async function autosaveInventoryAction(payloadJson: string) {
   await setInventoryPushPending(); // R3 변경 표시 → 다음 크론이 시트로 push
   // 자동저장은 편집기 상태가 이미 정확하므로 /admin/inventory 재검증 생략(편집 중 리셋 방지).
   revalidatePath("/inventory");
+}
+
+// #2 재고 백업/복구 — 위험작업(자동저장 삭제·붙여넣기) 전 자동백업 + 수동 백업/복구.
+export async function backupInventoryAction(): Promise<{
+  ok: boolean;
+  count?: number;
+  error?: string;
+}> {
+  await requireAdmin();
+  try {
+    const r = await snapshotInventory("수동 백업");
+    revalidatePath("/admin/inventory");
+    return { ok: true, count: r.count };
+  } catch {
+    return { ok: false, error: "백업에 실패했어요." };
+  }
+}
+
+export async function listInventoryBackupsAction(): Promise<SnapshotMeta[]> {
+  await requireAdmin();
+  return listInventorySnapshots();
+}
+
+export async function restoreInventoryBackupAction(key: string): Promise<{
+  ok: boolean;
+  restored?: number;
+  error?: string;
+}> {
+  const admin = await requireAdmin();
+  const r = await restoreInventorySnapshot(String(key ?? ""));
+  if (r.ok) {
+    await setInventoryPushPending().catch(() => {});
+    await writeAudit({
+      action: "inventory.restore",
+      actorId: admin.id,
+      actorName: admin.storeName,
+      summary: `재고 복구 · ${r.restored}품목`,
+    }).catch(() => {});
+    revalidatePath("/admin/inventory");
+    revalidatePath("/inventory");
+  }
+  return r;
 }
 
 // #22 관리자 수동 '지금 시트로 내보내기' — DB 전체를 시트에 다시 쓴다(정합 복구용). 성공/실패 반환.
