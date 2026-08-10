@@ -172,6 +172,52 @@ export async function GET(request: Request) {
     });
   }
 
+  // 특정 날짜 전 지점 계산서 총합: 품목별 청구합 vs 실제차감합 vs 현재재고. ?do=day&date=2026-08-10
+  if (url.searchParams.get("do") === "day") {
+    const date = url.searchParams.get("date") || "";
+    if (!date) return Response.json({ ok: false, error: "date 필요" }, { status: 400 });
+    const invs = await prisma.invoice.findMany({
+      where: { date, kind: "DAILY", status: { in: ["ISSUED", "PAID"] } },
+      select: {
+        stockDeductedSnap: true,
+        items: { where: { category: "TOOL" }, select: { name: true, qty: true } },
+      },
+    });
+    const billed = new Map<string, number>();
+    const snapIds = new Set<string>();
+    const snaps: Record<string, number>[] = [];
+    for (const inv of invs) {
+      for (const it of inv.items) {
+        const nm = it.name.trim();
+        if (nm) billed.set(nm, (billed.get(nm) ?? 0) + Math.round(it.qty));
+      }
+      const s = parseSnap(inv.stockDeductedSnap);
+      Object.keys(s).forEach((k) => snapIds.add(k));
+      snaps.push(s);
+    }
+    const invItems = await prisma.inventoryItem.findMany({
+      where: { OR: [{ id: { in: [...snapIds] } }, { deletedAt: null }] },
+      select: { id: true, name: true, qty: true, deletedAt: true },
+    });
+    const nameById = new Map(invItems.map((i) => [i.id, i.name]));
+    const baseByName = new Map<string, number>();
+    for (const i of invItems) if (!i.deletedAt) baseByName.set(i.name.trim(), i.qty);
+    const deducted = new Map<string, number>();
+    for (const s of snaps) for (const [id, q] of Object.entries(s)) {
+      const nm = (nameById.get(id) ?? "").trim();
+      if (nm) deducted.set(nm, (deducted.get(nm) ?? 0) + (Number(q) || 0));
+    }
+    const names = [...new Set([...billed.keys(), ...deducted.keys()])].sort((a, b) => a.localeCompare(b, "ko"));
+    const rows = names.map((nm) => {
+      const b = billed.get(nm) ?? 0;
+      const d = deducted.get(nm) ?? 0;
+      const base = baseByName.has(nm) ? baseByName.get(nm)! : null;
+      return { item: nm, billed: b, deducted: d, base, gap: b - d };
+    });
+    const off = rows.filter((r) => r.gap !== 0);
+    return Response.json({ ok: true, date, invoiceCount: invs.length, offCount: off.length, off, rows });
+  }
+
   const days = Math.min(60, Math.max(1, parseInt(url.searchParams.get("days") || "14", 10) || 14));
   const KST = 9 * 3600 * 1000;
   const cut = new Date(Date.now() + KST - days * 86400000).toISOString().slice(0, 10);
