@@ -96,15 +96,40 @@ export async function GET(request: Request) {
   // 누락 품목이 있으면(이름 불일치·수량0) 관리자에게 경고 — 두부가 조용히 안 나가는 것 방지.
   // 정상 제출 여부와 무관하게 누락이 있을 때만. 실제 실행 시각에만(dryrun 제외).
   if (!dryrun && skipped.length > 0) {
-    const uniq = [...new Set(skipped)];
-    await sendPushToRole("ADMIN_SAEROP", {
-      title: `채움채 발주에서 ${skipped.length}개 품목이 누락됐어요.`,
-      body: `품목명을 확인해 주세요: ${uniq.slice(0, 10).join(", ")}${uniq.length > 10 ? " 외" : ""}`,
-      url: "/admin",
-    }).catch((e) => logError("cron.chaeumchae.skippedAlert", e));
+    // 멱등 — tick·GH 백업 디스패처가 같은 발주창에 둘 다 호출해도 누락 알림은 1회만(원자 선점).
+    let firstSkip = false;
+    try {
+      await prisma.appMeta.create({ data: { key: `chaeumchae:skipped:${windowKeyAt(now)}` } });
+      firstSkip = true;
+    } catch {
+      firstSkip = false; // 이미 다른 호출이 발송함
+    }
+    if (firstSkip) {
+      const uniq = [...new Set(skipped)];
+      await sendPushToRole("ADMIN_SAEROP", {
+        title: `채움채 발주에서 ${skipped.length}개 품목이 누락됐어요.`,
+        body: `품목명을 확인해 주세요: ${uniq.slice(0, 10).join(", ")}${uniq.length > 10 ? " 외" : ""}`,
+        url: "/admin",
+      }).catch((e) => logError("cron.chaeumchae.skippedAlert", e));
+    }
   }
 
   if (items.length === 0) {
+    // 발주할 두부가 없는 날도 '처리됨'으로 마킹 → 외부 헬스체크(/api/health/chaeumchae)가 무발주일을
+    // '미제출'로 오탐 알림하지 않도록. (실제 제출 날은 claim 키로 판별되므로 여기만 보강)
+    //  단, 마킹은 '제출 시각(KST 20시 이후)'에만 — 창 열리기 전 이른 시각의 우발적 no-op 호출(주문 0건)이
+    //  stale 마커를 남겨 그날 밤 진짜 미제출을 200으로 가리는 것을 막는다.
+    const kstHour = new Date(now + 9 * 60 * 60 * 1000).getUTCHours();
+    if (!dryrun && kstHour >= 20) {
+      const doneKey = `chaeumchae:done:${windowKeyAt(now)}`;
+      await prisma.appMeta
+        .upsert({
+          where: { key: doneKey },
+          create: { key: doneKey, syncedAt: new Date(now) },
+          update: { syncedAt: new Date(now) },
+        })
+        .catch((e) => logError("cron.chaeumchae.doneMark", e));
+    }
     return Response.json({
       ok: true,
       submitted: false,

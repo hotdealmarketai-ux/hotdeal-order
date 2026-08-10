@@ -2,10 +2,11 @@ name: chaeumchae-submit
 
 # 채움채 자동 발주 — 마감 5분 뒤 20:05 KST (= 11:05 UTC), 마감이 있는 날(월~금·일)
 on:
-  # 스케줄 비활성화 — 채움채 자동제출은 cron-job.org → /api/cron/tick 디스패처(20:05 KST)가 담당(2026-07-09).
-  # 백업 복구가 필요하면 아래 주석 해제.
-  # schedule:
-  #   - cron: "5 11 * * 0-5"
+  # 백업 디스패처 — 정상 시 cron-job.org → /api/cron/tick(20:05 KST)가 채움채를 제출하고, 이 GH Actions 도
+  # 같은 20:05 에 한 번 더 호출한다. submit-chaeumchae 는 발주창 claim(멱등)이라 중복 제출되지 않고(정상일엔 dedup),
+  # cron-job.org 가 죽은 날에만 실제로 이게 채움채를 제출한다 → 유일 디스패처 SPOF 제거(2026-08-10 재활성).
+  schedule:
+    - cron: "5 11 * * 0-5" # 11:05 UTC = 20:05 KST, 채움채 발주일(일·월·화·수·목·금, 토 제외)
   workflow_dispatch:
     inputs:
       dryrun:
