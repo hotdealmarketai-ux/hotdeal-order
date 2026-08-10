@@ -177,59 +177,73 @@ export async function merchantLoadChat(): Promise<{
 export async function adminLoadThreads(): Promise<ChatThreadItem[] | null> {
   const v = await getViewer();
   if (!v || v.kind !== "admin") return null;
-  const [merchants, threads] = await Promise.all([
+  // 지점마다 findFirst+count(2N 쿼리) → 스레드별 '마지막 메시지 + 미읽음 수'를 단일 쿼리로.
+  // adminClearedAt 이후 메시지만 반영(대화창과 일치). [threadId, createdAt] 인덱스 활용.
+  const [merchants, rows] = await Promise.all([
     prisma.user.findMany({
       where: { status: "APPROVED", role: { in: ASSIGNABLE_MERCHANT_ROLES } },
       select: { id: true, storeName: true },
     }),
-    prisma.chatThread.findMany({
-      select: { id: true, merchantId: true, adminClearedAt: true },
-    }),
+    prisma.$queryRaw<
+      {
+        merchantId: string;
+        threadId: string;
+        lastBody: string | null;
+        lastFromAdmin: boolean | null;
+        lastAt: Date | null;
+        unread: number;
+      }[]
+    >`
+      SELECT
+        t."merchantId" AS "merchantId",
+        t.id          AS "threadId",
+        last.body     AS "lastBody",
+        last."fromAdmin" AS "lastFromAdmin",
+        last."createdAt" AS "lastAt",
+        COALESCE(cnt.unread, 0)::int AS unread
+      FROM "ChatThread" t
+      LEFT JOIN LATERAL (
+        SELECT m.body, m."fromAdmin", m."createdAt"
+        FROM "ChatMessage" m
+        WHERE m."threadId" = t.id
+          AND (t."adminClearedAt" IS NULL OR m."createdAt" > t."adminClearedAt")
+        ORDER BY m."createdAt" DESC
+        LIMIT 1
+      ) last ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*)::int AS unread
+        FROM "ChatMessage" m
+        WHERE m."threadId" = t.id
+          AND m."fromAdmin" = FALSE
+          AND m."readAt" IS NULL
+          AND (t."adminClearedAt" IS NULL OR m."createdAt" > t."adminClearedAt")
+      ) cnt ON TRUE
+    `,
   ]);
-  const threadByMerchant = new Map(threads.map((t) => [t.merchantId, t]));
-  const out: ChatThreadItem[] = [];
-  for (const m of merchants) {
-    const t = threadByMerchant.get(m.id);
-    if (t) {
-      // 관리자가 비운 이후 메시지만 목록의 last/미리보기로 — 대화창(adminLoadThread)과 일치.
-      const last = await prisma.chatMessage.findFirst({
-        where: {
-          threadId: t.id,
-          ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
-        },
-        orderBy: { createdAt: "desc" },
-        select: { body: true, createdAt: true, fromAdmin: true },
-      });
-      if (last) {
-        const unread = await prisma.chatMessage.count({
-          where: {
-            threadId: t.id,
-            fromAdmin: false,
-            readAt: null,
-            ...(t.adminClearedAt ? { createdAt: { gt: t.adminClearedAt } } : {}),
-          },
-        });
-        out.push({
-          threadId: t.id,
-          merchantId: m.id,
-          storeName: m.storeName,
-          last: (last.fromAdmin ? "나: " : "") + last.body,
-          lastAt: last.createdAt.toISOString(),
-          unread,
-        });
-        continue;
-      }
+  const byMerchant = new Map(rows.map((r) => [r.merchantId, r]));
+  const out: ChatThreadItem[] = merchants.map((m) => {
+    const r = byMerchant.get(m.id);
+    if (r && r.lastAt) {
+      // 관리자가 비운 이후 메시지가 있는 지점 — 최근 메시지·미읽음 표시.
+      return {
+        threadId: r.threadId,
+        merchantId: m.id,
+        storeName: m.storeName,
+        last: (r.lastFromAdmin ? "나: " : "") + (r.lastBody ?? ""),
+        lastAt: r.lastAt.toISOString(),
+        unread: Number(r.unread) || 0,
+      };
     }
     // 대화가 없거나 비운 뒤 메시지 없음 → '새 대화'로 노출
-    out.push({
-      threadId: t?.id ?? "",
+    return {
+      threadId: r?.threadId ?? "",
       merchantId: m.id,
       storeName: m.storeName,
       last: "",
       lastAt: "",
       unread: 0,
-    });
-  }
+    };
+  });
   out.sort((a, b) => {
     const am = a.lastAt ? 1 : 0;
     const bm = b.lastAt ? 1 : 0;

@@ -276,7 +276,8 @@ export function ChatWidget() {
       return () => clearInterval(id);
     }
     if (role === "admin" && view === "list") {
-      const id = setInterval(() => openAdminList(), 5000);
+      // 목록 폴링은 15초(단일 집계 쿼리라 부담은 낮지만 상시 반복 완화). 새 메시지는 푸시로도 알림.
+      const id = setInterval(() => openAdminList(), 15000);
       return () => clearInterval(id);
     }
   }, [open, role, mMode, view, threadId, openMerchantChat, loadThreadMessages, openAdminList]);
