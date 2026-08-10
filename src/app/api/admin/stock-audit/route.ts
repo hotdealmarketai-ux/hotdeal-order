@@ -32,7 +32,9 @@ export async function GET(request: Request) {
     const invs = await prisma.invoice.findMany({
       where: { id: { in: ids } },
       select: {
-        id: true, date: true, status: true, stockDeductedSnap: true,
+        id: true, date: true, status: true, kind: true, total: true,
+        createdAt: true, issuedAt: true, revisedAt: true, voidedAt: true,
+        stockDeductedSnap: true,
         user: { select: { storeName: true } },
         items: { where: { category: "TOOL" }, select: { name: true, qty: true } },
       },
@@ -54,6 +56,12 @@ export async function GET(request: Request) {
       store: inv.user?.storeName,
       date: inv.date,
       status: inv.status,
+      kind: inv.kind,
+      total: inv.total,
+      createdAt: inv.createdAt,
+      issuedAt: inv.issuedAt,
+      revisedAt: inv.revisedAt,
+      voidedAt: inv.voidedAt,
       line: inv.items.map((it) => ({ name: it.name, qty: it.qty })),
       deducted: Object.entries(snap).map(([id, qty]) => ({ name: nameById.get(id) ?? `(id:${id})`, qty })),
     }));
