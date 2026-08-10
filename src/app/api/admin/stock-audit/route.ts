@@ -23,6 +23,43 @@ export async function GET(request: Request) {
   if (!user || !isAdmin(user.role as Role)) return new Response("forbidden", { status: 403 });
 
   const url = new URL(request.url);
+
+  // 특정 계산서들의 실제차감(snap)을 품목명으로 풀어서 조회 — 정밀 보정용. ?do=snap&ids=a,b
+  if (url.searchParams.get("do") === "snap") {
+    const ids = (url.searchParams.get("ids") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (!ids.length) return Response.json({ ok: false, error: "ids 필요" }, { status: 400 });
+    const invs = await prisma.invoice.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true, date: true, status: true, stockDeductedSnap: true,
+        user: { select: { storeName: true } },
+        items: { where: { category: "TOOL" }, select: { name: true, qty: true } },
+      },
+    });
+    const allIds = new Set<string>();
+    const parsed = invs.map((inv) => {
+      const snap = parseSnap(inv.stockDeductedSnap);
+      Object.keys(snap).forEach((k) => allIds.add(k));
+      return { inv, snap };
+    });
+    const invItems = await prisma.inventoryItem.findMany({
+      where: { id: { in: [...allIds] } },
+      select: { id: true, name: true, qty: true },
+    });
+    const nameById = new Map(invItems.map((i) => [i.id, i.name]));
+    const baseByName = new Map(invItems.map((i) => [i.name, i.qty]));
+    const out = parsed.map(({ inv, snap }) => ({
+      id: inv.id,
+      store: inv.user?.storeName,
+      date: inv.date,
+      status: inv.status,
+      line: inv.items.map((it) => ({ name: it.name, qty: it.qty })),
+      deducted: Object.entries(snap).map(([id, qty]) => ({ name: nameById.get(id) ?? `(id:${id})`, qty })),
+    }));
+    const curBase = [...baseByName.entries()].map(([name, qty]) => ({ name, base: qty }));
+    return Response.json({ ok: true, invoices: out, currentBase: curBase });
+  }
+
   const days = Math.min(60, Math.max(1, parseInt(url.searchParams.get("days") || "14", 10) || 14));
   const KST = 9 * 3600 * 1000;
   const cut = new Date(Date.now() + KST - days * 86400000).toISOString().slice(0, 10);
