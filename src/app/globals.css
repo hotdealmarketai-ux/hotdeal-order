@@ -5129,6 +5129,13 @@ a.resv-card:active { transform: scale(0.995); }
 .rstep__btn:disabled { opacity: 0.35; cursor: default; }
 .rstep__btn:active:not(:disabled) { background: var(--green-100); }
 .rstep__val { min-width: 34px; text-align: center; font-size: 15px; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums; }
+/* 스테퍼 가운데 값 = 직접 타이핑 입력칸(+/- 와 동일 흐름, 포커스 아웃 시 커밋) */
+.rstep__input {
+  flex: 1; min-width: 34px; width: 100%; text-align: center;
+  font-size: 15px; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums;
+  border: 0; background: transparent; padding: 2px 0; margin: 0; appearance: none; -moz-appearance: textfield;
+}
+.rstep__input:focus { outline: none; background: var(--green-100); border-radius: 8px; }
 
 /* 관리자 상품상세 점포별 편집 */
 .fpse { display: block; }

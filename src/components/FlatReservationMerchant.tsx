@@ -145,6 +145,7 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
 function LinkedCard({ p }: { p: FlatMerchantCard }) {
   const router = useRouter();
   const [qty, setQty] = useState(p.myQty);
+  const [draft, setDraft] = useState<string | null>(null); // 입력칸 타이핑 중 임시값(포커스 아웃 시 커밋)
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
   const closed = useNow() >= p.closeAtMs;
@@ -242,7 +243,28 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
               >
                 −
               </button>
-              <span className="rstep__val">{qty}</span>
+              <input
+                className="rstep__input"
+                inputMode="numeric"
+                value={draft ?? String(qty)}
+                onChange={(e) =>
+                  setDraft(e.target.value.replace(/[^\d]/g, "").slice(0, 5))
+                }
+                onFocus={(e) => e.currentTarget.select()}
+                onBlur={() => {
+                  if (draft === null) return; // 타이핑 안 했으면 그대로
+                  const n = parseInt(draft || "0", 10) || 0;
+                  setDraft(null);
+                  hold(n); // 담기(홀드)로 커밋 — 재고 상한 클램프·미변경 시 무동작
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
+                aria-label={`${p.name} 예약 수량`}
+              />
               <button
                 className="rstep__btn"
                 disabled={pending || qty >= max}
