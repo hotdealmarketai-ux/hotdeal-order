@@ -135,6 +135,43 @@ export async function GET(request: Request) {
     return Response.json({ ok: true, store: ref.user?.storeName, date, orderRange: { start, end }, rows });
   }
 
+  // 특정 품목이 특정 날짜 전 지점 계산서에서 얼마 청구되고 얼마 실제차감됐는지 전수 추적. ?do=item&name=투쁠 불고기 200g&date=2026-08-10
+  if (url.searchParams.get("do") === "item") {
+    const name = (url.searchParams.get("name") || "").trim();
+    const date = url.searchParams.get("date") || "";
+    if (!name || !date) return Response.json({ ok: false, error: "name,date 필요" }, { status: 400 });
+    const items = await prisma.inventoryItem.findMany({
+      where: { name, deletedAt: null },
+      select: { id: true, name: true, qty: true },
+    });
+    const ids = new Set(items.map((i) => i.id));
+    const invs = await prisma.invoice.findMany({
+      where: { date, kind: "DAILY" },
+      select: {
+        id: true, status: true, total: true, createdAt: true, stockDeductedSnap: true,
+        user: { select: { storeName: true } },
+        items: { where: { category: "TOOL" }, select: { name: true, qty: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    const rows: { store: string | undefined; id: string; status: string; billed: number; deducted: number }[] = [];
+    let billedSum = 0, deductedSum = 0;
+    for (const inv of invs) {
+      const line = inv.items.filter((it) => it.name.trim() === name).reduce((n, it) => n + Math.round(it.qty), 0);
+      if (line === 0) continue;
+      const snap = parseSnap(inv.stockDeductedSnap);
+      let ded = 0;
+      for (const [id, q] of Object.entries(snap)) if (ids.has(id)) ded += Number(q) || 0;
+      rows.push({ store: inv.user?.storeName, id: inv.id, status: inv.status, billed: line, deducted: ded });
+      if (inv.status !== "VOID") { billedSum += line; deductedSum += ded; }
+    }
+    return Response.json({
+      ok: true, name, date,
+      inventoryItems: items.map((i) => ({ id: i.id, name: i.name, base: i.qty })),
+      billedSum, deductedSum, rows,
+    });
+  }
+
   const days = Math.min(60, Math.max(1, parseInt(url.searchParams.get("days") || "14", 10) || 14));
   const KST = 9 * 3600 * 1000;
   const cut = new Date(Date.now() + KST - days * 86400000).toISOString().slice(0, 10);
