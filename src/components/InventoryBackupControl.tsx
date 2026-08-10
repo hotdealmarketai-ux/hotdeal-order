@@ -51,7 +51,7 @@ export function InventoryBackupControl() {
 
   return (
     <div className="stack" style={{ gap: 8 }}>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 14 }}>
         <button
           type="button"
           className="btn btn--soft btn--sm"
