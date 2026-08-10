@@ -68,18 +68,29 @@ export async function deductInvoiceStock(
     where: { id: invoiceId },
     select: { id: true, userId: true, date: true, kind: true, stockDeductedAt: true },
   });
-  if (!inv || inv.kind !== "DAILY" || inv.stockDeductedAt) return false;
+  if (!inv || inv.kind !== "DAILY" || inv.stockDeductedAt) return false; // 빠른 사전 스킵(정상 경로)
   const byName = await invoiceToolByName(invoiceId);
   const at = new Date(now);
   const snap: Record<string, number> = {}; // InventoryItem.id → 실제차감량
+  let claimed = false;
   await prisma.$transaction(async (tx) => {
+    // ⚠ 이중차감 방지: '차감보다 먼저' 멱등 마커를 원자적으로 선점한다(stockDeductedAt=null → at).
+    // updateMany 는 그 행을 잠그므로, 동시 발행/재고마감이 겹쳐도 딱 한 트랜잭션만 count===1 로 선점하고
+    // 나머지는 count===0 이 되어 차감을 건너뛴다. (예전엔 차감을 먼저 하고 마커를 나중에 세팅해,
+    //  두 호출이 각각 base 를 차감하고 snap 은 1회분만 남아 취소해도 복구가 안 되는 TOCTOU 가 있었다.)
+    const claim = await tx.invoice.updateMany({
+      where: { id: inv.id, kind: "DAILY", stockDeductedAt: null },
+      data: { stockDeductedAt: at },
+    });
+    if (claim.count === 0) return; // 다른 호출이 이미 선점함 → 이 호출은 차감하지 않는다
+    claimed = true;
     for (const [name, q] of byName.entries()) {
       await deductNameToSnap(tx, name, q, snap);
     }
-    // 멱등 마커 — null일 때만 세팅(동시 발행 레이스에서 한 번만 차감) + 실제차감 스냅샷(id 키).
+    // 실제차감 스냅샷 기록(마커는 위 선점에서 이미 세팅됨).
     await tx.invoice.updateMany({
-      where: { id: inv.id, stockDeductedAt: null },
-      data: { stockDeductedAt: at, stockDeductedSnap: JSON.stringify(snap) },
+      where: { id: inv.id },
+      data: { stockDeductedSnap: JSON.stringify(snap) },
     });
     // 이 출고일에 픽업하는 이 점포의 예약(재고연동) 확정분을 '차감됨'으로 표시(이중집계 방지).
     await tx.reservationOrderItem.updateMany({
@@ -93,8 +104,8 @@ export async function deductInvoiceStock(
       data: { stockDeductedAt: at },
     });
   });
-  await setInventoryPushPending().catch(() => {});
-  return true;
+  if (claimed) await setInventoryPushPending().catch(() => {});
+  return claimed;
 }
 
 // 계산서 수정(재발행) 시 재고 재조정 — '이전 실제차감(snap)'을 되돌리고 '새 청구분'을 다시 차감(플로어)해 정확한 역연산.
