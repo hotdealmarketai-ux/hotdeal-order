@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { isAdmin, type Role } from "@/lib/constants";
+import { orderRangeForShipment } from "@/lib/date";
 
 function parseSnap(v: string | null): Record<string, number> {
   if (!v) return {};
@@ -58,6 +59,72 @@ export async function GET(request: Request) {
     }));
     const curBase = [...baseByName.entries()].map(([name, qty]) => ({ name, base: qty }));
     return Response.json({ ok: true, invoices: out, currentBase: curBase });
+  }
+
+  // 한 지점·출고일의 '실제 주문(담기발주) vs 계산서 라인 vs 실제차감(snap) vs 현재 재고' 품목별 대조. ?do=reconcile&invoiceId=X
+  if (url.searchParams.get("do") === "reconcile") {
+    const invoiceId = url.searchParams.get("invoiceId") || "";
+    const ref = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { userId: true, date: true, user: { select: { storeName: true } } },
+    });
+    if (!ref) return Response.json({ ok: false, error: "invoiceId 필요/없음" }, { status: 400 });
+    const { userId, date } = ref;
+    const { start, end } = orderRangeForShipment(date);
+    const [orders, dayInvoices] = await Promise.all([
+      prisma.order.findMany({
+        where: { userId, category: "TOOL", status: { not: "CANCELLED" }, createdAt: { gte: start, lt: end } },
+        select: { items: { select: { name: true, rawName: true, qty: true, rawQty: true } } },
+      }),
+      prisma.invoice.findMany({
+        where: { userId, date, kind: "DAILY", status: { in: ["ISSUED", "PAID"] } },
+        select: { id: true, stockDeductedSnap: true, items: { where: { category: "TOOL" }, select: { name: true, qty: true } } },
+      }),
+    ]);
+    const qn = (v: string | number) => {
+      if (typeof v === "number") return v;
+      const n = parseFloat(String(v).replace(/[^0-9.]/g, ""));
+      return Number.isFinite(n) ? n : 0;
+    };
+    const ordered = new Map<string, number>();
+    for (const o of orders) for (const it of o.items) {
+      const nm = (it.name || it.rawName || "").trim();
+      if (nm) ordered.set(nm, (ordered.get(nm) ?? 0) + qn(it.qty || it.rawQty));
+    }
+    const billed = new Map<string, number>();
+    const snapIds = new Set<string>();
+    const snaps: Record<string, number>[] = [];
+    for (const inv of dayInvoices) {
+      for (const it of inv.items) {
+        const nm = it.name.trim();
+        if (nm) billed.set(nm, (billed.get(nm) ?? 0) + Math.round(it.qty));
+      }
+      const s = parseSnap(inv.stockDeductedSnap);
+      Object.keys(s).forEach((k) => snapIds.add(k));
+      snaps.push(s);
+    }
+    const invItems = await prisma.inventoryItem.findMany({
+      where: { OR: [{ id: { in: [...snapIds] } }, { deletedAt: null }] },
+      select: { id: true, name: true, qty: true, deletedAt: true },
+    });
+    const nameById = new Map(invItems.map((i) => [i.id, i.name]));
+    const baseByName = new Map<string, number>();
+    const registered = new Set<string>();
+    for (const i of invItems) if (!i.deletedAt) { baseByName.set(i.name.trim(), i.qty); registered.add(i.name.trim()); }
+    const deducted = new Map<string, number>();
+    for (const s of snaps) for (const [id, q] of Object.entries(s)) {
+      const nm = (nameById.get(id) ?? "").trim();
+      if (nm) deducted.set(nm, (deducted.get(nm) ?? 0) + q);
+    }
+    const names = [...new Set([...ordered.keys(), ...billed.keys(), ...deducted.keys()])].sort((a, b) => a.localeCompare(b, "ko"));
+    const rows = names.map((nm) => ({
+      item: nm,
+      ordered: ordered.get(nm) ?? 0,     // 실제 주문(담기발주)
+      billed: billed.get(nm) ?? 0,       // 계산서 라인 합(여러 장이면 중복 포함)
+      deducted: deducted.get(nm) ?? 0,   // 재고에서 실제 빠진 양(snap)
+      base: registered.has(nm) ? baseByName.get(nm) ?? 0 : null, // null=재고현황 미등록
+    }));
+    return Response.json({ ok: true, store: ref.user?.storeName, date, orderRange: { start, end }, rows });
   }
 
   const days = Math.min(60, Math.max(1, parseInt(url.searchParams.get("days") || "14", 10) || 14));
