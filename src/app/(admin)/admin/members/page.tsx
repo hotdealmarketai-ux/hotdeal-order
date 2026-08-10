@@ -13,15 +13,23 @@ function statusBadge(status: Status): string {
 
 export default async function AdminMembers() {
   await requireAdmin();
-  const members = await prisma.user.findMany({
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-  });
+  const LIMIT = 500;
+  const [total, members] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.findMany({
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      take: LIMIT,
+      select: { id: true, storeName: true, username: true, role: true, status: true },
+    }),
+  ]);
 
   return (
     <>
       <Topbar backHref="/admin" title="회원 관리" />
       <div className="page">
-        <p className="lead">전체 {members.length}명</p>
+        <p className="lead">
+          전체 {total}명{total > LIMIT ? ` (최근 ${LIMIT}명 표시)` : ""}
+        </p>
 
         {members.length === 0 ? (
           <div className="empty">

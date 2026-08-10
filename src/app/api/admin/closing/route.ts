@@ -13,7 +13,7 @@ function kstStamp(now: Date): string {
   return `${kst.getUTCFullYear()}${p(kst.getUTCMonth() + 1)}${p(kst.getUTCDate())}-${p(kst.getUTCHours())}${p(kst.getUTCMinutes())}`;
 }
 
-export async function POST() {
+export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user || !isAdmin(user.role) || user.status !== "APPROVED") {
     return new Response("forbidden", {
@@ -22,7 +22,10 @@ export async function POST() {
     });
   }
   const now = new Date();
-  const { buffer, summary } = await buildClosingWorkbook(now);
+  // ?months=N → 상세(출고·원장) 시트를 최근 N개월로 제한(요약·미수·재고는 전체). 없으면 전체.
+  const mParam = new URL(req.url).searchParams.get("months");
+  const months = mParam && /^\d+$/.test(mParam) ? Math.min(120, parseInt(mParam, 10)) : null;
+  const { buffer, summary } = await buildClosingWorkbook(now, months);
   await writeClosingLog({ id: user.id, storeName: user.storeName }, summary);
   return new Response(new Uint8Array(buffer), {
     status: 200,

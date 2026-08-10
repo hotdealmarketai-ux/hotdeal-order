@@ -10,6 +10,7 @@ export function ClosingCard() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState("");
+  const [months, setMonths] = useState(""); // "" = 전체, "12"/"6"/"3" = 최근 N개월
 
   const close = () => {
     if (busy) return;
@@ -22,7 +23,10 @@ export function ClosingCard() {
     setBusy(true);
     setErr("");
     try {
-      const res = await fetch("/api/admin/closing", { method: "POST" });
+      const res = await fetch(
+        `/api/admin/closing${months ? `?months=${months}` : ""}`,
+        { method: "POST" },
+      );
       if (!res.ok) throw new Error(String(res.status));
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition") ?? "";
@@ -71,6 +75,20 @@ export function ClosingCard() {
                 ✕
               </button>
             </div>
+            {!done && (
+              <select
+                className="input input--compact"
+                style={{ marginTop: 12 }}
+                value={months}
+                onChange={(e) => setMonths(e.target.value)}
+                disabled={busy}
+              >
+                <option value="">전체 기간</option>
+                <option value="12">최근 12개월</option>
+                <option value="6">최근 6개월</option>
+                <option value="3">최근 3개월</option>
+              </select>
+            )}
             {err && (
               <div className="notice notice--error" style={{ marginTop: 8 }}>
                 {err}

@@ -27,7 +27,18 @@ export type ClosingSummary = {
 
 export async function buildClosingWorkbook(
   now: Date,
+  months: number | null = null,
 ): Promise<{ buffer: Buffer; summary: ClosingSummary }> {
+  // 기간 제한(선택) — 요약/미수/재고는 항상 전체(현재 잔액), 상세(출고·원장)만 최근 N개월로 줄여
+  // 데이터 누적 시 메모리/타임아웃을 방지. 미수 합계는 전체 groupBy에서 나오고, 원장 opening('이전 이월')이
+  // 창 이전분을 흡수하므로 running-balance 는 창을 잘라도 정확하게 유지된다.
+  const cutoffDate =
+    months && months > 0
+      ? new Date(new Date(now).setMonth(now.getMonth() - months))
+      : null;
+  const cutoffStr = cutoffDate
+    ? new Date(cutoffDate.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 10)
+    : null;
   const [stores, arGroups, adjGroups, invoices, inventory, deposits, adjustmentsAll] =
     await Promise.all([
     prisma.user.findMany({
@@ -48,7 +59,10 @@ export async function buildClosingWorkbook(
     }),
     // 출고된 발주 = 발행/입금완료(ISSUED·PAID) 계산서 품목(초안·취소 제외) — 완전한 출고 기록.
     prisma.invoice.findMany({
-      where: { status: { in: ["ISSUED", "PAID"] } },
+      where: {
+        status: { in: ["ISSUED", "PAID"] },
+        ...(cutoffStr ? { date: { gte: cutoffStr } } : {}),
+      },
       orderBy: [{ date: "asc" }],
       select: {
         id: true,
@@ -84,9 +98,12 @@ export async function buildClosingWorkbook(
         expiry: true,
       },
     }),
-    // 입출금 원장(running balance)용 — 매칭된 입금 전체 + 미수 조정 전체.
+    // 입출금 원장(running balance)용 — 매칭된 입금 + 미수 조정(상세만 기간창; 잔액은 opening 이월로 정확).
     prisma.deposit.findMany({
-      where: { matchStatus: { in: ["AUTO", "MANUAL"] } },
+      where: {
+        matchStatus: { in: ["AUTO", "MANUAL"] },
+        ...(cutoffDate ? { txAt: { gte: cutoffDate } } : {}),
+      },
       select: {
         id: true,
         matchedUserId: true,
@@ -98,6 +115,7 @@ export async function buildClosingWorkbook(
       },
     }),
     prisma.receivableAdjustment.findMany({
+      where: cutoffDate ? { createdAt: { gte: cutoffDate } } : {},
       select: {
         id: true,
         userId: true,
