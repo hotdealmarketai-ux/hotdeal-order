@@ -54,14 +54,23 @@ export async function GET(request: Request) {
       skipped += invs.length;
       continue;
     }
+    const ids = invs.map((i) => i.id);
+    // 원자 선점 — 발송 전에 overdueRemindedAt(=null)만 먼저 마킹. 겹친 실행이 이미 마킹했으면 스킵(이중 안내 방지).
+    const claim = await prisma.invoice.updateMany({
+      where: { id: { in: ids }, overdueRemindedAt: null },
+      data: { overdueRemindedAt: new Date() },
+    });
+    if (claim.count === 0) {
+      skipped += invs.length;
+      continue;
+    }
     try {
       await notifyMerchantWeeklyInvoiceOverdue(uid, bal.get(uid) ?? 0);
-      await prisma.invoice.updateMany({
-        where: { id: { in: invs.map((i) => i.id) } },
-        data: { overdueRemindedAt: new Date() },
-      });
       sent += 1;
     } catch (e) {
+      await prisma.invoice
+        .updateMany({ where: { id: { in: ids } }, data: { overdueRemindedAt: null } })
+        .catch(() => {});
       logError("cron.weekly-overdue", e, { userId: uid });
     }
   }

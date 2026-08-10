@@ -46,28 +46,32 @@ export async function GET(request: Request) {
   if (!job) return Response.json({ ok: true, sent: false, dow, h });
 
   const key = `notify-weekly:${job.type}:${kstDateOf(new Date(atMs))}`;
-  const already = await prisma.appMeta.findUnique({ where: { key } });
-  if (already) {
+  // 원자 선점(키가 @id) — findUnique→발송→upsert 는 겹치면 전 가맹점에 '두 번' 발송된다.
+  //   발송 전에 create 로 원자적으로 선점하고, 실패 시 되돌린다(notify 크론과 동일 패턴).
+  try {
+    await prisma.appMeta.create({ data: { key, syncedAt: new Date() } });
+  } catch {
     return Response.json({ ok: true, sent: false, dedup: true, type: job.type });
   }
 
-  await sendPushToRole("MERCHANT_HOTDEAL", {
-    title: job.title,
-    body: "",
-    url: "/weekly",
-  });
-  // 마감(20시)엔 새롭 관리자에게도 확인 요청 푸시
-  if (job.type === "deadline") {
-    await sendPushToRole("ADMIN_SAEROP", {
-      title: "주간발주가 마감되었습니다. 지금 확인해주세요!",
+  try {
+    await sendPushToRole("MERCHANT_HOTDEAL", {
+      title: job.title,
       body: "",
-      url: "/admin/weekly",
+      url: "/weekly",
     });
+    // 마감(20시)엔 새롭 관리자에게도 확인 요청 푸시
+    if (job.type === "deadline") {
+      await sendPushToRole("ADMIN_SAEROP", {
+        title: "주간발주가 마감되었습니다. 지금 확인해주세요!",
+        body: "",
+        url: "/admin/weekly",
+      });
+    }
+  } catch (err) {
+    // 발송 실패 시 선점 되돌려 다음 실행에서 재시도(무음 유실 방지).
+    await prisma.appMeta.deleteMany({ where: { key } }).catch(() => {});
+    throw err;
   }
-  await prisma.appMeta.upsert({
-    where: { key },
-    create: { key, syncedAt: new Date() },
-    update: { syncedAt: new Date() },
-  });
   return Response.json({ ok: true, sent: true, type: job.type, dow, h });
 }

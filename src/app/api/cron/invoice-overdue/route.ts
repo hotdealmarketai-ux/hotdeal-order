@@ -78,16 +78,27 @@ export async function GET(request: Request) {
       skipped += invs.length;
       continue; // 다 갚은 점포 — 안내 생략(마커 안 남김 → 이후 미수 생기면 정상 안내)
     }
+    const ids = invs.map((i) => i.id);
+    // 원자 선점 — 발송 '전에' overdueRemindedAt(=null)만 먼저 마킹. 겹친 실행이 이미 마킹했으면
+    //   count===0 → 스킵(이중 안내 방지). read→발송→mark 는 겹치면 둘 다 발송됐다.
+    const claim = await prisma.invoice.updateMany({
+      where: { id: { in: ids }, overdueRemindedAt: null },
+      data: { overdueRemindedAt: new Date() },
+    });
+    if (claim.count === 0) {
+      skipped += invs.length;
+      continue;
+    }
     // 대표 날짜 = 가장 오래된 미납 계산서. 금액은 지점 총미수.
     const oldest = invs.reduce((a, b) => (a.date <= b.date ? a : b));
     try {
       await notifyMerchantInvoiceOverdue(uid, oldest.date, bal.get(uid) ?? 0);
-      await prisma.invoice.updateMany({
-        where: { id: { in: invs.map((i) => i.id) } },
-        data: { overdueRemindedAt: new Date() },
-      });
       sent += 1;
     } catch (err) {
+      // 발송 실패 → 마커 되돌려 다음 실행에서 재시도(무음 유실 방지).
+      await prisma.invoice
+        .updateMany({ where: { id: { in: ids } }, data: { overdueRemindedAt: null } })
+        .catch(() => {});
       logError("cron.invoiceOverdue.notify", err, { userId: uid });
     }
   }
