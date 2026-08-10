@@ -479,6 +479,7 @@ export async function loadInvoiceToolItemsAction(
   userId: string,
   shipmentDate: string,
   category: Category = "TOOL",
+  excludeInvoiceId?: string,
 ): Promise<{
   items: { name: string; qty: string; unitPrice: string; inventoryItemId: string }[];
 }> {
@@ -486,7 +487,7 @@ export async function loadInvoiceToolItemsAction(
   if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(shipmentDate)) return { items: [] };
 
   const { start, end } = orderRangeForShipment(shipmentDate);
-  const [toolOrders, resvItems, invItems] = await Promise.all([
+  const [toolOrders, resvItems, invItems, billedItems] = await Promise.all([
     // ① 담기 발주(해당 카테고리) — 출고일에 실릴 발주(전날 등). 취소 제외.
     prisma.order.findMany({
       where: {
@@ -522,7 +523,27 @@ export async function loadInvoiceToolItemsAction(
       where: { deletedAt: null },
       select: { id: true, name: true, supplyPrice: true },
     }),
+    // ③ 이미 '다른' 계산서(취소 제외, 이 계산서 자신 제외)에 청구된 같은 카테고리 공구 — 델타만 불러오려고 뺀다.
+    //    → 같은 날 추가 발주분(담기 총량 증가)만 새 계산서에 담기고, 같은 걸 또 불러와도 0이라 이중차감이 안 난다.
+    prisma.invoiceItem.findMany({
+      where: {
+        category,
+        invoice: {
+          userId,
+          date: shipmentDate,
+          status: { not: "VOID" },
+          ...(excludeInvoiceId ? { id: { not: excludeInvoiceId } } : {}),
+        },
+      },
+      select: { name: true, qty: true },
+    }),
   ]);
+  // 이미 청구된 공구(품목명별 합) — 불러올 총량에서 이만큼 빼서 '아직 청구 안 된 분'만 채운다.
+  const billedByName = new Map<string, number>();
+  for (const it of billedItems) {
+    const k = it.name.trim();
+    if (k) billedByName.set(k, (billedByName.get(k) ?? 0) + it.qty);
+  }
 
   const priceByName = new Map<string, number>();
   const idByName = new Map<string, string>();
@@ -570,16 +591,20 @@ export async function loadInvoiceToolItemsAction(
     add(it.name, qtyToNum(it.qty), it.supplyPrice, it.inventoryItemId || idByName.get(it.name.trim()) || "");
   }
 
-  const items = orderKeys.map((k) => {
-    const a = agg.get(k)!;
-    const qty = Math.round(a.qty * 100) / 100; // 부동소수 정리
-    return {
+  const items = orderKeys
+    .map((k) => {
+      const a = agg.get(k)!;
+      const already = billedByName.get(k) ?? 0; // 다른 계산서에 이미 청구된 분
+      const qty = Math.round((a.qty - already) * 100) / 100; // 아직 청구 안 된 델타만(부동소수 정리)
+      return { a, qty };
+    })
+    .filter((x) => x.qty > 0) // 이미 다 청구됐으면(델타 0) 안 담아 이중차감 방지
+    .map(({ a, qty }) => ({
       name: a.name,
       qty: String(qty),
       unitPrice: a.priced ? String(a.unitPrice) : "",
       inventoryItemId: a.inventoryItemId,
-    };
-  });
+    }));
   return { items };
 }
 

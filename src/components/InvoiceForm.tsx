@@ -294,7 +294,7 @@ export function InvoiceForm({
     setLoadingCat(cat);
     setLoadNote(null);
     try {
-      const { items } = await loadInvoiceToolItemsAction(userId, date, cat);
+      const { items } = await loadInvoiceToolItemsAction(userId, date, cat, invoiceId);
       setConfirming(false);
       setRowsByCat((prev) => {
         const rows: Row[] = items.map((it) => ({
