@@ -32,7 +32,8 @@ export default async function AdminBillingMerchantPage(props: {
     receivableOf(id),
     prisma.invoice.findMany({
       where: { userId: id, status: { not: "VOID" } },
-      orderBy: { updatedAt: "desc" },
+      // 출고일(date) 최신순 고정 — updatedAt은 수정/입금확인/재차감마다 바뀌어 순서가 뒤틀림(같은날은 생성순).
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 200,
       select: { id: true, date: true, kind: true, status: true, total: true },
     }),

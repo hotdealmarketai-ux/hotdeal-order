@@ -26,7 +26,8 @@ export default async function AdminInvoices() {
     prisma.receivableAdjustment.aggregate({ _sum: { amount: true } }),
     prisma.invoice.findMany({
       where: { kind: "DAILY" }, // 주간(WEEKLY)은 /admin/weekly 에서 별도 관리
-      orderBy: { updatedAt: "desc" },
+      // 출고일(date) 최신순 고정 — updatedAt은 수정/입금확인/재차감마다 바뀌어 순서가 뒤틀림(같은날은 생성순).
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       take: 200,
       include: { user: { select: { storeName: true } } },
     }),

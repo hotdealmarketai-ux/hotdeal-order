@@ -92,13 +92,30 @@ export async function GET(request: Request) {
     }))
     .sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : a.store.localeCompare(b.store, "ko")));
 
+  // (지점,출고일)에 발행 DAILY 계산서가 2장+ 인 모든 케이스 — 이중차감이 '발생 가능한' 지점.
+  const byStoreDate = new Map<string, { store: string; date: string; ids: string[] }>();
+  for (const inv of invoices) {
+    if (inv.items.length === 0) continue; // 공구 없는 계산서는 재고 무관
+    const store = inv.user?.storeName ?? "(?)";
+    const k = `${store}|${inv.date}`;
+    const g = byStoreDate.get(k) ?? { store, date: inv.date, ids: [] };
+    g.ids.push(inv.id);
+    byStoreDate.set(k, g);
+  }
+  const multiInvoice = [...byStoreDate.values()]
+    .filter((g) => g.ids.length >= 2)
+    .map((g) => ({ store: g.store, date: g.date, invoiceCount: g.ids.length, invoiceIds: g.ids }))
+    .sort((a, b) => (b.date < a.date ? -1 : b.date > a.date ? 1 : a.store.localeCompare(b.store, "ko")));
+
   return Response.json({
     ok: true,
     days,
     since: cut,
     invoiceCount: invoices.length,
     doubleCount: doubles.length,
-    doubles,          // 이중차감 의심(같은 품목 2장+)
-    snapMismatch,     // 실제차감(snap) vs 라인 불일치(수정 이상)
+    doubles,             // 같은 품목이 2장+ 계산서에 걸쳐 실제 이중차감된 것
+    multiInvoiceCount: multiInvoice.length,
+    multiInvoice,        // 공구 있는 계산서가 2장+인 (지점,출고일) 전부 = 이중 가능 지점
+    snapMismatch,        // 실제차감(snap) vs 라인 불일치(대부분 미등록/구버전=이중 아님)
   });
 }
