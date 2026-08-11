@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { computeToolReconcile } from "@/app/actions/stock-reconcile";
@@ -50,6 +51,14 @@ export default async function StockReconcilePage(props: {
             <b>총 {fmt(totalDeducted)}개</b>
           </div>
         </div>
+
+        <Link
+          href={`/admin/stock-reconcile/diff?date=${date}`}
+          className="btn btn--soft btn--block"
+          style={{ marginBottom: 16 }}
+        >
+          발주↔출고 대조 — 재고 튄 품목 찾기
+        </Link>
 
         <StockReconcileForm
           date={date}
