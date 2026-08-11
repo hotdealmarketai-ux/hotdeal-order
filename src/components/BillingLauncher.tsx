@@ -46,7 +46,7 @@ export function BillingLauncher({ userId }: { userId: string }) {
         <button
           type="button"
           className="btn btn--soft btn--block"
-          style={{ marginTop: 8 }}
+          style={{ marginTop: 8, boxShadow: "var(--shadow-pill)" }}
           onClick={() => router.push(`/admin/billing/${userId}/sadadream`)}
         >
           사다드림 발행
