@@ -812,3 +812,59 @@ model SourcingRun {
 
   @@index([startedAt])
 }
+
+// ── 사내 메신저 ─────────────────────────────────────────────────────────────
+// 1차 로그인(공용 새롭 관리자 saerop)으로 관리자 화면 진입 후, 메신저는 '2차 로그인'으로 개인 식별.
+// 멤버=개인 신원(이름+PIN). 채널=주제별 방(전 멤버 공용). 외부(가맹점)엔 절대 노출 안 됨.
+model MessengerMember {
+  id        String   @id @default(cuid())
+  name      String
+  pinHash   String // bcrypt 해시(개인 PIN)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  messages MessengerMessage[]
+  reads    MessengerRead[]
+
+  @@index([active, sortOrder])
+}
+
+model MessengerChannel {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  messages MessengerMessage[]
+  reads    MessengerRead[]
+
+  @@index([archived, sortOrder])
+}
+
+model MessengerMessage {
+  id        String           @id @default(cuid())
+  channelId String
+  channel   MessengerChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    MessengerMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  body      String
+  mediaUrl  String? // 첨부 사진·영상(Vercel Blob)
+  mediaType String? // "image" | "video"
+  createdAt DateTime         @default(now())
+
+  @@index([channelId, createdAt])
+}
+
+// 멤버×채널 마지막 읽음 시각 — 안 읽은 메시지 배지용.
+model MessengerRead {
+  id         String           @id @default(cuid())
+  memberId   String
+  member     MessengerMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  channelId  String
+  channel    MessengerChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  lastReadAt DateTime         @default(now())
+
+  @@unique([memberId, channelId])
+}
