@@ -29,8 +29,8 @@ export function OrderShipmentDiffView({ data }: { data: OrderShipmentDiff }) {
         </div>
         {data.totalMismatch > 0 && (
           <div className="row__sub" style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--line)", lineHeight: 1.6 }}>
-            <b style={{ color: "var(--danger)" }}>부족</b> = 발주보다 출고 완료가 적음(발주했는데 안 나감) ·{" "}
-            <b style={{ color: "#2563eb" }}>초과</b> = 발주보다 출고 완료가 많음(발주보다 더 나감)
+            <b style={{ color: "var(--danger)" }}>미출고</b> = 발주했는데 출고 완료(계산서)에 안 잡힘 ·{" "}
+            <b style={{ color: "#2563eb" }}>초과</b> = 발주보다 출고 완료가 더 많음
           </div>
         )}
       </div>
@@ -116,7 +116,7 @@ function CatTable({ label, rows }: { label: string; rows: DiffRow[] }) {
                   fontWeight: 700,
                 }}
               >
-                {short ? "부족 " : "초과 "}
+                {short ? "미출고 " : "초과 "}
                 {fmt(Math.abs(r.diff))}
               </span>
             </div>
