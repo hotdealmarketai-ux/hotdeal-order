@@ -47,7 +47,7 @@ export default async function BillingByDateStorePage(props: {
       select: { storeName: true },
     }),
     prisma.invoice.findMany({
-      where: { userId, date, status: { not: "VOID" } },
+      where: { userId, date, status: { not: "VOID" }, kind: { not: "SADADREAM" } },
       include: { items: { orderBy: { sortOrder: "asc" } } },
       orderBy: { kind: "asc" },
     }),

@@ -16,10 +16,10 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 export default async function AdminInvoices() {
   await requireAdmin();
 
-  const [ar, adj, invoices] = await Promise.all([
-    // 미수 합계 = 발행·미입금(전 종류) + 관리자 수동조정 — receivableOf·입금관리와 동일 기준.
+  const [ar, adj, invoices, sd] = await Promise.all([
+    // 미수 합계 = 발행·미입금(전 종류) + 관리자 수동조정 — receivableOf·입금관리와 동일 기준. 사다드림(별도 트랙) 제외.
     prisma.invoice.aggregate({
-      where: { status: "ISSUED" },
+      where: { status: "ISSUED", kind: { not: "SADADREAM" } },
       _sum: { total: true },
       _count: true,
     }),
@@ -31,8 +31,15 @@ export default async function AdminInvoices() {
       take: 200,
       include: { user: { select: { storeName: true } } },
     }),
+    // 사다드림 미수(별도 트랙) — 발행(ISSUED) 사다드림 계산서 합. 입금확인 시 PAID 로 빠짐.
+    prisma.invoice.aggregate({
+      where: { status: "ISSUED", kind: "SADADREAM" },
+      _sum: { total: true },
+      _count: true,
+    }),
   ]);
   const arSum = (ar._sum.total ?? 0) + (adj._sum.amount ?? 0);
+  const sdSum = sd._sum.total ?? 0;
 
   return (
     <>
@@ -46,6 +53,12 @@ export default async function AdminInvoices() {
           <div className="row__sub" style={{ marginTop: 2 }}>
             입금 대기 {ar._count}건
           </div>
+          {sd._count > 0 && (
+            <div className="spread" style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+              <span className="row__sub">사다드림 미수 ({sd._count}건)</span>
+              <b style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(sdSum)}원</b>
+            </div>
+          )}
         </div>
 
         <p className="hint" style={{ marginBottom: 12 }}>

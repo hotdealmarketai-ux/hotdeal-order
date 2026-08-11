@@ -46,10 +46,10 @@ export async function buildClosingWorkbook(
       orderBy: { storeName: "asc" },
       select: { id: true, storeName: true },
     }),
-    // 미수 = 발행·미입금(ISSUED) 계산서 합 (receivableOf와 동일 정의). 종류 무관.
+    // 미수 = 발행·미입금(ISSUED) 계산서 합 (receivableOf와 동일 정의). 사다드림(별도 트랙)은 제외.
     prisma.invoice.groupBy({
       by: ["userId"],
-      where: { status: "ISSUED" },
+      where: { status: "ISSUED", kind: { not: "SADADREAM" } },
       _sum: { total: true },
       _count: true,
     }),
@@ -57,10 +57,11 @@ export async function buildClosingWorkbook(
       by: ["userId"],
       _sum: { amount: true },
     }),
-    // 출고된 발주 = 발행/입금완료(ISSUED·PAID) 계산서 품목(초안·취소 제외) — 완전한 출고 기록.
+    // 출고된 발주 = 발행/입금완료(ISSUED·PAID) 계산서 품목(초안·취소 제외) — 완전한 출고 기록. 사다드림(우리 출고 아님) 제외.
     prisma.invoice.findMany({
       where: {
         status: { in: ["ISSUED", "PAID"] },
+        kind: { not: "SADADREAM" },
         ...(cutoffStr ? { date: { gte: cutoffStr } } : {}),
       },
       orderBy: [{ date: "asc" }],

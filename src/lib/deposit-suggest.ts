@@ -27,7 +27,7 @@ export async function suggestStoresForDeposits(
     }),
     prisma.invoice.findMany({
       // 환불계산서(REFUND, 음수)는 입금 매칭 후보가 아니므로 제외.
-      where: { status: "ISSUED", splitRequested: false, kind: { not: "REFUND" } },
+      where: { status: "ISSUED", splitRequested: false, kind: { notIn: ["REFUND", "SADADREAM"] } },
       select: { userId: true, total: true },
     }),
   ]);

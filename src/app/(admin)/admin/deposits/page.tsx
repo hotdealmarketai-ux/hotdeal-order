@@ -21,18 +21,18 @@ export const maxDuration = 60;
 export default async function AdminDeposits() {
   await requireAdmin();
 
-  const [stores, balances, splitReqs, txns, pendingSplits, adjustments] =
+  const [stores, balances, splitReqs, txns, pendingSplits, adjustments, sdBalances] =
     await Promise.all([
     prisma.user.findMany({
       where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
       select: { id: true, storeName: true, payerNames: true },
       orderBy: { storeName: "asc" },
     }),
-    // 미입금 계산서(ISSUED) 합 = 남은 결제잔액. receivableOf(마이·점포상세)와 동일하게 전 종류(일반+주간) 합산
-    // — kind:DAILY로 좁히면 주간 미수가 있는 점포에서 목록과 상세 미수가 달라진다.
+    // 미입금 계산서(ISSUED) 합 = 남은 결제잔액. receivableOf(마이·점포상세)와 동일하게 전 종류(일반+주간) 합산.
+    // 사다드림(우리 계좌 아님·별도 트랙)은 제외 — 아래 sdBalances 로 따로 집계.
     prisma.invoice.groupBy({
       by: ["userId"],
-      where: { status: "ISSUED" },
+      where: { status: "ISSUED", kind: { not: "SADADREAM" } },
       _sum: { total: true },
       _count: true,
     }),
@@ -65,6 +65,13 @@ export default async function AdminDeposits() {
       by: ["userId"],
       _sum: { amount: true },
     }),
+    // 사다드림 미수(별도 트랙) — 발행(ISSUED) 사다드림 계산서 지점별 합. 입금확인 시 PAID 로 빠짐.
+    prisma.invoice.groupBy({
+      by: ["userId"],
+      where: { status: "ISSUED", kind: "SADADREAM" },
+      _sum: { total: true },
+      _count: true,
+    }),
   ]);
 
   const balByUser = new Map(
@@ -73,6 +80,9 @@ export default async function AdminDeposits() {
   const adjByUser = new Map(
     adjustments.map((a) => [a.userId, a._sum.amount ?? 0]),
   );
+  const sdByUser = new Map(
+    sdBalances.map((b) => [b.userId, b._sum.total ?? 0]),
+  );
   const splitSet = new Set(splitReqs.map((s) => s.userId));
 
   const rows = stores
@@ -80,9 +90,10 @@ export default async function AdminDeposits() {
       id: s.id,
       storeName: s.storeName,
       payer: s.payerNames[0] ?? "미등록",
-      // 미수 = 발행(ISSUED) + 조정(수동 + 입금매칭). receivableOf와 동일 기준.
+      // 미수 = 발행(ISSUED) + 조정(수동 + 입금매칭). receivableOf와 동일 기준(사다드림 제외).
       balance: (balByUser.get(s.id)?.sum ?? 0) + (adjByUser.get(s.id) ?? 0),
       count: balByUser.get(s.id)?.count ?? 0,
+      sadadream: sdByUser.get(s.id) ?? 0, // 사다드림 미수(별도)
       split: splitSet.has(s.id),
     }))
     .sort(
@@ -90,6 +101,7 @@ export default async function AdminDeposits() {
     );
 
   const totalDue = rows.reduce((n, r) => n + r.balance, 0);
+  const totalSadadream = rows.reduce((n, r) => n + r.sadadream, 0);
 
   // 미매칭 입금(예금주 미등록) 매칭용 점포 옵션
   const merchants = await prisma.user.findMany({
@@ -118,6 +130,14 @@ export default async function AdminDeposits() {
             {fmt(totalDue)}원
           </span>
         </div>
+        {totalSadadream > 0 && (
+          <div className="deptotal" style={{ marginTop: -8 }}>
+            <span className="deptotal__k">사다드림 미수</span>
+            <span className="deptotal__v" style={{ color: "#2563eb" }}>
+              {fmt(totalSadadream)}원
+            </span>
+          </div>
+        )}
 
         {/* 지금 수집 — 팝빌 계좌조회에서 최근 입금을 즉시 끌어와 자동매칭(자동수집 크론과 별개, 수동 트리거) */}
         <CollectDepositsButton />
@@ -221,6 +241,19 @@ export default async function AdminDeposits() {
                   </div>
                 ) : (
                   <span className="badge badge--ok">완납</span>
+                )}
+                {r.sadadream > 0 && (
+                  <div
+                    style={{
+                      color: "#2563eb",
+                      fontWeight: 700,
+                      fontSize: 12.5,
+                      marginTop: 2,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    사다드림 {fmt(r.sadadream)}원
+                  </div>
                 )}
               </div>
             </Link>

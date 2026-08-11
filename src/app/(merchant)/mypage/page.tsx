@@ -10,7 +10,7 @@ import {
 } from "@/lib/constants";
 import { formatKDate } from "@/lib/format";
 import { kstDateOf, kstToday, labelDate, shipmentDayOf } from "@/lib/date";
-import { receivableOf } from "@/lib/receivable";
+import { receivableOf, receivableSadadreamOf } from "@/lib/receivable";
 import { LogoutButton } from "@/components/LogoutButton";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
@@ -53,7 +53,8 @@ export default async function MyPage(props: {
           })
         : Promise.resolve([]),
       prisma.invoice.findMany({
-        where: { userId: user.id, status: { in: ["ISSUED", "PAID"] } },
+        // 날짜별 입금 배지용 — 사다드림(별도 트랙)은 일반 발주일 배지를 오염시키지 않게 제외.
+        where: { userId: user.id, status: { in: ["ISSUED", "PAID"] }, kind: { not: "SADADREAM" } },
         select: { date: true, status: true },
       }),
       receivableOf(user.id),
@@ -62,6 +63,7 @@ export default async function MyPage(props: {
   // '지점 총미수'로만 판단(2026-08-05~): 미수가 남아 있으면 미입금 청구 날짜는 '입금 요청', 다 냈으면 '입금 완료'.
   // (레거시로 status가 PAID인 계산서 날짜는 그대로 '완료'. 낱장 추정 = 이중납부 위험이라 하지 않는다)
   const storePaid = ar.balance <= 0;
+  const sdBal = (await receivableSadadreamOf(user.id)).balance; // 사다드림 미수(별도 트랙)
   const invByDate = new Map<string, "ISSUED" | "PAID">();
   for (const inv of invoices) {
     const st = inv.status === "PAID" || storePaid ? "PAID" : "ISSUED";
@@ -202,6 +204,19 @@ export default async function MyPage(props: {
             {ar.balance > 0 ? `${fmt(ar.balance)}원 ›` : "보기 ›"}
           </span>
         </Link>
+
+        {sdBal > 0 && (
+          <Link
+            href="/invoices"
+            className="card"
+            style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", borderColor: "#2563eb" }}
+          >
+            <span className="row__sub" style={{ color: "#2563eb", fontWeight: 700 }}>
+              사다드림 미수
+            </span>
+            <b style={{ color: "#2563eb", fontVariantNumeric: "tabular-nums" }}>{fmt(sdBal)}원 ›</b>
+          </Link>
+        )}
 
         <div className="card" style={{ marginTop: 16 }}>
           <div className="receipt__store">{user.storeName}</div>

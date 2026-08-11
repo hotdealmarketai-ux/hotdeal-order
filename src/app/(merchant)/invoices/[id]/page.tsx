@@ -8,6 +8,7 @@ import { labelDate, labelDateLong } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { RefundReceipt } from "@/components/RefundReceipt";
+import { SadadreamReceipt } from "@/components/SadadreamReceipt";
 import { PrintButton } from "@/components/PrintButton";
 import { InvoiceRevisionHistory } from "@/components/InvoiceRevisionHistory";
 import { parseRevisionChanges } from "@/lib/invoice-revision";
@@ -78,6 +79,54 @@ export default async function MerchantInvoiceDetailPage({
           <InvoiceRevisionHistory revisions={refundRevisions} isRefund />
           <div style={{ marginTop: 16 }}>
             <PrintButton label="환불계산서 인쇄" />
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // 사다드림 계산서 — 우리 계좌가 아닌 개인/개인업체 계좌로 결제. 전체 미수와 분리.
+  if (inv.kind === "SADADREAM") {
+    const sdItems = inv.items.map((it) => ({
+      name: it.name,
+      qty: it.qty,
+      unitPrice: it.unitPrice,
+      amount: it.amount,
+    }));
+    const sdRevisions = (
+      await prisma.invoiceRevision.findMany({
+        where: { invoiceId: id },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, createdAt: true, totalBefore: true, totalAfter: true, changes: true },
+      })
+    ).map((r) => ({ ...r, changes: parseRevisionChanges(r.changes) }));
+    return (
+      <>
+        <Topbar backHref="/invoices" title="사다드림 계산서" right={<TopbarChip>{user.storeName}</TopbarChip>} />
+        <div className="page">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <h1 className="h1" style={{ margin: 0 }}>
+              사다드림 계산서
+            </h1>
+            <span className="badge badge--wait">사다드림</span>
+          </div>
+          {inv.revisedAt && inv.status !== "VOID" && (
+            <div className="notice notice--ai" style={{ margin: "10px 0" }}>
+              이 사다드림 계산서는 {formatKDateTime(inv.revisedAt)}에 수정되었어요. 아래 내용이 최신이에요.
+            </div>
+          )}
+          <SadadreamReceipt
+            storeName={user.storeName}
+            dateLabel={labelDate(inv.date)}
+            bank={inv.sdBank}
+            holder={inv.sdHolder}
+            account={inv.sdAccount}
+            items={sdItems}
+            paid={inv.status === "PAID"}
+          />
+          <InvoiceRevisionHistory revisions={sdRevisions} />
+          <div style={{ marginTop: 16 }}>
+            <PrintButton label="사다드림 계산서 인쇄" />
           </div>
         </div>
       </>

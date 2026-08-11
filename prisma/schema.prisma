@@ -396,8 +396,15 @@ model Invoice {
   user   User   @relation(fields: [userId], references: [id])
   date   String // 출고 기준일 (KST, YYYY-MM-DD) — 합본 발주서 날짜와 동일 단위
 
-  // kind: DAILY(일일 발주 계산서) | WEEKLY(주간발주 입금요청서) — 잠금/미수 계산이 서로 오염되지 않게 분리
+  // kind: DAILY(일일 발주 계산서) | WEEKLY(주간발주 입금요청서) | REFUND(환불) | SADADREAM(사다드림) — 잠금/미수 계산이 서로 오염되지 않게 분리
+  // ※ SADADREAM = '사다드림'(우리 계좌가 아닌 개인/개인업체로 결제). 전체 미수와 완전 분리된 '사다드림 미수' 별도 트랙.
+  //   미수를 합산하는 모든 곳에서 kind!=SADADREAM 로 제외하고, 사다드림 미수/입금확인은 별도로만 집계한다.
   kind   String @default("DAILY")
+
+  // 사다드림 계산서 전용 — 입금받을 계좌 스냅샷(발행 시점 입력, 계산서마다 다를 수 있음). 다른 kind 는 빈 값.
+  sdBank    String @default("") // 은행
+  sdHolder  String @default("") // 예금주
+  sdAccount String @default("") // 계좌번호
 
   // status: DRAFT(작성중) | ISSUED(발행·입금대기) | PAID(입금확인) | VOID(취소)
   status String @default("DRAFT")

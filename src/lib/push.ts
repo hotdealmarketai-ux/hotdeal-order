@@ -302,6 +302,40 @@ export async function notifyMerchantRefundRevised(
   }
 }
 
+export async function notifyMerchantSadadreamIssued(
+  userId: string,
+  invoiceId: string,
+  amount: number,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: `사다드림 계산서 ${amount.toLocaleString("ko-KR")}원이 발행되었습니다.`,
+      body: "",
+      url: `/invoices/${invoiceId}`,
+      type: "invoice",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantSadadreamIssued failed:", err);
+  }
+}
+
+export async function notifyMerchantSadadreamRevised(
+  userId: string,
+  invoiceId: string,
+  amount: number,
+) {
+  try {
+    await sendPushToUser(userId, {
+      title: `사다드림 계산서가 수정되었습니다. 변경된 금액 ${amount.toLocaleString("ko-KR")}원`,
+      body: "",
+      url: `/invoices/${invoiceId}`,
+      type: "invoice",
+    });
+  } catch (err) {
+    console.error("[push] notifyMerchantSadadreamRevised failed:", err);
+  }
+}
+
 // 점주에게 '계산서(입금요청서) 수정 재발송' 알림 — 같은 계산서로 이동, 바뀐 금액 포함
 export async function notifyMerchantInvoiceRevised(
   userId: string,

@@ -4,11 +4,11 @@ import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { labelDate } from "@/lib/date";
-import { receivableOf } from "@/lib/receivable";
+import { receivableOf, receivableSadadreamOf } from "@/lib/receivable";
 import { BillingLauncher } from "@/components/BillingLauncher";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
-const KIND: Record<string, string> = { DAILY: "발주", WEEKLY: "주간발주", REFUND: "환불계산서" };
+const KIND: Record<string, string> = { DAILY: "발주", WEEKLY: "주간발주", REFUND: "환불계산서", SADADREAM: "사다드림" };
 const STATUS: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: "작성중", cls: "badge--mute" },
   ISSUED: { label: "입금대기", cls: "badge--wait" },
@@ -27,7 +27,7 @@ export default async function AdminBillingMerchantPage(props: {
   });
   if (!merchant || merchant.role !== "MERCHANT_HOTDEAL") notFound();
 
-  const [rec, invoices] = await Promise.all([
+  const [rec, invoices, sdRec] = await Promise.all([
     // 미수 = 발행분 + 관리자 수동조정(입금관리·점주 화면과 동일 기준). ISSUED만 합치면 수동조정이 빠져 안 맞음.
     receivableOf(id),
     prisma.invoice.findMany({
@@ -37,8 +37,10 @@ export default async function AdminBillingMerchantPage(props: {
       take: 200,
       select: { id: true, date: true, kind: true, status: true, total: true },
     }),
+    receivableSadadreamOf(id), // 사다드림 미수(별도 트랙)
   ]);
   const bal = rec.balance;
+  const sdBal = sdRec.balance;
 
   return (
     <>
@@ -49,6 +51,12 @@ export default async function AdminBillingMerchantPage(props: {
           <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: bal > 0 ? "var(--danger)" : "var(--green-700)" }}>
             {won(bal)}원
           </div>
+          {sdBal > 0 && (
+            <div className="spread" style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+              <span className="row__sub">사다드림 미수</span>
+              <b style={{ color: "#2563eb", fontVariantNumeric: "tabular-nums" }}>{won(sdBal)}원</b>
+            </div>
+          )}
         </div>
 
         <div className="itemshead">

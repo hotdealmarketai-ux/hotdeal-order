@@ -229,6 +229,7 @@ export async function tryAutoPayInvoice(
     where: {
       userId,
       status: "ISSUED",
+      kind: { not: "SADADREAM" }, // 사다드림은 우리 계좌 입금이 아니라 자동매칭 대상 아님
       total: amount,
       splitRequested: false,
       issuedAt: { lte: paidAt },
@@ -308,7 +309,7 @@ export async function replaceManualPlaceholderWithReal(
 export async function clearOrderUnlockIfSettled(userId: string) {
   const remaining = await prisma.invoice.count({
     // 환불계산서(REFUND, 음수)는 미수 '남은 빚'이 아니라 크레딧이므로 정산 판정에서 제외.
-    where: { userId, status: "ISSUED", kind: { not: "REFUND" } },
+    where: { userId, status: "ISSUED", kind: { notIn: ["REFUND", "SADADREAM"] } },
   });
   if (remaining === 0) {
     await prisma.user.updateMany({

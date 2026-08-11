@@ -52,7 +52,8 @@ export async function receivableOf(
   //   더 이상 계산서 개별 '입금확인'으로 미수를 깎지 않는다(이중차감 방지). 미수 감소 창구는 매칭·수동조정뿐.
   const [ar, adj] = await Promise.all([
     prisma.invoice.aggregate({
-      where: { userId, status: "ISSUED" },
+      // 사다드림(SADADREAM)은 우리 계좌가 아닌 개인/개인업체 결제라 '전체 미수'에서 완전 제외(별도 트랙).
+      where: { userId, status: "ISSUED", kind: { not: "SADADREAM" } },
       _sum: { total: true },
       _count: true,
     }),
@@ -65,6 +66,19 @@ export async function receivableOf(
     balance: (ar._sum.total ?? 0) + (adj._sum.amount ?? 0),
     count: ar._count,
   };
+}
+
+// 사다드림 미수(별도 트랙) = 발행(ISSUED)된 SADADREAM 계산서 합. 입금확인 시 그 계산서가 PAID 로 바뀌어 빠진다.
+// 전체 미수(receivableOf)와 절대 섞이지 않는다 — 조정(ReceivableAdjustment)도 안 탄다(낱장 PAID 로만 차감).
+export async function receivableSadadreamOf(
+  userId: string,
+): Promise<{ balance: number; count: number }> {
+  const ar = await prisma.invoice.aggregate({
+    where: { userId, status: "ISSUED", kind: "SADADREAM" },
+    _sum: { total: true },
+    _count: true,
+  });
+  return { balance: ar._sum.total ?? 0, count: ar._count };
 }
 
 // 1일 미수 잠금: '이번 발주창 시작 이전' 날짜의 미입금(ISSUED) 일반 계산서가 있고 + 지점 미수 잔액이 남아 있으면

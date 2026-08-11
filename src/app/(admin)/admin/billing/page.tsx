@@ -15,10 +15,11 @@ export default async function AdminBillingPage() {
     select: { id: true, storeName: true },
   });
   const ids = merchants.map((m) => m.id);
-  const [ar, adj, drafts] = await Promise.all([
+  const [ar, adj, drafts, sd] = await Promise.all([
     prisma.invoice.groupBy({
       by: ["userId"],
-      where: { status: "ISSUED", userId: { in: ids } },
+      // 사다드림(별도 트랙)은 전체 미수에서 제외 — 아래 sd 로 따로 집계.
+      where: { status: "ISSUED", userId: { in: ids }, kind: { not: "SADADREAM" } },
       _sum: { total: true },
     }),
     // 미수 = 발행·미입금 계산서 합 + 관리자 수동조정(ReceivableAdjustment) — receivableOf·입금관리와 동일 기준.
@@ -34,11 +35,20 @@ export default async function AdminBillingPage() {
       select: { userId: true },
       distinct: ["userId"],
     }),
+    // 사다드림 미수(별도 트랙) — 발행(ISSUED) 사다드림 계산서 지점별 합.
+    prisma.invoice.groupBy({
+      by: ["userId"],
+      where: { status: "ISSUED", userId: { in: ids }, kind: "SADADREAM" },
+      _sum: { total: true },
+    }),
   ]);
   const arMap: Record<string, number> = {};
   for (const a of ar) arMap[a.userId] = a._sum.total ?? 0;
   for (const a of adj) arMap[a.userId] = (arMap[a.userId] ?? 0) + (a._sum.amount ?? 0);
   const totalAr = Object.values(arMap).reduce((n, v) => n + v, 0);
+  const sdMap: Record<string, number> = {};
+  for (const a of sd) sdMap[a.userId] = a._sum.total ?? 0;
+  const totalSadadream = Object.values(sdMap).reduce((n, v) => n + v, 0);
   const draftUserIds = new Set(drafts.map((d) => d.userId));
 
   return (
@@ -58,6 +68,12 @@ export default async function AdminBillingPage() {
           <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4, color: "var(--green-700)" }}>
             {won(totalAr)}원
           </div>
+          {totalSadadream > 0 && (
+            <div className="spread" style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+              <span className="row__sub">사다드림 미수</span>
+              <b style={{ color: "#2563eb", fontVariantNumeric: "tabular-nums" }}>{won(totalSadadream)}원</b>
+            </div>
+          )}
         </div>
 
         <div className="itemshead">
@@ -70,6 +86,7 @@ export default async function AdminBillingPage() {
           <div className="list">
             {merchants.map((m) => {
               const bal = arMap[m.id] ?? 0;
+              const sdBal = sdMap[m.id] ?? 0;
               const draft = draftUserIds.has(m.id);
               return (
                 <Link
@@ -81,6 +98,11 @@ export default async function AdminBillingPage() {
                     <div className="row__title">{m.storeName}</div>
                     <div className="row__sub">
                       {bal > 0 ? `미수 ${won(bal)}원` : "미수 없음"}
+                      {sdBal > 0 && (
+                        <span style={{ color: "#2563eb", fontWeight: 700 }}>
+                          {" · "}사다드림 {won(sdBal)}원
+                        </span>
+                      )}
                     </div>
                   </div>
                   {draft ? (

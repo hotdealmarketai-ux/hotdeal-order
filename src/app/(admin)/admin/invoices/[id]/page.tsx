@@ -28,6 +28,14 @@ import { DeleteDraftButton } from "@/components/DeleteDraftButton";
 import { RefundReceipt } from "@/components/RefundReceipt";
 import { RefundVoidButton } from "@/components/RefundVoidButton";
 import { ReviseRefundForm } from "@/components/ReviseRefundForm";
+import { SadadreamReceipt } from "@/components/SadadreamReceipt";
+import { SadadreamInvoiceForm } from "@/components/SadadreamInvoiceForm";
+import { SubmitButton } from "@/components/SubmitButton";
+import {
+  confirmSadadreamPaidAction,
+  unconfirmSadadreamPaidAction,
+  voidSadadreamAction,
+} from "@/app/actions/sadadream";
 import {
   ReviseInvoiceForm,
   type ReviseInitialItem,
@@ -140,6 +148,92 @@ export default async function AdminInvoiceDetail(props: {
                 unitPrice: it.unitPrice,
               }))}
             />
+          )}
+        </div>
+      </>
+    );
+  }
+
+  // 사다드림 계산서 — 별도 트랙. 조회 + 입금확인(낱장 PAID)/취소 + 제자리 수정 + 취소(VOID).
+  if (inv.kind === "SADADREAM") {
+    const items = inv.items.map((it) => ({
+      name: it.name,
+      qty: it.qty,
+      unitPrice: it.unitPrice,
+      amount: it.amount,
+    }));
+    const sdRevisions = (
+      await prisma.invoiceRevision.findMany({
+        where: { invoiceId: inv.id },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, createdAt: true, totalBefore: true, totalAfter: true, changes: true },
+      })
+    ).map((r) => ({ ...r, changes: parseRevisionChanges(r.changes) }));
+    return (
+      <>
+        <Topbar backHref={`/admin/billing/${inv.userId}`} title="사다드림 계산서" />
+        <div className="page">
+          <div
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 }}
+          >
+            <span className="badge badge--wait">
+              사다드림{inv.status === "PAID" ? " · 입금완료" : inv.status === "VOID" ? " · 취소됨" : ""}
+            </span>
+            {inv.status === "ISSUED" && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <form action={confirmSadadreamPaidAction}>
+                  <input type="hidden" name="id" value={inv.id} />
+                  <SubmitButton className="btn btn--xs btn--primary" pendingText="…">입금확인</SubmitButton>
+                </form>
+                <form action={voidSadadreamAction}>
+                  <input type="hidden" name="id" value={inv.id} />
+                  <SubmitButton className="btn btn--xs btn--ghost" pendingText="…">취소</SubmitButton>
+                </form>
+              </div>
+            )}
+            {inv.status === "PAID" && (
+              <form action={unconfirmSadadreamPaidAction}>
+                <input type="hidden" name="id" value={inv.id} />
+                <SubmitButton className="btn btn--xs btn--ghost" pendingText="…">입금확인 취소</SubmitButton>
+              </form>
+            )}
+          </div>
+          <SadadreamReceipt
+            storeName={inv.user.storeName}
+            dateLabel={labelDate(inv.date)}
+            bank={inv.sdBank}
+            holder={inv.sdHolder}
+            account={inv.sdAccount}
+            items={items}
+            paid={inv.status === "PAID"}
+          />
+          {inv.revisedAt && (
+            <p className="hint center" style={{ marginTop: 8 }}>
+              {formatKDateTime(inv.revisedAt)} 수정됨
+            </p>
+          )}
+          <InvoiceRevisionHistory revisions={sdRevisions} />
+          {inv.status === "ISSUED" && (
+            <div style={{ marginTop: 16 }}>
+              <div className="section-label">수정·재발송</div>
+              <SadadreamInvoiceForm
+                userId={inv.userId}
+                storeName={inv.user.storeName}
+                defaultDate={inv.date}
+                initial={{
+                  invoiceId: inv.id,
+                  date: inv.date,
+                  bank: inv.sdBank,
+                  holder: inv.sdHolder,
+                  account: inv.sdAccount,
+                  items: inv.items.map((it) => ({
+                    name: it.name,
+                    qty: it.qty,
+                    unitPrice: it.unitPrice,
+                  })),
+                }}
+              />
+            </div>
           )}
         </div>
       </>

@@ -13,6 +13,11 @@ import { setOrderUnlockAction } from "@/app/actions/deposit";
 import { ReceivableAdjustControl } from "@/components/ReceivableAdjustControl";
 import { DepositUnmatchButton } from "@/components/DepositUnmatchButton";
 import { ReceivableAdjustDeleteButton } from "@/components/ReceivableAdjustDeleteButton";
+import { SubmitButton } from "@/components/SubmitButton";
+import {
+  confirmSadadreamPaidAction,
+  unconfirmSadadreamPaidAction,
+} from "@/app/actions/sadadream";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -58,12 +63,13 @@ export default async function AdminDepositStore(props: {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || user.role !== "MERCHANT_HOTDEAL") notFound();
 
-  const [invoices, deposits, ar, lock, adjustments] = await Promise.all([
+  const [invoices, deposits, ar, lock, adjustments, sadadream] = await Promise.all([
     // 미수(receivableOf)는 종류 무관 ISSUED 계산서 전체를 합산하므로, 입출금 내역도 전 종류
     // (일반 DAILY·주간 WEEKLY·환불 REFUND)를 보여야 잔액이 헤더(총 미수)와 정확히 맞는다.
+    // 단 사다드림(SADADREAM)은 별도 트랙이라 일반 원장/잔액에서 제외하고 아래 별도 섹션으로 뺀다.
     prisma.invoice.findMany({
       // ISSUED(미수 대상) + PAID(레거시 정산분)만. DRAFT(작성 중)는 아직 청구가 아니라 제외.
-      where: { userId, status: { in: ["ISSUED", "PAID"] } },
+      where: { userId, status: { in: ["ISSUED", "PAID"] }, kind: { not: "SADADREAM" } },
       select: {
         id: true,
         date: true,
@@ -95,7 +101,15 @@ export default async function AdminDepositStore(props: {
       orderBy: { createdAt: "desc" },
       select: { id: true, amount: true, memo: true, adminName: true, createdAt: true, depositId: true },
     }),
+    // 사다드림 계산서(별도 트랙) — 발행/입금완료. 입금확인은 여기서 낱장 단위로 따로 처리(우리 계좌 입금 아님).
+    prisma.invoice.findMany({
+      where: { userId, kind: "SADADREAM", status: { in: ["ISSUED", "PAID"] } },
+      orderBy: [{ issuedAt: "desc" }, { createdAt: "desc" }],
+      select: { id: true, date: true, total: true, status: true, sdBank: true, sdHolder: true, sdAccount: true },
+    }),
   ]);
+  const sdIssued = sadadream.filter((s) => s.status === "ISSUED");
+  const sdBalance = sdIssued.reduce((n, s) => n + s.total, 0);
 
   // 수동 조정(내역 표시용)과 입금매칭 조정(입금별 금액 맵)으로 분리.
   const manualAdjustments = adjustments.filter((a) => !a.depositId);
@@ -279,6 +293,62 @@ export default async function AdminDepositStore(props: {
         </div>
 
         <ReceivableAdjustControl userId={userId} currentBalance={ar.balance} />
+
+        {/* 사다드림(별도 트랙) — 우리 계좌 입금이 아니라 낱장 단위로 따로 입금확인. 전체 미수와 무관. */}
+        {sadadream.length > 0 && (
+          <div style={{ marginBottom: 18 }}>
+            <div className="spread section-label">
+              <span>사다드림 미수</span>
+              <b style={{ color: "#2563eb", fontVariantNumeric: "tabular-nums" }}>
+                {fmt(sdBalance)}원
+              </b>
+            </div>
+            <div className="list">
+              {sadadream.map((s) => {
+                const acct = [s.sdBank, s.sdHolder, s.sdAccount].filter(Boolean).join(" ");
+                return (
+                  <div className="row" key={`sd-${s.id}`}>
+                    <div className="row__main">
+                      <Link
+                        href={`/admin/invoices/${s.id}`}
+                        className="row__title"
+                        style={{ textDecoration: "none" }}
+                      >
+                        사다드림 · {fmt(s.total)}원
+                        {s.status === "PAID" && (
+                          <span className="badge badge--ok" style={{ marginLeft: 8 }}>
+                            입금완료
+                          </span>
+                        )}
+                      </Link>
+                      <div className="row__sub">
+                        {labelDate(s.date)}
+                        {acct ? ` · ${acct}` : ""}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      {s.status === "ISSUED" ? (
+                        <form action={confirmSadadreamPaidAction}>
+                          <input type="hidden" name="id" value={s.id} />
+                          <SubmitButton className="btn btn--xs btn--primary" pendingText="…">
+                            입금확인
+                          </SubmitButton>
+                        </form>
+                      ) : (
+                        <form action={unconfirmSadadreamPaidAction}>
+                          <input type="hidden" name="id" value={s.id} />
+                          <SubmitButton className="btn btn--xs btn--ghost" pendingText="…">
+                            입금확인 취소
+                          </SubmitButton>
+                        </form>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         <div className="section-label">입출금 내역</div>
         <form method="get" style={{ marginBottom: 12 }}>

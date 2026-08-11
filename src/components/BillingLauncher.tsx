@@ -42,6 +42,15 @@ export function BillingLauncher({ userId }: { userId: string }) {
             환불계산서 발행
           </button>
         </div>
+        {/* 사다드림 계산서 — 우리 계좌가 아닌 개인/개인업체 결제. 전체 미수와 분리된 '사다드림 미수' 별도 트랙. */}
+        <button
+          type="button"
+          className="btn btn--soft btn--block"
+          style={{ marginTop: 8 }}
+          onClick={() => router.push(`/admin/billing/${userId}/sadadream`)}
+        >
+          사다드림 발행
+        </button>
       </div>
     </div>
   );

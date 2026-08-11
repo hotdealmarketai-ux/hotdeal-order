@@ -31,7 +31,8 @@ export default async function BillingByDatePage(props: {
   const date = normalizeDateStr(dateParam);
 
   const invoices = await prisma.invoice.findMany({
-    where: { date, status: { not: "VOID" } },
+    // 사다드림(별도 트랙)은 우리 계좌 청구가 아니라 이 '날짜별 발행 합계'에서 제외.
+    where: { date, status: { not: "VOID" }, kind: { not: "SADADREAM" } },
     select: {
       status: true,
       total: true,

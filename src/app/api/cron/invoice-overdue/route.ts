@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   const [billed, adj] = await Promise.all([
     prisma.invoice.groupBy({
       by: ["userId"],
-      where: { userId: { in: userIds }, status: "ISSUED" },
+      where: { userId: { in: userIds }, status: "ISSUED", kind: { not: "SADADREAM" } },
       _sum: { total: true },
     }),
     prisma.receivableAdjustment.groupBy({
