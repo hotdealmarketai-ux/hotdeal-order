@@ -27,6 +27,12 @@ export function OrderShipmentDiffView({ data }: { data: OrderShipmentDiff }) {
             {data.totalMismatch > 0 ? `튄 품목 ${data.totalMismatch}` : "이상 없음"}
           </b>
         </div>
+        {data.totalMismatch > 0 && (
+          <div className="row__sub" style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--line)", lineHeight: 1.6 }}>
+            <b style={{ color: "var(--danger)" }}>부족</b> = 발주보다 출고 완료가 적음(발주했는데 안 나감) ·{" "}
+            <b style={{ color: "#2563eb" }}>초과</b> = 발주보다 출고 완료가 많음(발주보다 더 나감)
+          </div>
+        )}
       </div>
 
       <div className="modetoggle" style={{ justifyContent: "flex-start", gap: 8 }}>
@@ -89,15 +95,15 @@ function CatTable({ label, rows }: { label: string; rows: DiffRow[] }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <div className="section-label">{label}</div>
-      <div className="rectable rectable--record2">
+      <div className="rectable">
         <div className="rectable__head">
           <span className="rectable__name">품목</span>
-          <span className="rectable__num">발주</span>
-          <span className="rectable__num">계산서</span>
+          <span className="rectable__num">실제 발주</span>
+          <span className="rectable__num">출고 완료</span>
           <span className="rectable__num">차이</span>
         </div>
         {rows.map((r) => {
-          const short = r.diff > 0; // 발주 > 계산서 = 출고 안 됨/부족(빨강)
+          const short = r.diff > 0; // 실제 발주 > 출고 완료 = 출고 부족(빨강)
           return (
             <div className="rectable__row" key={r.name}>
               <span className="rectable__name">{r.name}</span>
@@ -110,8 +116,8 @@ function CatTable({ label, rows }: { label: string; rows: DiffRow[] }) {
                   fontWeight: 700,
                 }}
               >
-                {short ? "+" : ""}
-                {fmt(r.diff)}
+                {short ? "부족 " : "초과 "}
+                {fmt(Math.abs(r.diff))}
               </span>
             </div>
           );
