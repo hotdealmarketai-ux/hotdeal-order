@@ -108,12 +108,20 @@ export default async function MerchantInvoiceDetailPage({
             <h1 className="h1" style={{ margin: 0 }}>
               사다드림 계산서
             </h1>
-            <span className="badge badge--wait">사다드림</span>
+            <span className={`badge ${inv.status === "VOID" ? "badge--mute" : "badge--wait"}`}>
+              {inv.status === "VOID" ? "취소됨" : "사다드림"}
+            </span>
           </div>
-          {inv.revisedAt && inv.status !== "VOID" && (
-            <div className="notice notice--ai" style={{ margin: "10px 0" }}>
-              이 사다드림 계산서는 {formatKDateTime(inv.revisedAt)}에 수정되었어요. 아래 내용이 최신이에요.
+          {inv.status === "VOID" ? (
+            <div className="notice notice--mute" style={{ margin: "10px 0" }}>
+              취소된 사다드림 계산서입니다. 입금하지 마세요.
             </div>
+          ) : (
+            inv.revisedAt && (
+              <div className="notice notice--ai" style={{ margin: "10px 0" }}>
+                이 사다드림 계산서는 {formatKDateTime(inv.revisedAt)}에 수정되었어요. 아래 내용이 최신이에요.
+              </div>
+            )
           )}
           <SadadreamReceipt
             storeName={user.storeName}

@@ -523,11 +523,14 @@ export async function loadInvoiceToolItemsAction(
       where: { deletedAt: null },
       select: { id: true, name: true, supplyPrice: true },
     }),
-    // ③ 이미 '다른' 계산서(취소 제외, 이 계산서 자신 제외)에 청구된 같은 카테고리 공구 — 델타만 불러오려고 뺀다.
+    // ③ 이미 '다른' 계산서(취소 제외, 이 계산서 자신 제외)에 청구된 같은 소스 품목 — 델타만 불러오려고 뺀다.
     //    → 같은 날 추가 발주분(담기 총량 증가)만 새 계산서에 담기고, 같은 걸 또 불러와도 0이라 이중차감이 안 난다.
+    //    ※ 공구(TOOL)는 사다드림(SADADREAM)과 같은 발주 소스(담기·예약)를 공유한다 — 한 제품은 공구 계산서 '또는'
+    //      사다드림 계산서 중 한 쪽으로만 나가야 하므로, TOOL 로드의 '이미 청구' 집합에 SADADREAM 발행분도 함께 센다.
+    //      (안 그러면 사다드림 먼저 발행→공구 불러오기 시 같은 품목이 일반 미수로, 또는 사다드림 재로드 시 이중청구된다.)
     prisma.invoiceItem.findMany({
       where: {
-        category,
+        category: category === "TOOL" ? { in: ["TOOL", "SADADREAM"] } : category,
         invoice: {
           userId,
           date: shipmentDate,

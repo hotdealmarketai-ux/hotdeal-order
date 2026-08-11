@@ -49,7 +49,8 @@ export default async function DayReceiptPage(props: {
       orderBy: { createdAt: "asc" },
     }),
     prisma.invoice.findFirst({
-      where: { userId: user.id, date, status: { in: ["ISSUED", "PAID"] } },
+      // 이 날짜의 일반 입금요청서만(사다드림 등 별도 트랙 제외) — 현재 뷰는 비활성이나 재활성 대비 방어.
+      where: { userId: user.id, date, kind: "DAILY", status: { in: ["ISSUED", "PAID"] } },
       include: { items: { orderBy: { sortOrder: "asc" } } },
     }),
   ]);

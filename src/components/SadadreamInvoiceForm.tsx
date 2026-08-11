@@ -128,6 +128,7 @@ export function SadadreamInvoiceForm({
   const submit = () => {
     setErr("");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return setErr("날짜를 확인하세요.");
+    if (!bank.trim() || !account.trim()) return setErr("입금계좌(은행·계좌번호)를 입력하세요.");
     const items = rows
       .filter(isFilled)
       .map((r) => ({

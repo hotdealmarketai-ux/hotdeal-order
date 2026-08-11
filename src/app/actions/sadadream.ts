@@ -73,6 +73,8 @@ export async function issueSadadreamInvoiceAction(
   if (items.length === 0) return { error: "품목을 한 개 이상 입력하세요." };
   if (gross <= 0) return { error: "금액이 0보다 커야 해요." };
   const acct = readAccount(formData);
+  // 사다드림은 개인/개인업체 계좌로 결제받는 계산서라 입금계좌가 없으면 '결제 불가' 계산서가 된다 → 필수.
+  if (!acct.sdBank || !acct.sdAccount) return { error: "입금계좌(은행·계좌번호)를 입력하세요." };
 
   const created = await prisma.invoice.create({
     data: {
@@ -147,6 +149,7 @@ export async function reviseSadadreamInvoiceAction(
   if (items.length === 0) return { error: "품목을 한 개 이상 입력하세요." };
   if (gross <= 0) return { error: "금액이 0보다 커야 해요." };
   const acct = readAccount(formData);
+  if (!acct.sdBank || !acct.sdAccount) return { error: "입금계좌(은행·계좌번호)를 입력하세요." };
 
   try {
     await prisma.$transaction(async (tx) => {
