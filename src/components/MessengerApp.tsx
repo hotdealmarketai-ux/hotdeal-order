@@ -126,8 +126,9 @@ export function MessengerApp({
       const res = await loadMessengerChannelAction(active);
       setMessages(res.messages);
       scrollDown();
-    } catch {
-      setErr("첨부 전송에 실패했어요.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      setErr(msg ? `첨부 실패: ${msg}` : "첨부 전송에 실패했어요. 저장소 설정을 확인해 주세요.");
     } finally {
       setUploading(false);
     }
