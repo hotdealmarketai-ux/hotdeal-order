@@ -5,6 +5,7 @@ import {
   issueSadadreamInvoiceAction,
   reviseSadadreamInvoiceAction,
 } from "@/app/actions/sadadream";
+import { loadInvoiceToolItemsAction } from "@/app/actions/invoice";
 import { MoneyInput } from "./MoneyInput";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -90,6 +91,40 @@ export function SadadreamInvoiceForm({
     });
   };
 
+  // 본사출고 불러오기 — 그 출고일(발행 일자) 공구 불러오기와 '똑같이' 품목을 폼에 채운다(값 변경·부작용 없음).
+  // 담기 발주 + 확정 예약분(사다드림 제품 포함)을 이름·수량·공급가로 가져오고, 이미 DAILY 계산서에 청구된
+  // 공구는 자동 제외된다. 불러온 뒤 필요 없는(공구) 품목을 지우고 사다드림 품목만 남겨 발행하면 된다.
+  const [loading, setLoading] = useState(false);
+  const [loadMsg, setLoadMsg] = useState("");
+  const load = () => {
+    setLoadMsg("");
+    setErr("");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      setLoadMsg("발행 일자를 먼저 확인하세요.");
+      return;
+    }
+    if (rows.some(isFilled) && !confirm("지금 입력한 품목을 불러온 내용으로 바꿀까요?")) return;
+    setLoading(true);
+    loadInvoiceToolItemsAction(userId, date, "TOOL")
+      .then((res) => {
+        if (!res.items.length) {
+          setLoadMsg("그 출고일에 불러올 본사출고 품목이 없어요.");
+          return;
+        }
+        const next: Row[] = res.items.map((it) => ({
+          id: ++uid.current,
+          name: it.name,
+          qty: it.qty,
+          unitPrice: it.unitPrice,
+        }));
+        next.push({ id: ++uid.current, name: "", qty: "", unitPrice: "" });
+        setRows(next);
+        setLoadMsg(`${res.items.length}개 품목을 불러왔어요. 사다드림 품목만 남기고 발행하세요.`);
+      })
+      .catch(() => setLoadMsg("불러오기에 실패했어요. 잠시 후 다시 시도해 주세요."))
+      .finally(() => setLoading(false));
+  };
+
   const submit = () => {
     setErr("");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return setErr("날짜를 확인하세요.");
@@ -171,9 +206,24 @@ export function SadadreamInvoiceForm({
         style={{ marginBottom: 12 }}
       />
 
-      <div className="section-label" style={{ marginBottom: 6 }}>
-        품목
+      <div className="spread" style={{ marginBottom: 6, alignItems: "center" }}>
+        <span className="section-label" style={{ margin: 0 }}>
+          품목
+        </span>
+        <button
+          type="button"
+          className="btn btn--soft btn--sm"
+          onClick={load}
+          disabled={loading}
+        >
+          {loading ? "불러오는 중…" : "본사출고 불러오기"}
+        </button>
       </div>
+      {loadMsg && (
+        <div className="notice notice--ai" style={{ marginBottom: 8 }}>
+          {loadMsg}
+        </div>
+      )}
       <div className="rfrow rfrow--head">
         <span>품목</span>
         <span>수량</span>
