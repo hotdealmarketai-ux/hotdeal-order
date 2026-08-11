@@ -205,6 +205,16 @@ export default async function MyPage(props: {
           </span>
         </Link>
 
+        {/* 입출금내역 — 청구·입금·조정 통장식 내역(조회 전용) */}
+        <Link
+          href="/transactions"
+          className="card"
+          style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}
+        >
+          <span style={{ fontWeight: 700 }}>입출금내역</span>
+          <span className="row__sub">청구·입금 내역 보기 ›</span>
+        </Link>
+
         {sdBal > 0 && (
           <Link
             href="/invoices"
