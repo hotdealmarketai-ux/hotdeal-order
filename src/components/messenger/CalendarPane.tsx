@@ -134,9 +134,10 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
             >
               <span className={`mcal__num${dow === 0 ? " sun" : ""}${dow === 6 ? " sat" : ""}`}>{d}</span>
               <span className="mcal__marks">
-                {es.slice(0, 3).map((e) => (
+                {es.slice(0, 5).map((e) => (
                   <span key={e.id} className="mcal__ev" title={e.title}>{e.title}</span>
                 ))}
+                {es.length > 5 && <span className="mcal__more">+{es.length - 5}</span>}
                 {ts.length > 0 && <span className="mcal__task">할일 {ts.length}</span>}
               </span>
             </button>
