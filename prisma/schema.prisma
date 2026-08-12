@@ -892,6 +892,18 @@ model MessengerMention {
   @@index([messageId])
 }
 
+// 메신저 웹푸시 구독 — 멤버 단위(핫딜오더 User가 아님, 전원 공용 saerop로 1차 로그인). endpoint=기기.
+model MessengerPushSubscription {
+  id        String   @id @default(cuid())
+  memberId  String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([memberId])
+}
+
 // 메시지 공감(체크) — 카톡 공감처럼 멤버가 메시지에 ✓ 반응(멤버당 1개, 누가 눌렀는지 표시).
 model MessengerReaction {
   id        String   @id @default(cuid())

@@ -2,9 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { kstDateOf } from "@/lib/date";
+import {
+  notifyMessengerMessage,
+  notifyMessengerTaskAssigned,
+  notifyMessengerTaskDone,
+  notifyMessengerNotice,
+} from "@/lib/messenger-push";
 import {
   setMessengerMemberCookie,
   clearMessengerMemberCookie,
@@ -39,6 +46,31 @@ export async function messengerLogoutAction(): Promise<void> {
   await requireAdmin();
   await clearMessengerMemberCookie();
   redirect("/messenger");
+}
+
+// ── 웹푸시 구독(멤버 단위) ──────────────────────────────────
+// 브라우저 구독을 현재 2차 로그인 멤버에게 귀속(endpoint 유니크 → 소유자 갱신).
+// 같은 기기서 멤버 전환 시 마지막 로그인 멤버에게 알림이 가도록(핫딜오더 User 푸시와 별개 테이블).
+export async function saveMessengerPushSubscriptionAction(sub: {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !sub?.endpoint || !sub.p256dh || !sub.auth) return { ok: false };
+  await prisma.messengerPushSubscription.upsert({
+    where: { endpoint: sub.endpoint },
+    update: { memberId: me.id, p256dh: sub.p256dh, auth: sub.auth },
+    create: { memberId: me.id, endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth },
+  });
+  return { ok: true };
+}
+
+export async function removeMessengerPushSubscriptionAction(endpoint: string): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  if (endpoint) await prisma.messengerPushSubscription.deleteMany({ where: { endpoint } });
+  return { ok: true };
 }
 
 // ── 메시지 ─────────────────────────────────────────────────
@@ -77,13 +109,20 @@ export async function sendMessengerMessageAction(
   });
 
   // @멘션 파싱 — 본문에 "@이름"이 있으면 그 멤버를 언급으로 기록(본인 제외). 홈 멘션 토픽용.
+  // 단어 경계로 매칭: '@민수'가 이름 '민'을 오탐하지 않게(뒤에 한글/영숫자/밑줄이 오면 매칭 안 함).
+  let mentionedIds: string[] = [];
   if (body.includes("@")) {
     const members = await prisma.messengerMember.findMany({ where: { active: true }, select: { id: true, name: true } });
     const preview = (body || "사진").slice(0, 140);
-    const mentions = members
-      .filter((m) => m.id !== me.id && body.includes(`@${m.name}`))
-      .map((m) => ({ channelId, messageId: msg.id, mentionedMemberId: m.id, byMemberId: me.id, preview }));
-    if (mentions.length) await prisma.messengerMention.createMany({ data: mentions });
+    const escapeRx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const hit = members.filter(
+      (m) => m.id !== me.id && m.name && new RegExp(`@${escapeRx(m.name)}(?![0-9A-Za-z가-힣_])`).test(body),
+    );
+    mentionedIds = hit.map((m) => m.id);
+    if (hit.length)
+      await prisma.messengerMention.createMany({
+        data: hit.map((m) => ({ channelId, messageId: msg.id, mentionedMemberId: m.id, byMemberId: me.id, preview })),
+      });
   }
 
   // 보낸 사람은 그 채널을 방금 읽은 것으로.
@@ -92,6 +131,19 @@ export async function sendMessengerMessageAction(
     create: { memberId: me.id, channelId, lastReadAt: new Date() },
     update: { lastReadAt: new Date() },
   });
+
+  // 웹푸시 — 발신자 제외 전원에게 '누가·무엇을'(멘션 대상만 언급 문구). 응답 막지 않게 after()로.
+  after(() =>
+    notifyMessengerMessage({
+      senderId: me.id,
+      senderName: me.name,
+      channelId,
+      text: body,
+      mediaKind: fileUrl ? "file" : mediaUrl || mediaUrls.length ? "image" : null,
+      mentionedIds,
+    }).catch(() => {}),
+  );
+
   revalidatePath("/messenger");
   return {};
 }
@@ -223,11 +275,23 @@ export async function toggleMessengerNoticeAction(messageId: string, on: boolean
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me || !messageId) return;
-  const msg = await prisma.messengerMessage.findUnique({ where: { id: messageId }, select: { channelId: true } });
+  const msg = await prisma.messengerMessage.findUnique({
+    where: { id: messageId },
+    select: { channelId: true, body: true, noticeAt: true, channel: { select: { name: true } } },
+  });
   if (!msg) return;
   if (on) {
+    const wasNotice = !!msg.noticeAt;
     await prisma.messengerMessage.updateMany({ where: { channelId: msg.channelId, noticeAt: { not: null } }, data: { noticeAt: null } });
-    await prisma.messengerMessage.update({ where: { id: messageId }, data: { noticeAt: new Date() } }).catch(() => {});
+    const ok = await prisma.messengerMessage
+      .update({ where: { id: messageId }, data: { noticeAt: new Date() } })
+      .then(() => true)
+      .catch(() => false);
+    // 실제로 공지가 새로 설정됐을 때만 전체 브로드캐스트(업데이트 실패·이미 공지였던 경우 제외).
+    if (ok && !wasNotice)
+      after(() =>
+        notifyMessengerNotice({ actorId: me.id, channelId: msg.channelId, channelName: msg.channel?.name ?? "", text: msg.body }).catch(() => {}),
+      );
   } else {
     await prisma.messengerMessage.update({ where: { id: messageId }, data: { noticeAt: null } }).catch(() => {});
   }
@@ -711,6 +775,8 @@ export async function addMessengerTaskAction(formData: FormData): Promise<{ erro
       });
     }
   }
+  // 배정받은 사람(또는 팀 전체)에게 웹푸시.
+  after(() => notifyMessengerTaskAssigned({ creatorId: me.id, creatorName: me.name, title, toAll, assigneeIds }).catch(() => {}));
   revalidatePath("/messenger");
   return {};
 }
@@ -719,12 +785,27 @@ export async function toggleMessengerTaskAction(id: string): Promise<void> {
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me || !id) return;
-  const t = await prisma.messengerTask.findUnique({ where: { id }, select: { done: true } });
-  if (!t) return;
-  await prisma.messengerTask.update({
+  const t = await prisma.messengerTask.findUnique({
     where: { id },
-    data: { done: !t.done, doneAt: !t.done ? new Date() : null },
+    select: { done: true, title: true, createdById: true, toAll: true, assigneeIds: true, assigneeId: true },
   });
+  if (!t) return;
+  const newDone = !t.done;
+  await prisma.messengerTask.update({ where: { id }, data: { done: newDone, doneAt: newDone ? new Date() : null } });
+  // 완료로 바뀔 때만 — 등록자·공동 배정자에게(완료한 본인 제외) 웹푸시.
+  if (newDone) {
+    const assignees = t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [];
+    after(() =>
+      notifyMessengerTaskDone({
+        doneById: me.id,
+        doneByName: me.name,
+        title: t.title,
+        createdById: t.createdById,
+        toAll: t.toAll,
+        assigneeIds: assignees,
+      }).catch(() => {}),
+    );
+  }
 }
 
 export async function updateMessengerTaskAction(formData: FormData): Promise<{ error?: string }> {

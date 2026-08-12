@@ -109,6 +109,8 @@ export async function GET(request: Request) {
     await timed("tick:deadline", 20, 0, [1, 2, 3, 4, 5, 0], "/api/cron/notify?type=deadline", 30);
     await timed("tick:chaeumchae", 20, 5, [1, 2, 3, 4, 5, 0], "/api/cron/submit-chaeumchae", 180);
     await timed("tick:overdue", 10, 0, [0, 1, 2, 3, 4, 5, 6], "/api/cron/invoice-overdue?days=1", 720);
+    // 사내 메신저 — 오늘 캘린더 일정 아침 알림(08:00 KST 매일).
+    await timed("tick:messenger-agenda", 8, 0, [0, 1, 2, 3, 4, 5, 6], "/api/cron/messenger-agenda", 720);
     await timed("tick:wh-stock", 10, 0, [0, 1, 2, 3, 4, 5, 6], "/api/cron/warehouse-stock-sync", 720);
 
     // 주간발주 — 토요일(dow 6)만: 12시 오픈 / 19시 마감1h전 / 20시 마감. 미입금 안내는 금요일(dow 5) 10시.

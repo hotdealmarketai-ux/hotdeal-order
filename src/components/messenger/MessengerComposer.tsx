@@ -27,17 +27,29 @@ export function MessengerComposer({
   const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const docRef = useRef<HTMLInputElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const activeMembers = useMemo(() => members.filter((m) => m.active), [members]);
+
+  // 여러 줄 입력 자동 높이(줄바꿈 시 늘어나고, 일정 높이에서 스크롤).
+  const grow = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  };
+  const resetHeight = () => {
+    if (inputRef.current) inputRef.current.style.height = "auto";
+  };
 
   // 답장 시작 시 입력창 포커스(꾹 눌러 '댓글' 후 바로 타이핑).
   useEffect(() => {
     if (replyTo) inputRef.current?.focus();
   }, [replyTo]);
 
-  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const v = e.target.value;
     setInput(v);
+    grow();
     const caret = e.target.selectionStart ?? v.length;
     const upto = v.slice(0, caret);
     const at = upto.lastIndexOf("@");
@@ -61,6 +73,7 @@ export function MessengerComposer({
       const pos = (before + `@${name} `).length;
       inputRef.current?.focus();
       inputRef.current?.setSelectionRange(pos, pos);
+      grow();
     });
   };
   const list = mention
@@ -73,6 +86,7 @@ export function MessengerComposer({
     onSend(t);
     setInput("");
     setMention(null);
+    resetHeight();
   };
   const onPhotoInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -115,18 +129,23 @@ export function MessengerComposer({
         <button type="button" className="msgr__attach msgr__attach--file" onClick={() => docRef.current?.click()} disabled={uploading} aria-label="파일 첨부">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9 12.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
-        <input
+        <textarea
           ref={inputRef}
+          rows={1}
           className="input msgr__input"
           value={input}
           onChange={onChange}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (mention && list.length > 0) pick(list[0].name);
-              else submit();
-            }
-            if (e.key === "Escape") setMention(null);
+            if (e.key === "Escape") { setMention(null); return; }
+            if (e.key !== "Enter") return;
+            // 한글 등 IME 조합 확정 Enter는 무시(오발송 방지).
+            if (e.nativeEvent.isComposing) return;
+            // 데스크톱: Enter=전송, Shift+Enter=줄바꿈. 모바일(터치)·Shift+Enter는 기본 줄바꿈 허용.
+            const coarse = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
+            if (coarse || e.shiftKey) return;
+            e.preventDefault();
+            if (mention && list.length > 0) pick(list[0].name);
+            else submit();
           }}
           placeholder=""
         />

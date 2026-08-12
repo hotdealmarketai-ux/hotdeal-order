@@ -1,17 +1,23 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { syncPushSubscriptionAction } from "@/app/actions/push";
 
 // S1 같은 브라우저에서 여러 계정(관리자·가맹점주)을 오갈 때, 브라우저의 푸시 구독이 '이전 로그인 유저'에
 // 묶여 남는 문제를 막는다. 페이지 로드마다 현재 로그인 유저에게 구독을 재귀속(endpoint 유니크 → 소유자 갱신).
 // → 지금 로그인한 유저의 알림만 이 기기로 온다.
+// ⚠ /messenger 에서는 절대 실행 안 함 — 메신저는 별도 SW 스코프(/messenger)로 자체 구독을 관리하고,
+//   전원이 공용 saerop로 1차 로그인하므로, 여기서 메신저 엔드포인트를 saerop User에 귀속하면
+//   지점 발주·입금·고객문의 푸시가 메신저 직원 기기로 새어 나간다.
 export function PushSubscriptionSync() {
+  const pathname = usePathname();
   useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    if (pathname?.startsWith("/messenger")) return;
     (async () => {
       try {
-        const reg = await navigator.serviceWorker.getRegistration();
+        const reg = await navigator.serviceWorker.getRegistration("/");
         const sub = await reg?.pushManager.getSubscription();
         if (!sub) return;
         const json = sub.toJSON();
@@ -24,6 +30,6 @@ export function PushSubscriptionSync() {
         // 비로그인/미지원 등은 조용히 무시
       }
     })();
-  }, []);
+  }, [pathname]);
   return null;
 }

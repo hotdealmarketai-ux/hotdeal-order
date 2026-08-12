@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { messengerUnreadAction, messengerLogoutAction, toggleMessengerFavoriteAction } from "@/app/actions/messenger";
-import { SubmitButton } from "@/components/SubmitButton";
+import { messengerUnreadAction, toggleMessengerFavoriteAction } from "@/app/actions/messenger";
+import { MessengerLogoutButton } from "@/components/messenger/MessengerLogoutButton";
 import { ChatPane, type ChatTool } from "@/components/messenger/ChatPane";
 import { TasksPane } from "@/components/messenger/TasksPane";
 import { MyTasksPane } from "@/components/messenger/MyTasksPane";
 import { CalendarPane } from "@/components/messenger/CalendarPane";
 import { AddTaskButton } from "@/components/messenger/AddTaskButton";
+import { MessengerPushBanner } from "@/components/messenger/MessengerPushBanner";
 
 type Channel = { id: string; name: string; favorite: boolean; groupId: string | null };
 type Group = { id: string; name: string };
@@ -49,6 +50,22 @@ export function MessengerWorkspace({
     const t = setInterval(run, 5000);
     return () => { alive = false; clearInterval(t); };
   }, [view, active]);
+
+  // 푸시 알림 클릭 딥링크(?ch=채널 / ?view=mytasks) 처리 후 URL 정리.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const ch = sp.get("ch");
+    const v = sp.get("view");
+    if (ch && channels.some((c) => c.id === ch)) {
+      setActive(ch);
+      setView("chat");
+    } else if (v === "mytasks") {
+      setView("mytasks");
+    }
+    if (ch || v) window.history.replaceState({}, "", "/messenger");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pick = (v: View, ch?: string) => {
     setView(v);
@@ -175,9 +192,7 @@ export function MessengerWorkspace({
 
         <div className="mw__sidefoot">
           <Link href="/messenger/manage" className="mw__foota">관리</Link>
-          <form action={messengerLogoutAction}>
-            <SubmitButton className="mw__foota mw__foota--btn" pendingText="…">로그아웃</SubmitButton>
-          </form>
+          <MessengerLogoutButton className="mw__foota mw__foota--btn" />
         </div>
       </aside>
 
@@ -209,6 +224,7 @@ export function MessengerWorkspace({
             </div>
           )}
         </header>
+        <MessengerPushBanner />
         <div className="mw__content">
           {view === "chat" ? (
             active ? (
