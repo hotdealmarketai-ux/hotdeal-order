@@ -51,7 +51,7 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
     const cur = tasks.find((t) => t.id === id);
     if (!cur || !cur.canComplete) return;
     const on = !cur.done;
-    if (on && !confirm("정말 완료했습니까?")) return; // 완료로 체크할 때만 재확인
+    if (!confirm(on ? "정말 완료했습니까?" : "완료 체크를 해제하시겠습니까?")) return; // 체크/해제 모두 재확인
     setTasks((ts) =>
       ts.map((t) => {
         if (t.id !== id) return t;
