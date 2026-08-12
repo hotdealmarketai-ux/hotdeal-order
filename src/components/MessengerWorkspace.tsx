@@ -104,7 +104,7 @@ export function MessengerWorkspace({
       </aside>
 
       <main className="mw__main">
-        <header className="mw__top">
+        <header className={`mw__top${view === "home" ? " mw__top--home" : ""}`}>
           <button type="button" className="mw__ham" onClick={() => setSideOpen(true)} aria-label="메뉴 열기">☰</button>
           <div className="mw__toptitle">{topTitle}</div>
         </header>

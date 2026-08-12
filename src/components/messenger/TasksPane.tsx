@@ -17,7 +17,6 @@ export function TasksPane({ me, members }: { me: { id: string; name: string }; m
   const [title, setTitle] = useState("");
   const [target, setTarget] = useState("ALL"); // "ALL" | 멤버 id
   const [err, setErr] = useState("");
-  const [showDone, setShowDone] = useState(false);
   const [pending, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
@@ -116,17 +115,14 @@ export function TasksPane({ me, members }: { me: { id: string; name: string }; m
         </div>
 
         <div className="home__list">
-          {open.length === 0 ? (
+          {open.length === 0 && done.length === 0 && (
             <div className="home__empty">할 일이 없어요. 새 할 일을 추가해 보세요.</div>
-          ) : (
-            open.map(Card)
           )}
+          {open.map(Card)}
           {done.length > 0 && (
             <>
-              <button type="button" className="home__donehead" onClick={() => setShowDone((v) => !v)}>
-                {showDone ? "▾" : "▸"} 완료 {done.length}
-              </button>
-              {showDone && done.map(Card)}
+              <div className="home__donelabel">완료 {done.length}</div>
+              {done.map(Card)}
             </>
           )}
         </div>
