@@ -56,3 +56,4 @@ _*.cjs
 _copy-data.json
 _extract-copy.mjs
 문구수정목록.xlsx
+.env*.local
