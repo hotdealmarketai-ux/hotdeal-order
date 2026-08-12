@@ -868,3 +868,30 @@ model MessengerRead {
 
   @@unique([memberId, channelId])
 }
+
+// 사내 메신저 할일(팀 전체 공용). createdById/assigneeId 는 MessengerMember.id(관계 없이 문자열 — 삭제 내구성).
+model MessengerTask {
+  id          String    @id @default(cuid())
+  title       String
+  done        Boolean   @default(false)
+  assigneeId  String? // 담당자 멤버 id(선택)
+  dueDate     DateTime? // 마감일(KST 자정 기준 저장)
+  createdById String // 만든 멤버 id
+  createdAt   DateTime  @default(now())
+  doneAt      DateTime?
+
+  @@index([done, createdAt])
+  @@index([dueDate])
+}
+
+// 사내 메신저 팀 캘린더 일정(팀 전체 공용). date = 해당 일자(KST 자정 기준 저장).
+model MessengerEvent {
+  id          String   @id @default(cuid())
+  title       String
+  date        DateTime
+  memo        String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([date])
+}

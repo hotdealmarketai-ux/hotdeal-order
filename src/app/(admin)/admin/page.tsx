@@ -115,7 +115,7 @@ export default async function AdminHome() {
     {
       label: "회원 · 시스템",
       items: [
-        { href: "/admin/messenger", title: "사내 메신저" },
+        { href: "/messenger", title: "사내 메신저" },
         { href: "/admin/approvals", title: "가입 대기", badge: pending > 0 ? pending : undefined },
         { href: "/admin/members", title: "회원 관리" },
         { href: "/admin/onboarding", title: "튜토리얼" },

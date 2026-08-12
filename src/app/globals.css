@@ -5927,3 +5927,155 @@ a.resv-card:active { transform: scale(0.995); }
 .lb__bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2; display: flex; justify-content: flex-end; gap: 8px; padding: max(10px, env(safe-area-inset-top)) 12px 10px; }
 .lb__btn { width: 42px; height: 42px; border-radius: 999px; border: 0; background: rgba(255,255,255,0.14); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .lb__btn:active { background: rgba(255,255,255,0.28); }
+
+/* ============================================================
+   사내 메신저 워크스페이스 — 핫딜오더와 완전 분리된 슬랙/노션식 셸
+   ============================================================ */
+.mw-root { font-family: inherit; }
+
+/* 2차 로그인 게이트 */
+.mw-gate { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: radial-gradient(1200px 600px at 50% -10%, #1c4a2f 0%, #123c26 45%, #0e2e1d 100%); }
+.mw-gate__card { width: 100%; max-width: 380px; background: #fff; border-radius: 20px; padding: 26px 22px 20px; box-shadow: 0 24px 60px rgba(0,0,0,0.35); }
+.mw-gate__brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.mw-gate__logo { width: 44px; height: 44px; border-radius: 13px; background: var(--green-700); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; }
+.mw-gate__title { font-size: 18px; font-weight: 900; color: var(--fg); }
+.mw-gate__sub { font-size: 13px; color: var(--muted); font-weight: 700; }
+.mw-gate__empty { text-align: center; color: var(--muted); display: grid; gap: 12px; padding: 10px 0; }
+.mw-gate__foot { display: flex; justify-content: space-between; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.mw-gate__link { font-size: 13px; color: var(--muted); font-weight: 700; text-decoration: none; }
+.mw-gate__link:hover { color: var(--green-700); }
+
+/* 셸 레이아웃 */
+.mw { position: fixed; inset: 0; z-index: 100; display: flex; background: var(--surface-2); color: var(--fg); overflow: hidden; }
+.mw__backdrop { display: none; }
+
+/* 사이드바(브랜드 녹색) */
+.mw__side { flex: 0 0 264px; width: 264px; background: #123c26; color: #dce8de; display: flex; flex-direction: column; min-height: 0; }
+.mw__brandrow { display: flex; align-items: center; gap: 11px; padding: 16px 16px 12px; }
+.mw__logo { width: 38px; height: 38px; border-radius: 11px; background: rgba(255,255,255,0.14); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 16px; flex: 0 0 auto; }
+.mw__brandname { font-size: 15.5px; font-weight: 900; color: #fff; line-height: 1.2; }
+.mw__brandsub { font-size: 12px; color: rgba(255,255,255,0.6); font-weight: 700; }
+.mw__back { display: block; margin: 0 12px 10px; padding: 8px 10px; border-radius: 9px; font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.72); text-decoration: none; background: rgba(255,255,255,0.06); }
+.mw__back:hover { background: rgba(255,255,255,0.12); color: #fff; }
+.mw__mecard { display: flex; align-items: center; gap: 9px; margin: 0 12px 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.06); }
+.mw__ava { width: 26px; height: 26px; border-radius: 8px; background: var(--green-100); color: var(--green-800); display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; }
+.mw__mename { font-size: 14px; font-weight: 800; color: #fff; }
+.mw__nav { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 8px 12px; }
+.mw__navsec { font-size: 11px; font-weight: 800; letter-spacing: 0.03em; color: rgba(255,255,255,0.45); padding: 6px 8px 4px; text-transform: uppercase; }
+.mw__navsec--gap { margin-top: 12px; }
+.mw__navempty { font-size: 12.5px; color: rgba(255,255,255,0.4); padding: 4px 10px; }
+.mw__navitem { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; background: none; color: rgba(255,255,255,0.82); font-size: 14.5px; font-weight: 600; border-radius: 8px; cursor: pointer; text-align: left; }
+.mw__navitem:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.mw__navitem.is-on { background: rgba(255,255,255,0.18); color: #fff; font-weight: 800; }
+.mw__hash { opacity: 0.6; font-weight: 800; }
+.mw__ico { width: 18px; text-align: center; }
+.mw__navlabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mw__badge { flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+.mw__sidefoot { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-top: 1px solid rgba(255,255,255,0.1); }
+.mw__foota { font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,0.66); text-decoration: none; background: none; border: 0; cursor: pointer; padding: 4px 6px; }
+.mw__foota:hover { color: #fff; }
+.mw__foota--btn { margin-left: auto; }
+
+/* 메인 */
+.mw__main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface-2); }
+.mw__top { flex: 0 0 auto; height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); }
+.mw__ham { display: none; width: 34px; height: 34px; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--fg); border-radius: 8px; }
+.mw__ham:hover { background: var(--chip); }
+.mw__toptitle { font-size: 16px; font-weight: 900; color: var(--fg); }
+.mw__content { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.mw__blank { margin: auto; color: var(--muted); font-size: 14px; }
+.mw__blank a { color: var(--green-700); font-weight: 700; }
+
+/* 채팅 페인 */
+.chatpane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #fff; }
+.chatpane__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 12px 8px; display: flex; flex-direction: column; gap: 3px; }
+.chatpane__empty { margin: auto; text-align: center; color: var(--muted); }
+.chatpane__emptyhash { font-size: 20px; font-weight: 900; color: var(--green-700); margin-bottom: 6px; }
+.chatpane__day { align-self: center; margin: 10px 0 6px; padding: 3px 12px; border-radius: 999px; background: var(--chip); color: var(--muted); font-size: 11.5px; font-weight: 700; }
+.chatpane__composer { flex: 0 0 auto; border-top: 1px solid var(--line); padding: 10px 12px; background: #fff; }
+
+/* 할일 */
+.tasks { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.tasks > * { max-width: 760px; margin-left: auto; margin-right: auto; }
+.tasks__add { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 16px; }
+.tasks__addopts { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.tasks__addopts .select, .tasks__addopts input[type="date"] { flex: 1; min-width: 130px; }
+.tasks__addopts .btn { flex: 0 0 auto; width: auto; padding: 0 20px; min-height: 46px; }
+.tasks__sec { font-size: 13px; font-weight: 800; color: var(--muted); margin: 4px 2px 6px; display: flex; align-items: center; gap: 6px; }
+.tasks__count { display: inline-flex; min-width: 18px; height: 18px; padding: 0 5px; align-items: center; justify-content: center; background: var(--chip); border-radius: 999px; font-size: 11px; color: var(--fg-2); }
+.tasks__empty { color: var(--muted); font-size: 14px; padding: 14px 2px; }
+.tasks__list { background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.tasks__list .tasks__sec { margin: 12px 12px 4px; }
+.tasks__donehead { width: 100%; text-align: left; border: 0; background: var(--surface-2); border-top: 1px solid var(--line); padding: 10px 14px; font-size: 13px; font-weight: 800; color: var(--muted); cursor: pointer; display: flex; gap: 6px; align-items: center; }
+.task { display: flex; align-items: flex-start; gap: 11px; padding: 11px 14px; border-top: 1px solid var(--line-soft); }
+.task:first-of-type { border-top: 0; }
+.task__check { flex: 0 0 auto; width: 22px; height: 22px; margin-top: 1px; border-radius: 999px; border: 2px solid var(--line-strong); background: #fff; color: #fff; font-size: 13px; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.task__check.on { background: var(--green-700); border-color: var(--green-700); }
+.task__main { flex: 1; min-width: 0; }
+.task__title { font-size: 15px; font-weight: 600; color: var(--fg); word-break: break-word; }
+.task.is-done .task__title { text-decoration: line-through; color: var(--muted-2); }
+.task__meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.task__who { font-size: 11.5px; font-weight: 800; color: var(--green-800); background: var(--green-100); padding: 2px 8px; border-radius: 999px; }
+.task__due { font-size: 11.5px; font-weight: 700; color: var(--muted); background: var(--chip); padding: 2px 8px; border-radius: 999px; }
+.task__due.over { color: var(--danger); background: var(--danger-bg); }
+.task__del { flex: 0 0 auto; width: 26px; height: 26px; border: 0; background: none; color: var(--muted-3); font-size: 14px; cursor: pointer; border-radius: 8px; }
+.task__del:hover { color: var(--danger); background: var(--danger-soft-bg); }
+
+/* 캘린더 */
+.cal { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.cal > * { max-width: 900px; margin-left: auto; margin-right: auto; }
+.cal__bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.cal__title { font-size: 19px; font-weight: 900; color: var(--fg); }
+.cal__nav { display: flex; align-items: center; gap: 6px; }
+.cal__btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 20px; cursor: pointer; color: var(--fg); }
+.cal__btn:hover { background: var(--chip); }
+.cal__today { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 13px; font-weight: 800; cursor: pointer; color: var(--fg); }
+.cal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal__dow { text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); padding: 2px 0 6px; }
+.cal__dow.sun { color: var(--danger); }
+.cal__dow.sat { color: #2f6cbf; }
+.cal__cell { min-height: 84px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 6px; display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer; overflow: hidden; }
+.cal__cell.is-empty { background: transparent; border-color: transparent; cursor: default; }
+.cal__cell:not(.is-empty):hover { border-color: var(--green-150); }
+.cal__cell.is-sel { border-color: var(--green-700); box-shadow: inset 0 0 0 1px var(--green-700); background: var(--green-100); }
+.cal__num { font-size: 13px; font-weight: 800; color: var(--fg-2); width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; }
+.cal__num.sun { color: var(--danger); }
+.cal__num.sat { color: #2f6cbf; }
+.cal__cell.is-today .cal__num { background: var(--green-700); color: #fff; }
+.cal__marks { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.cal__ev { font-size: 11px; font-weight: 700; color: #fff; background: var(--green-700); border-radius: 5px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal__task { font-size: 10.5px; font-weight: 800; color: #8a5a00; background: #ffedc7; border-radius: 5px; padding: 1px 5px; align-self: flex-start; }
+.cal__panel { margin-top: 14px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.cal__panelhead { font-size: 15px; font-weight: 900; color: var(--fg); margin-bottom: 10px; }
+.cal__none { color: var(--muted); font-size: 14px; padding: 4px 0 10px; }
+.cal__row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.cal__row:first-of-type { border-top: 0; }
+.cal__dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 999px; margin-top: 6px; }
+.cal__dot--ev { background: var(--green-700); }
+.cal__dot--task { background: #e8a400; }
+.cal__rowmain { flex: 1; min-width: 0; }
+.cal__rowtitle { font-size: 14.5px; font-weight: 700; color: var(--fg); }
+.cal__row.is-done .cal__rowtitle { text-decoration: line-through; color: var(--muted-2); }
+.cal__doneflag { font-size: 11px; font-weight: 800; color: var(--green-700); }
+.cal__rowmemo { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.cal__add { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.cal__add .btn { width: auto; align-self: flex-start; padding: 0 20px; min-height: 46px; }
+
+/* 관리 페이지 */
+.mw-manage { position: fixed; inset: 0; z-index: 100; background: var(--surface-2); display: flex; flex-direction: column; }
+.mw-manage__top { flex: 0 0 auto; height: 54px; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); }
+.mw-manage__back { font-size: 13.5px; font-weight: 800; color: var(--green-700); text-decoration: none; }
+.mw-manage__title { font-size: 16px; font-weight: 900; color: var(--fg); }
+.mw-manage__body { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 16px; }
+.mw-manage__body > * { max-width: 640px; margin: 0 auto; }
+
+/* 반응형 — 모바일: 사이드바를 오프캔버스 드로어로 */
+@media (max-width: 760px) {
+  .mw__side { position: absolute; left: 0; top: 0; bottom: 0; z-index: 30; transform: translateX(-100%); transition: transform 0.22s ease; box-shadow: 0 0 40px rgba(0,0,0,0.4); }
+  .mw__side.is-open { transform: translateX(0); }
+  .mw__backdrop { display: block; position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,0.42); }
+  .mw__ham { display: inline-flex; align-items: center; justify-content: center; }
+  .cal__cell { min-height: 62px; padding: 4px; }
+  .cal__ev, .cal__task { font-size: 9.5px; }
+}

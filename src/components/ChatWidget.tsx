@@ -442,8 +442,8 @@ export function ChatWidget() {
   };
 
   if (!role) return null;
-  // 사내 메신저 화면은 자체 작성창이 있어 문의채팅 FAB가 전송 버튼을 가림 → 이 경로에선 숨김.
-  if (pathname?.startsWith("/admin/messenger")) return null;
+  // 사내 메신저는 완전 분리된 워크스페이스 → 이 경로에선 핫딜오더 문의채팅 FAB 숨김.
+  if (pathname?.startsWith("/messenger")) return null;
 
   const lastMine = [...messages].reverse().find((m) => m.mine);
   // 상대방 이름/아바타 — 가맹점 화면에선 '관리자', 관리자 화면에선 지점명
