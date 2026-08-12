@@ -6023,44 +6023,44 @@ a.resv-card:active { transform: scale(0.995); }
 .task__del:hover { color: var(--danger); background: var(--danger-soft-bg); }
 
 /* 캘린더 */
-.cal { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
-.cal > * { max-width: 900px; margin-left: auto; margin-right: auto; }
-.cal__bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.cal__title { font-size: 19px; font-weight: 900; color: var(--fg); }
-.cal__nav { display: flex; align-items: center; gap: 6px; }
-.cal__btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 20px; cursor: pointer; color: var(--fg); }
-.cal__btn:hover { background: var(--chip); }
-.cal__today { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 13px; font-weight: 800; cursor: pointer; color: var(--fg); }
-.cal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.cal__dow { text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); padding: 2px 0 6px; }
-.cal__dow.sun { color: var(--danger); }
-.cal__dow.sat { color: #2f6cbf; }
-.cal__cell { min-height: 84px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 6px; display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer; overflow: hidden; }
-.cal__cell.is-empty { background: transparent; border-color: transparent; cursor: default; }
-.cal__cell:not(.is-empty):hover { border-color: var(--green-150); }
-.cal__cell.is-sel { border-color: var(--green-700); box-shadow: inset 0 0 0 1px var(--green-700); background: var(--green-100); }
-.cal__num { font-size: 13px; font-weight: 800; color: var(--fg-2); width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; }
-.cal__num.sun { color: var(--danger); }
-.cal__num.sat { color: #2f6cbf; }
-.cal__cell.is-today .cal__num { background: var(--green-700); color: #fff; }
-.cal__marks { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
-.cal__ev { font-size: 11px; font-weight: 700; color: #fff; background: var(--green-700); border-radius: 5px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal__task { font-size: 10.5px; font-weight: 800; color: #8a5a00; background: #ffedc7; border-radius: 5px; padding: 1px 5px; align-self: flex-start; }
-.cal__panel { margin-top: 14px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
-.cal__panelhead { font-size: 15px; font-weight: 900; color: var(--fg); margin-bottom: 10px; }
-.cal__none { color: var(--muted); font-size: 14px; padding: 4px 0 10px; }
-.cal__row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); }
-.cal__row:first-of-type { border-top: 0; }
-.cal__dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 999px; margin-top: 6px; }
-.cal__dot--ev { background: var(--green-700); }
-.cal__dot--task { background: #e8a400; }
-.cal__rowmain { flex: 1; min-width: 0; }
-.cal__rowtitle { font-size: 14.5px; font-weight: 700; color: var(--fg); }
-.cal__row.is-done .cal__rowtitle { text-decoration: line-through; color: var(--muted-2); }
-.cal__doneflag { font-size: 11px; font-weight: 800; color: var(--green-700); }
-.cal__rowmemo { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
-.cal__add { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.cal__add .btn { width: auto; align-self: flex-start; padding: 0 20px; min-height: 46px; }
+.mcal { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.mcal > * { max-width: 900px; margin-left: auto; margin-right: auto; }
+.mcal__bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.mcal__title { font-size: 19px; font-weight: 900; color: var(--fg); }
+.mcal__nav { display: flex; align-items: center; gap: 6px; }
+.mcal__btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 20px; cursor: pointer; color: var(--fg); }
+.mcal__btn:hover { background: var(--chip); }
+.mcal__today { height: 36px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line); background: #fff; font-size: 13px; font-weight: 800; cursor: pointer; color: var(--fg); }
+.mcal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.mcal__dow { text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); padding: 2px 0 6px; }
+.mcal__dow.sun { color: var(--danger); }
+.mcal__dow.sat { color: #2f6cbf; }
+.mcal__cell { min-height: 84px; border: 1px solid var(--line); border-radius: 10px; background: #fff; padding: 6px; display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer; overflow: hidden; }
+.mcal__cell.is-empty { background: transparent; border-color: transparent; cursor: default; }
+.mcal__cell:not(.is-empty):hover { border-color: var(--green-150); }
+.mcal__cell.is-sel { border-color: var(--green-700); box-shadow: inset 0 0 0 1px var(--green-700); background: var(--green-100); }
+.mcal__num { font-size: 13px; font-weight: 800; color: var(--fg-2); width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; }
+.mcal__num.sun { color: var(--danger); }
+.mcal__num.sat { color: #2f6cbf; }
+.mcal__cell.is-today .mcal__num { background: var(--green-700); color: #fff; }
+.mcal__marks { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.mcal__ev { font-size: 11px; font-weight: 700; color: #fff; background: var(--green-700); border-radius: 5px; padding: 1px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mcal__task { font-size: 10.5px; font-weight: 800; color: #8a5a00; background: #ffedc7; border-radius: 5px; padding: 1px 5px; align-self: flex-start; }
+.mcal__panel { margin-top: 14px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.mcal__panelhead { font-size: 15px; font-weight: 900; color: var(--fg); margin-bottom: 10px; }
+.mcal__none { color: var(--muted); font-size: 14px; padding: 4px 0 10px; }
+.mcal__row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.mcal__row:first-of-type { border-top: 0; }
+.mcal__dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 999px; margin-top: 6px; }
+.mcal__dot--ev { background: var(--green-700); }
+.mcal__dot--task { background: #e8a400; }
+.mcal__rowmain { flex: 1; min-width: 0; }
+.mcal__rowtitle { font-size: 14.5px; font-weight: 700; color: var(--fg); }
+.mcal__row.is-done .mcal__rowtitle { text-decoration: line-through; color: var(--muted-2); }
+.mcal__doneflag { font-size: 11px; font-weight: 800; color: var(--green-700); }
+.mcal__rowmemo { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.mcal__add { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mcal__add .btn { width: auto; align-self: flex-start; padding: 0 20px; min-height: 46px; }
 
 /* 관리 페이지 */
 .mw-manage { position: fixed; inset: 0; z-index: 100; background: var(--surface-2); display: flex; flex-direction: column; }
@@ -6077,6 +6077,108 @@ a.resv-card:active { transform: scale(0.995); }
   .mw__side.is-open { transform: translateX(0); box-shadow: 8px 0 40px rgba(0,0,0,0.4); }
   .mw__backdrop { display: block; position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,0.42); }
   .mw__ham { display: inline-flex; align-items: center; justify-content: center; }
-  .cal__cell { min-height: 62px; padding: 4px; }
-  .cal__ev, .cal__task { font-size: 9.5px; }
+  .mcal__cell { min-height: 62px; padding: 4px; }
+  .mcal__ev, .mcal__task { font-size: 9.5px; }
 }
+
+/* ============================================================
+   사내 메신저 · 미래지향 다크 그린 테마(초록 배경 + 글래스 + 민트 액센트)
+   ============================================================ */
+.mw {
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(94, 234, 212, 0.16), transparent 60%),
+    radial-gradient(760px 520px at 112% 8%, rgba(28, 74, 47, 0.55), transparent 55%),
+    linear-gradient(165deg, #08210f 0%, #0c2c1a 55%, #103a24 100%);
+  color: #e9f3ec;
+}
+.mw__side { background: rgba(9, 32, 20, 0.6); backdrop-filter: blur(16px); border-right: 1px solid rgba(255, 255, 255, 0.08); }
+.mw__logo { background: linear-gradient(135deg, #5eead4, #22c98f); color: #06251a; }
+.mw__navitem.is-on { background: rgba(94, 234, 212, 0.16); color: #fff; box-shadow: inset 0 0 0 1px rgba(94, 234, 212, 0.25); }
+.mw__navsec { color: rgba(255, 255, 255, 0.4); }
+.mw__main { background: transparent; }
+.mw__top { background: rgba(8, 28, 17, 0.5); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.mw__toptitle { color: #fff; }
+.mw__ham { color: #e9f3ec; }
+.mw__ham:hover { background: rgba(255, 255, 255, 0.1); }
+.mw__blank { color: rgba(233, 243, 236, 0.6); }
+.mw__blank a { color: #5eead4; }
+
+/* 홈 = 팀 할 일 보드 */
+.home { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 18px 44px; }
+.home__inner { max-width: 720px; margin: 0 auto; }
+.home__greet { margin: 4px 2px 18px; }
+.home__hi { font-size: 24px; font-weight: 900; letter-spacing: -0.02em; color: #fff; }
+.home__sub { font-size: 13.5px; font-weight: 800; color: #5eead4; margin-top: 4px; }
+.home__add { background: rgba(255, 255, 255, 0.055); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(14px); border-radius: 18px; padding: 12px; margin-bottom: 16px; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28); }
+.home__title { width: 100%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 13px 14px; color: #fff; font-size: 15px; font-weight: 600; font-family: inherit; outline: none; }
+.home__title::placeholder { color: rgba(233, 243, 236, 0.45); }
+.home__title:focus { border-color: #5eead4; box-shadow: 0 0 0 3px rgba(94, 234, 212, 0.18); }
+.home__addrow { display: flex; gap: 8px; margin-top: 8px; }
+.home__select { flex: 1; min-width: 0; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 12px; padding: 12px 14px; color: #fff; font-size: 14px; font-weight: 700; font-family: inherit; outline: none; -webkit-appearance: none; appearance: none; }
+.home__select:focus { border-color: #5eead4; }
+.home__select option { color: #14301f; }
+.home__addbtn { flex: 0 0 auto; padding: 0 22px; min-height: 46px; border-radius: 12px; border: 0; background: linear-gradient(135deg, #5eead4, #22c98f); color: #06251a; font-size: 15px; font-weight: 900; cursor: pointer; box-shadow: 0 6px 18px rgba(94, 234, 212, 0.28); }
+.home__addbtn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.home__err { margin-top: 8px; color: #fecaca; background: rgba(192, 57, 43, 0.22); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+.home__list { display: flex; flex-direction: column; gap: 8px; }
+.home__empty { color: rgba(233, 243, 236, 0.55); font-size: 14px; padding: 26px 4px; text-align: center; }
+.home__donehead { margin-top: 8px; text-align: left; background: none; border: 0; color: rgba(233, 243, 236, 0.6); font-size: 13px; font-weight: 800; cursor: pointer; padding: 6px 2px; }
+
+.tcard { display: flex; align-items: flex-start; gap: 12px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 15px; padding: 13px 14px; transition: border-color 0.15s ease, background 0.15s ease; }
+.tcard:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(94, 234, 212, 0.35); }
+.tcard.is-done { opacity: 0.5; }
+.tcard__check { flex: 0 0 auto; width: 25px; height: 25px; margin-top: 1px; border-radius: 999px; border: 2px solid rgba(255, 255, 255, 0.3); background: transparent; color: #06251a; font-size: 14px; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s ease; }
+.tcard__check.on { background: linear-gradient(135deg, #5eead4, #22c98f); border-color: transparent; box-shadow: 0 0 14px rgba(94, 234, 212, 0.5); }
+.tcard__main { flex: 1; min-width: 0; }
+.tcard__title { font-size: 15.5px; font-weight: 700; color: #fff; word-break: break-word; }
+.tcard.is-done .tcard__title { text-decoration: line-through; color: rgba(233, 243, 236, 0.6); }
+.tcard__who { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 5px; font-size: 12.5px; }
+.tcard__from { font-weight: 800; color: rgba(233, 243, 236, 0.82); }
+.tcard__arrow { color: #5eead4; font-weight: 900; }
+.tcard__to { font-weight: 800; color: #06251a; background: #5eead4; padding: 2px 9px; border-radius: 999px; }
+.tcard__to.all { background: rgba(94, 234, 212, 0.2); color: #5eead4; }
+.tcard__del { flex: 0 0 auto; width: 26px; height: 26px; border: 0; background: none; color: rgba(233, 243, 236, 0.4); font-size: 13px; cursor: pointer; border-radius: 8px; }
+.tcard__del:hover { color: #fca5a5; background: rgba(255, 255, 255, 0.06); }
+
+/* 채팅 다크 */
+.chatpane, .chatpane__scroll { background: transparent; }
+.chatpane__empty { color: rgba(233, 243, 236, 0.6); }
+.chatpane__emptyhash { color: #5eead4; }
+.chatpane__day { background: rgba(255, 255, 255, 0.08); color: rgba(233, 243, 236, 0.72); }
+.chatpane__composer { background: rgba(8, 28, 17, 0.5); backdrop-filter: blur(14px); border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.chatpane .msgr__sender { color: rgba(233, 243, 236, 0.62); }
+.chatpane .msgr__time { color: rgba(233, 243, 236, 0.4); }
+.chatpane .msgr__bubble { background: rgba(255, 255, 255, 0.09); border-color: rgba(255, 255, 255, 0.1); color: #eef5f0; box-shadow: none; }
+.chatpane .msgr__bubble.is-mine { background: linear-gradient(135deg, rgba(94, 234, 212, 0.92), rgba(34, 201, 143, 0.92)); border-color: transparent; color: #06251a; }
+.chatpane .msgr__input { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #fff; }
+.chatpane .msgr__input::placeholder { color: rgba(233, 243, 236, 0.45); }
+.chatpane .msgr__attach { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); color: #e9f3ec; }
+.chatpane .msgr__send { background: linear-gradient(135deg, #5eead4, #22c98f); color: #06251a; box-shadow: 0 6px 18px rgba(94, 234, 212, 0.25); }
+
+/* 캘린더 다크 */
+.mcal__title { color: #fff; }
+.mcal__btn, .mcal__today { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.12); color: #e9f3ec; }
+.mcal__btn:hover { background: rgba(255, 255, 255, 0.12); }
+.mcal__dow { color: rgba(233, 243, 236, 0.58); }
+.mcal__dow.sun { color: #fca5a5; }
+.mcal__dow.sat { color: #93c5fd; }
+.mcal__cell { background: rgba(255, 255, 255, 0.045); border-color: rgba(255, 255, 255, 0.08); }
+.mcal__cell.is-empty { background: transparent; border-color: transparent; }
+.mcal__cell:not(.is-empty):hover { border-color: rgba(94, 234, 212, 0.3); }
+.mcal__cell.is-sel { border-color: #5eead4; box-shadow: inset 0 0 0 1px #5eead4; background: rgba(94, 234, 212, 0.12); }
+.mcal__num { color: rgba(233, 243, 236, 0.82); }
+.mcal__num.sun { color: #fca5a5; }
+.mcal__num.sat { color: #93c5fd; }
+.mcal__cell.is-today .mcal__num { background: linear-gradient(135deg, #5eead4, #22c98f); color: #06251a; }
+.mcal__ev { background: rgba(94, 234, 212, 0.92); color: #06251a; }
+.mcal__task { background: rgba(245, 200, 90, 0.92); color: #3a2a00; }
+.mcal__panel { background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.1); backdrop-filter: blur(14px); }
+.mcal__panelhead { color: #fff; }
+.mcal__none { color: rgba(233, 243, 236, 0.55); }
+.mcal__row { border-top-color: rgba(255, 255, 255, 0.08); }
+.mcal__rowtitle { color: #fff; }
+.mcal__rowmemo { color: rgba(233, 243, 236, 0.6); }
+.mcal__add { border-top-color: rgba(255, 255, 255, 0.1); }
+.mcal__add .input { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); color: #fff; }
+.mcal__add .input::placeholder { color: rgba(233, 243, 236, 0.45); }
+.mcal__add .btn { background: linear-gradient(135deg, #5eead4, #22c98f); color: #06251a; }

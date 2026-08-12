@@ -105,22 +105,22 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
   };
 
   return (
-    <div className="cal">
-      <div className="cal__bar">
-        <div className="cal__title">{year}년 {month}월</div>
-        <div className="cal__nav">
-          <button type="button" className="cal__btn" onClick={() => move(-1)} aria-label="이전 달">‹</button>
-          <button type="button" className="cal__today" onClick={goToday}>오늘</button>
-          <button type="button" className="cal__btn" onClick={() => move(1)} aria-label="다음 달">›</button>
+    <div className="mcal">
+      <div className="mcal__bar">
+        <div className="mcal__title">{year}년 {month}월</div>
+        <div className="mcal__nav">
+          <button type="button" className="mcal__btn" onClick={() => move(-1)} aria-label="이전 달">‹</button>
+          <button type="button" className="mcal__today" onClick={goToday}>오늘</button>
+          <button type="button" className="mcal__btn" onClick={() => move(1)} aria-label="다음 달">›</button>
         </div>
       </div>
 
-      <div className="cal__grid">
+      <div className="mcal__grid">
         {WEEK.map((w, i) => (
-          <div key={w} className={`cal__dow${i === 0 ? " sun" : ""}${i === 6 ? " sat" : ""}`}>{w}</div>
+          <div key={w} className={`mcal__dow${i === 0 ? " sun" : ""}${i === 6 ? " sat" : ""}`}>{w}</div>
         ))}
         {cells.map((d, i) => {
-          if (d === null) return <div key={`e${i}`} className="cal__cell is-empty" />;
+          if (d === null) return <div key={`e${i}`} className="mcal__cell is-empty" />;
           const day = ymd(year, month, d);
           const es = evByDay(day);
           const ts = taskByDay(day);
@@ -129,48 +129,48 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
             <button
               key={day}
               type="button"
-              className={`cal__cell${day === sel ? " is-sel" : ""}${day === t ? " is-today" : ""}`}
+              className={`mcal__cell${day === sel ? " is-sel" : ""}${day === t ? " is-today" : ""}`}
               onClick={() => setSel(day)}
             >
-              <span className={`cal__num${dow === 0 ? " sun" : ""}${dow === 6 ? " sat" : ""}`}>{d}</span>
-              <span className="cal__marks">
+              <span className={`mcal__num${dow === 0 ? " sun" : ""}${dow === 6 ? " sat" : ""}`}>{d}</span>
+              <span className="mcal__marks">
                 {es.slice(0, 3).map((e) => (
-                  <span key={e.id} className="cal__ev" title={e.title}>{e.title}</span>
+                  <span key={e.id} className="mcal__ev" title={e.title}>{e.title}</span>
                 ))}
-                {ts.length > 0 && <span className="cal__task">할일 {ts.length}</span>}
+                {ts.length > 0 && <span className="mcal__task">할일 {ts.length}</span>}
               </span>
             </button>
           );
         })}
       </div>
 
-      <div className="cal__panel">
-        <div className="cal__panelhead">{selLabel}</div>
+      <div className="mcal__panel">
+        <div className="mcal__panelhead">{selLabel}</div>
 
         {selEvents.length === 0 && selTasks.length === 0 && (
-          <div className="cal__none">이 날의 일정이 없어요.</div>
+          <div className="mcal__none">이 날의 일정이 없어요.</div>
         )}
         {selEvents.map((e) => (
-          <div className="cal__row" key={e.id}>
-            <span className="cal__dot cal__dot--ev" />
-            <div className="cal__rowmain">
-              <div className="cal__rowtitle">{e.title}</div>
-              {e.memo && <div className="cal__rowmemo">{e.memo}</div>}
+          <div className="mcal__row" key={e.id}>
+            <span className="mcal__dot mcal__dot--ev" />
+            <div className="mcal__rowmain">
+              <div className="mcal__rowtitle">{e.title}</div>
+              {e.memo && <div className="mcal__rowmemo">{e.memo}</div>}
             </div>
             <button type="button" className="task__del" onClick={() => removeEvent(e.id)} aria-label="삭제">✕</button>
           </div>
         ))}
         {selTasks.map((tk) => (
-          <div className={`cal__row${tk.done ? " is-done" : ""}`} key={tk.id}>
-            <span className="cal__dot cal__dot--task" />
-            <div className="cal__rowmain">
-              <div className="cal__rowtitle">{tk.title} {tk.done && <span className="cal__doneflag">완료</span>}</div>
-              <div className="cal__rowmemo">할 일{tk.assigneeId ? ` · ${nameOf(tk.assigneeId)}` : ""}</div>
+          <div className={`mcal__row${tk.done ? " is-done" : ""}`} key={tk.id}>
+            <span className="mcal__dot mcal__dot--task" />
+            <div className="mcal__rowmain">
+              <div className="mcal__rowtitle">{tk.title} {tk.done && <span className="mcal__doneflag">완료</span>}</div>
+              <div className="mcal__rowmemo">할 일{tk.assigneeId ? ` · ${nameOf(tk.assigneeId)}` : ""}</div>
             </div>
           </div>
         ))}
 
-        <div className="cal__add">
+        <div className="mcal__add">
           <input
             className="input"
             value={title}

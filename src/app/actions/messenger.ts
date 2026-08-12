@@ -197,8 +197,9 @@ export type TaskDTO = {
   title: string;
   done: boolean;
   assigneeId: string | null;
+  toAll: boolean; // 받는 사람 = 팀원 전체
   due: string | null; // yyyy-mm-dd(KST) | null
-  createdById: string;
+  createdById: string; // 보낸 사람(시킨 사람)
   createdAt: string;
   doneAt: string | null;
 };
@@ -214,6 +215,7 @@ export async function loadMessengerTasksAction(): Promise<{ tasks: TaskDTO[] }> 
       title: t.title,
       done: t.done,
       assigneeId: t.assigneeId,
+      toAll: t.toAll,
       due: t.dueDate ? kstDateOf(t.dueDate) : null,
       createdById: t.createdById,
       createdAt: t.createdAt.toISOString(),
@@ -228,9 +230,11 @@ export async function addMessengerTaskAction(formData: FormData): Promise<{ erro
   if (!me) return { error: "메신저 로그인이 필요해요." };
   const title = String(formData.get("title") ?? "").trim().slice(0, 300);
   if (!title) return { error: "할 일을 입력하세요." };
-  const assigneeId = String(formData.get("assigneeId") ?? "").trim() || null;
+  const toAll = String(formData.get("toAll") ?? "") === "1";
+  const assigneeId = toAll ? null : String(formData.get("assigneeId") ?? "").trim() || null;
+  if (!toAll && !assigneeId) return { error: "받는 사람을 선택하세요." };
   const due = kstMidnight(String(formData.get("due") ?? "").trim());
-  await prisma.messengerTask.create({ data: { title, createdById: me.id, assigneeId, dueDate: due } });
+  await prisma.messengerTask.create({ data: { title, createdById: me.id, assigneeId, toAll, dueDate: due } });
   revalidatePath("/messenger");
   return {};
 }

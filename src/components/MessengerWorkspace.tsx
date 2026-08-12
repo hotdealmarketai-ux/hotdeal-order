@@ -10,7 +10,7 @@ import { CalendarPane } from "@/components/messenger/CalendarPane";
 
 type Channel = { id: string; name: string };
 type Member = { id: string; name: string; active: boolean };
-type View = "chat" | "tasks" | "calendar";
+type View = "home" | "chat" | "calendar";
 
 export function MessengerWorkspace({
   me,
@@ -21,7 +21,7 @@ export function MessengerWorkspace({
   channels: Channel[];
   members: Member[];
 }) {
-  const [view, setView] = useState<View>(channels.length ? "chat" : "tasks");
+  const [view, setView] = useState<View>("home");
   const [active, setActive] = useState<string>(channels[0]?.id ?? "");
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [sideOpen, setSideOpen] = useState(false);
@@ -48,7 +48,7 @@ export function MessengerWorkspace({
   };
 
   const activeName = channels.find((c) => c.id === active)?.name ?? "";
-  const topTitle = view === "chat" ? `# ${activeName}` : view === "tasks" ? "할일" : "캘린더";
+  const topTitle = view === "chat" ? `# ${activeName}` : view === "home" ? "홈" : "캘린더";
 
   return (
     <div className="mw">
@@ -70,7 +70,14 @@ export function MessengerWorkspace({
         </div>
 
         <nav className="mw__nav">
-          <div className="mw__navsec">채팅</div>
+          <button type="button" className={`mw__navitem${view === "home" ? " is-on" : ""}`} onClick={() => pick("home")}>
+            <span className="mw__navlabel">홈</span>
+          </button>
+          <button type="button" className={`mw__navitem${view === "calendar" ? " is-on" : ""}`} onClick={() => pick("calendar")}>
+            <span className="mw__navlabel">캘린더</span>
+          </button>
+
+          <div className="mw__navsec mw__navsec--gap">채팅</div>
           {channels.length === 0 ? (
             <div className="mw__navempty">채널이 없어요</div>
           ) : (
@@ -86,16 +93,6 @@ export function MessengerWorkspace({
               );
             })
           )}
-
-          <div className="mw__navsec mw__navsec--gap">워크스페이스</div>
-          <button type="button" className={`mw__navitem${view === "tasks" ? " is-on" : ""}`} onClick={() => pick("tasks")}>
-            <span className="mw__ico">✓</span>
-            <span className="mw__navlabel">할일</span>
-          </button>
-          <button type="button" className={`mw__navitem${view === "calendar" ? " is-on" : ""}`} onClick={() => pick("calendar")}>
-            <span className="mw__ico">🗓</span>
-            <span className="mw__navlabel">캘린더</span>
-          </button>
         </nav>
 
         <div className="mw__sidefoot">
@@ -118,7 +115,7 @@ export function MessengerWorkspace({
             ) : (
               <div className="mw__blank">채널이 없습니다. <Link href="/messenger/manage">관리</Link>에서 채널을 먼저 만들어 주세요.</div>
             )
-          ) : view === "tasks" ? (
+          ) : view === "home" ? (
             <TasksPane me={me} members={members} />
           ) : (
             <CalendarPane me={me} members={members} />

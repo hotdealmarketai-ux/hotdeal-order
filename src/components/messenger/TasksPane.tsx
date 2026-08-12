@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   loadMessengerTasksAction,
   addMessengerTaskAction,
@@ -11,28 +11,17 @@ import {
 
 type Member = { id: string; name: string; active: boolean };
 
-const todayYmd = () =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date()); // yyyy-mm-dd
-const fmtDue = (ymd: string) => {
-  const [, m, d] = ymd.split("-");
-  return `${Number(m)}/${Number(d)}`;
-};
-
+// 홈(메인 인트로) = 팀 할 일 보드. 팀 전체에 모두 노출. 제목 + 보낸사람(시킨사람)→받는사람 + 체크.
 export function TasksPane({ me, members }: { me: { id: string; name: string }; members: Member[] }) {
   const [tasks, setTasks] = useState<TaskDTO[]>([]);
   const [title, setTitle] = useState("");
-  const [assignee, setAssignee] = useState("");
-  const [due, setDue] = useState("");
+  const [target, setTarget] = useState("ALL"); // "ALL" | 멤버 id
   const [err, setErr] = useState("");
   const [showDone, setShowDone] = useState(false);
   const [pending, start] = useTransition();
-  const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "?" : null);
-  const today = todayYmd();
+  const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
-  const load = async () => {
-    const r = await loadMessengerTasksAction();
-    setTasks(r.tasks);
-  };
+  const load = async () => setTasks((await loadMessengerTasksAction()).tasks);
   useEffect(() => {
     let alive = true;
     const run = async () => {
@@ -54,18 +43,15 @@ export function TasksPane({ me, members }: { me: { id: string; name: string }; m
     start(async () => {
       const fd = new FormData();
       fd.set("title", t);
-      if (assignee) fd.set("assigneeId", assignee);
-      if (due) fd.set("due", due);
+      if (target === "ALL") fd.set("toAll", "1");
+      else fd.set("assigneeId", target);
       const r = await addMessengerTaskAction(fd);
       if (r?.error) return setErr(r.error);
       setTitle("");
-      setAssignee("");
-      setDue("");
       await load();
     });
   };
   const toggle = (id: string) => {
-    // 낙관적 업데이트
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
     start(async () => {
       await toggleMessengerTaskAction(id);
@@ -84,60 +70,66 @@ export function TasksPane({ me, members }: { me: { id: string; name: string }; m
   const open = tasks.filter((t) => !t.done);
   const done = tasks.filter((t) => t.done);
 
-  const Row = (t: TaskDTO) => {
-    const overdue = !t.done && t.due && t.due < today;
-    return (
-      <div className={`task${t.done ? " is-done" : ""}`} key={t.id}>
-        <button type="button" className={`task__check${t.done ? " on" : ""}`} onClick={() => toggle(t.id)} aria-label="완료 토글">
-          {t.done ? "✓" : ""}
-        </button>
-        <div className="task__main">
-          <div className="task__title">{t.title}</div>
-          <div className="task__meta">
-            {t.assigneeId && <span className="task__who">{nameOf(t.assigneeId)}</span>}
-            {t.due && <span className={`task__due${overdue ? " over" : ""}`}>📅 {fmtDue(t.due)}</span>}
-          </div>
+  const Card = (t: TaskDTO) => (
+    <div className={`tcard${t.done ? " is-done" : ""}`} key={t.id}>
+      <button type="button" className={`tcard__check${t.done ? " on" : ""}`} onClick={() => toggle(t.id)} aria-label="완료 체크">
+        {t.done ? "✓" : ""}
+      </button>
+      <div className="tcard__main">
+        <div className="tcard__title">{t.title}</div>
+        <div className="tcard__who">
+          <span className="tcard__from">{nameOf(t.createdById)}</span>
+          <span className="tcard__arrow">→</span>
+          <span className={`tcard__to${t.toAll ? " all" : ""}`}>{t.toAll ? "팀원 전체" : nameOf(t.assigneeId)}</span>
         </div>
-        <button type="button" className="task__del" onClick={() => remove(t.id)} aria-label="삭제">✕</button>
       </div>
-    );
-  };
+      <button type="button" className="tcard__del" onClick={() => remove(t.id)} aria-label="삭제">✕</button>
+    </div>
+  );
 
   return (
-    <div className="tasks">
-      <div className="tasks__add">
-        <input
-          className="input tasks__title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
-          placeholder="할 일을 입력하고 Enter"
-        />
-        <div className="tasks__addopts">
-          <select className="input select" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-            <option value="">담당자 없음</option>
-            {members.filter((m) => m.active).map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-          <input className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
-          <button type="button" className="btn btn--primary" onClick={add} disabled={pending || !title.trim()}>추가</button>
+    <div className="home">
+      <div className="home__inner">
+        <div className="home__greet">
+          <div className="home__hi">{me.name}님, 반가워요</div>
+          <div className="home__sub">팀 할 일{open.length ? ` · 진행 중 ${open.length}` : ""}</div>
         </div>
-        {err && <div className="notice notice--error">{err}</div>}
-      </div>
 
-      <div className="tasks__list">
-        <div className="tasks__sec">해야 할 일 <span className="tasks__count">{open.length}</span></div>
-        {open.length === 0 ? <div className="tasks__empty">할 일이 없어요. 깔끔하네요 👍</div> : open.map(Row)}
+        <div className="home__add">
+          <input
+            className="home__title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && add()}
+            placeholder="할 일을 입력하세요"
+          />
+          <div className="home__addrow">
+            <select className="home__select" value={target} onChange={(e) => setTarget(e.target.value)}>
+              <option value="ALL">받는 사람 · 팀원 전체</option>
+              {members.filter((m) => m.active).map((m) => (
+                <option key={m.id} value={m.id}>받는 사람 · {m.name}</option>
+              ))}
+            </select>
+            <button type="button" className="home__addbtn" onClick={add} disabled={pending || !title.trim()}>추가</button>
+          </div>
+          {err && <div className="home__err">{err}</div>}
+        </div>
 
-        {done.length > 0 && (
-          <>
-            <button type="button" className="tasks__donehead" onClick={() => setShowDone((v) => !v)}>
-              {showDone ? "▾" : "▸"} 완료됨 <span className="tasks__count">{done.length}</span>
-            </button>
-            {showDone && done.map(Row)}
-          </>
-        )}
+        <div className="home__list">
+          {open.length === 0 ? (
+            <div className="home__empty">할 일이 없어요. 새 할 일을 추가해 보세요.</div>
+          ) : (
+            open.map(Card)
+          )}
+          {done.length > 0 && (
+            <>
+              <button type="button" className="home__donehead" onClick={() => setShowDone((v) => !v)}>
+                {showDone ? "▾" : "▸"} 완료 {done.length}
+              </button>
+              {showDone && done.map(Card)}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
