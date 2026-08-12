@@ -103,6 +103,11 @@ export function TasksPane({
     markMentionReadAction(mt.id).catch(() => {});
     onJump(mt.channelId, mt.messageId);
   };
+  // 이동하지 않고 멘션만 지우기(홈에서 ✕).
+  const dismissMention = (mt: Mention) => {
+    setMentions((xs) => xs.filter((x) => x.id !== mt.id));
+    markMentionReadAction(mt.id).catch(() => {});
+  };
 
   const open = tasks.filter((t) => !t.done);
   const done = tasks.filter((t) => t.done);
@@ -144,7 +149,7 @@ export function TasksPane({
         <div className="home__greet">
           <div className="home__greetmain">
             <div className="home__hi">{me.name}님, 반가워요</div>
-            <div className="home__sub">{open.length ? `할 일 ${open.length}` : "오늘도 좋은 하루"}</div>
+            {open.length > 0 && <div className="home__sub">할 일 {open.length}</div>}
           </div>
           <AddTaskButton members={members} className="home__addfab" label="＋" onAdded={load} />
         </div>
@@ -173,7 +178,7 @@ export function TasksPane({
             {favorites.length > 0 && (
               <div className="home__favs">
                 {favorites.map((c) => (
-                  <button key={c.id} type="button" className="home__fav" onClick={() => onOpenChannel(c.id)}>★ {c.name}</button>
+                  <button key={c.id} type="button" className="home__fav" onClick={() => onOpenChannel(c.id)}># {c.name}</button>
                 ))}
               </div>
             )}
@@ -200,11 +205,14 @@ export function TasksPane({
               <div className="home__mentions">
                 <div className="home__sectitle">받은 멘션</div>
                 {mentions.map((mt) => (
-                  <button key={mt.id} type="button" className="mtopic" onClick={() => openMention(mt)}>
-                    <span className="mtopic__ch"># {mt.channelName}</span>
-                    <span className="mtopic__body"><b>{mt.by}</b> {mt.preview}</span>
-                    <span className="mtopic__go">이동 ›</span>
-                  </button>
+                  <div key={mt.id} className="mtopic">
+                    <button type="button" className="mtopic__main" onClick={() => openMention(mt)}>
+                      <span className="mtopic__ch"># {mt.channelName}</span>
+                      <span className="mtopic__body"><b>{mt.by}</b> {mt.preview}</span>
+                      <span className="mtopic__go">이동 ›</span>
+                    </button>
+                    <button type="button" className="mtopic__x" onClick={() => dismissMention(mt)} aria-label="지우기">✕</button>
+                  </div>
                 ))}
               </div>
             )}

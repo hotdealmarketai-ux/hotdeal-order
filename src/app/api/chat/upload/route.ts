@@ -26,7 +26,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       body,
       request,
       onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ["image/*", "video/*"],
+        // 사진·영상 + 일반 파일(문서·압축 등) 첨부. 100MB 이하.
+        allowedContentTypes: ["image/*", "video/*", "audio/*", "application/*", "text/*"],
         maximumSizeInBytes: 100 * 1024 * 1024, // 100MB
         addRandomSuffix: true,
       }),

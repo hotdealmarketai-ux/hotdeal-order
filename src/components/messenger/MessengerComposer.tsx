@@ -12,6 +12,7 @@ export function MessengerComposer({
   onClearReply,
   onSend,
   onFiles,
+  onFile,
   uploading,
 }: {
   members: Member[];
@@ -19,11 +20,13 @@ export function MessengerComposer({
   onClearReply: () => void;
   onSend: (text: string) => void;
   onFiles: (files: File[]) => void;
+  onFile: (file: File) => void;
   uploading: boolean;
 }) {
   const [input, setInput] = useState("");
   const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const docRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const activeMembers = useMemo(() => members.filter((m) => m.active), [members]);
 
@@ -71,10 +74,15 @@ export function MessengerComposer({
     setInput("");
     setMention(null);
   };
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onPhotoInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (files.length) onFiles(files);
+  };
+  const onDocInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) onFile(file);
   };
 
   return (
@@ -99,9 +107,13 @@ export function MessengerComposer({
             ))}
           </div>
         )}
-        <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={onFile} />
+        <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={onPhotoInput} />
+        <input ref={docRef} type="file" hidden onChange={onDocInput} />
         <button type="button" className="msgr__attach" onClick={() => fileRef.current?.click()} disabled={uploading} aria-label="사진·영상 첨부">
           {uploading ? "…" : "＋"}
+        </button>
+        <button type="button" className="msgr__attach msgr__attach--file" onClick={() => docRef.current?.click()} disabled={uploading} aria-label="파일 첨부">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7L9 12.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
         <input
           ref={inputRef}

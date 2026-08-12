@@ -9,6 +9,7 @@ import {
   loadMessengerNoticesAction,
   toggleMessengerNoticeAction,
   deleteMessengerMessageAction,
+  toggleMessengerReactionAction,
   loadMessengerChannelMediaAction,
   searchMessengerChannelAction,
   type ChatMsgDTO,
@@ -23,7 +24,7 @@ import { compressImage } from "@/lib/image-compress";
 type Member = { id: string; name: string; active: boolean };
 type Notice = { id: string; body: string; name: string; at: string };
 type ReplyTo = { id: string; name: string; body: string };
-type Menu = { msgId: string; body: string; isNotice: boolean; mine: boolean; x: number; y: number };
+type Menu = { msgId: string; body: string; isNotice: boolean; mine: boolean; reacted: boolean; x: number; y: number };
 type Msg = ChatMsgDTO & { pending?: boolean; failed?: boolean };
 export type ChatTool = null | "search" | "media";
 
@@ -171,9 +172,9 @@ export function ChatPane({
       ...p,
       {
         id: tempId, memberId: me.id, memberName: me.name, body: text,
-        mediaUrl: null, mediaType: null, mediaUrls: [],
+        mediaUrl: null, mediaType: null, mediaUrls: [], fileUrl: null, fileName: null,
         replyToName: rt?.name ?? null, replyToBody: rt?.body ?? null,
-        notice: false, at: new Date().toISOString(), pending: true,
+        notice: false, reactions: [], reactedByMe: false, at: new Date().toISOString(), pending: true,
       },
     ]);
     start(async () => {
@@ -268,15 +269,52 @@ export function ChatPane({
     }
   };
 
+  // 일반 파일 첨부(문서 등, 최대 100MB) — 압축 없이 그대로 업로드.
+  const onPickFile = (file: File) => {
+    if (!file || !channelId) return;
+    if (file.size > 100 * 1024 * 1024) return setErr("100MB 이하 파일만 보낼 수 있어요.");
+    setErr("");
+    doUploadFile(file);
+  };
+  const doUploadFile = async (file: File) => {
+    if (!channelId) return;
+    stick.current = true;
+    try {
+      setUp([{ url: null, pct: 0 }]);
+      const b = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/chat/upload",
+        contentType: file.type || undefined,
+        onUploadProgress: (ev) => setUp([{ url: null, pct: Math.round(ev.percentage) }]),
+      });
+      const fd = new FormData();
+      fd.set("channelId", channelId);
+      // downloadUrl 은 content-disposition: attachment 라서 크로스오리진에서도 실제 '다운로드'가 된다
+      // (브라우저는 크로스오리진 링크의 download 속성을 무시하므로 url 이면 그냥 열리기만 함).
+      fd.set("fileUrl", b.downloadUrl ?? b.url);
+      fd.set("fileName", file.name);
+      const r = await sendMessengerMessageAction(fd);
+      if (r?.error) setErr(r.error);
+      const res = await loadMessengerChannelAction(channelId);
+      stick.current = true;
+      setMessages(res.messages);
+    } catch (e2) {
+      const msg = e2 instanceof Error ? e2.message : "";
+      setErr(msg ? `파일 전송 실패: ${msg}` : "파일 전송에 실패했어요.");
+    } finally {
+      setUp(null);
+    }
+  };
+
   // 꾹 눌러(모바일) / 우클릭(PC) 메뉴.
   const openMenu = (m: Msg, x: number, y: number) => {
     if (m.pending || m.failed) return;
-    setMenu({ msgId: m.id, body: m.body, isNotice: m.notice, mine: m.memberId === me.id, x: Math.min(x, window.innerWidth - 150), y: Math.min(y, window.innerHeight - 210) });
+    setMenu({ msgId: m.id, body: m.body, isNotice: m.notice, mine: m.memberId === me.id, reacted: m.reactedByMe, x: Math.min(x, window.innerWidth - 150), y: Math.min(y, window.innerHeight - 250) });
   };
   const onBubbleDown = (m: Msg) => (e: React.PointerEvent) => {
     if (e.pointerType === "mouse") return;
     const x = e.clientX, y = e.clientY;
-    lpTimer.current = setTimeout(() => openMenu(m, x, y), 460);
+    lpTimer.current = setTimeout(() => openMenu(m, x, y), 260);
   };
   const cancelLp = () => {
     if (lpTimer.current) clearTimeout(lpTimer.current);
@@ -317,6 +355,32 @@ export function ChatPane({
       setMessages(res.messages);
       setNotices(n.notices);
     });
+  };
+
+  // 공감(체크) — 카톡 공감처럼 메시지에 ✓. 낙관적 토글 후 서버 반영.
+  const applyReact = (id: string, on: boolean) => {
+    setMessages((ms) =>
+      ms.map((x) => {
+        if (x.id !== id) return x;
+        const names = on ? [...x.reactions.filter((n) => n !== me.name), me.name] : x.reactions.filter((n) => n !== me.name);
+        return { ...x, reactedByMe: on, reactions: names };
+      }),
+    );
+    start(async () => {
+      await toggleMessengerReactionAction(id, on);
+      const res = await loadMessengerChannelAction(channelId);
+      setMessages(res.messages);
+    });
+  };
+  const doReact = () => {
+    if (!menu) return;
+    const { msgId, reacted } = menu;
+    setMenu(null);
+    applyReact(msgId, !reacted);
+  };
+  const toggleReactRow = (m: Msg) => {
+    if (m.pending || m.failed) return;
+    applyReact(m.id, !m.reactedByMe);
   };
 
   const renderBody = (body: string) => {
@@ -395,10 +459,27 @@ export function ChatPane({
                             </button>
                           )
                         ) : null}
+                        {m.fileUrl && (
+                          <a className="msgr__file" href={m.fileUrl} target="_blank" rel="noreferrer" download={m.fileName ?? undefined}>
+                            <span className="msgr__fileicon">
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /><path d="M14 3v5h5" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /></svg>
+                            </span>
+                            <span className="msgr__filename">{m.fileName ?? "파일"}</span>
+                            <span className="msgr__filedl">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4v10m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 19h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+                            </span>
+                          </a>
+                        )}
                         {m.body && <div className="msgr__text">{renderBody(m.body)}</div>}
                       </div>
                       {!mine && <span className="msgr__time">{fmtTime(m.at)}</span>}
                     </div>
+                    {m.reactions.length > 0 && (
+                      <button type="button" className={`msgr__react${m.reactedByMe ? " is-mine" : ""}`} onClick={() => toggleReactRow(m)} title={m.reactions.join(", ")}>
+                        <span className="msgr__reactcheck">✓</span>
+                        <span className="msgr__reactnames">{m.reactions.join(", ")}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -431,7 +512,7 @@ export function ChatPane({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img src={up[0].url} alt="업로드 중" className="msgr__media" />
                       ) : (
-                        <div className="msgr__upfile">동영상 업로드 중</div>
+                        <div className="msgr__upfile">업로드 중</div>
                       )}
                       <div className="msgr__upoverlay"><span className="msgr__uppct">{up[0].pct}%</span></div>
                     </>
@@ -451,6 +532,7 @@ export function ChatPane({
         onClearReply={() => setReplyTo(null)}
         onSend={onSend}
         onFiles={onFiles}
+        onFile={onPickFile}
         uploading={!!up}
       />
 
@@ -520,6 +602,7 @@ export function ChatPane({
           <>
             <div className="msgmenu__backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
             <div className="msgmenu" style={{ left: menu.x, top: menu.y }}>
+              <button type="button" className="msgmenu__item" onClick={doReact}>{menu.reacted ? "체크 해제" : "✓ 체크"}</button>
               <button type="button" className="msgmenu__item" onClick={doReply}>댓글</button>
               <button type="button" className="msgmenu__item" onClick={doNotice}>{menu.isNotice ? "공지 해제" : "공지 등록"}</button>
               <button type="button" className="msgmenu__item" onClick={doCopy}>복사</button>

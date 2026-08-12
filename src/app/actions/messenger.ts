@@ -58,8 +58,11 @@ export async function sendMessengerMessageAction(
   // 대표 URL/타입(하위호환·미리보기): 단일 첨부면 그대로, 묶음이면 첫 장.
   const mediaUrl = mediaUrlRaw ?? (mediaUrls[0] ?? null);
   const mediaType = mediaTypeIn ?? (mediaUrls.length ? "image" : null);
+  // 일반 파일 첨부(문서 등).
+  const fileUrl = String(formData.get("fileUrl") ?? "").trim() || null;
+  const fileName = String(formData.get("fileName") ?? "").trim().slice(0, 200) || null;
   if (!channelId) return { error: "채널을 선택하세요." };
-  if (!body && !mediaUrl && mediaUrls.length === 0) return { error: "" }; // 빈 전송 무시
+  if (!body && !mediaUrl && mediaUrls.length === 0 && !fileUrl) return { error: "" }; // 빈 전송 무시
 
   const ch = await prisma.messengerChannel.findFirst({ where: { id: channelId, archived: false } });
   if (!ch) return { error: "채널을 찾을 수 없어요." };
@@ -70,7 +73,7 @@ export async function sendMessengerMessageAction(
   const replyToBody = String(formData.get("replyToBody") ?? "").trim().slice(0, 120) || null;
 
   const msg = await prisma.messengerMessage.create({
-    data: { channelId, memberId: me.id, body, mediaUrl, mediaType, mediaUrls, replyToId, replyToName, replyToBody },
+    data: { channelId, memberId: me.id, body, mediaUrl, mediaType, mediaUrls, fileUrl, fileName, replyToId, replyToName, replyToBody },
   });
 
   // @멘션 파싱 — 본문에 "@이름"이 있으면 그 멤버를 언급으로 기록(본인 제외). 홈 멘션 토픽용.
@@ -102,6 +105,7 @@ export async function deleteMessengerMessageAction(messageId: string): Promise<{
   if (!msg) return {};
   if (msg.memberId !== me.id) return { error: "내가 보낸 메시지만 취소할 수 있어요." };
   await prisma.messengerMention.deleteMany({ where: { messageId } }).catch(() => {});
+  await prisma.messengerReaction.deleteMany({ where: { messageId } }).catch(() => {});
   await prisma.messengerMessage.delete({ where: { id: messageId } }).catch(() => {});
   return {};
 }
@@ -126,9 +130,13 @@ export type ChatMsgDTO = {
   mediaUrl: string | null;
   mediaType: string | null;
   mediaUrls: string[]; // 사진 묶음(2장 이상이면 그리드), 없으면 []
+  fileUrl: string | null; // 일반 파일 첨부
+  fileName: string | null;
   replyToName: string | null;
   replyToBody: string | null;
   notice: boolean;
+  reactions: string[]; // 공감(체크)한 멤버 이름들
+  reactedByMe: boolean;
   at: string;
 };
 
@@ -145,7 +153,7 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
       take: 300,
       select: {
         id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, mediaUrls: true, createdAt: true,
-        replyToName: true, replyToBody: true, noticeAt: true,
+        fileUrl: true, fileName: true, replyToName: true, replyToBody: true, noticeAt: true,
         member: { select: { name: true } },
       },
     })
@@ -155,6 +163,22 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
     create: { memberId: me.id, channelId, lastReadAt: new Date() },
     update: { lastReadAt: new Date() },
   });
+  // 공감(체크) 반응 — 이 300개 메시지에 달린 반응을 한 번에 모아 메시지별 이름/내 반응 여부로 정리.
+  const ids = rows.map((m) => m.id);
+  const reacts = ids.length
+    ? await prisma.messengerReaction.findMany({ where: { messageId: { in: ids } }, select: { messageId: true, memberId: true } })
+    : [];
+  // 반응이 하나도 없으면 멤버 이름맵 조회 자체를 건너뛴다(매 3초 폴링 낭비 방지).
+  const nameById = reacts.length
+    ? new Map((await prisma.messengerMember.findMany({ select: { id: true, name: true } })).map((m) => [m.id, m.name]))
+    : new Map<string, string>();
+  const reactByMsg = new Map<string, { names: string[]; mine: boolean }>();
+  for (const r of reacts) {
+    const cur = reactByMsg.get(r.messageId) ?? { names: [], mine: false };
+    cur.names.push(nameById.get(r.memberId) ?? "지난 멤버");
+    if (r.memberId === me.id) cur.mine = true;
+    reactByMsg.set(r.messageId, cur);
+  }
   return {
     messages: rows.map((m) => ({
       id: m.id,
@@ -164,12 +188,34 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
       mediaUrl: m.mediaUrl,
       mediaType: m.mediaType,
       mediaUrls: m.mediaUrls ?? [],
+      fileUrl: m.fileUrl,
+      fileName: m.fileName,
       replyToName: m.replyToName,
       replyToBody: m.replyToBody,
       notice: !!m.noticeAt,
+      reactions: reactByMsg.get(m.id)?.names ?? [],
+      reactedByMe: reactByMsg.get(m.id)?.mine ?? false,
       at: m.createdAt.toISOString(),
     })),
   };
+}
+
+// 메시지 공감(체크) — 클라가 원하는 최종 상태(on)를 넘겨 멱등하게 반영(빠른 더블탭 경합 방지).
+// 누가 눌렀는지는 로드 시 이름으로 표시.
+export async function toggleMessengerReactionAction(messageId: string, on: boolean): Promise<{ error?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !messageId) return { error: "" };
+  const msg = await prisma.messengerMessage.findUnique({ where: { id: messageId }, select: { id: true } });
+  if (!msg) return { error: "메시지를 찾을 수 없어요." };
+  if (on) {
+    await prisma.messengerReaction
+      .upsert({ where: { messageId_memberId: { messageId, memberId: me.id } }, create: { messageId, memberId: me.id }, update: {} })
+      .catch(() => {});
+  } else {
+    await prisma.messengerReaction.deleteMany({ where: { messageId, memberId: me.id } });
+  }
+  return {};
 }
 
 // 공지 등록/해제 — 공지는 채널당 1개(등록 시 기존 공지 자동 해제).
@@ -585,6 +631,33 @@ export async function loadMessengerTasksAction(): Promise<{ tasks: TaskDTO[] }> 
   const me = await getMessengerMember();
   if (!me) return { tasks: [] };
   const rows = await prisma.messengerTask.findMany({ orderBy: [{ done: "asc" }, { createdAt: "desc" }], take: 500 });
+  return {
+    tasks: rows.map((t) => ({
+      id: t.id,
+      title: t.title,
+      detail: t.detail,
+      done: t.done,
+      assigneeId: t.assigneeId,
+      assigneeIds: t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [],
+      toAll: t.toAll,
+      due: t.dueDate ? kstDateOf(t.dueDate) : null,
+      createdById: t.createdById,
+      createdAt: t.createdAt.toISOString(),
+      doneAt: t.doneAt ? t.doneAt.toISOString() : null,
+    })),
+  };
+}
+
+// 내 할일 — 나에게 배정된(또는 팀원 전체) 할일만. 홈(전체)과 같은 task라 체크는 전역 반영.
+export async function loadMyMessengerTasksAction(): Promise<{ tasks: TaskDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { tasks: [] };
+  const rows = await prisma.messengerTask.findMany({
+    where: { OR: [{ toAll: true }, { assigneeIds: { has: me.id } }] },
+    orderBy: [{ done: "asc" }, { createdAt: "desc" }],
+    take: 500,
+  });
   return {
     tasks: rows.map((t) => ({
       id: t.id,

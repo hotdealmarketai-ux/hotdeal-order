@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 // 확인 모달 오버레이 — 항상 document.body 로 포탈한다.
@@ -23,11 +23,28 @@ export function Sheet({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // 모바일 키보드가 뜨면 바텀시트가 가려지는 문제 — visualViewport 로 키보드가 가린 높이만큼
+  // 시트 컨테이너 하단 패딩을 줘서 패널(하단 정렬)을 키보드 위로 올린다(iOS/Android 공통).
+  const [kb, setKb] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setKb(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
   return createPortal(
     <div
       className="sheet"
       role="dialog"
       aria-modal="true"
+      style={kb > 0 ? { paddingBottom: kb } : undefined}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
