@@ -8,6 +8,7 @@ import {
   loadMessengerChannelAction,
   loadMessengerNoticesAction,
   toggleMessengerNoticeAction,
+  deleteMessengerMessageAction,
   loadMessengerChannelMediaAction,
   searchMessengerChannelAction,
   type ChatMsgDTO,
@@ -16,12 +17,13 @@ import {
 } from "@/app/actions/messenger";
 import { MediaLightbox } from "@/components/MediaLightbox";
 import { MessengerComposer } from "@/components/messenger/MessengerComposer";
+import { Sheet } from "@/components/Sheet";
 import { compressImage } from "@/lib/image-compress";
 
 type Member = { id: string; name: string; active: boolean };
 type Notice = { id: string; body: string; name: string; at: string };
 type ReplyTo = { id: string; name: string; body: string };
-type Menu = { msgId: string; body: string; isNotice: boolean; x: number; y: number };
+type Menu = { msgId: string; body: string; isNotice: boolean; mine: boolean; x: number; y: number };
 type Msg = ChatMsgDTO & { pending?: boolean; failed?: boolean };
 export type ChatTool = null | "search" | "media";
 
@@ -53,6 +55,7 @@ export function ChatPane({
   const [pending, setPending] = useState<Msg[]>([]); // 낙관적 전송(서버 목록과 분리 — 폴링이 절대 못 지움)
   const [notices, setNotices] = useState<Notice[]>([]);
   const [up, setUp] = useState<{ url: string | null; pct: number }[] | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null); // 첨부 전송 확인 대기
   const [err, setErr] = useState("");
   const [lb, setLb] = useState<{ src: string; type: "image" | "video"; group?: string[] } | null>(null);
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
@@ -195,15 +198,20 @@ export function ChatPane({
     });
   };
 
-  // 첨부(사진 묶어보내기 + 동영상).
-  const onFiles = async (files: File[]) => {
+  // 첨부 선택 → 바로 안 보내고 'N장의 사진을 보내시겠습니까?' 확인 후 업로드.
+  const onFiles = (files: File[]) => {
     if (!files.length || !channelId) return;
     if (files.some((f) => f.type.startsWith("video") && f.size > 50 * 1024 * 1024))
       return setErr("동영상은 50MB 이하만 보낼 수 있어요. 짧게 잘라서 올려주세요.");
     if (files.some((f) => f.size > 100 * 1024 * 1024)) return setErr("100MB 이하 파일만 보낼 수 있어요.");
+    setErr("");
+    setPendingFiles(files);
+  };
+  // 확인 후 실제 업로드(사진 묶어보내기 + 동영상).
+  const doUpload = async (files: File[]) => {
+    if (!files.length || !channelId) return;
     const images = files.filter((f) => !f.type.startsWith("video")).slice(0, 10);
     const videos = files.filter((f) => f.type.startsWith("video"));
-    setErr("");
     stick.current = true;
     const objectUrls: string[] = [];
     try {
@@ -262,8 +270,8 @@ export function ChatPane({
 
   // 꾹 눌러(모바일) / 우클릭(PC) 메뉴.
   const openMenu = (m: Msg, x: number, y: number) => {
-    if (m.pending) return;
-    setMenu({ msgId: m.id, body: m.body, isNotice: m.notice, x: Math.min(x, window.innerWidth - 150), y: Math.min(y, window.innerHeight - 150) });
+    if (m.pending || m.failed) return;
+    setMenu({ msgId: m.id, body: m.body, isNotice: m.notice, mine: m.memberId === me.id, x: Math.min(x, window.innerWidth - 150), y: Math.min(y, window.innerHeight - 210) });
   };
   const onBubbleDown = (m: Msg) => (e: React.PointerEvent) => {
     if (e.pointerType === "mouse") return;
@@ -294,6 +302,21 @@ export function ChatPane({
     if (!menu) return;
     try { await navigator.clipboard.writeText(menu.body); } catch {}
     setMenu(null);
+  };
+  const doDelete = () => {
+    if (!menu) return;
+    const { msgId } = menu;
+    setMenu(null);
+    if (!confirm("이 메시지를 전송 취소할까요?")) return;
+    setMessages((ms) => ms.filter((x) => x.id !== msgId)); // 낙관적 제거
+    setNotices((ns) => ns.filter((x) => x.id !== msgId)); // 공지였으면 상단 바도 즉시 제거
+    start(async () => {
+      const r = await deleteMessengerMessageAction(msgId);
+      if (r?.error) setErr(r.error);
+      const [res, n] = await Promise.all([loadMessengerChannelAction(channelId), loadMessengerNoticesAction(channelId)]);
+      setMessages(res.messages);
+      setNotices(n.notices);
+    });
   };
 
   const renderBody = (body: string) => {
@@ -500,12 +523,29 @@ export function ChatPane({
               <button type="button" className="msgmenu__item" onClick={doReply}>댓글</button>
               <button type="button" className="msgmenu__item" onClick={doNotice}>{menu.isNotice ? "공지 해제" : "공지 등록"}</button>
               <button type="button" className="msgmenu__item" onClick={doCopy}>복사</button>
+              {menu.mine && <button type="button" className="msgmenu__item msgmenu__item--danger" onClick={doDelete}>전송 취소</button>}
             </div>
           </>,
           document.body,
         )}
 
       {lb && <MediaLightbox media={{ src: lb.src, type: lb.type }} group={lb.group} onClose={() => setLb(null)} />}
+
+      {pendingFiles && (
+        <Sheet onClose={() => setPendingFiles(null)}>
+          <div className="sheet__panel" style={{ maxWidth: 340 }}>
+            <div className="confirm__title" style={{ marginBottom: 0, textAlign: "center" }}>
+              {pendingFiles.some((f) => f.type.startsWith("video"))
+                ? `${pendingFiles.length}개 파일을 보내시겠습니까?`
+                : `${pendingFiles.length}장의 사진을 보내시겠습니까?`}
+            </div>
+            <div className="confirm__actions">
+              <button type="button" className="btn btn--ghost" onClick={() => setPendingFiles(null)}>아니오</button>
+              <button type="button" className="btn btn--primary" onClick={() => { const f = pendingFiles; setPendingFiles(null); doUpload(f); }}>확인</button>
+            </div>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }

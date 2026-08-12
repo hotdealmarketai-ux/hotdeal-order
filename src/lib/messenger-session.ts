@@ -34,7 +34,7 @@ export async function setMessengerMemberCookie(id: string) {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: 60 * 60 * 24 * 365 * 5, // 5년(사실상 로그아웃 전까지 자동 로그인 유지)
   });
 }
 export async function clearMessengerMemberCookie() {

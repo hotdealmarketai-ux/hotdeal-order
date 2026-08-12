@@ -909,7 +909,8 @@ model MessengerTask {
   title       String
   detail      String? // 상세 설명(제목 클릭 시 팝업)
   done        Boolean   @default(false)
-  assigneeId  String? // 받는 사람 멤버 id(toAll=false일 때)
+  assigneeId  String? // (레거시) 단일 받는 사람 — 하위호환. 신규는 assigneeIds 사용
+  assigneeIds String[]  @default([]) // 받는 사람(다중) 멤버 id 목록(toAll=false일 때)
   toAll       Boolean   @default(false) // 받는 사람 = 팀원 전체
   dueDate     DateTime? // 마감일(KST 자정 기준 저장, 선택)
   createdById String // 보낸 사람(시킨 사람) 멤버 id

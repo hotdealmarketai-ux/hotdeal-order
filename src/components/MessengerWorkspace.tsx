@@ -188,6 +188,7 @@ export function MessengerWorkspace({
             <div className="mw__toptools">
               <AddTaskButton
                 members={members}
+                channelId={active}
                 className="mw__topbtn"
                 label={
                   <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
@@ -220,6 +221,20 @@ export function MessengerWorkspace({
             <CalendarPane me={me} members={members} />
           )}
         </div>
+        <nav className="mw__bottomnav">
+          <Link href="/admin" className="mw__bnitem">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <span>뒤로가기</span>
+          </Link>
+          <button type="button" className={`mw__bnitem${view === "home" ? " is-on" : ""}`} onClick={() => pick("home")}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 11l8-7 8 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M6 10v9h12v-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <span>홈</span>
+          </button>
+          <button type="button" className={`mw__bnitem${view === "calendar" ? " is-on" : ""}`} onClick={() => pick("calendar")}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="4" y="5" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="2" /><path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            <span>캘린더</span>
+          </button>
+        </nav>
       </main>
 
       {chMenu &&

@@ -5982,6 +5982,10 @@ a.resv-card:active { transform: scale(0.995); }
 .mw__top { flex: 0 0 auto; height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); }
 .mw__ham { display: none; width: 34px; height: 34px; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--fg); border-radius: 8px; }
 .mw__ham:hover { background: var(--chip); }
+.mw__bottomnav { flex: 0 0 auto; display: flex; background: #fff; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.mw__bnitem { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 7px; border: 0; background: none; color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; text-decoration: none; transition: color .12s ease, transform .08s ease; -webkit-tap-highlight-color: transparent; }
+.mw__bnitem.is-on { color: var(--green-700); }
+.mw__bnitem:active { transform: scale(0.95); }
 .mw__toptitle { flex: 1; min-width: 0; font-size: 16px; font-weight: 900; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mw__toptools { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
 .mw__topbtn { width: 38px; height: 38px; border-radius: 10px; border: 0; background: none; color: var(--fg-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background .12s ease, color .12s ease; -webkit-tap-highlight-color: transparent; }
@@ -6076,15 +6080,13 @@ a.resv-card:active { transform: scale(0.995); }
 .mw-manage__body > * { max-width: 640px; margin: 0 auto; }
 
 /* 반응형 — 모바일: 사이드바를 오프캔버스 드로어로 */
-@media (max-width: 760px) {
-  /* 닫혀 있을 땐 그림자 없음(화면 밖 사이드바의 box-shadow가 왼쪽 가장자리로 새는 것 방지). 열렸을 때만 그림자. */
-  .mw__side { position: absolute; left: 0; top: 0; bottom: 0; z-index: 30; transform: translateX(-100%); transition: transform 0.22s ease; }
-  .mw__side.is-open { transform: translateX(0); box-shadow: 8px 0 40px rgba(0,0,0,0.4); }
-  .mw__backdrop { display: block; position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,0.42); }
-  .mw__ham { display: inline-flex; align-items: center; justify-content: center; }
-  .mcal__cell { min-height: 62px; padding: 4px; }
-  .mcal__ev, .mcal__task { font-size: 9.5px; }
-}
+/* 사내 메신저는 반응형 없이 항상 모바일 레이아웃(오프캔버스 사이드바 드로어 + 햄버거) — 모든 폭 동일. */
+.mw__side { position: absolute; left: 0; top: 0; bottom: 0; z-index: 30; transform: translateX(-100%); transition: transform 0.22s ease; }
+.mw__side.is-open { transform: translateX(0); box-shadow: 8px 0 40px rgba(0,0,0,0.4); }
+.mw__backdrop { display: block; position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,0.42); }
+.mw__ham { display: inline-flex; align-items: center; justify-content: center; }
+.mcal__cell { min-height: 62px; padding: 4px; }
+.mcal__ev, .mcal__task { font-size: 9.5px; }
 
 /* ============================================================
    홈 = 라이트(흰 바탕). 채팅 소셜 UI(공지·답장·@멘션·메뉴)도 라이트.
@@ -6161,6 +6163,8 @@ a.resv-card:active { transform: scale(0.995); }
 .msgmenu { position: fixed; z-index: 3401; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.2); min-width: 160px; padding: 4px; }
 .msgmenu__item { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 10px 12px; font-size: 14px; font-weight: 600; color: var(--fg); cursor: pointer; border-radius: 8px; }
 .msgmenu__item:hover { background: var(--green-100); }
+.msgmenu__item--danger { color: var(--danger); }
+.msgmenu__item--danger:hover { background: var(--danger-soft-bg); }
 /* 채팅 이미지: 말풍선 배경 없이 이미지만 + 업로드 실시간 % */
 .chatpane .msgr__bubble--media { background: none; border: 0; padding: 0; box-shadow: none; }
 .chatpane .msgr__media { border-radius: 12px; display: block; }
@@ -6212,6 +6216,8 @@ a.resv-card:active { transform: scale(0.995); }
 .mdd__opt { text-align: left; background: none; border: 0; padding: 11px 12px; border-radius: 9px; font-size: 14.5px; font-weight: 700; color: var(--fg); font-family: inherit; cursor: pointer; }
 .mdd__opt:hover { background: var(--surface-2); }
 .mdd__opt.on { background: var(--green-100); color: var(--green-800); }
+.mdd__check { display: inline-block; width: 16px; flex: 0 0 auto; color: var(--green-700); font-weight: 900; }
+.mdd__opt { display: flex; align-items: center; gap: 4px; }
 
 /* 할 일 추가 / 상세 팝업(바텀시트) */
 .taskmodal { gap: 10px; }
@@ -6281,7 +6287,7 @@ a.resv-card:active { transform: scale(0.995); }
 .home__today { margin-bottom: 16px; display: flex; flex-direction: column; }
 .home__today .home__sectitle { margin-bottom: 2px; }
 .home__todayrow { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 6px; }
-.home__todayday { flex: 0 0 auto; width: 22px; text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); }
+.home__todayday { flex: 0 0 auto; min-width: 48px; text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); white-space: nowrap; }
 .home__todayday.is-today { color: var(--green-700); }
 .home__todaydot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; }
 .home__todaydot--event { background: var(--green-700); }

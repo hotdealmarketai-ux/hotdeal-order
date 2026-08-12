@@ -18,6 +18,7 @@ import {
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 const wdOf = (ymd: string) => WEEKDAY[new Date(`${ymd}T00:00:00Z`).getUTCDay()];
+const mdOf = (ymd: string) => { const [, m, d] = ymd.split("-"); return `${Number(m)}/${Number(d)}`; };
 
 type Member = { id: string; name: string; active: boolean };
 type Channel = { id: string; name: string };
@@ -127,7 +128,7 @@ export function TasksPane({
         <div className="tcard__who">
           <span className="tcard__from">{nameOf(t.createdById)}</span>
           <span className="tcard__arrow">→</span>
-          <span className={`tcard__to${t.toAll ? " all" : ""}`}>{t.toAll ? "팀원 전체" : t.assigneeId ? nameOf(t.assigneeId) : "미지정"}</span>
+          <span className={`tcard__to${t.toAll ? " all" : ""}`}>{t.toAll ? "팀원 전체" : t.assigneeIds.length ? t.assigneeIds.map(nameOf).join(", ") : "미지정"}</span>
           <span className="tcard__time">{fmtClock(t.createdAt)}</span>
         </div>
       </div>
@@ -142,7 +143,7 @@ export function TasksPane({
       <div className="home__inner">
         <div className="home__greet">
           <div className="home__greetmain">
-            <div className="home__hi">{me.name}님</div>
+            <div className="home__hi">{me.name}님, 반가워요</div>
             <div className="home__sub">{open.length ? `할 일 ${open.length}` : "오늘도 좋은 하루"}</div>
           </div>
           <AddTaskButton members={members} className="home__addfab" label="＋" onAdded={load} />
@@ -184,7 +185,7 @@ export function TasksPane({
                   const isToday = it.date === kstYmd(new Date());
                   return (
                     <div className="home__todayrow" key={`${it.kind}-${it.id}`}>
-                      <span className={`home__todayday${isToday ? " is-today" : ""}`}>{wdOf(it.date)}</span>
+                      <span className={`home__todayday${isToday ? " is-today" : ""}`}>{mdOf(it.date)} {wdOf(it.date)}</span>
                       <span className={`home__todaydot home__todaydot--${it.kind}`} />
                       <span className="home__todaytitle">{it.title}</span>
                       {it.who && <span className="home__todaywho">{it.who}</span>}
@@ -234,7 +235,7 @@ export function TasksPane({
             <div className="taskdetail__meta">
               <span>{nameOf(detailTask.createdById)}</span>
               <span className="tcard__arrow">→</span>
-              <span>{detailTask.toAll ? "팀원 전체" : detailTask.assigneeId ? nameOf(detailTask.assigneeId) : "미지정"}</span>
+              <span>{detailTask.toAll ? "팀원 전체" : detailTask.assigneeIds.length ? detailTask.assigneeIds.map(nameOf).join(", ") : "미지정"}</span>
               <span className="taskdetail__dot">·</span>
               <span>{fmtFull(detailTask.createdAt)}</span>
             </div>

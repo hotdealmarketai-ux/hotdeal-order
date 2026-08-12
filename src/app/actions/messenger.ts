@@ -93,6 +93,19 @@ export async function sendMessengerMessageAction(
   return {};
 }
 
+// 메시지 전송 취소(삭제) — 본인이 보낸 메시지만.
+export async function deleteMessengerMessageAction(messageId: string): Promise<{ error?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !messageId) return { error: "" };
+  const msg = await prisma.messengerMessage.findUnique({ where: { id: messageId }, select: { memberId: true } });
+  if (!msg) return {};
+  if (msg.memberId !== me.id) return { error: "내가 보낸 메시지만 취소할 수 있어요." };
+  await prisma.messengerMention.deleteMany({ where: { messageId } }).catch(() => {});
+  await prisma.messengerMessage.delete({ where: { id: messageId } }).catch(() => {});
+  return {};
+}
+
 // 채널 열람 시 읽음 처리(안 읽음 배지 소멸용).
 export async function markMessengerReadAction(channelId: string): Promise<void> {
   await requireAdmin();
@@ -321,19 +334,24 @@ export async function loadMessengerWeekAgendaAction(): Promise<{ items: WeekItem
     prisma.messengerEvent.findMany({ where: { date: { gte: start, lt: end } }, orderBy: { date: "asc" } }),
     prisma.messengerTask.findMany({ where: { dueDate: { gte: start, lt: end }, done: false }, orderBy: { dueDate: "asc" } }),
   ]);
-  const ids = [...new Set(tasks.map((t) => t.assigneeId).filter((x): x is string => !!x))];
+  const idsOf = (t: { assigneeIds: string[]; assigneeId: string | null }) =>
+    t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [];
+  const ids = [...new Set(tasks.flatMap(idsOf))];
   const mem = ids.length ? await prisma.messengerMember.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }) : [];
   const nameMap = new Map(mem.map((m) => [m.id, m.name]));
   const items: WeekItemDTO[] = [
     ...events.map((e) => ({ id: e.id, kind: "event" as const, title: e.title, memo: e.memo, who: null, date: kstDateOf(e.date) })),
-    ...tasks.map((t) => ({
-      id: t.id,
-      kind: "task" as const,
-      title: t.title,
-      memo: null,
-      who: t.toAll ? "팀원 전체" : t.assigneeId ? nameMap.get(t.assigneeId) ?? "지난 멤버" : "미지정",
-      date: kstDateOf(t.dueDate!),
-    })),
+    ...tasks.map((t) => {
+      const list = idsOf(t);
+      return {
+        id: t.id,
+        kind: "task" as const,
+        title: t.title,
+        memo: null,
+        who: t.toAll ? "팀원 전체" : list.length ? list.map((id) => nameMap.get(id) ?? "지난 멤버").join(", ") : "미지정",
+        date: kstDateOf(t.dueDate!),
+      };
+    }),
   ];
   items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return { items };
@@ -382,6 +400,17 @@ export async function resetMessengerPinAction(formData: FormData): Promise<{ err
   if (!id || pin.length < 4) return { error: "비밀번호는 4자 이상." };
   await prisma.messengerMember.update({ where: { id }, data: { pinHash: await hashPin(pin) } });
   revalidatePath("/messenger/manage");
+  return {};
+}
+export async function renameMessengerMemberAction(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim().slice(0, 30);
+  if (!id) return { error: "" };
+  if (!name) return { error: "이름을 입력하세요." };
+  await prisma.messengerMember.update({ where: { id }, data: { name } }).catch(() => {});
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
   return {};
 }
 export async function toggleMessengerMemberAction(formData: FormData): Promise<void> {
@@ -542,7 +571,8 @@ export type TaskDTO = {
   title: string;
   detail: string | null; // 상세 설명(제목 클릭 시 팝업)
   done: boolean;
-  assigneeId: string | null;
+  assigneeId: string | null; // (레거시) 단일
+  assigneeIds: string[]; // 받는 사람(다중)
   toAll: boolean; // 받는 사람 = 팀원 전체
   due: string | null; // yyyy-mm-dd(KST) | null
   createdById: string; // 보낸 사람(시킨 사람)
@@ -562,6 +592,7 @@ export async function loadMessengerTasksAction(): Promise<{ tasks: TaskDTO[] }> 
       detail: t.detail,
       done: t.done,
       assigneeId: t.assigneeId,
+      assigneeIds: t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [],
       toAll: t.toAll,
       due: t.dueDate ? kstDateOf(t.dueDate) : null,
       createdById: t.createdById,
@@ -579,10 +610,34 @@ export async function addMessengerTaskAction(formData: FormData): Promise<{ erro
   if (!title) return { error: "할 일을 입력하세요." };
   const detail = String(formData.get("detail") ?? "").trim().slice(0, 2000) || null;
   const toAll = String(formData.get("toAll") ?? "") === "1";
-  const assigneeId = toAll ? null : String(formData.get("assigneeId") ?? "").trim() || null;
-  if (!toAll && !assigneeId) return { error: "받는 사람을 선택하세요." };
+  const assigneeIds = toAll ? [] : [...new Set(formData.getAll("assigneeIds").map((v) => String(v).trim()).filter(Boolean))];
+  if (!toAll && assigneeIds.length === 0) return { error: "받는 사람을 선택하세요." };
   const due = kstMidnight(String(formData.get("due") ?? "").trim());
-  await prisma.messengerTask.create({ data: { title, detail, createdById: me.id, assigneeId, toAll, dueDate: due } });
+  await prisma.messengerTask.create({
+    data: { title, detail, createdById: me.id, assigneeId: assigneeIds[0] ?? null, assigneeIds, toAll, dueDate: due },
+  });
+
+  // 채널에서 추가한 경우(홈이 아니면) 그 채널에 '할 일이 등록되었습니다' 안내 메시지.
+  const channelId = String(formData.get("channelId") ?? "").trim();
+  if (channelId) {
+    const ch = await prisma.messengerChannel.findFirst({ where: { id: channelId, archived: false }, select: { id: true } });
+    if (ch) {
+      let whoLabel = "팀원 전체";
+      if (!toAll) {
+        const mem = await prisma.messengerMember.findMany({ where: { id: { in: assigneeIds } }, select: { id: true, name: true } });
+        const nameMap = new Map(mem.map((m) => [m.id, m.name]));
+        whoLabel = assigneeIds.map((id) => nameMap.get(id) ?? "지난 멤버").join(", ") || "미지정";
+      }
+      const lines = ["할 일이 등록되었습니다", `· 할 일: ${title}`, `· 받는 사람: ${whoLabel}`];
+      if (detail) lines.push(`· 내용: ${detail}`);
+      await prisma.messengerMessage.create({ data: { channelId, memberId: me.id, body: lines.join("\n") } });
+      await prisma.messengerRead.upsert({
+        where: { memberId_channelId: { memberId: me.id, channelId } },
+        create: { memberId: me.id, channelId, lastReadAt: new Date() },
+        update: { lastReadAt: new Date() },
+      });
+    }
+  }
   revalidatePath("/messenger");
   return {};
 }
@@ -627,7 +682,7 @@ export async function deleteMessengerTaskAction(id: string): Promise<void> {
 
 // ── 팀 캘린더(팀 전체 공용) ──────────────────────────────────
 export type EventDTO = { id: string; title: string; date: string; memo: string | null; createdById: string };
-export type CalTaskDTO = { id: string; title: string; due: string; done: boolean; assigneeId: string | null };
+export type CalTaskDTO = { id: string; title: string; due: string; done: boolean; assigneeIds: string[] };
 
 export async function loadMessengerCalendarAction(
   year: number,
@@ -648,7 +703,13 @@ export async function loadMessengerCalendarAction(
   ]);
   return {
     events: events.map((e) => ({ id: e.id, title: e.title, date: kstDateOf(e.date), memo: e.memo, createdById: e.createdById })),
-    tasks: tasks.map((t) => ({ id: t.id, title: t.title, due: kstDateOf(t.dueDate!), done: t.done, assigneeId: t.assigneeId })),
+    tasks: tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      due: kstDateOf(t.dueDate!),
+      done: t.done,
+      assigneeIds: t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [],
+    })),
   };
 }
 

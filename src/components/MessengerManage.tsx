@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   addMessengerMemberAction,
   resetMessengerPinAction,
+  renameMessengerMemberAction,
   deleteMessengerMemberAction,
   addMessengerChannelAction,
   renameMessengerChannelAction,
@@ -31,6 +32,8 @@ export function MessengerManage({ members, channels, groups }: { members: Member
   const [cErr, setCErr] = useState("");
   const [pinFor, setPinFor] = useState<string | null>(null);
   const [pinVal, setPinVal] = useState("");
+  const [mRenFor, setMRenFor] = useState<string | null>(null);
+  const [mRenVal, setMRenVal] = useState("");
   const [renFor, setRenFor] = useState<string | null>(null);
   const [renVal, setRenVal] = useState("");
   const [gName, setGName] = useState("");
@@ -65,6 +68,12 @@ export function MessengerManage({ members, channels, groups }: { members: Member
     fd.set("id", id);
     fd.set("pin", pinVal.trim());
     run(() => resetMessengerPinAction(fd), (e) => alert(e), () => { setPinFor(null); setPinVal(""); });
+  };
+  const mRename = (id: string) => {
+    const fd = new FormData();
+    fd.set("id", id);
+    fd.set("name", mRenVal.trim());
+    run(() => renameMessengerMemberAction(fd), (e) => alert(e), () => { setMRenFor(null); setMRenVal(""); });
   };
   const delMember = (id: string, name: string) => {
     if (!confirm(`'${name}' 멤버를 삭제할까요?\n이 멤버가 보낸 메시지도 함께 사라지며 되돌릴 수 없어요.`)) return;
@@ -149,7 +158,10 @@ export function MessengerManage({ members, channels, groups }: { members: Member
                 <div className="row__main">
                   <div className="row__title">{m.name}</div>
                 </div>
-                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
+                  <button type="button" className="btn btn--xs btn--soft" onClick={() => { setMRenFor(mRenFor === m.id ? null : m.id); setMRenVal(m.name); }}>
+                    이름 수정
+                  </button>
                   <button type="button" className="btn btn--xs btn--soft" onClick={() => { setPinFor(pinFor === m.id ? null : m.id); setPinVal(""); }}>
                     비밀번호 변경
                   </button>
@@ -157,6 +169,19 @@ export function MessengerManage({ members, channels, groups }: { members: Member
                     삭제
                   </button>
                 </div>
+                {mRenFor === m.id && (
+                  <div style={{ display: "flex", gap: 6, width: "100%", marginTop: 8 }}>
+                    <input
+                      className="input"
+                      value={mRenVal}
+                      onChange={(e) => setMRenVal(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && mRenVal.trim() && mRename(m.id)}
+                      placeholder="새 이름"
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <button type="button" className="btn btn--xs btn--primary" onClick={() => mRename(m.id)} disabled={pending || !mRenVal.trim()}>변경</button>
+                  </div>
+                )}
                 {pinFor === m.id && (
                   <div style={{ display: "flex", gap: 6, width: "100%", marginTop: 8 }}>
                     <input

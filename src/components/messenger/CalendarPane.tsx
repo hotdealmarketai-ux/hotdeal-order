@@ -165,7 +165,7 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
             <span className="mcal__dot mcal__dot--task" />
             <div className="mcal__rowmain">
               <div className="mcal__rowtitle">{tk.title} {tk.done && <span className="mcal__doneflag">완료</span>}</div>
-              <div className="mcal__rowmemo">할 일{tk.assigneeId ? ` · ${nameOf(tk.assigneeId)}` : ""}</div>
+              <div className="mcal__rowmemo">할 일{tk.assigneeIds.length ? ` · ${tk.assigneeIds.map(nameOf).join(", ")}` : ""}</div>
             </div>
           </div>
         ))}
