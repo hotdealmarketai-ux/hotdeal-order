@@ -7,6 +7,7 @@ import {
   sendMessengerMessageAction,
   loadMessengerChannelAction,
   loadMessengerNoticesAction,
+  markMessengerReadAction,
   toggleMessengerNoticeAction,
   deleteMessengerMessageAction,
   editMessengerMessageAction,
@@ -73,6 +74,7 @@ export function ChatPane({
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpedFor = useRef<string | null>(null);
+  const lastReadId = useRef<string | null>(null);
   const stick = useRef(true); // 하단 고정
   const tmpSeq = useRef(0);
 
@@ -114,17 +116,31 @@ export function ChatPane({
     jumpedFor.current = null;
     stick.current = !scrollToId;
     if (!channelId) return;
+    lastReadId.current = null;
     const load = async () => {
       const [r, n] = await Promise.all([loadMessengerChannelAction(channelId), loadMessengerNoticesAction(channelId)]);
       if (!alive) return;
       setNotices(n.notices);
       setMessages(r.messages); // 서버 진실만 갱신 — 낙관적 pending 은 별도 상태라 안전
+      // 읽음 처리는 '새 메시지가 실제로 도착했고 지금 화면을 보고 있을 때'만(폴링마다 write 방지).
+      const newest = r.messages.length ? r.messages[r.messages.length - 1].id : null;
+      if (newest && newest !== lastReadId.current && (typeof document === "undefined" || !document.hidden)) {
+        lastReadId.current = newest;
+        markMessengerReadAction(channelId).catch(() => {});
+      }
     };
     load();
-    const t = setInterval(load, 3000);
+    // 백그라운드 탭에선 폴링 스킵(밤새 열어둔 탭이 DB를 계속 때리지 않게), 보일 때 즉시 1회 새로고침.
+    const t = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      load();
+    }, 3000);
+    const onVis = () => { if (!document.hidden) load(); };
+    document.addEventListener("visibilitychange", onVis);
     return () => {
       alive = false;
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, [channelId, scrollToId]);
 

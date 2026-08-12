@@ -47,7 +47,8 @@ export function MessengerWorkspace({
       if (alive) setUnread(u);
     };
     run();
-    const t = setInterval(run, 5000);
+    // 백그라운드 탭에선 스킵(밤새 열어둔 탭이 안읽음 카운트를 계속 폴링하지 않게).
+    const t = setInterval(() => { if (typeof document !== "undefined" && document.hidden) return; run(); }, 5000);
     return () => { alive = false; clearInterval(t); };
   }, [view, active]);
 

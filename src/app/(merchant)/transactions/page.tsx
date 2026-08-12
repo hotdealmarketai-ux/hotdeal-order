@@ -25,11 +25,15 @@ export default async function MerchantTransactionsPage(props: {
     prisma.invoice.findMany({
       where: { userId: user.id, status: { in: ["ISSUED", "PAID"] }, kind: { not: "SADADREAM" } },
       select: { id: true, date: true, total: true, status: true, splitRequested: true, issuedAt: true, createdAt: true, kind: true },
+      orderBy: { createdAt: "desc" },
+      take: 500, // 최근 500건만(미수 잔액은 receivableOf 로 별도 합산 → 목록 캡과 무관하게 정확).
     }),
     // 입금 내역 — 이 지점으로 매칭된 입금(관리자가 매칭). 미매칭 입금은 아직 이 지점 것으로 확정 전이라 제외.
     prisma.deposit.findMany({
       where: { matchedUserId: user.id, matchStatus: { in: ["AUTO", "MANUAL"] } },
       select: { id: true, txAt: true, amount: true, payerName: true },
+      orderBy: { txAt: "desc" },
+      take: 500,
     }),
     receivableOf(user.id),
     prisma.receivableAdjustment.findMany({

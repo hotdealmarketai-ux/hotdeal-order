@@ -1,0 +1,36 @@
+name: db-backup
+
+# 매일 Neon DB 전체를 pg_dump → GitHub 아티팩트로 30일 보관(오프사이트 백업).
+# in-DB 스냅샷(AppMeta)은 DB가 죽으면 같이 죽으므로, 다른 곳(GitHub)에 실물 덤프를 둔다.
+# ⚠ 최초 1회: GitHub 저장소 Settings > Secrets > Actions 에 NEON_DATABASE_URL 추가
+#    (값 = Neon 직결(unpooled) 연결 문자열, sslmode=require 포함).
+on:
+  schedule:
+    - cron: "0 22 * * *" # 07:00 KST 매일(새벽 1~6시 출고 조회창 이후, 저트래픽)
+  workflow_dispatch:
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump Neon DB (custom format, compressed)
+        run: |
+          if [ -z "${{ secrets.NEON_DATABASE_URL }}" ]; then
+            echo "NEON_DATABASE_URL 시크릿이 없습니다 — 저장소 Secrets에 추가하세요." >&2
+            exit 1
+          fi
+          # 서버 버전과 무관하게 최신 pg_dump 사용(신 버전 pg_dump는 구 버전 서버 덤프 가능).
+          docker run --rm -e PGCONN="${{ secrets.NEON_DATABASE_URL }}" postgres:17 \
+            sh -c 'pg_dump "$PGCONN" --no-owner --no-privileges -Fc' > "neon-$(date -u +%Y%m%d).dump"
+          ls -lh neon-*.dump
+      - name: Upload backup artifact (30d retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: neon-backup-${{ github.run_id }}
+          path: neon-*.dump
+          retention-days: 30
+          if-no-files-found: error

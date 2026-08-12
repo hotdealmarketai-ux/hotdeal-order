@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { kstDateOf } from "@/lib/date";
@@ -153,12 +154,20 @@ export async function deleteMessengerMessageAction(messageId: string): Promise<{
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me || !messageId) return { error: "" };
-  const msg = await prisma.messengerMessage.findUnique({ where: { id: messageId }, select: { memberId: true } });
+  const msg = await prisma.messengerMessage.findUnique({
+    where: { id: messageId },
+    select: { memberId: true, mediaUrl: true, mediaUrls: true, fileUrl: true },
+  });
   if (!msg) return {};
   if (msg.memberId !== me.id) return { error: "내가 보낸 메시지만 취소할 수 있어요." };
   await prisma.messengerMention.deleteMany({ where: { messageId } }).catch(() => {});
   await prisma.messengerReaction.deleteMany({ where: { messageId } }).catch(() => {});
-  await prisma.messengerMessage.delete({ where: { id: messageId } }).catch(() => {});
+  // 행 삭제가 실제로 성공했을 때만 Blob 정리 — 삭제 실패 시 살아있는 메시지의 미디어를 지워버리지 않게.
+  const deleted = await prisma.messengerMessage.delete({ where: { id: messageId } }).then(() => true).catch(() => false);
+  if (deleted) {
+    const urls = [msg.mediaUrl, ...(msg.mediaUrls ?? []), msg.fileUrl].filter((u): u is string => !!u);
+    if (urls.length) after(() => del(urls).catch(() => {}));
+  }
   return {};
 }
 
@@ -224,11 +233,8 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
       },
     })
   ).reverse();
-  await prisma.messengerRead.upsert({
-    where: { memberId_channelId: { memberId: me.id, channelId } },
-    create: { memberId: me.id, channelId, lastReadAt: new Date() },
-    update: { lastReadAt: new Date() },
-  });
+  // ⚠ 읽음 처리는 여기서 하지 않는다(3초 폴링마다 write가 나가 Neon 컴퓨트를 24시간 깨워두는 문제).
+  //   클라(ChatPane)가 '새 메시지가 실제로 도착했을 때'만 markMessengerReadAction 을 호출한다.
   // 공감(체크) 반응 — 이 300개 메시지에 달린 반응을 한 번에 모아 메시지별 이름/내 반응 여부로 정리.
   const ids = rows.map((m) => m.id);
   const reacts = ids.length
@@ -595,8 +601,18 @@ export async function deleteMessengerChannelAction(formData: FormData): Promise<
   await requireAdmin();
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return;
+  // 삭제 전에 채널 메시지들의 첨부 Blob URL 수집 → 원본 정리(고아 파일 방지).
+  const withMedia = await prisma.messengerMessage.findMany({
+    where: { channelId: id, OR: [{ mediaUrl: { not: null } }, { fileUrl: { not: null } }, { mediaUrls: { isEmpty: false } }] },
+    select: { mediaUrl: true, mediaUrls: true, fileUrl: true },
+  });
+  const urls = withMedia.flatMap((m) => [m.mediaUrl, ...(m.mediaUrls ?? []), m.fileUrl]).filter((u): u is string => !!u);
   await prisma.messengerMention.deleteMany({ where: { channelId: id } }).catch(() => {});
   await prisma.messengerChannel.delete({ where: { id } }).catch(() => {});
+  if (urls.length)
+    after(async () => {
+      for (let i = 0; i < urls.length; i += 100) await del(urls.slice(i, i + 100)).catch(() => {});
+    });
   revalidatePath("/messenger/manage");
   revalidatePath("/messenger");
 }

@@ -120,6 +120,8 @@ export async function GET(request: Request) {
     await timed("tick:weekly-overdue", 10, 0, [5], "/api/cron/weekly-overdue", 720);
 
     // 입금 자동수집 — 24시간, 약 10분 간격. 슬롯 먼저 선점(팝빌 지연/타임아웃 나도 매분 재시도 방지).
+    // ※ 팝빌 계좌조회는 계좌당 '월정액'(폴링 횟수 무관, bank-collect.yml 주석)이라 빈도를 줄여도 비용 절감이 없고,
+    //   오히려 새벽 입금 감지가 늦어지므로 상시 조회를 유지한다(감사 #9는 건당 과금 가정 → 요금제 확인 필요).
     if (now - (await lastFired("tick:collect")) >= 9.5 * 60 * 1000) {
       await markFired("tick:collect", now);
       await hit("/api/cron/collect-deposits?days=3"); // 멱등 — 다음 슬롯에 다시 시도됨

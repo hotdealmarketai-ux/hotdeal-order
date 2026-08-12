@@ -20,6 +20,11 @@ async function getWebPush() {
   return webpush;
 }
 
+// 한 발송이 죽은 엔드포인트에 매달려 함수를 점유하지 않도록 8초 타임아웃(라이브러리 버전 무관하게 race).
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error("push-timeout")), ms))]);
+}
+
 // 특정 멤버들에게 발송(중복 id 제거). 만료 구독(404/410)은 정리.
 export async function sendMessengerPush(memberIds: string[], payload: MsgrPushPayload) {
   const ids = [...new Set(memberIds.filter(Boolean))];
@@ -32,7 +37,7 @@ export async function sendMessengerPush(memberIds: string[], payload: MsgrPushPa
   await Promise.all(
     subs.map(async (s) => {
       try {
-        await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, data);
+        await withTimeout(webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, data), 8000);
       } catch (err) {
         const code = (err as { statusCode?: number })?.statusCode;
         if (code === 404 || code === 410) {
@@ -45,10 +50,19 @@ export async function sendMessengerPush(memberIds: string[], payload: MsgrPushPa
   );
 }
 
+// 활성 멤버 id 캐시 — 메시지 폭주 시 메시지당 멤버 전체조회를 막는다(인스턴스별 30초 TTL).
+let _activeIdsCache: { at: number; ids: string[] } | null = null;
+async function allActiveIds(): Promise<string[]> {
+  const now = Date.now();
+  if (_activeIdsCache && now - _activeIdsCache.at < 30_000) return _activeIdsCache.ids;
+  const ms = await prisma.messengerMember.findMany({ where: { active: true }, select: { id: true } });
+  _activeIdsCache = { at: now, ids: ms.map((m) => m.id) };
+  return _activeIdsCache.ids;
+}
+
 // 활성 멤버 id 목록(발신자 제외).
 export async function activeMemberIdsExcept(exceptId: string): Promise<string[]> {
-  const ms = await prisma.messengerMember.findMany({ where: { active: true }, select: { id: true } });
-  return ms.map((m) => m.id).filter((id) => id !== exceptId);
+  return (await allActiveIds()).filter((id) => id !== exceptId);
 }
 
 // 목적격 조사 을/를 — 받침 있으면 '을', 없으면 '를'(한글 아니면 '을'로 안전).

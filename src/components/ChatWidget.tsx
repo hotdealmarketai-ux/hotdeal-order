@@ -129,13 +129,14 @@ export function ChatWidget() {
     };
   }, [pathname]);
 
-  // 닫혀있을 때 미읽음 폴링
+  // 닫혀있을 때 미읽음 폴링 — 백그라운드 탭에선 스킵, 주기 30초(새 메시지는 웹푸시가 커버).
   useEffect(() => {
     if (!role || open) return;
     const id = setInterval(async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
       const n = await chatUnread().catch(() => null);
       if (typeof n === "number") setUnread(n);
-    }, 12000);
+    }, 30000);
     return () => clearInterval(id);
   }, [role, open]);
 

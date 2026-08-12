@@ -76,7 +76,7 @@ export function TasksPane({
       setWeek(a.items);
     };
     run();
-    const iv = setInterval(run, 7000);
+    const iv = setInterval(() => { if (typeof document !== "undefined" && document.hidden) return; run(); }, 7000);
     return () => { alive = false; clearInterval(iv); };
   }, []);
 
