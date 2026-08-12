@@ -124,16 +124,19 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me || !channelId) return { messages: [] };
-  const rows = await prisma.messengerMessage.findMany({
-    where: { channelId },
-    orderBy: { createdAt: "asc" },
-    take: 300,
-    select: {
-      id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, mediaUrls: true, createdAt: true,
-      replyToName: true, replyToBody: true, noticeAt: true,
-      member: { select: { name: true } },
-    },
-  });
+  // 최신 300개를 불러온 뒤 오름차순으로 뒤집는다(오래된 300개만 보여서 새 메시지가 안 뜨던 문제 방지).
+  const rows = (
+    await prisma.messengerMessage.findMany({
+      where: { channelId },
+      orderBy: { createdAt: "desc" },
+      take: 300,
+      select: {
+        id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, mediaUrls: true, createdAt: true,
+        replyToName: true, replyToBody: true, noticeAt: true,
+        member: { select: { name: true } },
+      },
+    })
+  ).reverse();
   await prisma.messengerRead.upsert({
     where: { memberId_channelId: { memberId: me.id, channelId } },
     create: { memberId: me.id, channelId, lastReadAt: new Date() },
@@ -156,12 +159,19 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
   };
 }
 
-// 공지 등록/해제.
+// 공지 등록/해제 — 공지는 채널당 1개(등록 시 기존 공지 자동 해제).
 export async function toggleMessengerNoticeAction(messageId: string, on: boolean): Promise<void> {
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me || !messageId) return;
-  await prisma.messengerMessage.update({ where: { id: messageId }, data: { noticeAt: on ? new Date() : null } }).catch(() => {});
+  const msg = await prisma.messengerMessage.findUnique({ where: { id: messageId }, select: { channelId: true } });
+  if (!msg) return;
+  if (on) {
+    await prisma.messengerMessage.updateMany({ where: { channelId: msg.channelId, noticeAt: { not: null } }, data: { noticeAt: null } });
+    await prisma.messengerMessage.update({ where: { id: messageId }, data: { noticeAt: new Date() } }).catch(() => {});
+  } else {
+    await prisma.messengerMessage.update({ where: { id: messageId }, data: { noticeAt: null } }).catch(() => {});
+  }
 }
 
 // 채널 공지 목록(상단 고정 바용).
@@ -226,6 +236,100 @@ export async function markMentionReadAction(mentionId: string): Promise<void> {
     .catch(() => {});
 }
 
+// 채널 보관함 — 이 채널에 올라온 모든 사진·영상(카카오톡식 갤러리).
+export type MediaItemDTO = { messageId: string; url: string; type: "image" | "video"; at: string; name: string };
+export async function loadMessengerChannelMediaAction(channelId: string): Promise<{ items: MediaItemDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !channelId) return { items: [] };
+  const rows = await prisma.messengerMessage.findMany({
+    where: { channelId, OR: [{ mediaUrl: { not: null } }, { mediaUrls: { isEmpty: false } }] },
+    orderBy: { createdAt: "desc" },
+    take: 500,
+    select: { id: true, mediaUrl: true, mediaType: true, mediaUrls: true, createdAt: true, member: { select: { name: true } } },
+  });
+  const items: MediaItemDTO[] = [];
+  for (const m of rows) {
+    const at = m.createdAt.toISOString();
+    const type: "image" | "video" = m.mediaType === "video" ? "video" : "image";
+    const urls = m.mediaUrls && m.mediaUrls.length ? m.mediaUrls : m.mediaUrl ? [m.mediaUrl] : [];
+    for (const url of urls) items.push({ messageId: m.id, url, type, at, name: m.member.name });
+  }
+  return { items };
+}
+
+// 채널 안 대화 검색.
+export type SearchHitDTO = { messageId: string; body: string; name: string; at: string };
+export async function searchMessengerChannelAction(channelId: string, q: string): Promise<{ hits: SearchHitDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  const query = q.trim();
+  if (!me || !channelId || query.length < 1) return { hits: [] };
+  const rows = await prisma.messengerMessage.findMany({
+    where: { channelId, body: { contains: query, mode: "insensitive" } },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: { id: true, body: true, createdAt: true, member: { select: { name: true } } },
+  });
+  return { hits: rows.map((m) => ({ messageId: m.id, body: m.body, name: m.member.name, at: m.createdAt.toISOString() })) };
+}
+
+// 전 채널 대화 검색(홈 검색바) — 어느 채널의 어떤 대화인지.
+export type GlobalHitDTO = { channelId: string; channelName: string; messageId: string; body: string; name: string; at: string };
+export async function searchMessengerAllAction(q: string): Promise<{ hits: GlobalHitDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  const query = q.trim();
+  if (!me || query.length < 1) return { hits: [] };
+  const chans = await prisma.messengerChannel.findMany({ where: { archived: false }, select: { id: true, name: true } });
+  const nameMap = new Map(chans.map((c) => [c.id, c.name]));
+  const rows = await prisma.messengerMessage.findMany({
+    where: { channelId: { in: chans.map((c) => c.id) }, body: { contains: query, mode: "insensitive" } },
+    orderBy: { createdAt: "desc" },
+    take: 60,
+    select: { id: true, channelId: true, body: true, createdAt: true, member: { select: { name: true } } },
+  });
+  return {
+    hits: rows.map((m) => ({
+      channelId: m.channelId,
+      channelName: nameMap.get(m.channelId) ?? "채널",
+      messageId: m.id,
+      body: m.body,
+      name: m.member.name,
+      at: m.createdAt.toISOString(),
+    })),
+  };
+}
+
+// 홈 '오늘 일정' — 오늘 날짜 캘린더 일정 + 오늘 마감 할일(팀 전체 공용).
+export type TodayItemDTO = { id: string; kind: "event" | "task"; title: string; memo: string | null; who: string | null };
+export async function loadMessengerTodayAgendaAction(): Promise<{ items: TodayItemDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+  const start = kstMidnight(today);
+  if (!me || !start) return { items: [] };
+  const end = new Date(start.getTime() + 86400000);
+  const [events, tasks] = await Promise.all([
+    prisma.messengerEvent.findMany({ where: { date: { gte: start, lt: end } }, orderBy: { createdAt: "asc" } }),
+    prisma.messengerTask.findMany({ where: { dueDate: { gte: start, lt: end }, done: false }, orderBy: { createdAt: "asc" } }),
+  ]);
+  const ids = [...new Set(tasks.map((t) => t.assigneeId).filter((x): x is string => !!x))];
+  const mem = ids.length ? await prisma.messengerMember.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }) : [];
+  const nameMap = new Map(mem.map((m) => [m.id, m.name]));
+  const items: TodayItemDTO[] = [
+    ...events.map((e) => ({ id: e.id, kind: "event" as const, title: e.title, memo: e.memo, who: null })),
+    ...tasks.map((t) => ({
+      id: t.id,
+      kind: "task" as const,
+      title: t.title,
+      memo: null,
+      who: t.toAll ? "팀원 전체" : t.assigneeId ? nameMap.get(t.assigneeId) ?? "지난 멤버" : "미지정",
+    })),
+  ];
+  return { items };
+}
+
 // 채널별 안 읽음 수(배지 폴링).
 export async function messengerUnreadAction(): Promise<Record<string, number>> {
   await requireAdmin();
@@ -281,6 +385,17 @@ export async function toggleMessengerMemberAction(formData: FormData): Promise<v
   revalidatePath("/messenger/manage");
   revalidatePath("/messenger");
 }
+// 멤버 삭제(하드) — 메시지·읽음은 FK Cascade 로 함께 삭제. 할일/멘션의 memberId(문자열)는 '지난 멤버'로 표시.
+export async function deleteMessengerMemberAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  // 이 멤버 관련 멘션(문자열 참조, FK 없음)도 정리 — 죽은 '받은 멘션' 방지.
+  await prisma.messengerMention.deleteMany({ where: { OR: [{ mentionedMemberId: id }, { byMemberId: id }] } }).catch(() => {});
+  await prisma.messengerMember.delete({ where: { id } }).catch(() => {});
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+}
 export async function addMessengerChannelAction(formData: FormData): Promise<{ error?: string }> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim().slice(0, 30);
@@ -299,6 +414,38 @@ export async function archiveMessengerChannelAction(formData: FormData): Promise
   if (!ch) return;
   await prisma.messengerChannel.update({ where: { id }, data: { archived: !ch.archived } });
   revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+}
+// 채널 이름 수정.
+export async function renameMessengerChannelAction(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim().slice(0, 40);
+  if (!id) return { error: "" };
+  if (!name) return { error: "채널 이름을 입력하세요." };
+  await prisma.messengerChannel.update({ where: { id }, data: { name } }).catch(() => {});
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+  return {};
+}
+// 채널 삭제(하드) — 메시지·읽음은 FK Cascade, 멘션(문자열 channelId)은 별도 정리. 되돌릴 수 없음.
+export async function deleteMessengerChannelAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  await prisma.messengerMention.deleteMany({ where: { channelId: id } }).catch(() => {});
+  await prisma.messengerChannel.delete({ where: { id } }).catch(() => {});
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+}
+// 채널 즐겨찾기 토글(팀 공용).
+export async function toggleMessengerFavoriteAction(channelId: string): Promise<void> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !channelId) return;
+  const c = await prisma.messengerChannel.findUnique({ where: { id: channelId }, select: { favorite: true } });
+  if (!c) return;
+  await prisma.messengerChannel.update({ where: { id: channelId }, data: { favorite: !c.favorite } });
   revalidatePath("/messenger");
 }
 

@@ -8,14 +8,21 @@ import {
   loadMessengerChannelAction,
   loadMessengerNoticesAction,
   toggleMessengerNoticeAction,
+  loadMessengerChannelMediaAction,
+  searchMessengerChannelAction,
   type ChatMsgDTO,
+  type MediaItemDTO,
+  type SearchHitDTO,
 } from "@/app/actions/messenger";
 import { MediaLightbox } from "@/components/MediaLightbox";
+import { MessengerComposer } from "@/components/messenger/MessengerComposer";
 
 type Member = { id: string; name: string; active: boolean };
 type Notice = { id: string; body: string; name: string; at: string };
 type ReplyTo = { id: string; name: string; body: string };
 type Menu = { msgId: string; body: string; isNotice: boolean; x: number; y: number };
+type Msg = ChatMsgDTO & { pending?: boolean; failed?: boolean };
+export type ChatTool = null | "search" | "media";
 
 const fmtTime = (iso: string) =>
   new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" }).format(new Date(iso));
@@ -30,84 +37,90 @@ export function ChatPane({
   channelName,
   members,
   scrollToId,
+  tool = null,
+  onCloseTool,
 }: {
   me: { id: string; name: string };
   channelId: string;
   channelName: string;
   members: Member[];
   scrollToId?: string | null;
+  tool?: ChatTool;
+  onCloseTool?: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMsgDTO[]>([]);
+  const [messages, setMessages] = useState<Msg[]>([]); // 서버 진실
+  const [pending, setPending] = useState<Msg[]>([]); // 낙관적 전송(서버 목록과 분리 — 폴링이 절대 못 지움)
   const [notices, setNotices] = useState<Notice[]>([]);
-  const [input, setInput] = useState("");
-  const [up, setUp] = useState<{ url: string | null; pct: number }[] | null>(null); // 업로드 미리보기 + 진행률(여러 장)
+  const [up, setUp] = useState<{ url: string | null; pct: number }[] | null>(null);
   const [err, setErr] = useState("");
   const [lb, setLb] = useState<{ src: string; type: "image" | "video"; group?: string[] } | null>(null);
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
-  const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<SearchHitDTO[]>([]);
+  const [mediaItems, setMediaItems] = useState<MediaItemDTO[] | null>(null);
+  const [, start] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpedFor = useRef<string | null>(null);
-  const stick = useRef(true); // 하단 고정 — 바닥 근처면 새 메시지에 자동 스크롤
+  const stick = useRef(true); // 하단 고정
+  const tmpSeq = useRef(0);
 
-  const activeMembers = useMemo(() => members.filter((m) => m.active), [members]);
   const nameSet = useMemo(() => new Set(members.map((m) => m.name)), [members]);
+  const mentionRe = useMemo(
+    () => (nameSet.size ? new RegExp(`(@(?:${members.map((m) => escapeRe(m.name)).join("|")}))`, "g") : null),
+    [members, nameSet.size],
+  );
 
   const onScroll = () => {
     const el = scrollRef.current;
     if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90;
   };
-  const scrollDown = () => {
-    stick.current = true; // 실제 스크롤은 아래 messages/up 이펙트가 커밋 후 수행
-  };
+  const scrollDown = () => { stick.current = true; };
 
-  // 메시지/업로드 미리보기가 바뀐 뒤(커밋 후) 하단 고정 상태면 맨 아래로.
   useEffect(() => {
     if (stick.current) {
       const el = scrollRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }
-  }, [messages, up]);
+  }, [messages, pending, up]);
 
   const jumpTo = (id: string) => {
     const el = rowRefs.current.get(id);
     if (!el) return;
-    stick.current = false; // 특정 메시지로 점프 중엔 하단 고정 해제(폴링이 바닥으로 끌지 않게)
+    stick.current = false;
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     setHighlight(id);
     setTimeout(() => setHighlight((h) => (h === id ? null : h)), 2200);
   };
 
-  // 채널 전환 시 초기화 + 폴링(메시지·공지·읽음).
+  // 채널 전환 + 폴링(3초).
   useEffect(() => {
     let alive = true;
     setMessages([]);
+    setPending([]);
     setNotices([]);
     setReplyTo(null);
     jumpedFor.current = null;
-    stick.current = !scrollToId; // 진입 시 하단 고정(멘션 점프면 해제)
+    stick.current = !scrollToId;
     if (!channelId) return;
     const load = async () => {
       const [r, n] = await Promise.all([loadMessengerChannelAction(channelId), loadMessengerNoticesAction(channelId)]);
       if (!alive) return;
       setNotices(n.notices);
-      setMessages(r.messages);
+      setMessages(r.messages); // 서버 진실만 갱신 — 낙관적 pending 은 별도 상태라 안전
     };
     load();
-    const t = setInterval(load, 4000);
+    const t = setInterval(load, 3000);
     return () => {
       alive = false;
       clearInterval(t);
     };
   }, [channelId, scrollToId]);
 
-  // 멘션 등으로 특정 메시지로 점프(로드 완료 후 1회).
   useEffect(() => {
     if (scrollToId && messages.some((m) => m.id === scrollToId) && jumpedFor.current !== scrollToId) {
       jumpedFor.current = scrollToId;
@@ -115,78 +128,82 @@ export function ChatPane({
     }
   }, [scrollToId, messages]);
 
-  // @자동완성 — 커서 앞의 "@검색어" 감지.
-  const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    setInput(v);
-    const caret = e.target.selectionStart ?? v.length;
-    const upto = v.slice(0, caret);
-    const at = upto.lastIndexOf("@");
-    if (at >= 0 && (at === 0 || /\s/.test(upto[at - 1]))) {
-      const q = upto.slice(at + 1);
-      if (!/\s/.test(q)) {
-        setMention({ query: q, start: at });
-        return;
-      }
-    }
-    setMention(null);
-  };
-  const pickMention = (name: string) => {
-    if (!mention) return;
-    const before = input.slice(0, mention.start);
-    const after = input.slice((inputRef.current?.selectionStart ?? input.length));
-    const next = `${before}@${name} ${after}`;
-    setInput(next);
-    setMention(null);
-    requestAnimationFrame(() => {
-      const pos = (before + `@${name} `).length;
-      inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(pos, pos);
-    });
-  };
-  const mentionList = mention
-    ? activeMembers.filter((m) => m.name.toLowerCase().includes(mention.query.toLowerCase())).slice(0, 6)
-    : [];
+  // 도구(검색/보관함) 로드.
+  useEffect(() => {
+    if (tool !== "search") { setQ(""); setHits([]); }
+    if (tool !== "media") setMediaItems(null);
+    if (tool === "search") setTimeout(() => inputRef.current?.focus(), 50);
+  }, [tool]);
+  useEffect(() => {
+    if (tool !== "media" || !channelId) return;
+    let alive = true;
+    loadMessengerChannelMediaAction(channelId).then((r) => { if (alive) setMediaItems(r.items); });
+    return () => { alive = false; };
+  }, [tool, channelId]);
+  useEffect(() => {
+    if (tool !== "search") return;
+    const query = q.trim();
+    if (!query) { setHits([]); return; }
+    let alive = true;
+    const t = setTimeout(() => {
+      searchMessengerChannelAction(channelId, query).then((r) => { if (alive) setHits(r.hits); });
+    }, 220);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q, tool, channelId]);
 
-  const send = () => {
-    const body = input.trim();
-    if (!body || !channelId) return;
-    setInput("");
-    setMention(null);
+  // 전송(낙관적) — 보낸 메시지를 즉시 pending 으로 붙이고, 서버 반영 후 실제 목록으로 교체.
+  const failTemp = (tempId: string, msg: string) => {
+    setPending((p) => p.map((x) => (x.id === tempId ? { ...x, pending: false, failed: true } : x)));
+    if (msg) setErr(msg);
+  };
+  const onSend = (body: string) => {
+    const text = body.trim();
+    if (!text || !channelId) return;
     const rt = replyTo;
     setReplyTo(null);
+    const tempId = `tmp-${Date.now()}-${tmpSeq.current++}`;
+    stick.current = true;
+    setPending((p) => [
+      ...p,
+      {
+        id: tempId, memberId: me.id, memberName: me.name, body: text,
+        mediaUrl: null, mediaType: null, mediaUrls: [],
+        replyToName: rt?.name ?? null, replyToBody: rt?.body ?? null,
+        notice: false, at: new Date().toISOString(), pending: true,
+      },
+    ]);
     start(async () => {
-      const fd = new FormData();
-      fd.set("channelId", channelId);
-      fd.set("body", body);
-      if (rt) {
-        fd.set("replyToId", rt.id);
-        fd.set("replyToName", rt.name);
-        fd.set("replyToBody", rt.body);
+      try {
+        const fd = new FormData();
+        fd.set("channelId", channelId);
+        fd.set("body", text);
+        if (rt) {
+          fd.set("replyToId", rt.id);
+          fd.set("replyToName", rt.name);
+          fd.set("replyToBody", rt.body);
+        }
+        const r = await sendMessengerMessageAction(fd);
+        if (r?.error) return failTemp(tempId, r.error);
+        const res = await loadMessengerChannelAction(channelId);
+        stick.current = true;
+        setMessages(res.messages);
+        setPending((p) => p.filter((x) => x.id !== tempId)); // 실제 메시지가 목록에 들어왔으니 임시분 제거
+      } catch {
+        failTemp(tempId, "전송에 실패했어요.");
       }
-      const r = await sendMessengerMessageAction(fd);
-      if (r?.error) setErr(r.error);
-      const res = await loadMessengerChannelAction(channelId);
-      setMessages(res.messages);
-      scrollDown();
     });
   };
 
-  // 첨부(사진 여러 장 묶어보내기 + 동영상). 사진은 한 메시지(그리드), 동영상은 각각 개별 메시지.
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    e.target.value = "";
+  // 첨부(사진 묶어보내기 + 동영상).
+  const onFiles = async (files: File[]) => {
     if (!files.length || !channelId) return;
     if (files.some((f) => f.size > 100 * 1024 * 1024)) return setErr("100MB 이하 파일만 보낼 수 있어요.");
     const images = files.filter((f) => !f.type.startsWith("video")).slice(0, 10);
     const videos = files.filter((f) => f.type.startsWith("video"));
     setErr("");
     stick.current = true;
-    let bodyLeft = input.trim(); // 타이핑한 글은 첫 메시지에만 붙임
-    setInput("");
     const objectUrls: string[] = [];
     try {
-      // 1) 사진 묶음 → 한 메시지(그리드)
       if (images.length) {
         const previews = images.map((f) => URL.createObjectURL(f));
         objectUrls.push(...previews);
@@ -204,15 +221,12 @@ export function ChatPane({
         );
         const fd = new FormData();
         fd.set("channelId", channelId);
-        fd.set("body", bodyLeft);
-        bodyLeft = "";
         fd.set("mediaType", "image");
         urls.forEach((u) => fd.append("mediaUrls", u));
         const r = await sendMessengerMessageAction(fd);
         if (r?.error) setErr(r.error);
         setUp(null);
       }
-      // 2) 동영상 → 각각 개별 메시지
       for (const v of videos) {
         setUp([{ url: null, pct: 0 }]);
         const b = await upload(v.name, v, {
@@ -223,8 +237,6 @@ export function ChatPane({
         });
         const fd = new FormData();
         fd.set("channelId", channelId);
-        fd.set("body", bodyLeft);
-        bodyLeft = "";
         fd.set("mediaUrl", b.url);
         fd.set("mediaType", "video");
         const r = await sendMessengerMessageAction(fd);
@@ -232,8 +244,8 @@ export function ChatPane({
         setUp(null);
       }
       const res = await loadMessengerChannelAction(channelId);
-      setMessages(res.messages);
       stick.current = true;
+      setMessages(res.messages);
     } catch (e2) {
       const msg = e2 instanceof Error ? e2.message : "";
       setErr(msg ? `첨부 실패: ${msg}` : "첨부 전송에 실패했어요.");
@@ -243,25 +255,24 @@ export function ChatPane({
     }
   };
 
-  // 꾹 눌러 메뉴(모바일) / 우클릭(PC).
-  const openMenu = (m: ChatMsgDTO, x: number, y: number) => {
-    setMenu({ msgId: m.id, body: m.body, isNotice: m.notice, x: Math.min(x, window.innerWidth - 170), y: Math.min(y, window.innerHeight - 160) });
+  // 꾹 눌러(모바일) / 우클릭(PC) 메뉴.
+  const openMenu = (m: Msg, x: number, y: number) => {
+    if (m.pending) return;
+    setMenu({ msgId: m.id, body: m.body, isNotice: m.notice, x: Math.min(x, window.innerWidth - 150), y: Math.min(y, window.innerHeight - 150) });
   };
-  const onBubbleDown = (m: ChatMsgDTO) => (e: React.PointerEvent) => {
-    if (e.pointerType === "mouse") return; // 마우스는 우클릭으로
+  const onBubbleDown = (m: Msg) => (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse") return;
     const x = e.clientX, y = e.clientY;
-    lpTimer.current = setTimeout(() => openMenu(m, x, y), 480);
+    lpTimer.current = setTimeout(() => openMenu(m, x, y), 460);
   };
   const cancelLp = () => {
     if (lpTimer.current) clearTimeout(lpTimer.current);
     lpTimer.current = null;
   };
-
   const doReply = () => {
     if (!menu) return;
     setReplyTo({ id: menu.msgId, name: messages.find((x) => x.id === menu.msgId)?.memberName ?? "", body: menu.body || "사진" });
     setMenu(null);
-    inputRef.current?.focus();
   };
   const doNotice = () => {
     if (!menu) return;
@@ -276,64 +287,57 @@ export function ChatPane({
   };
   const doCopy = async () => {
     if (!menu) return;
-    try {
-      await navigator.clipboard.writeText(menu.body);
-    } catch {}
+    try { await navigator.clipboard.writeText(menu.body); } catch {}
     setMenu(null);
   };
 
-  // 본문 렌더 — @멤버 강조.
   const renderBody = (body: string) => {
-    if (!body.includes("@") || nameSet.size === 0) return body;
-    const re = new RegExp(`(@(?:${members.map((m) => escapeRe(m.name)).join("|")}))`, "g");
-    return body.split(re).map((p, i) =>
-      p.startsWith("@") && nameSet.has(p.slice(1)) ? (
-        <span key={i} className="msgr__mention">{p}</span>
-      ) : (
-        <span key={i}>{p}</span>
-      ),
+    if (!mentionRe || !body.includes("@")) return body;
+    return body.split(mentionRe).map((p, i) =>
+      p.startsWith("@") && nameSet.has(p.slice(1)) ? <span key={i} className="msgr__mention">{p}</span> : <span key={i}>{p}</span>,
     );
   };
 
+  const mediaImageUrls = useMemo(() => (mediaItems ?? []).filter((i) => i.type === "image").map((i) => i.url), [mediaItems]);
+  const view = useMemo(() => [...messages, ...pending], [messages, pending]); // 서버 + 낙관적 합쳐서 렌더
+
   return (
     <div className="chatpane">
-      {notices.length > 0 && (
+      {notices.length > 0 && tool === null && (
         <button type="button" className="chatpane__notice" onClick={() => jumpTo(notices[0].id)}>
-          <span className="chatpane__noticepin">📌 공지</span>
-          <span className="chatpane__noticebody">{notices[0].body}</span>
-          {notices.length > 1 && <span className="chatpane__noticemore">+{notices.length - 1}</span>}
+          <span className="chatpane__noticetag">공지</span>
+          <span className="chatpane__noticebody">{notices[0].body || "사진"}</span>
         </button>
       )}
 
       <div className="chatpane__scroll" ref={scrollRef} onScroll={onScroll}>
-        {messages.length === 0 ? (
+        {view.length === 0 ? (
           <div className="chatpane__empty">
             <div className="chatpane__emptyhash">#{channelName}</div>
-            <p>채널의 첫 메시지를 남겨보세요.</p>
+            <p>첫 메시지를 남겨보세요.</p>
           </div>
         ) : (
-          messages.map((m, i) => {
+          view.map((m, i) => {
             const mine = m.memberId === me.id;
-            const prev = messages[i - 1];
+            const prev = view[i - 1];
             const showDay = !prev || dayKey(prev.at) !== dayKey(m.at);
             const showName = !mine && (!prev || prev.memberId !== m.memberId || showDay);
             return (
               <div key={m.id} ref={(el) => { if (el) rowRefs.current.set(m.id, el); }}>
                 {showDay && <div className="chatpane__day">{fmtDay(m.at)}</div>}
-                <div className={`msgr__row${mine ? " is-mine" : ""}${highlight === m.id ? " is-hl" : ""}`}>
+                <div className={`msgr__row${mine ? " is-mine" : ""}${highlight === m.id ? " is-hl" : ""}${m.pending ? " is-pending" : ""}${m.failed ? " is-failed" : ""}`}>
                   <div className="msgr__bubblewrap">
                     {showName && <div className="msgr__sender">{m.memberName}</div>}
                     <div className="msgr__bubblerow">
-                      {mine && <span className="msgr__time">{fmtTime(m.at)}</span>}
+                      {mine && <span className="msgr__time">{m.pending ? "전송 중" : m.failed ? "전송 실패" : fmtTime(m.at)}</span>}
                       <div
-                        className={`msgr__bubble${mine ? " is-mine" : ""}${m.notice ? " is-notice" : ""}${m.mediaUrl && !m.body && !m.replyToName && !m.notice ? " msgr__bubble--media" : ""}`}
+                        className={`msgr__bubble${mine ? " is-mine" : ""}${m.notice ? " is-notice" : ""}${(m.mediaUrl || m.mediaUrls?.length) && !m.body && !m.replyToName ? " msgr__bubble--media" : ""}`}
                         onPointerDown={onBubbleDown(m)}
                         onPointerUp={cancelLp}
                         onPointerMove={cancelLp}
                         onPointerCancel={cancelLp}
                         onContextMenu={(e) => { e.preventDefault(); openMenu(m, e.clientX, e.clientY); }}
                       >
-                        {m.notice && <span className="msgr__noticebadge">📌 공지</span>}
                         {m.replyToName && (
                           <div className="msgr__quote">
                             <span className="msgr__quotename">{m.replyToName}</span>
@@ -413,50 +417,75 @@ export function ChatPane({
 
       {err && <div className="notice notice--error" style={{ margin: "0 12px 8px" }}>{err}</div>}
 
-      {replyTo && (
-        <div className="chatpane__reply">
-          <div className="chatpane__replymain">
-            <span className="chatpane__replyname">{replyTo.name}에게 답장</span>
-            <span className="chatpane__replybody">{replyTo.body}</span>
-          </div>
-          <button type="button" className="chatpane__replyx" onClick={() => setReplyTo(null)} aria-label="답장 취소">✕</button>
-        </div>
-      )}
+      <MessengerComposer
+        members={members}
+        replyTo={replyTo}
+        onClearReply={() => setReplyTo(null)}
+        onSend={onSend}
+        onFiles={onFiles}
+        uploading={!!up}
+      />
 
-      <div className="msgr__composer chatpane__composer">
-        {mention && mentionList.length > 0 && (
-          <div className="chatpane__mentions">
-            {mentionList.map((m) => (
-              <button key={m.id} type="button" className="chatpane__mentionitem" onClick={() => pickMention(m.name)}>
-                <span className="chatpane__mentionava">{m.name.slice(0, 1)}</span>
-                {m.name}
+      {/* 검색 오버레이 */}
+      {tool === "search" && (
+        <div className="chatpane__panel">
+          <div className="chatpane__panelhead">
+            <input
+              ref={inputRef}
+              className="chatpane__searchinput"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="이 채널에서 검색"
+            />
+            <button type="button" className="chatpane__panelclose" onClick={onCloseTool} aria-label="닫기">✕</button>
+          </div>
+          <div className="chatpane__panelbody">
+            {q.trim() && hits.length === 0 && <div className="chatpane__panelempty">검색 결과가 없어요.</div>}
+            {hits.map((h) => (
+              <button key={h.messageId} type="button" className="chatpane__hit" onClick={() => { onCloseTool?.(); setTimeout(() => jumpTo(h.messageId), 40); }}>
+                <div className="chatpane__hitmeta"><b>{h.name}</b> · {fmtDay(h.at)} {fmtTime(h.at)}</div>
+                <div className="chatpane__hitbody">{h.body}</div>
               </button>
             ))}
           </div>
-        )}
-        <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={onFile} />
-        <button type="button" className="msgr__attach" onClick={() => fileRef.current?.click()} disabled={!!up || pending} aria-label="사진·영상 첨부">
-          {up ? "…" : "＋"}
-        </button>
-        <input
-          ref={inputRef}
-          className="input msgr__input"
-          value={input}
-          onChange={onInputChange}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              if (mention && mentionList.length > 0) pickMention(mentionList[0].name);
-              else send();
-            }
-            if (e.key === "Escape") setMention(null);
-          }}
-          placeholder={`#${channelName} 에 메시지 (@로 멘션)`}
-        />
-        <button type="button" className="btn btn--primary msgr__send" onClick={send} disabled={pending || !input.trim()}>
-          전송
-        </button>
-      </div>
+        </div>
+      )}
+
+      {/* 보관함(사진·영상) 오버레이 */}
+      {tool === "media" && (
+        <div className="chatpane__panel">
+          <div className="chatpane__panelhead">
+            <div className="chatpane__paneltitle">사진 · 동영상</div>
+            <button type="button" className="chatpane__panelclose" onClick={onCloseTool} aria-label="닫기">✕</button>
+          </div>
+          <div className="chatpane__panelbody">
+            {mediaItems === null ? (
+              <div className="chatpane__panelempty">불러오는 중…</div>
+            ) : mediaItems.length === 0 ? (
+              <div className="chatpane__panelempty">올라온 사진·영상이 없어요.</div>
+            ) : (
+              <div className="chatpane__mediagrid">
+                {mediaItems.map((it, i) => (
+                  <button
+                    key={`${it.messageId}-${i}`}
+                    type="button"
+                    className="chatpane__mediacell"
+                    onClick={() => setLb(it.type === "video" ? { src: it.url, type: "video" } : { src: it.url, type: "image", group: mediaImageUrls })}
+                  >
+                    {it.type === "video" ? (
+                      <video src={it.url} className="chatpane__mediathumb" muted />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={it.url} alt="첨부" className="chatpane__mediathumb" />
+                    )}
+                    {it.type === "video" && <span className="chatpane__mediaplay">▶</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {menu &&
         createPortal(

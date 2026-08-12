@@ -9,13 +9,17 @@ import {
   deleteMessengerTaskAction,
   loadMessengerMentionsAction,
   markMentionReadAction,
+  loadMessengerTodayAgendaAction,
+  searchMessengerAllAction,
   type TaskDTO,
+  type TodayItemDTO,
+  type GlobalHitDTO,
 } from "@/app/actions/messenger";
 
 type Member = { id: string; name: string; active: boolean };
+type Channel = { id: string; name: string };
 type Mention = { id: string; channelId: string; channelName: string; messageId: string; by: string; preview: string; at: string };
 
-// 날짜/시간 포맷(KST).
 const kstYmd = (d: Date) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 const fmtClock = (iso: string) =>
@@ -32,7 +36,6 @@ const dayLabel = (ymd: string) => {
   );
 };
 
-// 우리 UIUX 커스텀 드롭다운(받는 사람).
 function TargetSelect({ members, value, onChange }: { members: Member[]; value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false);
   const label = value === "ALL" ? "팀원 전체" : members.find((m) => m.id === value)?.name ?? "선택";
@@ -47,13 +50,9 @@ function TargetSelect({ members, value, onChange }: { members: Member[]; value: 
         <>
           <div className="mdd__scrim" onClick={() => setOpen(false)} />
           <div className="mdd__pop" role="listbox">
-            <button type="button" className={`mdd__opt${value === "ALL" ? " on" : ""}`} onClick={() => { onChange("ALL"); setOpen(false); }}>
-              팀원 전체
-            </button>
+            <button type="button" className={`mdd__opt${value === "ALL" ? " on" : ""}`} onClick={() => { onChange("ALL"); setOpen(false); }}>팀원 전체</button>
             {members.map((m) => (
-              <button key={m.id} type="button" className={`mdd__opt${value === m.id ? " on" : ""}`} onClick={() => { onChange(m.id); setOpen(false); }}>
-                {m.name}
-              </button>
+              <button key={m.id} type="button" className={`mdd__opt${value === m.id ? " on" : ""}`} onClick={() => { onChange(m.id); setOpen(false); }}>{m.name}</button>
             ))}
           </div>
         </>
@@ -62,24 +61,31 @@ function TargetSelect({ members, value, onChange }: { members: Member[]; value: 
   );
 }
 
-// 홈(메인 인트로) = 받은 멘션 토픽 + 팀 할 일 보드. 팀 전체에 모두 노출.
+// 홈 = 전체 검색 + 즐겨찾기 + 오늘 일정 + 받은 멘션 + 팀 할 일.
 export function TasksPane({
   me,
   members,
+  favorites,
   onJump,
+  onOpenChannel,
 }: {
   me: { id: string; name: string };
   members: Member[];
+  favorites: Channel[];
   onJump: (channelId: string, messageId: string) => void;
+  onOpenChannel: (channelId: string) => void;
 }) {
   const [tasks, setTasks] = useState<TaskDTO[]>([]);
   const [mentions, setMentions] = useState<Mention[]>([]);
-  const [adding, setAdding] = useState(false); // 추가 팝업
+  const [today, setToday] = useState<TodayItemDTO[]>([]);
+  const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [detail, setDetail] = useState("");
-  const [target, setTarget] = useState("ALL"); // "ALL" | 멤버 id
+  const [target, setTarget] = useState("ALL");
   const [err, setErr] = useState("");
-  const [detailTask, setDetailTask] = useState<TaskDTO | null>(null); // 제목 클릭 → 상세 팝업
+  const [detailTask, setDetailTask] = useState<TaskDTO | null>(null);
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<GlobalHitDTO[]>([]);
   const [pending, start] = useTransition();
   const activeMembers = useMemo(() => members.filter((m) => m.active), [members]);
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
@@ -88,18 +94,27 @@ export function TasksPane({
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      const [t, m] = await Promise.all([loadMessengerTasksAction(), loadMessengerMentionsAction()]);
+      const [t, m, a] = await Promise.all([loadMessengerTasksAction(), loadMessengerMentionsAction(), loadMessengerTodayAgendaAction()]);
       if (!alive) return;
       setTasks(t.tasks);
       setMentions(m.mentions);
+      setToday(a.items);
     };
     run();
     const iv = setInterval(run, 7000);
-    return () => {
-      alive = false;
-      clearInterval(iv);
-    };
+    return () => { alive = false; clearInterval(iv); };
   }, []);
+
+  // 전 채널 대화 검색(디바운스).
+  useEffect(() => {
+    const query = search.trim();
+    if (!query) { setResults([]); return; }
+    let alive = true;
+    const t = setTimeout(() => {
+      searchMessengerAllAction(query).then((r) => { if (alive) setResults(r.hits); });
+    }, 240);
+    return () => { alive = false; clearTimeout(t); };
+  }, [search]);
 
   const add = () => {
     const t = title.trim();
@@ -113,29 +128,19 @@ export function TasksPane({
       else fd.set("assigneeId", target);
       const r = await addMessengerTaskAction(fd);
       if (r?.error) return setErr(r.error);
-      setTitle("");
-      setDetail("");
-      setTarget("ALL");
-      setAdding(false);
+      setTitle(""); setDetail(""); setTarget("ALL"); setAdding(false);
       await load();
     });
   };
   const toggle = (id: string) => {
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-    start(async () => {
-      await toggleMessengerTaskAction(id);
-      await load();
-    });
+    start(async () => { await toggleMessengerTaskAction(id); await load(); });
   };
   const remove = (id: string) => {
     if (!confirm("이 할 일을 삭제할까요?")) return;
     setTasks((ts) => ts.filter((t) => t.id !== id));
-    start(async () => {
-      await deleteMessengerTaskAction(id);
-      await load();
-    });
+    start(async () => { await deleteMessengerTaskAction(id); await load(); });
   };
-  // 멘션 확인(클릭) → 알림에서 제거 + 해당 채팅으로 이동.
   const openMention = (mt: Mention) => {
     setMentions((xs) => xs.filter((x) => x.id !== mt.id));
     markMentionReadAction(mt.id).catch(() => {});
@@ -144,7 +149,6 @@ export function TasksPane({
 
   const open = tasks.filter((t) => !t.done);
   const done = tasks.filter((t) => t.done);
-  // 진행 중 할 일 → 올린 날짜별 그룹(최신 날짜 먼저).
   const groups = useMemo(() => {
     const map = new Map<string, TaskDTO[]>();
     for (const t of open) {
@@ -153,18 +157,16 @@ export function TasksPane({
       if (arr) arr.push(t);
       else map.set(key, [t]);
     }
-    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)); // 최신 날짜 먼저
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
   }, [open]);
 
   const Card = (t: TaskDTO) => (
     <div className={`tcard${t.done ? " is-done" : ""}`} key={t.id}>
-      <button type="button" className={`tcard__check${t.done ? " on" : ""}`} onClick={() => toggle(t.id)} aria-label="완료 체크">
-        {t.done ? "✓" : ""}
-      </button>
+      <button type="button" className={`tcard__check${t.done ? " on" : ""}`} onClick={() => toggle(t.id)} aria-label="완료 체크">{t.done ? "✓" : ""}</button>
       <div className="tcard__main">
         <button type="button" className="tcard__title" onClick={() => setDetailTask(t)}>
           {t.title}
-          {t.detail ? <span className="tcard__memoicon" aria-label="상세 설명 있음">﹖</span> : null}
+          {t.detail ? <span className="tcard__memoicon" aria-label="내용 있음">﹖</span> : null}
         </button>
         <div className="tcard__who">
           <span className="tcard__from">{nameOf(t.createdById)}</span>
@@ -177,50 +179,94 @@ export function TasksPane({
     </div>
   );
 
+  const searching = search.trim().length > 0;
+
   return (
     <div className="home">
       <div className="home__inner">
         <div className="home__greet">
           <div className="home__greetmain">
-            <div className="home__hi">{me.name}님, 반가워요</div>
-            <div className="home__sub">팀 할 일{open.length ? ` · 진행 중 ${open.length}` : ""}</div>
+            <div className="home__hi">{me.name}님</div>
+            <div className="home__sub">{open.length ? `할 일 ${open.length}` : "오늘도 좋은 하루"}</div>
           </div>
           <button type="button" className="home__addfab" onClick={() => { setErr(""); setAdding(true); }} aria-label="할 일 추가">＋</button>
         </div>
 
-        {mentions.length > 0 && (
-          <div className="home__mentions">
-            <div className="home__sectitle">받은 멘션</div>
-            {mentions.map((mt) => (
-              <button key={mt.id} type="button" className="mtopic" onClick={() => openMention(mt)}>
-                <span className="mtopic__ch"># {mt.channelName}</span>
-                <span className="mtopic__body"><b>{mt.by}</b> {mt.preview}</span>
-                <span className="mtopic__go">이동 ›</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="home__list">
-          {open.length === 0 && done.length === 0 && (
-            <div className="home__empty">할 일이 없어요. 오른쪽 위 ＋ 로 새 할 일을 추가해 보세요.</div>
-          )}
-          {groups.map(([ymd, list]) => (
-            <div className="home__group" key={ymd}>
-              <div className="home__daylabel">{dayLabel(ymd)}</div>
-              {list.map(Card)}
-            </div>
-          ))}
-          {done.length > 0 && (
-            <div className="home__group">
-              <div className="home__donelabel">완료 {done.length}</div>
-              {done.map(Card)}
-            </div>
-          )}
+        <div className="home__searchbar">
+          <svg className="home__searchicon" width="17" height="17" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" /><path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+          <input className="home__searchinput" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="전체 채널 대화 검색" />
+          {search && <button type="button" className="home__searchclear" onClick={() => setSearch("")} aria-label="지우기">✕</button>}
         </div>
+
+        {searching ? (
+          <div className="home__results">
+            {results.length === 0 ? (
+              <div className="home__empty">검색 결과가 없어요.</div>
+            ) : (
+              results.map((h) => (
+                <button key={h.messageId} type="button" className="home__result" onClick={() => onJump(h.channelId, h.messageId)}>
+                  <span className="home__resultch"># {h.channelName}</span>
+                  <span className="home__resultbody"><b>{h.name}</b> {h.body || "사진"}</span>
+                </button>
+              ))
+            )}
+          </div>
+        ) : (
+          <>
+            {favorites.length > 0 && (
+              <div className="home__favs">
+                {favorites.map((c) => (
+                  <button key={c.id} type="button" className="home__fav" onClick={() => onOpenChannel(c.id)}>★ {c.name}</button>
+                ))}
+              </div>
+            )}
+
+            {today.length > 0 && (
+              <div className="home__today">
+                <div className="home__sectitle">오늘 일정</div>
+                {today.map((it) => (
+                  <div className="home__todayrow" key={`${it.kind}-${it.id}`}>
+                    <span className={`home__todaydot home__todaydot--${it.kind}`} />
+                    <span className="home__todaytitle">{it.title}</span>
+                    {it.who && <span className="home__todaywho">{it.who}</span>}
+                    {it.memo && <span className="home__todaymemo">{it.memo}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {mentions.length > 0 && (
+              <div className="home__mentions">
+                <div className="home__sectitle">받은 멘션</div>
+                {mentions.map((mt) => (
+                  <button key={mt.id} type="button" className="mtopic" onClick={() => openMention(mt)}>
+                    <span className="mtopic__ch"># {mt.channelName}</span>
+                    <span className="mtopic__body"><b>{mt.by}</b> {mt.preview}</span>
+                    <span className="mtopic__go">이동 ›</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="home__list">
+              {open.length === 0 && done.length === 0 && <div className="home__empty">할 일이 없어요.</div>}
+              {groups.map(([ymd, list]) => (
+                <div className="home__group" key={ymd}>
+                  <div className="home__daylabel">{dayLabel(ymd)}</div>
+                  {list.map(Card)}
+                </div>
+              ))}
+              {done.length > 0 && (
+                <div className="home__group">
+                  <div className="home__donelabel">완료 {done.length}</div>
+                  {done.map(Card)}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* 할 일 추가 팝업 */}
       {adding && (
         <Sheet onClose={() => setAdding(false)}>
           <div className="sheet__panel taskmodal">
@@ -230,16 +276,10 @@ export function TasksPane({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && add()}
-              placeholder="할 일 제목"
+              placeholder="할 일"
               autoFocus
             />
-            <textarea
-              className="input taskmodal__area"
-              value={detail}
-              onChange={(e) => setDetail(e.target.value)}
-              placeholder="상세 설명 (선택) — 제목을 누르면 여기 내용이 보여요"
-              rows={3}
-            />
+            <textarea className="input taskmodal__area" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="내용" rows={3} />
             <TargetSelect members={activeMembers} value={target} onChange={setTarget} />
             {err && <div className="home__err">{err}</div>}
             <div className="taskmodal__actions">
@@ -250,7 +290,6 @@ export function TasksPane({
         </Sheet>
       )}
 
-      {/* 상세 설명 팝업 */}
       {detailTask && (
         <Sheet onClose={() => setDetailTask(null)}>
           <div className="sheet__panel taskmodal">
@@ -262,7 +301,7 @@ export function TasksPane({
               <span className="taskdetail__dot">·</span>
               <span>{fmtFull(detailTask.createdAt)}</span>
             </div>
-            <div className="taskdetail__body">{detailTask.detail ? detailTask.detail : "상세 설명이 없어요."}</div>
+            <div className="taskdetail__body">{detailTask.detail ? detailTask.detail : "내용이 없어요."}</div>
             <div className="taskmodal__actions">
               <button type="button" className="btn btn--primary" onClick={() => setDetailTask(null)}>닫기</button>
             </div>

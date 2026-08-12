@@ -148,7 +148,7 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
         <div className="mcal__panelhead">{selLabel}</div>
 
         {selEvents.length === 0 && selTasks.length === 0 && (
-          <div className="mcal__none">이 날의 일정이 없어요.</div>
+          <div className="mcal__none">일정이 없어요.</div>
         )}
         {selEvents.map((e) => (
           <div className="mcal__row" key={e.id}>
@@ -176,9 +176,9 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addEvent()}
-            placeholder={`${selLabel} 일정 추가`}
+            placeholder="일정"
           />
-          <input className="input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모(선택)" />
+          <input className="input" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="메모" />
           <button type="button" className="btn btn--primary" onClick={addEvent} disabled={pending || !title.trim()}>추가</button>
           {err && <div className="notice notice--error">{err}</div>}
         </div>

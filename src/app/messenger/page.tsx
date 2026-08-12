@@ -22,10 +22,9 @@ export default async function MessengerPage() {
       <div className="mw-gate">
         <div className="mw-gate__card">
           <div className="mw-gate__brand">
-            <span className="mw-gate__logo">S</span>
+            <span className="mw-gate__logo">핫</span>
             <div>
-              <div className="mw-gate__title">새롭 오더야</div>
-              <div className="mw-gate__sub">사내 메신저</div>
+              <div className="mw-gate__title">핫딜마켓 메신저</div>
             </div>
           </div>
           {members.length === 0 ? (
@@ -49,7 +48,7 @@ export default async function MessengerPage() {
     prisma.messengerChannel.findMany({
       where: { archived: false },
       orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, favorite: true },
     }),
     prisma.messengerMember.findMany({
       orderBy: [{ active: "desc" }, { sortOrder: "asc" }],

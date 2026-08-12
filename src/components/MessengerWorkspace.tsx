@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { messengerUnreadAction, messengerLogoutAction } from "@/app/actions/messenger";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { messengerUnreadAction, messengerLogoutAction, toggleMessengerFavoriteAction } from "@/app/actions/messenger";
 import { SubmitButton } from "@/components/SubmitButton";
-import { ChatPane } from "@/components/messenger/ChatPane";
+import { ChatPane, type ChatTool } from "@/components/messenger/ChatPane";
 import { TasksPane } from "@/components/messenger/TasksPane";
 import { CalendarPane } from "@/components/messenger/CalendarPane";
 
-type Channel = { id: string; name: string };
+type Channel = { id: string; name: string; favorite: boolean };
 type Member = { id: string; name: string; active: boolean };
 type View = "home" | "chat" | "calendar";
 
@@ -22,12 +23,17 @@ export function MessengerWorkspace({
   members: Member[];
 }) {
   const [view, setView] = useState<View>("home");
+  const [chans, setChans] = useState<Channel[]>(channels);
   const [active, setActive] = useState<string>(channels[0]?.id ?? "");
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [sideOpen, setSideOpen] = useState(false);
-  const [jumpMsg, setJumpMsg] = useState<string | null>(null); // 홈 멘션 → 해당 메시지로 이동
+  const [jumpMsg, setJumpMsg] = useState<string | null>(null);
+  const [tool, setTool] = useState<ChatTool>(null);
+  const [chMenu, setChMenu] = useState<{ id: string; favorite: boolean; x: number; y: number } | null>(null);
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressed = useRef(false);
+  const lpStart = useRef<{ x: number; y: number } | null>(null);
 
-  // 채널 안읽음 배지 폴링.
   useEffect(() => {
     let alive = true;
     const run = async () => {
@@ -36,28 +42,55 @@ export function MessengerWorkspace({
     };
     run();
     const t = setInterval(run, 5000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
+    return () => { alive = false; clearInterval(t); };
   }, [view, active]);
 
   const pick = (v: View, ch?: string) => {
     setView(v);
     if (ch) setActive(ch);
     setJumpMsg(null);
+    setTool(null);
     setSideOpen(false);
   };
-  // 홈 멘션 클릭 → 그 채널 채팅으로 이동 + 해당 메시지로 스크롤.
   const handleJump = (ch: string, messageId: string) => {
     setActive(ch);
     setJumpMsg(messageId);
     setView("chat");
+    setTool(null);
     setSideOpen(false);
   };
 
-  const activeName = channels.find((c) => c.id === active)?.name ?? "";
-  const topTitle = view === "chat" ? `# ${activeName}` : view === "home" ? "홈" : "캘린더";
+  // 채널 즐겨찾기(꾹 눌러/우클릭).
+  const openChMenu = (c: Channel, x: number, y: number) => {
+    setChMenu({ id: c.id, favorite: c.favorite, x: Math.min(x, window.innerWidth - 150), y: Math.min(y, window.innerHeight - 110) });
+  };
+  const onChanDown = (c: Channel) => (e: React.PointerEvent) => {
+    if (e.pointerType === "mouse") return;
+    longPressed.current = false;
+    lpStart.current = { x: e.clientX, y: e.clientY };
+    const x = e.clientX, y = e.clientY;
+    lpTimer.current = setTimeout(() => { longPressed.current = true; openChMenu(c, x, y); }, 460);
+  };
+  // 손가락 미세 흔들림엔 취소하지 않고, 12px 이상 움직였을 때만 롱프레스 취소(스크롤 의도).
+  const onChanMove = (e: React.PointerEvent) => {
+    if (!lpTimer.current || !lpStart.current) return;
+    if (Math.hypot(e.clientX - lpStart.current.x, e.clientY - lpStart.current.y) > 12) cancelLp();
+  };
+  const cancelLp = () => { if (lpTimer.current) clearTimeout(lpTimer.current); lpTimer.current = null; };
+  const toggleFav = () => {
+    if (!chMenu) return;
+    const id = chMenu.id;
+    setChans((cs) => cs.map((c) => (c.id === id ? { ...c, favorite: !c.favorite } : c)));
+    setChMenu(null);
+    toggleMessengerFavoriteAction(id).catch(() => {});
+  };
+
+  const activeName = chans.find((c) => c.id === active)?.name ?? "";
+  const sortedChans = useMemo(
+    () => [...chans].sort((a, b) => Number(b.favorite) - Number(a.favorite)),
+    [chans],
+  );
+  const favorites = useMemo(() => chans.filter((c) => c.favorite), [chans]);
 
   return (
     <div className="mw">
@@ -65,13 +98,12 @@ export function MessengerWorkspace({
 
       <aside className={`mw__side${sideOpen ? " is-open" : ""}`}>
         <div className="mw__brandrow">
-          <span className="mw__logo">새</span>
+          <span className="mw__logo">핫</span>
           <div className="mw__brandtext">
-            <div className="mw__brandname">새롭 오더야</div>
-            <div className="mw__brandsub">사내 메신저</div>
+            <div className="mw__brandname">핫딜마켓 메신저</div>
           </div>
         </div>
-        <Link href="/admin" className="mw__back">← 핫딜오더로 돌아가기</Link>
+        <Link href="/admin" className="mw__back">← 핫딜오더로</Link>
 
         <div className="mw__mecard">
           <span className="mw__ava">{me.name.slice(0, 1)}</span>
@@ -86,16 +118,26 @@ export function MessengerWorkspace({
             <span className="mw__navlabel">캘린더</span>
           </button>
 
-          <div className="mw__navsec mw__navsec--gap">채팅</div>
-          {channels.length === 0 ? (
+          <div className="mw__navsec mw__navsec--gap">채널</div>
+          {sortedChans.length === 0 ? (
             <div className="mw__navempty">채널이 없어요</div>
           ) : (
-            channels.map((c) => {
+            sortedChans.map((c) => {
               const u = unread[c.id] ?? 0;
               const on = view === "chat" && active === c.id;
               return (
-                <button key={c.id} type="button" className={`mw__navitem mw__chan${on ? " is-on" : ""}`} onClick={() => pick("chat", c.id)}>
-                  <span className="mw__hash">#</span>
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`mw__navitem mw__chan${on ? " is-on" : ""}`}
+                  onClick={() => { if (longPressed.current) { longPressed.current = false; return; } pick("chat", c.id); }}
+                  onContextMenu={(e) => { e.preventDefault(); openChMenu(c, e.clientX, e.clientY); }}
+                  onPointerDown={onChanDown(c)}
+                  onPointerUp={cancelLp}
+                  onPointerMove={onChanMove}
+                  onPointerCancel={cancelLp}
+                >
+                  <span className="mw__hash">{c.favorite ? "★" : "#"}</span>
                   <span className="mw__navlabel">{c.name}</span>
                   {u > 0 && !on && <span className="mw__badge">{u > 99 ? "99+" : u}</span>}
                 </button>
@@ -115,22 +157,43 @@ export function MessengerWorkspace({
       <main className="mw__main">
         <header className={`mw__top${view === "home" ? " mw__top--home" : ""}`}>
           <button type="button" className="mw__ham" onClick={() => setSideOpen(true)} aria-label="메뉴 열기">☰</button>
-          <div className="mw__toptitle">{topTitle}</div>
+          <div className="mw__toptitle">{view === "chat" ? `# ${activeName}` : view === "home" ? "홈" : "캘린더"}</div>
+          {view === "chat" && active && (
+            <div className="mw__toptools">
+              <button type="button" className={`mw__topbtn${tool === "search" ? " is-on" : ""}`} onClick={() => setTool(tool === "search" ? null : "search")} aria-label="대화 검색">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" /><path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              </button>
+              <button type="button" className={`mw__topbtn${tool === "media" ? " is-on" : ""}`} onClick={() => setTool(tool === "media" ? null : "media")} aria-label="사진·영상 보관함">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="2" /><circle cx="8.5" cy="9" r="1.6" fill="currentColor" /><path d="M5 16l4-4 3 3 3-4 4 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </button>
+            </div>
+          )}
         </header>
         <div className="mw__content">
           {view === "chat" ? (
             active ? (
-              <ChatPane key={active} me={me} channelId={active} channelName={activeName} members={members} scrollToId={jumpMsg} />
+              <ChatPane key={active} me={me} channelId={active} channelName={activeName} members={members} scrollToId={jumpMsg} tool={tool} onCloseTool={() => setTool(null)} />
             ) : (
               <div className="mw__blank">채널이 없습니다. <Link href="/messenger/manage">관리</Link>에서 채널을 먼저 만들어 주세요.</div>
             )
           ) : view === "home" ? (
-            <TasksPane me={me} members={members} onJump={handleJump} />
+            <TasksPane me={me} members={members} favorites={favorites} onJump={handleJump} onOpenChannel={(id) => pick("chat", id)} />
           ) : (
             <CalendarPane me={me} members={members} />
           )}
         </div>
       </main>
+
+      {chMenu &&
+        createPortal(
+          <>
+            <div className="msgmenu__backdrop" onClick={() => setChMenu(null)} onContextMenu={(e) => { e.preventDefault(); setChMenu(null); }} />
+            <div className="msgmenu" style={{ left: chMenu.x, top: chMenu.y }}>
+              <button type="button" className="msgmenu__item" onClick={toggleFav}>{chMenu.favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}</button>
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }

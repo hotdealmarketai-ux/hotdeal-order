@@ -835,6 +835,7 @@ model MessengerChannel {
   name      String
   sortOrder Int      @default(0)
   archived  Boolean  @default(false)
+  favorite  Boolean  @default(false) // 즐겨찾기(팀 공용) — 홈 바로가기·사이드바 상단
   createdAt DateTime @default(now())
 
   messages MessengerMessage[]
