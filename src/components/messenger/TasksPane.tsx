@@ -46,12 +46,16 @@ export function TasksPane({
   me,
   members,
   favorites,
+  channels,
+  unread,
   onJump,
   onOpenChannel,
 }: {
   me: { id: string; name: string };
   members: Member[];
   favorites: Channel[];
+  channels: Channel[];
+  unread: Record<string, number>;
   onJump: (channelId: string, messageId: string) => void;
   onOpenChannel: (channelId: string) => void;
 }) {
@@ -121,6 +125,16 @@ export function TasksPane({
     markMentionReadAction(mt.id).catch(() => {});
   };
 
+  // 안 읽은 메시지 있는 채널 — 홈에 '채널명 (개수)' 바로가기 알림 버튼으로.
+  const unreadChannels = useMemo(
+    () =>
+      channels
+        .map((c) => ({ id: c.id, name: c.name, count: unread[c.id] ?? 0 }))
+        .filter((c) => c.count > 0)
+        .sort((a, b) => b.count - a.count),
+    [channels, unread],
+  );
+
   const open = tasks.filter((t) => !t.done);
   const done = tasks.filter((t) => t.done);
   const groups = useMemo(() => {
@@ -188,6 +202,19 @@ export function TasksPane({
           </div>
         ) : (
           <>
+            {unreadChannels.length > 0 && (
+              <div className="home__unread">
+                <div className="home__sectitle">안 읽은 메시지</div>
+                {unreadChannels.map((c) => (
+                  <button key={c.id} type="button" className="home__unreaditem" onClick={() => onOpenChannel(c.id)}>
+                    <span className="home__unreadch"># {c.name}</span>
+                    <span className="home__unreadcount">{c.count > 99 ? "99+" : c.count}</span>
+                    <span className="home__unreadgo">이동 ›</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {favorites.length > 0 && (
               <div className="home__favs">
                 {favorites.map((c) => (

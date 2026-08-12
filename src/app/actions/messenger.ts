@@ -751,21 +751,26 @@ async function enrichTaskDTOs(rows: TaskRow[], meId: string): Promise<TaskDTO[]>
   const nameById = comps.length
     ? new Map((await prisma.messengerMember.findMany({ select: { id: true, name: true } })).map((m) => [m.id, m.name]))
     : new Map<string, string>();
-  const byTask = new Map<string, { names: string[]; mine: boolean }>();
+  const byTask = new Map<string, { names: string[]; mine: boolean; ids: Set<string> }>();
   for (const c of comps) {
-    const cur = byTask.get(c.taskId) ?? { names: [], mine: false };
+    const cur = byTask.get(c.taskId) ?? { names: [], mine: false, ids: new Set<string>() };
     cur.names.push(nameById.get(c.memberId) ?? "지난 멤버");
+    cur.ids.add(c.memberId);
     if (c.memberId === meId) cur.mine = true;
     byTask.set(c.taskId, cur);
   }
   return rows.map((t) => {
     const assignees = t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [];
     const comp = byTask.get(t.id);
+    const canComplete = t.toAll || assignees.includes(meId);
+    // 배정받은 사람 전원이 완료했는지 — 배정 안 받은 사람에겐 이걸로 '완료' 표시(체크·완료그룹).
+    const allAssigneesDone = assignees.length > 0 && assignees.every((id) => comp?.ids.has(id) ?? false);
     return {
       id: t.id,
       title: t.title,
       detail: t.detail,
-      done: comp?.mine ?? false,
+      // 배정받았으면 '내 완료', 아니면 '배정자 전원 완료'로 완료 여부를 본다.
+      done: canComplete ? (comp?.mine ?? false) : allAssigneesDone,
       assigneeId: t.assigneeId,
       assigneeIds: assignees,
       toAll: t.toAll,
@@ -774,7 +779,7 @@ async function enrichTaskDTOs(rows: TaskRow[], meId: string): Promise<TaskDTO[]>
       createdAt: t.createdAt.toISOString(),
       doneAt: t.doneAt ? t.doneAt.toISOString() : null,
       completedNames: comp?.names ?? [],
-      canComplete: t.toAll || assignees.includes(meId),
+      canComplete,
     };
   });
 }

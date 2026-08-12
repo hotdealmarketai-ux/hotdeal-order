@@ -6126,6 +6126,14 @@ a.resv-card:active { transform: scale(0.995); }
 .mtopic__go { flex: 0 0 auto; font-size: 12px; font-weight: 800; color: var(--muted); }
 .mtopic__x { flex: 0 0 auto; width: 38px; border: 0; border-left: 1px solid var(--line); background: none; color: var(--muted); font-size: 12px; cursor: pointer; }
 .mtopic__x:hover { background: var(--danger-soft, #fdecec); color: var(--danger); }
+/* 안 읽은 메시지 알림 — 홈 상단 채널 바로가기 */
+.home__unread { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
+.home__unreaditem { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--danger); border-radius: 12px; padding: 10px 12px; cursor: pointer; transition: background .12s ease, transform .1s ease; }
+.home__unreaditem:hover { background: var(--green-100); }
+.home__unreaditem:active { transform: scale(0.99); }
+.home__unreadch { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 800; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home__unreadcount { flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 11.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+.home__unreadgo { flex: 0 0 auto; font-size: 12px; font-weight: 800; color: var(--muted); }
 .home__add { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px; margin-bottom: 16px; }
 .home__title { width: 100%; background: var(--field); border: 1px solid var(--line-strong); border-radius: 11px; padding: 13px 14px; color: var(--fg); font-size: 15px; font-weight: 600; font-family: inherit; outline: none; }
 .home__title::placeholder { color: var(--muted-2); }

@@ -250,7 +250,7 @@ export function MessengerWorkspace({
               <div className="mw__blank">채널이 없습니다. <Link href="/messenger/manage">관리</Link>에서 채널을 먼저 만들어 주세요.</div>
             )
           ) : view === "home" ? (
-            <TasksPane me={me} members={members} favorites={favorites} onJump={handleJump} onOpenChannel={(id) => pick("chat", id)} />
+            <TasksPane me={me} members={members} favorites={favorites} channels={chans} unread={unread} onJump={handleJump} onOpenChannel={(id) => pick("chat", id)} />
           ) : view === "mytasks" ? (
             <MyTasksPane me={me} members={members} />
           ) : (
