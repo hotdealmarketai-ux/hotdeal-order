@@ -830,12 +830,22 @@ model MessengerMember {
   @@index([active, sortOrder])
 }
 
+model MessengerChannelGroup {
+  id        String   @id @default(cuid())
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([sortOrder])
+}
+
 model MessengerChannel {
   id        String   @id @default(cuid())
   name      String
   sortOrder Int      @default(0)
   archived  Boolean  @default(false)
   favorite  Boolean  @default(false) // 즐겨찾기(팀 공용) — 홈 바로가기·사이드바 상단
+  groupId   String? // 채널 그룹(단 나누기, 관계없는 String — 그룹 삭제 시 null 처리)
   createdAt DateTime @default(now())
 
   messages MessengerMessage[]

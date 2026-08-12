@@ -10,12 +10,18 @@ import {
   renameMessengerChannelAction,
   deleteMessengerChannelAction,
   reorderMessengerChannelAction,
+  addMessengerChannelGroupAction,
+  renameMessengerChannelGroupAction,
+  deleteMessengerChannelGroupAction,
+  reorderMessengerChannelGroupAction,
+  setMessengerChannelGroupAction,
 } from "@/app/actions/messenger";
 
 type Member = { id: string; name: string; active: boolean };
-type Channel = { id: string; name: string; archived: boolean };
+type Channel = { id: string; name: string; archived: boolean; groupId: string | null };
+type Group = { id: string; name: string };
 
-export function MessengerManage({ members, channels }: { members: Member[]; channels: Channel[] }) {
+export function MessengerManage({ members, channels, groups }: { members: Member[]; channels: Channel[]; groups: Group[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [mName, setMName] = useState("");
@@ -27,6 +33,10 @@ export function MessengerManage({ members, channels }: { members: Member[]; chan
   const [pinVal, setPinVal] = useState("");
   const [renFor, setRenFor] = useState<string | null>(null);
   const [renVal, setRenVal] = useState("");
+  const [gName, setGName] = useState("");
+  const [gErr, setGErr] = useState("");
+  const [gRenFor, setGRenFor] = useState<string | null>(null);
+  const [gRenVal, setGRenVal] = useState("");
 
   const run = (
     fn: () => Promise<{ error?: string } | void>,
@@ -82,6 +92,31 @@ export function MessengerManage({ members, channels }: { members: Member[]; chan
     run(() => deleteMessengerChannelAction(fd));
   };
   const move = (id: string, dir: "up" | "down") => run(() => reorderMessengerChannelAction(id, dir));
+  const setGroup = (channelId: string, groupId: string) => {
+    const fd = new FormData();
+    fd.set("channelId", channelId);
+    fd.set("groupId", groupId);
+    run(() => setMessengerChannelGroupAction(fd));
+  };
+  const addGroup = () => {
+    setGErr("");
+    const fd = new FormData();
+    fd.set("name", gName.trim());
+    run(() => addMessengerChannelGroupAction(fd), setGErr, () => setGName(""));
+  };
+  const gRename = (id: string) => {
+    const fd = new FormData();
+    fd.set("id", id);
+    fd.set("name", gRenVal.trim());
+    run(() => renameMessengerChannelGroupAction(fd), (e) => alert(e), () => { setGRenFor(null); setGRenVal(""); });
+  };
+  const gDel = (id: string, name: string) => {
+    if (!confirm(`'${name}' 그룹을 삭제할까요?\n채널은 지워지지 않고 '그룹 없음'으로 이동합니다.`)) return;
+    const fd = new FormData();
+    fd.set("id", id);
+    run(() => deleteMessengerChannelGroupAction(fd));
+  };
+  const gMove = (id: string, dir: "up" | "down") => run(() => reorderMessengerChannelGroupAction(id, dir));
 
   return (
     <div className="stack" style={{ gap: 24 }}>
@@ -144,6 +179,56 @@ export function MessengerManage({ members, channels }: { members: Member[]; chan
         </div>
       </div>
 
+      {/* 채널 그룹 */}
+      <div>
+        <div className="section-label">채널 그룹 (단 나누기)</div>
+        <div className="card" style={{ marginBottom: 10 }}>
+          <div className="mwm__addrow">
+            <input
+              className="input mwm__addinput"
+              value={gName}
+              onChange={(e) => setGName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && gName.trim() && addGroup()}
+              placeholder="그룹 이름 (예: 매장, 물류, 공지)"
+            />
+            <button type="button" className="btn btn--xs btn--primary mwm__addbtn" onClick={addGroup} disabled={pending || !gName.trim()}>
+              추가
+            </button>
+          </div>
+          {gErr && <div className="notice notice--error" style={{ marginTop: 8 }}>{gErr}</div>}
+        </div>
+        <div className="list">
+          {groups.length === 0 ? (
+            <div className="empty">그룹이 없어요. 그룹을 만들면 아래 채널을 단으로 나눠 볼 수 있어요.</div>
+          ) : (
+            groups.map((g, i) => (
+              <div className="row" key={g.id} style={{ flexWrap: "wrap" }}>
+                <div className="row__main"><div className="row__title">{g.name}</div></div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button type="button" className="btn btn--xs btn--soft" onClick={() => gMove(g.id, "up")} disabled={pending || i === 0} aria-label="위로">↑</button>
+                  <button type="button" className="btn btn--xs btn--soft" onClick={() => gMove(g.id, "down")} disabled={pending || i === groups.length - 1} aria-label="아래로">↓</button>
+                  <button type="button" className="btn btn--xs btn--soft" onClick={() => { setGRenFor(gRenFor === g.id ? null : g.id); setGRenVal(g.name); }}>이름 수정</button>
+                  <button type="button" className="btn btn--xs btn--danger" onClick={() => gDel(g.id, g.name)} disabled={pending}>삭제</button>
+                </div>
+                {gRenFor === g.id && (
+                  <div style={{ display: "flex", gap: 6, width: "100%", marginTop: 8 }}>
+                    <input
+                      className="input"
+                      value={gRenVal}
+                      onChange={(e) => setGRenVal(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && gRenVal.trim() && gRename(g.id)}
+                      placeholder="새 그룹 이름"
+                      style={{ flex: 1, minWidth: 0 }}
+                    />
+                    <button type="button" className="btn btn--xs btn--primary" onClick={() => gRename(g.id)} disabled={pending || !gRenVal.trim()}>변경</button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
       {/* 채널 */}
       <div>
         <div className="section-label">채널</div>
@@ -197,6 +282,15 @@ export function MessengerManage({ members, channels }: { members: Member[]; chan
                     <button type="button" className="btn btn--xs btn--primary" onClick={() => doRename(c.id)} disabled={pending || !renVal.trim()}>
                       변경
                     </button>
+                  </div>
+                )}
+                {groups.length > 0 && (
+                  <div style={{ width: "100%", marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 700 }}>그룹</span>
+                    <select className="input" style={{ flex: 1, minWidth: 0 }} value={c.groupId ?? ""} onChange={(e) => setGroup(c.id, e.target.value)}>
+                      <option value="">그룹 없음</option>
+                      {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    </select>
                   </div>
                 )}
               </div>

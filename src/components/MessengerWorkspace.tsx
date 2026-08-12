@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { messengerUnreadAction, messengerLogoutAction, toggleMessengerFavoriteAction } from "@/app/actions/messenger";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -9,7 +9,8 @@ import { ChatPane, type ChatTool } from "@/components/messenger/ChatPane";
 import { TasksPane } from "@/components/messenger/TasksPane";
 import { CalendarPane } from "@/components/messenger/CalendarPane";
 
-type Channel = { id: string; name: string; favorite: boolean };
+type Channel = { id: string; name: string; favorite: boolean; groupId: string | null };
+type Group = { id: string; name: string };
 type Member = { id: string; name: string; active: boolean };
 type View = "home" | "chat" | "calendar";
 
@@ -17,10 +18,12 @@ export function MessengerWorkspace({
   me,
   channels,
   members,
+  groups,
 }: {
   me: { id: string; name: string };
   channels: Channel[];
   members: Member[];
+  groups: Group[];
 }) {
   const [view, setView] = useState<View>("home");
   const [chans, setChans] = useState<Channel[]>(channels);
@@ -86,11 +89,34 @@ export function MessengerWorkspace({
   };
 
   const activeName = chans.find((c) => c.id === active)?.name ?? "";
-  const sortedChans = useMemo(
-    () => [...chans].sort((a, b) => Number(b.favorite) - Number(a.favorite)),
-    [chans],
-  );
   const favorites = useMemo(() => chans.filter((c) => c.favorite), [chans]);
+  // 그룹(단) 나눠 보이기 — 그룹 내 즐겨찾기 우선, 그다음 sortOrder(서버 정렬 유지).
+  const favSort = (list: Channel[]) => [...list].sort((a, b) => Number(b.favorite) - Number(a.favorite));
+  const groupIds = useMemo(() => new Set(groups.map((g) => g.id)), [groups]);
+  const ungrouped = useMemo(() => favSort(chans.filter((c) => !c.groupId || !groupIds.has(c.groupId))), [chans, groupIds]);
+  const chansOfGroup = (gid: string) => favSort(chans.filter((c) => c.groupId === gid));
+
+  const renderChan = (c: Channel) => {
+    const u = unread[c.id] ?? 0;
+    const on = view === "chat" && active === c.id;
+    return (
+      <button
+        key={c.id}
+        type="button"
+        className={`mw__navitem mw__chan${on ? " is-on" : ""}`}
+        onClick={() => { if (longPressed.current) { longPressed.current = false; return; } pick("chat", c.id); }}
+        onContextMenu={(e) => { e.preventDefault(); openChMenu(c, e.clientX, e.clientY); }}
+        onPointerDown={onChanDown(c)}
+        onPointerUp={cancelLp}
+        onPointerMove={onChanMove}
+        onPointerCancel={cancelLp}
+      >
+        <span className="mw__hash">{c.favorite ? "★" : "#"}</span>
+        <span className="mw__navlabel">{c.name}</span>
+        {u > 0 && !on && <span className="mw__badge">{u > 99 ? "99+" : u}</span>}
+      </button>
+    );
+  };
 
   return (
     <div className="mw">
@@ -118,31 +144,30 @@ export function MessengerWorkspace({
             <span className="mw__navlabel">캘린더</span>
           </button>
 
-          <div className="mw__navsec mw__navsec--gap">채널</div>
-          {sortedChans.length === 0 ? (
-            <div className="mw__navempty">채널이 없어요</div>
+          {chans.length === 0 ? (
+            <>
+              <div className="mw__navsec mw__navsec--gap">채널</div>
+              <div className="mw__navempty">채널이 없어요</div>
+            </>
           ) : (
-            sortedChans.map((c) => {
-              const u = unread[c.id] ?? 0;
-              const on = view === "chat" && active === c.id;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`mw__navitem mw__chan${on ? " is-on" : ""}`}
-                  onClick={() => { if (longPressed.current) { longPressed.current = false; return; } pick("chat", c.id); }}
-                  onContextMenu={(e) => { e.preventDefault(); openChMenu(c, e.clientX, e.clientY); }}
-                  onPointerDown={onChanDown(c)}
-                  onPointerUp={cancelLp}
-                  onPointerMove={onChanMove}
-                  onPointerCancel={cancelLp}
-                >
-                  <span className="mw__hash">{c.favorite ? "★" : "#"}</span>
-                  <span className="mw__navlabel">{c.name}</span>
-                  {u > 0 && !on && <span className="mw__badge">{u > 99 ? "99+" : u}</span>}
-                </button>
-              );
-            })
+            <>
+              {groups.map((g) => {
+                const list = chansOfGroup(g.id);
+                if (!list.length) return null;
+                return (
+                  <Fragment key={g.id}>
+                    <div className="mw__navsec mw__navsec--gap">{g.name}</div>
+                    {list.map(renderChan)}
+                  </Fragment>
+                );
+              })}
+              {ungrouped.length > 0 && (
+                <>
+                  <div className="mw__navsec mw__navsec--gap">채널</div>
+                  {ungrouped.map(renderChan)}
+                </>
+              )}
+            </>
           )}
         </nav>
 

@@ -8,14 +8,18 @@ export const dynamic = "force-dynamic";
 // 멤버(2차 로그인 계정) 추가/비번변경/활성토글, 채널 추가/보관. 별도 셸의 관리 화면.
 export default async function MessengerManagePage() {
   await requireAdmin();
-  const [members, channels] = await Promise.all([
+  const [members, channels, groups] = await Promise.all([
     prisma.messengerMember.findMany({
       orderBy: [{ active: "desc" }, { sortOrder: "asc" }],
       select: { id: true, name: true, active: true },
     }),
     prisma.messengerChannel.findMany({
       orderBy: [{ archived: "asc" }, { sortOrder: "asc" }],
-      select: { id: true, name: true, archived: true },
+      select: { id: true, name: true, archived: true, groupId: true },
+    }),
+    prisma.messengerChannelGroup.findMany({
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true },
     }),
   ]);
 
@@ -26,7 +30,7 @@ export default async function MessengerManagePage() {
         <div className="mw-manage__title">멤버 · 채널 관리</div>
       </header>
       <div className="mw-manage__body">
-        <MessengerManage members={members} channels={channels} />
+        <MessengerManage members={members} channels={channels} groups={groups} />
       </div>
     </div>
   );

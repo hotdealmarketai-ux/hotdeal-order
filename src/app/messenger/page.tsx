@@ -44,17 +44,21 @@ export default async function MessengerPage() {
     );
   }
 
-  const [channels, members] = await Promise.all([
+  const [channels, members, groups] = await Promise.all([
     prisma.messengerChannel.findMany({
       where: { archived: false },
       orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true, favorite: true },
+      select: { id: true, name: true, favorite: true, groupId: true },
     }),
     prisma.messengerMember.findMany({
       orderBy: [{ active: "desc" }, { sortOrder: "asc" }],
       select: { id: true, name: true, active: true },
     }),
+    prisma.messengerChannelGroup.findMany({
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+      select: { id: true, name: true },
+    }),
   ]);
 
-  return <MessengerWorkspace me={me} channels={channels} members={members} />;
+  return <MessengerWorkspace me={me} channels={channels} members={members} groups={groups} />;
 }

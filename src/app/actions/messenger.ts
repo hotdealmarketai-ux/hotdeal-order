@@ -468,6 +468,65 @@ export async function toggleMessengerFavoriteAction(channelId: string): Promise<
   revalidatePath("/messenger");
 }
 
+// ── 채널 그룹(단 나누기) ─────────────────────────────────────
+export async function addMessengerChannelGroupAction(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim().slice(0, 40);
+  if (!name) return { error: "그룹 이름을 입력하세요." };
+  const max = await prisma.messengerChannelGroup.aggregate({ _max: { sortOrder: true } });
+  await prisma.messengerChannelGroup.create({ data: { name, sortOrder: (max._max.sortOrder ?? 0) + 1 } });
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+  return {};
+}
+export async function renameMessengerChannelGroupAction(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim().slice(0, 40);
+  if (!id) return { error: "" };
+  if (!name) return { error: "그룹 이름을 입력하세요." };
+  await prisma.messengerChannelGroup.update({ where: { id }, data: { name } }).catch(() => {});
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+  return {};
+}
+// 그룹 삭제 — 소속 채널은 지우지 않고 '그룹 없음'으로.
+export async function deleteMessengerChannelGroupAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  await prisma.messengerChannel.updateMany({ where: { groupId: id }, data: { groupId: null } });
+  await prisma.messengerChannelGroup.delete({ where: { id } }).catch(() => {});
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+}
+export async function reorderMessengerChannelGroupAction(id: string, dir: "up" | "down"): Promise<void> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !id) return;
+  const groups = await prisma.messengerChannelGroup.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true } });
+  const order = groups.map((g) => g.id);
+  const idx = order.indexOf(id);
+  if (idx < 0) return;
+  const swap = dir === "up" ? idx - 1 : idx + 1;
+  if (swap < 0 || swap >= order.length) return;
+  [order[idx], order[swap]] = [order[swap], order[idx]];
+  await prisma.$transaction(order.map((gid, i) => prisma.messengerChannelGroup.update({ where: { id: gid }, data: { sortOrder: i } })));
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+}
+// 채널을 그룹에 배정(빈 값=그룹 없음).
+export async function setMessengerChannelGroupAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  const channelId = String(formData.get("channelId") ?? "").trim();
+  const groupId = String(formData.get("groupId") ?? "").trim() || null;
+  if (!me || !channelId) return;
+  await prisma.messengerChannel.update({ where: { id: channelId }, data: { groupId } }).catch(() => {});
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+}
+
 // ── 할일(팀 전체 공용) ───────────────────────────────────────
 export type TaskDTO = {
   id: string;
