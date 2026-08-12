@@ -198,6 +198,8 @@ export function ChatPane({
   // 첨부(사진 묶어보내기 + 동영상).
   const onFiles = async (files: File[]) => {
     if (!files.length || !channelId) return;
+    if (files.some((f) => f.type.startsWith("video") && f.size > 50 * 1024 * 1024))
+      return setErr("동영상은 50MB 이하만 보낼 수 있어요. 짧게 잘라서 올려주세요.");
     if (files.some((f) => f.size > 100 * 1024 * 1024)) return setErr("100MB 이하 파일만 보낼 수 있어요.");
     const images = files.filter((f) => !f.type.startsWith("video")).slice(0, 10);
     const videos = files.filter((f) => f.type.startsWith("video"));

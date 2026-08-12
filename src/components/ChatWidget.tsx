@@ -329,6 +329,10 @@ export function ChatWidget() {
     e.target.value = ""; // 같은 파일 재선택 가능하게 초기화
     if (!file) return;
     if (role === "admin" && !threadId) return;
+    if (file.type.startsWith("video") && file.size > 50 * 1024 * 1024) {
+      setErr("동영상은 50MB 이하만 보낼 수 있어요. 짧게 잘라서 올려주세요.");
+      return;
+    }
     if (file.size > MAX_MEDIA_BYTES) {
       setErr("100MB 이하 파일만 보낼 수 있어요.");
       return;
