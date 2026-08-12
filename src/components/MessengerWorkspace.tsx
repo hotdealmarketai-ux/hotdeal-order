@@ -8,6 +8,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { ChatPane, type ChatTool } from "@/components/messenger/ChatPane";
 import { TasksPane } from "@/components/messenger/TasksPane";
 import { CalendarPane } from "@/components/messenger/CalendarPane";
+import { AddTaskButton } from "@/components/messenger/AddTaskButton";
 
 type Channel = { id: string; name: string; favorite: boolean; groupId: string | null };
 type Group = { id: string; name: string };
@@ -185,6 +186,18 @@ export function MessengerWorkspace({
           <div className="mw__toptitle">{view === "chat" ? `# ${activeName}` : view === "home" ? "홈" : "캘린더"}</div>
           {view === "chat" && active && (
             <div className="mw__toptools">
+              <AddTaskButton
+                members={members}
+                className="mw__topbtn"
+                label={
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 6l1.4 1.4L7.6 4.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M4 12l1.4 1.4L7.6 10.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M4 18l1.4 1.4L7.6 16.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M11 6h9M11 12h9M11 18h9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                }
+              />
               <button type="button" className={`mw__topbtn${tool === "search" ? " is-on" : ""}`} onClick={() => setTool(tool === "search" ? null : "search")} aria-label="대화 검색">
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" /><path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
               </button>

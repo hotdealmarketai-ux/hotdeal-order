@@ -6281,6 +6281,8 @@ a.resv-card:active { transform: scale(0.995); }
 .home__today { margin-bottom: 16px; display: flex; flex-direction: column; }
 .home__today .home__sectitle { margin-bottom: 2px; }
 .home__todayrow { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 6px; }
+.home__todayday { flex: 0 0 auto; width: 22px; text-align: center; font-size: 12px; font-weight: 800; color: var(--muted); }
+.home__todayday.is-today { color: var(--green-700); }
 .home__todaydot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; }
 .home__todaydot--event { background: var(--green-700); }
 .home__todaydot--task { background: #d98c00; }

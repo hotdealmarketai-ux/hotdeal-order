@@ -2,19 +2,22 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Sheet } from "@/components/Sheet";
+import { AddTaskButton } from "./AddTaskButton";
 import {
   loadMessengerTasksAction,
-  addMessengerTaskAction,
   toggleMessengerTaskAction,
   deleteMessengerTaskAction,
   loadMessengerMentionsAction,
   markMentionReadAction,
-  loadMessengerTodayAgendaAction,
+  loadMessengerWeekAgendaAction,
   searchMessengerAllAction,
   type TaskDTO,
-  type TodayItemDTO,
+  type WeekItemDTO,
   type GlobalHitDTO,
 } from "@/app/actions/messenger";
+
+const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
+const wdOf = (ymd: string) => WEEKDAY[new Date(`${ymd}T00:00:00Z`).getUTCDay()];
 
 type Member = { id: string; name: string; active: boolean };
 type Channel = { id: string; name: string };
@@ -36,31 +39,6 @@ const dayLabel = (ymd: string) => {
   );
 };
 
-function TargetSelect({ members, value, onChange }: { members: Member[]; value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const label = value === "ALL" ? "팀원 전체" : members.find((m) => m.id === value)?.name ?? "선택";
-  return (
-    <div className="mdd">
-      <button type="button" className={`mdd__btn${open ? " is-open" : ""}`} onClick={() => setOpen((o) => !o)}>
-        <span className="mdd__k">받는 사람</span>
-        <span className="mdd__v">{label}</span>
-        <span className="mdd__caret" aria-hidden>▾</span>
-      </button>
-      {open && (
-        <>
-          <div className="mdd__scrim" onClick={() => setOpen(false)} />
-          <div className="mdd__pop" role="listbox">
-            <button type="button" className={`mdd__opt${value === "ALL" ? " on" : ""}`} onClick={() => { onChange("ALL"); setOpen(false); }}>팀원 전체</button>
-            {members.map((m) => (
-              <button key={m.id} type="button" className={`mdd__opt${value === m.id ? " on" : ""}`} onClick={() => { onChange(m.id); setOpen(false); }}>{m.name}</button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 // 홈 = 전체 검색 + 즐겨찾기 + 오늘 일정 + 받은 멘션 + 팀 할 일.
 export function TasksPane({
   me,
@@ -77,28 +55,22 @@ export function TasksPane({
 }) {
   const [tasks, setTasks] = useState<TaskDTO[]>([]);
   const [mentions, setMentions] = useState<Mention[]>([]);
-  const [today, setToday] = useState<TodayItemDTO[]>([]);
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState("");
-  const [detail, setDetail] = useState("");
-  const [target, setTarget] = useState("ALL");
-  const [err, setErr] = useState("");
+  const [week, setWeek] = useState<WeekItemDTO[]>([]);
   const [detailTask, setDetailTask] = useState<TaskDTO | null>(null);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<GlobalHitDTO[]>([]);
-  const [pending, start] = useTransition();
-  const activeMembers = useMemo(() => members.filter((m) => m.active), [members]);
+  const [, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
   const load = async () => setTasks((await loadMessengerTasksAction()).tasks);
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      const [t, m, a] = await Promise.all([loadMessengerTasksAction(), loadMessengerMentionsAction(), loadMessengerTodayAgendaAction()]);
+      const [t, m, a] = await Promise.all([loadMessengerTasksAction(), loadMessengerMentionsAction(), loadMessengerWeekAgendaAction()]);
       if (!alive) return;
       setTasks(t.tasks);
       setMentions(m.mentions);
-      setToday(a.items);
+      setWeek(a.items);
     };
     run();
     const iv = setInterval(run, 7000);
@@ -116,22 +88,6 @@ export function TasksPane({
     return () => { alive = false; clearTimeout(t); };
   }, [search]);
 
-  const add = () => {
-    const t = title.trim();
-    if (!t) return;
-    setErr("");
-    start(async () => {
-      const fd = new FormData();
-      fd.set("title", t);
-      if (detail.trim()) fd.set("detail", detail.trim());
-      if (target === "ALL") fd.set("toAll", "1");
-      else fd.set("assigneeId", target);
-      const r = await addMessengerTaskAction(fd);
-      if (r?.error) return setErr(r.error);
-      setTitle(""); setDetail(""); setTarget("ALL"); setAdding(false);
-      await load();
-    });
-  };
   const toggle = (id: string) => {
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
     start(async () => { await toggleMessengerTaskAction(id); await load(); });
@@ -189,7 +145,7 @@ export function TasksPane({
             <div className="home__hi">{me.name}님</div>
             <div className="home__sub">{open.length ? `할 일 ${open.length}` : "오늘도 좋은 하루"}</div>
           </div>
-          <button type="button" className="home__addfab" onClick={() => { setErr(""); setAdding(true); }} aria-label="할 일 추가">＋</button>
+          <AddTaskButton members={members} className="home__addfab" label="＋" onAdded={load} />
         </div>
 
         <div className="home__searchbar">
@@ -221,17 +177,21 @@ export function TasksPane({
               </div>
             )}
 
-            {today.length > 0 && (
+            {week.length > 0 && (
               <div className="home__today">
-                <div className="home__sectitle">오늘 일정</div>
-                {today.map((it) => (
-                  <div className="home__todayrow" key={`${it.kind}-${it.id}`}>
-                    <span className={`home__todaydot home__todaydot--${it.kind}`} />
-                    <span className="home__todaytitle">{it.title}</span>
-                    {it.who && <span className="home__todaywho">{it.who}</span>}
-                    {it.memo && <span className="home__todaymemo">{it.memo}</span>}
-                  </div>
-                ))}
+                <div className="home__sectitle">이번 주 일정</div>
+                {week.map((it) => {
+                  const isToday = it.date === kstYmd(new Date());
+                  return (
+                    <div className="home__todayrow" key={`${it.kind}-${it.id}`}>
+                      <span className={`home__todayday${isToday ? " is-today" : ""}`}>{wdOf(it.date)}</span>
+                      <span className={`home__todaydot home__todaydot--${it.kind}`} />
+                      <span className="home__todaytitle">{it.title}</span>
+                      {it.who && <span className="home__todaywho">{it.who}</span>}
+                      {it.memo && <span className="home__todaymemo">{it.memo}</span>}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -266,29 +226,6 @@ export function TasksPane({
           </>
         )}
       </div>
-
-      {adding && (
-        <Sheet onClose={() => setAdding(false)}>
-          <div className="sheet__panel taskmodal">
-            <div className="taskmodal__title">새 할 일</div>
-            <input
-              className="input taskmodal__field"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && add()}
-              placeholder="할 일"
-              autoFocus
-            />
-            <textarea className="input taskmodal__area" value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="내용" rows={3} />
-            <TargetSelect members={activeMembers} value={target} onChange={setTarget} />
-            {err && <div className="home__err">{err}</div>}
-            <div className="taskmodal__actions">
-              <button type="button" className="btn btn--ghost" onClick={() => setAdding(false)}>취소</button>
-              <button type="button" className="btn btn--primary" onClick={add} disabled={pending || !title.trim()}>추가</button>
-            </div>
-          </div>
-        </Sheet>
-      )}
 
       {detailTask && (
         <Sheet onClose={() => setDetailTask(null)}>

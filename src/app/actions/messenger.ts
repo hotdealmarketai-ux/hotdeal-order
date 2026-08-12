@@ -301,32 +301,41 @@ export async function searchMessengerAllAction(q: string): Promise<{ hits: Globa
   };
 }
 
-// 홈 '오늘 일정' — 오늘 날짜 캘린더 일정 + 오늘 마감 할일(팀 전체 공용).
-export type TodayItemDTO = { id: string; kind: "event" | "task"; title: string; memo: string | null; who: string | null };
-export async function loadMessengerTodayAgendaAction(): Promise<{ items: TodayItemDTO[] }> {
+// 홈 '이번 주 일정' — 이번 주(월~일) 캘린더 일정 + 이번 주 마감 할일(팀 전체 공용).
+export type WeekItemDTO = { id: string; kind: "event" | "task"; title: string; memo: string | null; who: string | null; date: string };
+export async function loadMessengerWeekAgendaAction(): Promise<{ items: WeekItemDTO[] }> {
   await requireAdmin();
   const me = await getMessengerMember();
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
-  const start = kstMidnight(today);
-  if (!me || !start) return { items: [] };
-  const end = new Date(start.getTime() + 86400000);
+  // 이번 주 = 월~일. 요일은 달력상 날짜(UTC) 기준으로 계산해 서버 TZ 영향 배제.
+  const dow = new Date(`${today}T00:00:00Z`).getUTCDay(); // 0=일 … 6=토
+  const fromMon = (dow + 6) % 7; // 월=0 … 일=6
+  const wsD = new Date(`${today}T00:00:00Z`);
+  wsD.setUTCDate(wsD.getUTCDate() - fromMon);
+  const weD = new Date(wsD);
+  weD.setUTCDate(weD.getUTCDate() + 7);
+  const start = kstMidnight(wsD.toISOString().slice(0, 10));
+  const end = kstMidnight(weD.toISOString().slice(0, 10));
+  if (!me || !start || !end) return { items: [] };
   const [events, tasks] = await Promise.all([
-    prisma.messengerEvent.findMany({ where: { date: { gte: start, lt: end } }, orderBy: { createdAt: "asc" } }),
-    prisma.messengerTask.findMany({ where: { dueDate: { gte: start, lt: end }, done: false }, orderBy: { createdAt: "asc" } }),
+    prisma.messengerEvent.findMany({ where: { date: { gte: start, lt: end } }, orderBy: { date: "asc" } }),
+    prisma.messengerTask.findMany({ where: { dueDate: { gte: start, lt: end }, done: false }, orderBy: { dueDate: "asc" } }),
   ]);
   const ids = [...new Set(tasks.map((t) => t.assigneeId).filter((x): x is string => !!x))];
   const mem = ids.length ? await prisma.messengerMember.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }) : [];
   const nameMap = new Map(mem.map((m) => [m.id, m.name]));
-  const items: TodayItemDTO[] = [
-    ...events.map((e) => ({ id: e.id, kind: "event" as const, title: e.title, memo: e.memo, who: null })),
+  const items: WeekItemDTO[] = [
+    ...events.map((e) => ({ id: e.id, kind: "event" as const, title: e.title, memo: e.memo, who: null, date: kstDateOf(e.date) })),
     ...tasks.map((t) => ({
       id: t.id,
       kind: "task" as const,
       title: t.title,
       memo: null,
       who: t.toAll ? "팀원 전체" : t.assigneeId ? nameMap.get(t.assigneeId) ?? "지난 멤버" : "미지정",
+      date: kstDateOf(t.dueDate!),
     })),
   ];
+  items.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   return { items };
 }
 
