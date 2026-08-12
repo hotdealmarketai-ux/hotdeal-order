@@ -25,6 +25,7 @@ export function MessengerWorkspace({
   const [active, setActive] = useState<string>(channels[0]?.id ?? "");
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [sideOpen, setSideOpen] = useState(false);
+  const [jumpMsg, setJumpMsg] = useState<string | null>(null); // 홈 멘션 → 해당 메시지로 이동
 
   // 채널 안읽음 배지 폴링.
   useEffect(() => {
@@ -44,6 +45,14 @@ export function MessengerWorkspace({
   const pick = (v: View, ch?: string) => {
     setView(v);
     if (ch) setActive(ch);
+    setJumpMsg(null);
+    setSideOpen(false);
+  };
+  // 홈 멘션 클릭 → 그 채널 채팅으로 이동 + 해당 메시지로 스크롤.
+  const handleJump = (ch: string, messageId: string) => {
+    setActive(ch);
+    setJumpMsg(messageId);
+    setView("chat");
     setSideOpen(false);
   };
 
@@ -111,12 +120,12 @@ export function MessengerWorkspace({
         <div className="mw__content">
           {view === "chat" ? (
             active ? (
-              <ChatPane key={active} me={me} channelId={active} channelName={activeName} />
+              <ChatPane key={active} me={me} channelId={active} channelName={activeName} members={members} scrollToId={jumpMsg} />
             ) : (
               <div className="mw__blank">채널이 없습니다. <Link href="/messenger/manage">관리</Link>에서 채널을 먼저 만들어 주세요.</div>
             )
           ) : view === "home" ? (
-            <TasksPane me={me} members={members} />
+            <TasksPane me={me} members={members} onJump={handleJump} />
           ) : (
             <CalendarPane me={me} members={members} />
           )}

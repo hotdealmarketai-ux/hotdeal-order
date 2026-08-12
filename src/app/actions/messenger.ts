@@ -59,9 +59,25 @@ export async function sendMessengerMessageAction(
   const ch = await prisma.messengerChannel.findFirst({ where: { id: channelId, archived: false } });
   if (!ch) return { error: "채널을 찾을 수 없어요." };
 
-  await prisma.messengerMessage.create({
-    data: { channelId, memberId: me.id, body, mediaUrl, mediaType },
+  // 답장(대댓글) — 원본 미리보기 비정규화 저장.
+  const replyToId = String(formData.get("replyToId") ?? "").trim() || null;
+  const replyToName = String(formData.get("replyToName") ?? "").trim().slice(0, 30) || null;
+  const replyToBody = String(formData.get("replyToBody") ?? "").trim().slice(0, 120) || null;
+
+  const msg = await prisma.messengerMessage.create({
+    data: { channelId, memberId: me.id, body, mediaUrl, mediaType, replyToId, replyToName, replyToBody },
   });
+
+  // @멘션 파싱 — 본문에 "@이름"이 있으면 그 멤버를 언급으로 기록(본인 제외). 홈 멘션 토픽용.
+  if (body.includes("@")) {
+    const members = await prisma.messengerMember.findMany({ where: { active: true }, select: { id: true, name: true } });
+    const preview = (body || "사진").slice(0, 140);
+    const mentions = members
+      .filter((m) => m.id !== me.id && body.includes(`@${m.name}`))
+      .map((m) => ({ channelId, messageId: msg.id, mentionedMemberId: m.id, byMemberId: me.id, preview }));
+    if (mentions.length) await prisma.messengerMention.createMany({ data: mentions });
+  }
+
   // 보낸 사람은 그 채널을 방금 읽은 것으로.
   await prisma.messengerRead.upsert({
     where: { memberId_channelId: { memberId: me.id, channelId } },
@@ -84,10 +100,21 @@ export async function markMessengerReadAction(channelId: string): Promise<void> 
   });
 }
 
+export type ChatMsgDTO = {
+  id: string;
+  memberId: string;
+  memberName: string;
+  body: string;
+  mediaUrl: string | null;
+  mediaType: string | null;
+  replyToName: string | null;
+  replyToBody: string | null;
+  notice: boolean;
+  at: string;
+};
+
 // 폴링용 — 그 채널 메시지 최신 N개 + 읽음 처리.
-export async function loadMessengerChannelAction(channelId: string): Promise<{
-  messages: { id: string; memberId: string; memberName: string; body: string; mediaUrl: string | null; mediaType: string | null; at: string }[];
-}> {
+export async function loadMessengerChannelAction(channelId: string): Promise<{ messages: ChatMsgDTO[] }> {
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me || !channelId) return { messages: [] };
@@ -95,7 +122,11 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{
     where: { channelId },
     orderBy: { createdAt: "asc" },
     take: 300,
-    select: { id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, createdAt: true, member: { select: { name: true } } },
+    select: {
+      id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, createdAt: true,
+      replyToName: true, replyToBody: true, noticeAt: true,
+      member: { select: { name: true } },
+    },
   });
   await prisma.messengerRead.upsert({
     where: { memberId_channelId: { memberId: me.id, channelId } },
@@ -110,8 +141,71 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{
       body: m.body,
       mediaUrl: m.mediaUrl,
       mediaType: m.mediaType,
+      replyToName: m.replyToName,
+      replyToBody: m.replyToBody,
+      notice: !!m.noticeAt,
       at: m.createdAt.toISOString(),
     })),
+  };
+}
+
+// 공지 등록/해제.
+export async function toggleMessengerNoticeAction(messageId: string, on: boolean): Promise<void> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !messageId) return;
+  await prisma.messengerMessage.update({ where: { id: messageId }, data: { noticeAt: on ? new Date() : null } }).catch(() => {});
+}
+
+// 채널 공지 목록(상단 고정 바용).
+export async function loadMessengerNoticesAction(channelId: string): Promise<{
+  notices: { id: string; body: string; name: string; at: string }[];
+}> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !channelId) return { notices: [] };
+  const rows = await prisma.messengerMessage.findMany({
+    where: { channelId, noticeAt: { not: null } },
+    orderBy: { noticeAt: "desc" },
+    take: 20,
+    select: { id: true, body: true, noticeAt: true, member: { select: { name: true } } },
+  });
+  return { notices: rows.map((r) => ({ id: r.id, body: r.body || "(사진)", name: r.member.name, at: r.noticeAt!.toISOString() })) };
+}
+
+// 홈 멘션 토픽 — 나를 @언급한 메시지들(누르면 해당 채팅으로 이동).
+export async function loadMessengerMentionsAction(): Promise<{
+  mentions: { id: string; channelId: string; channelName: string; messageId: string; by: string; preview: string; at: string }[];
+}> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { mentions: [] };
+  const rows = await prisma.messengerMention.findMany({
+    where: { mentionedMemberId: me.id },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+  if (rows.length === 0) return { mentions: [] };
+  const chIds = [...new Set(rows.map((r) => r.channelId))];
+  const byIds = [...new Set(rows.map((r) => r.byMemberId))];
+  const [chans, bys] = await Promise.all([
+    prisma.messengerChannel.findMany({ where: { id: { in: chIds } }, select: { id: true, name: true, archived: true } }),
+    prisma.messengerMember.findMany({ where: { id: { in: byIds } }, select: { id: true, name: true } }),
+  ]);
+  const chMap = new Map(chans.map((c) => [c.id, c]));
+  const byMap = new Map(bys.map((b) => [b.id, b.name]));
+  return {
+    mentions: rows
+      .filter((r) => !chMap.get(r.channelId)?.archived)
+      .map((r) => ({
+        id: r.id,
+        channelId: r.channelId,
+        channelName: chMap.get(r.channelId)?.name ?? "채널",
+        messageId: r.messageId,
+        by: byMap.get(r.byMemberId) ?? "누군가",
+        preview: r.preview,
+        at: r.createdAt.toISOString(),
+      })),
   };
 }
 

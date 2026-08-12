@@ -6,14 +6,25 @@ import {
   addMessengerTaskAction,
   toggleMessengerTaskAction,
   deleteMessengerTaskAction,
+  loadMessengerMentionsAction,
   type TaskDTO,
 } from "@/app/actions/messenger";
 
 type Member = { id: string; name: string; active: boolean };
+type Mention = { id: string; channelId: string; channelName: string; messageId: string; by: string; preview: string; at: string };
 
-// 홈(메인 인트로) = 팀 할 일 보드. 팀 전체에 모두 노출. 제목 + 보낸사람(시킨사람)→받는사람 + 체크.
-export function TasksPane({ me, members }: { me: { id: string; name: string }; members: Member[] }) {
+// 홈(메인 인트로) = 받은 멘션 토픽 + 팀 할 일 보드. 팀 전체에 모두 노출.
+export function TasksPane({
+  me,
+  members,
+  onJump,
+}: {
+  me: { id: string; name: string };
+  members: Member[];
+  onJump: (channelId: string, messageId: string) => void;
+}) {
   const [tasks, setTasks] = useState<TaskDTO[]>([]);
+  const [mentions, setMentions] = useState<Mention[]>([]);
   const [title, setTitle] = useState("");
   const [target, setTarget] = useState("ALL"); // "ALL" | 멤버 id
   const [err, setErr] = useState("");
@@ -24,14 +35,16 @@ export function TasksPane({ me, members }: { me: { id: string; name: string }; m
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      const r = await loadMessengerTasksAction();
-      if (alive) setTasks(r.tasks);
+      const [t, m] = await Promise.all([loadMessengerTasksAction(), loadMessengerMentionsAction()]);
+      if (!alive) return;
+      setTasks(t.tasks);
+      setMentions(m.mentions);
     };
     run();
-    const t = setInterval(run, 7000);
+    const iv = setInterval(run, 7000);
     return () => {
       alive = false;
-      clearInterval(t);
+      clearInterval(iv);
     };
   }, []);
 
@@ -93,6 +106,19 @@ export function TasksPane({ me, members }: { me: { id: string; name: string }; m
           <div className="home__hi">{me.name}님, 반가워요</div>
           <div className="home__sub">팀 할 일{open.length ? ` · 진행 중 ${open.length}` : ""}</div>
         </div>
+
+        {mentions.length > 0 && (
+          <div className="home__mentions">
+            <div className="home__sectitle">받은 멘션</div>
+            {mentions.map((mt) => (
+              <button key={mt.id} type="button" className="mtopic" onClick={() => onJump(mt.channelId, mt.messageId)}>
+                <span className="mtopic__ch"># {mt.channelName}</span>
+                <span className="mtopic__body"><b>{mt.by}</b> {mt.preview}</span>
+                <span className="mtopic__go">이동 ›</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="home__add">
           <input
