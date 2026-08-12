@@ -162,6 +162,20 @@ export async function deleteMessengerMessageAction(messageId: string): Promise<{
   return {};
 }
 
+// 메시지 수정 — 본인이 보낸 메시지의 본문만. (재알림·멘션 재파싱 없음: 오타 수정 용도)
+export async function editMessengerMessageAction(messageId: string, body: string): Promise<{ error?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !messageId) return { error: "" };
+  const msg = await prisma.messengerMessage.findUnique({ where: { id: messageId }, select: { memberId: true } });
+  if (!msg) return {};
+  if (msg.memberId !== me.id) return { error: "내가 보낸 메시지만 수정할 수 있어요." };
+  const next = body.trim().slice(0, 4000);
+  if (!next) return { error: "내용을 입력하세요." };
+  await prisma.messengerMessage.update({ where: { id: messageId }, data: { body: next } });
+  return {};
+}
+
 // 채널 열람 시 읽음 처리(안 읽음 배지 소멸용).
 export async function markMessengerReadAction(channelId: string): Promise<void> {
   await requireAdmin();
@@ -808,20 +822,26 @@ export async function toggleMessengerTaskAction(id: string): Promise<void> {
   }
 }
 
+// 할 일 수정 — 올린 사람(createdById)만 가능. 받는 사람(다중/전체)도 수정.
 export async function updateMessengerTaskAction(formData: FormData): Promise<{ error?: string }> {
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me) return { error: "메신저 로그인이 필요해요." };
   const id = String(formData.get("id") ?? "").trim();
   if (!id) return { error: "" };
+  const existing = await prisma.messengerTask.findUnique({ where: { id }, select: { createdById: true } });
+  if (!existing) return { error: "할 일을 찾을 수 없어요." };
+  if (existing.createdById !== me.id) return { error: "올린 사람만 수정할 수 있어요." };
   const title = String(formData.get("title") ?? "").trim().slice(0, 300);
   if (!title) return { error: "할 일을 입력하세요." };
   const detail = String(formData.get("detail") ?? "").trim().slice(0, 2000) || null;
-  const assigneeId = String(formData.get("assigneeId") ?? "").trim() || null;
-  const dueRaw = String(formData.get("due") ?? "").trim();
+  const toAll = String(formData.get("toAll") ?? "") === "1";
+  const assigneeIds = toAll ? [] : [...new Set(formData.getAll("assigneeIds").map((v) => String(v).trim()).filter(Boolean))];
+  if (!toAll && assigneeIds.length === 0) return { error: "받는 사람을 선택하세요." };
+  // dueDate 는 이 UI에 입력칸이 없어 건드리지 않는다(기존 값 보존).
   await prisma.messengerTask.update({
     where: { id },
-    data: { title, detail, assigneeId, dueDate: dueRaw ? kstMidnight(dueRaw) : null },
+    data: { title, detail, toAll, assigneeIds, assigneeId: assigneeIds[0] ?? null },
   });
   revalidatePath("/messenger");
   return {};

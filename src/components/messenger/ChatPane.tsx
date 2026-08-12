@@ -9,6 +9,7 @@ import {
   loadMessengerNoticesAction,
   toggleMessengerNoticeAction,
   deleteMessengerMessageAction,
+  editMessengerMessageAction,
   toggleMessengerReactionAction,
   loadMessengerChannelMediaAction,
   searchMessengerChannelAction,
@@ -60,6 +61,7 @@ export function ChatPane({
   const [err, setErr] = useState("");
   const [lb, setLb] = useState<{ src: string; type: "image" | "video"; group?: string[] } | null>(null);
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
+  const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -309,7 +311,7 @@ export function ChatPane({
   // 꾹 눌러(모바일) / 우클릭(PC) 메뉴.
   const openMenu = (m: Msg, x: number, y: number) => {
     if (m.pending || m.failed) return;
-    setMenu({ msgId: m.id, body: m.body, isNotice: m.notice, mine: m.memberId === me.id, reacted: m.reactedByMe, x: Math.min(x, window.innerWidth - 150), y: Math.min(y, window.innerHeight - 250) });
+    setMenu({ msgId: m.id, body: m.body, isNotice: m.notice, mine: m.memberId === me.id, reacted: m.reactedByMe, x: Math.min(x, window.innerWidth - 150), y: Math.min(y, window.innerHeight - 290) });
   };
   const onBubbleDown = (m: Msg) => (e: React.PointerEvent) => {
     if (e.pointerType === "mouse") return;
@@ -354,6 +356,27 @@ export function ChatPane({
       const [res, n] = await Promise.all([loadMessengerChannelAction(channelId), loadMessengerNoticesAction(channelId)]);
       setMessages(res.messages);
       setNotices(n.notices);
+    });
+  };
+  // 내 메시지 수정 — 본문만. 낙관적 반영 후 서버 저장.
+  const doEdit = () => {
+    if (!menu) return;
+    const m = messages.find((x) => x.id === menu.msgId);
+    setEditing({ id: menu.msgId, body: m?.body ?? menu.body });
+    setMenu(null);
+  };
+  const saveEdit = () => {
+    if (!editing) return;
+    const { id } = editing;
+    const next = editing.body.trim();
+    if (!next) return;
+    setEditing(null);
+    setMessages((ms) => ms.map((x) => (x.id === id ? { ...x, body: next } : x))); // 낙관적
+    start(async () => {
+      const r = await editMessengerMessageAction(id, next);
+      if (r?.error) setErr(r.error);
+      const res = await loadMessengerChannelAction(channelId);
+      setMessages(res.messages);
     });
   };
 
@@ -606,6 +629,7 @@ export function ChatPane({
               <button type="button" className="msgmenu__item" onClick={doReply}>댓글</button>
               <button type="button" className="msgmenu__item" onClick={doNotice}>{menu.isNotice ? "공지 해제" : "공지 등록"}</button>
               <button type="button" className="msgmenu__item" onClick={doCopy}>복사</button>
+              {menu.mine && <button type="button" className="msgmenu__item" onClick={doEdit}>수정</button>}
               {menu.mine && <button type="button" className="msgmenu__item msgmenu__item--danger" onClick={doDelete}>전송 취소</button>}
             </div>
           </>,
@@ -613,6 +637,25 @@ export function ChatPane({
         )}
 
       {lb && <MediaLightbox media={{ src: lb.src, type: lb.type }} group={lb.group} onClose={() => setLb(null)} />}
+
+      {editing && (
+        <Sheet onClose={() => setEditing(null)}>
+          <div className="sheet__panel" style={{ maxWidth: 420 }}>
+            <div className="confirm__title" style={{ marginBottom: 10 }}>메시지 수정</div>
+            <textarea
+              className="input"
+              style={{ width: "100%", minHeight: 96, resize: "none", lineHeight: 1.4 }}
+              value={editing.body}
+              onChange={(e) => setEditing((s) => (s ? { ...s, body: e.target.value } : s))}
+              autoFocus
+            />
+            <div className="confirm__actions">
+              <button type="button" className="btn btn--ghost" onClick={() => setEditing(null)}>취소</button>
+              <button type="button" className="btn btn--primary" onClick={saveEdit} disabled={!editing.body.trim()}>저장</button>
+            </div>
+          </div>
+        </Sheet>
+      )}
 
       {pendingFiles && (
         <Sheet onClose={() => setPendingFiles(null)}>

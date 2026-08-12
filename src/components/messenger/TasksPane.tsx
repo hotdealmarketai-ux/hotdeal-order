@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Sheet } from "@/components/Sheet";
 import { AddTaskButton } from "./AddTaskButton";
+import { TaskFormSheet } from "./TaskFormSheet";
 import {
   loadMessengerTasksAction,
   toggleMessengerTaskAction,
@@ -58,6 +59,7 @@ export function TasksPane({
   const [mentions, setMentions] = useState<Mention[]>([]);
   const [week, setWeek] = useState<WeekItemDTO[]>([]);
   const [detailTask, setDetailTask] = useState<TaskDTO | null>(null);
+  const [editTask, setEditTask] = useState<TaskDTO | null>(null);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<GlobalHitDTO[]>([]);
   const [, start] = useTransition();
@@ -90,6 +92,8 @@ export function TasksPane({
   }, [search]);
 
   const toggle = (id: string) => {
+    const cur = tasks.find((t) => t.id === id);
+    if (cur && !cur.done && !confirm("정말 완료했습니까?")) return; // 완료로 체크할 때만 재확인
     setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
     start(async () => { await toggleMessengerTaskAction(id); await load(); });
   };
@@ -249,11 +253,16 @@ export function TasksPane({
             </div>
             <div className="taskdetail__body">{detailTask.detail ? detailTask.detail : "내용이 없어요."}</div>
             <div className="taskmodal__actions">
+              {detailTask.createdById === me.id && (
+                <button type="button" className="btn btn--ghost" onClick={() => { setEditTask(detailTask); setDetailTask(null); }}>수정</button>
+              )}
               <button type="button" className="btn btn--primary" onClick={() => setDetailTask(null)}>닫기</button>
             </div>
           </div>
         </Sheet>
       )}
+
+      {editTask && <TaskFormSheet members={members} editTask={editTask} onClose={() => setEditTask(null)} onDone={load} />}
     </div>
   );
 }
