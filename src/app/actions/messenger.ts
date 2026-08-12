@@ -50,11 +50,16 @@ export async function sendMessengerMessageAction(
   if (!me) return { error: "메신저 로그인이 필요해요." };
   const channelId = String(formData.get("channelId") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim().slice(0, 4000);
-  const mediaUrl = String(formData.get("mediaUrl") ?? "").trim() || null;
+  const mediaUrlRaw = String(formData.get("mediaUrl") ?? "").trim() || null;
   const mediaTypeRaw = String(formData.get("mediaType") ?? "").trim();
-  const mediaType = mediaTypeRaw === "image" || mediaTypeRaw === "video" ? mediaTypeRaw : null;
+  const mediaTypeIn = mediaTypeRaw === "image" || mediaTypeRaw === "video" ? mediaTypeRaw : null;
+  // 사진 묶어보내기 — 여러 장(2장 이상이면 그리드). 최대 10장.
+  const mediaUrls = formData.getAll("mediaUrls").map((v) => String(v).trim()).filter(Boolean).slice(0, 10);
+  // 대표 URL/타입(하위호환·미리보기): 단일 첨부면 그대로, 묶음이면 첫 장.
+  const mediaUrl = mediaUrlRaw ?? (mediaUrls[0] ?? null);
+  const mediaType = mediaTypeIn ?? (mediaUrls.length ? "image" : null);
   if (!channelId) return { error: "채널을 선택하세요." };
-  if (!body && !mediaUrl) return { error: "" }; // 빈 전송 무시
+  if (!body && !mediaUrl && mediaUrls.length === 0) return { error: "" }; // 빈 전송 무시
 
   const ch = await prisma.messengerChannel.findFirst({ where: { id: channelId, archived: false } });
   if (!ch) return { error: "채널을 찾을 수 없어요." };
@@ -65,7 +70,7 @@ export async function sendMessengerMessageAction(
   const replyToBody = String(formData.get("replyToBody") ?? "").trim().slice(0, 120) || null;
 
   const msg = await prisma.messengerMessage.create({
-    data: { channelId, memberId: me.id, body, mediaUrl, mediaType, replyToId, replyToName, replyToBody },
+    data: { channelId, memberId: me.id, body, mediaUrl, mediaType, mediaUrls, replyToId, replyToName, replyToBody },
   });
 
   // @멘션 파싱 — 본문에 "@이름"이 있으면 그 멤버를 언급으로 기록(본인 제외). 홈 멘션 토픽용.
@@ -107,6 +112,7 @@ export type ChatMsgDTO = {
   body: string;
   mediaUrl: string | null;
   mediaType: string | null;
+  mediaUrls: string[]; // 사진 묶음(2장 이상이면 그리드), 없으면 []
   replyToName: string | null;
   replyToBody: string | null;
   notice: boolean;
@@ -123,7 +129,7 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
     orderBy: { createdAt: "asc" },
     take: 300,
     select: {
-      id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, createdAt: true,
+      id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, mediaUrls: true, createdAt: true,
       replyToName: true, replyToBody: true, noticeAt: true,
       member: { select: { name: true } },
     },
@@ -141,6 +147,7 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
       body: m.body,
       mediaUrl: m.mediaUrl,
       mediaType: m.mediaType,
+      mediaUrls: m.mediaUrls ?? [],
       replyToName: m.replyToName,
       replyToBody: m.replyToBody,
       notice: !!m.noticeAt,
@@ -181,7 +188,7 @@ export async function loadMessengerMentionsAction(): Promise<{
   const me = await getMessengerMember();
   if (!me) return { mentions: [] };
   const rows = await prisma.messengerMention.findMany({
-    where: { mentionedMemberId: me.id },
+    where: { mentionedMemberId: me.id, readAt: null }, // 확인(클릭)한 멘션은 제외
     orderBy: { createdAt: "desc" },
     take: 30,
   });
@@ -207,6 +214,16 @@ export async function loadMessengerMentionsAction(): Promise<{
         at: r.createdAt.toISOString(),
       })),
   };
+}
+
+// 홈에서 멘션 토픽을 눌러 확인 → 읽음 처리(그 멤버의 해당 멘션만). '받은 멘션'에서 사라짐.
+export async function markMentionReadAction(mentionId: string): Promise<void> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !mentionId) return;
+  await prisma.messengerMention
+    .updateMany({ where: { id: mentionId, mentionedMemberId: me.id, readAt: null }, data: { readAt: new Date() } })
+    .catch(() => {});
 }
 
 // 채널별 안 읽음 수(배지 폴링).
@@ -289,6 +306,7 @@ export async function archiveMessengerChannelAction(formData: FormData): Promise
 export type TaskDTO = {
   id: string;
   title: string;
+  detail: string | null; // 상세 설명(제목 클릭 시 팝업)
   done: boolean;
   assigneeId: string | null;
   toAll: boolean; // 받는 사람 = 팀원 전체
@@ -307,6 +325,7 @@ export async function loadMessengerTasksAction(): Promise<{ tasks: TaskDTO[] }> 
     tasks: rows.map((t) => ({
       id: t.id,
       title: t.title,
+      detail: t.detail,
       done: t.done,
       assigneeId: t.assigneeId,
       toAll: t.toAll,
@@ -324,11 +343,12 @@ export async function addMessengerTaskAction(formData: FormData): Promise<{ erro
   if (!me) return { error: "메신저 로그인이 필요해요." };
   const title = String(formData.get("title") ?? "").trim().slice(0, 300);
   if (!title) return { error: "할 일을 입력하세요." };
+  const detail = String(formData.get("detail") ?? "").trim().slice(0, 2000) || null;
   const toAll = String(formData.get("toAll") ?? "") === "1";
   const assigneeId = toAll ? null : String(formData.get("assigneeId") ?? "").trim() || null;
   if (!toAll && !assigneeId) return { error: "받는 사람을 선택하세요." };
   const due = kstMidnight(String(formData.get("due") ?? "").trim());
-  await prisma.messengerTask.create({ data: { title, createdById: me.id, assigneeId, toAll, dueDate: due } });
+  await prisma.messengerTask.create({ data: { title, detail, createdById: me.id, assigneeId, toAll, dueDate: due } });
   revalidatePath("/messenger");
   return {};
 }
@@ -353,11 +373,12 @@ export async function updateMessengerTaskAction(formData: FormData): Promise<{ e
   if (!id) return { error: "" };
   const title = String(formData.get("title") ?? "").trim().slice(0, 300);
   if (!title) return { error: "할 일을 입력하세요." };
+  const detail = String(formData.get("detail") ?? "").trim().slice(0, 2000) || null;
   const assigneeId = String(formData.get("assigneeId") ?? "").trim() || null;
   const dueRaw = String(formData.get("due") ?? "").trim();
   await prisma.messengerTask.update({
     where: { id },
-    data: { title, assigneeId, dueDate: dueRaw ? kstMidnight(dueRaw) : null },
+    data: { title, detail, assigneeId, dueDate: dueRaw ? kstMidnight(dueRaw) : null },
   });
   revalidatePath("/messenger");
   return {};

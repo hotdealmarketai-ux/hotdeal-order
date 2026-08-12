@@ -6163,3 +6163,60 @@ a.resv-card:active { transform: scale(0.995); }
 .msgr__upoverlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.42); border-radius: 12px; }
 .msgr__uppct { color: #fff; font-size: 17px; font-weight: 900; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55); }
 .msgr__upfile { min-width: 170px; min-height: 90px; display: flex; align-items: center; justify-content: center; background: var(--chip); border-radius: 12px; color: var(--muted); font-size: 13px; font-weight: 700; }
+
+/* 사진 묶어보내기 — 카카오톡식 그리드 */
+.msgr__grid { display: grid; gap: 3px; width: min(240px, 66vw); border-radius: 12px; overflow: hidden; }
+.msgr__grid[data-n="2"], .msgr__grid[data-n="3"], .msgr__grid[data-n="4"] { grid-template-columns: 1fr 1fr; }
+.msgr__grid[data-n="3"] .msgr__gtile:first-child { grid-row: 1 / span 2; aspect-ratio: auto; }
+.msgr__gtile { position: relative; margin: 0; padding: 0; border: 0; background: var(--surface-2); cursor: pointer; overflow: hidden; aspect-ratio: 1 / 1; -webkit-tap-highlight-color: transparent; }
+.msgr__gtile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.msgr__gmore { position: absolute; inset: 0; background: rgba(0,0,0,0.5); color: #fff; font-size: 22px; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+
+/* 라이트박스 — 여러 장 넘겨보기 */
+.lb__count { margin-right: auto; align-self: center; color: rgba(255,255,255,0.92); font-size: 14px; font-weight: 800; }
+.lb__nav { position: fixed; top: 50%; transform: translateY(-50%); z-index: 2; width: 46px; height: 46px; border-radius: 999px; border: 0; background: rgba(255,255,255,0.14); color: #fff; font-size: 30px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+.lb__nav:active { background: rgba(255,255,255,0.28); }
+.lb__nav--prev { left: 10px; }
+.lb__nav--next { right: 10px; }
+
+/* 홈 인사말 줄 + 우측 작은 추가(＋) 버튼 */
+.home__greet { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.home__greetmain { min-width: 0; }
+.home__addfab { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 999px; border: 0; background: var(--green-700); color: #fff; font-size: 24px; font-weight: 700; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(20,48,31,0.22); -webkit-tap-highlight-color: transparent; }
+.home__addfab:active { transform: scale(0.94); }
+
+/* 할 일 — 올린 날짜별 그룹 */
+.home__group { display: flex; flex-direction: column; gap: 8px; }
+.home__daylabel { margin: 12px 2px 2px; font-size: 12.5px; font-weight: 800; color: var(--muted); }
+.home__list > .home__group:first-child .home__daylabel { margin-top: 2px; }
+
+/* tcard 제목(클릭 → 상세 팝업) + 추가시각 */
+.tcard__title { display: block; width: 100%; background: none; border: 0; padding: 0; margin: 0; text-align: left; font-family: inherit; cursor: pointer; }
+.tcard__memoicon { display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; margin-left: 5px; width: 16px; height: 16px; border-radius: 999px; background: var(--green-100); color: var(--green-800); font-size: 11px; font-weight: 900; }
+.tcard__time { margin-left: auto; color: var(--muted-3); font-weight: 700; }
+
+/* 받는 사람 커스텀 드롭다운 */
+.mdd { position: relative; }
+.mdd__btn { width: 100%; display: flex; align-items: center; gap: 8px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 11px; padding: 12px 14px; color: var(--fg); font-family: inherit; cursor: pointer; }
+.mdd__btn.is-open { border-color: var(--green-700); }
+.mdd__k { font-size: 12.5px; font-weight: 800; color: var(--muted); }
+.mdd__v { font-size: 14.5px; font-weight: 800; color: var(--fg); }
+.mdd__caret { margin-left: auto; color: var(--muted-2); font-size: 12px; }
+.mdd__scrim { position: fixed; inset: 0; z-index: 5; }
+.mdd__pop { position: absolute; z-index: 6; left: 0; right: 0; bottom: calc(100% + 6px); max-height: 240px; overflow-y: auto; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,0.16); padding: 6px; display: flex; flex-direction: column; }
+.mdd__opt { text-align: left; background: none; border: 0; padding: 11px 12px; border-radius: 9px; font-size: 14.5px; font-weight: 700; color: var(--fg); font-family: inherit; cursor: pointer; }
+.mdd__opt:hover { background: var(--surface-2); }
+.mdd__opt.on { background: var(--green-100); color: var(--green-800); }
+
+/* 할 일 추가 / 상세 팝업(바텀시트) */
+.taskmodal { gap: 10px; }
+.taskmodal__title { font-size: 17px; font-weight: 900; color: var(--fg); margin-bottom: 2px; }
+.taskmodal__field { font-weight: 700; }
+.taskmodal__area { resize: vertical; min-height: 66px; line-height: 1.55; font-family: inherit; }
+.taskmodal__actions { display: flex; gap: 8px; margin-top: 6px; }
+.taskmodal__actions .btn { flex: 1; min-height: 48px; font-weight: 800; }
+.taskdetail__title { font-size: 18px; font-weight: 900; color: var(--fg); word-break: break-word; }
+.taskdetail__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.taskdetail__dot { color: var(--muted-2); }
+.taskdetail__body { margin-top: 12px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.6; color: var(--fg-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; min-height: 60px; }
+/* messenger 홈/그리드 스타일 끝 */

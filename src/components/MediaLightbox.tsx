@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 // 카카오톡식 사진 미리보기(라이트박스). 항상 document.body 로 포탈(조상 transform이 fixed를 가두는 문제 회피 — Sheet와 동일 이유).
 // 이미지: 더블탭 확대(1x↔2.5x), 두 손가락 핀치 줌, 확대 시 드래그 팬, 원본크기에서 아래로 밀어 닫기.
+// 여러 장(묶음)일 땐 group 으로 넘겨 ‹ › / 키보드 좌우로 넘겨봄.
 // 영상: 컨트롤과 함께 중앙 재생.
 type Media = { src: string; type: "image" | "video" };
 
@@ -16,7 +17,24 @@ const clampPan = (s: number, x: number, y: number) => {
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(a.x - b.x, a.y - b.y);
 
-export function MediaLightbox({ media, onClose }: { media: Media; onClose: () => void }) {
+export function MediaLightbox({
+  media,
+  group,
+  onClose,
+}: {
+  media: Media;
+  group?: string[]; // 이미지 묶음(있으면 갤러리 네비 표시)
+  onClose: () => void;
+}) {
+  const isImage = media.type === "image";
+  const srcs = isImage && group && group.length > 1 ? group : [media.src];
+  const [idx, setIdx] = useState(() => {
+    const i = srcs.indexOf(media.src);
+    return i >= 0 ? i : 0;
+  });
+  const src = srcs[Math.min(idx, srcs.length - 1)] ?? media.src;
+  const many = srcs.length > 1;
+
   const [scale, setScale] = useState(1);
   const [tx, setTx] = useState(0);
   const [ty, setTy] = useState(0);
@@ -27,11 +45,23 @@ export function MediaLightbox({ media, onClose }: { media: Media; onClose: () =>
   const moved = useRef(0);
   const lastTap = useRef(0);
   const swipeY = useRef(0);
-  const isImage = media.type === "image";
+
+  const go = (dir: number) => {
+    setIdx((i) => (srcs.length ? (i + dir + srcs.length) % srcs.length : i));
+  };
+  // 사진 넘기면 확대/이동 초기화.
+  useEffect(() => {
+    setScale(1);
+    setTx(0);
+    setTy(0);
+    setAnimate(true);
+  }, [idx]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      else if (many && e.key === "ArrowLeft") go(-1);
+      else if (many && e.key === "ArrowRight") go(1);
     };
     document.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
@@ -40,7 +70,8 @@ export function MediaLightbox({ media, onClose }: { media: Media; onClose: () =>
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prev;
     };
-  }, [onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, many, srcs.length]);
 
   const onDown = (e: React.PointerEvent) => {
     if (!isImage) return;
@@ -119,18 +150,18 @@ export function MediaLightbox({ media, onClose }: { media: Media; onClose: () =>
 
   const save = async () => {
     try {
-      const r = await fetch(media.src);
+      const r = await fetch(src);
       const b = await r.blob();
       const u = URL.createObjectURL(b);
       const a = document.createElement("a");
       a.href = u;
-      a.download = media.src.split("/").pop()?.split("?")[0] || "download";
+      a.download = src.split("/").pop()?.split("?")[0] || "download";
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(u), 4000);
     } catch {
-      window.open(media.src, "_blank", "noopener");
+      window.open(src, "_blank", "noopener");
     }
   };
 
@@ -152,6 +183,7 @@ export function MediaLightbox({ media, onClose }: { media: Media; onClose: () =>
       }}
     >
       <div className="lb__bar" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+        {many && <span className="lb__count">{idx + 1} / {srcs.length}</span>}
         <button type="button" className="lb__btn" onClick={save} aria-label="저장">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -164,11 +196,20 @@ export function MediaLightbox({ media, onClose }: { media: Media; onClose: () =>
         </button>
       </div>
 
+      {many && (
+        <>
+          <button type="button" className="lb__nav lb__nav--prev" aria-label="이전"
+            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); go(-1); }}>‹</button>
+          <button type="button" className="lb__nav lb__nav--next" aria-label="다음"
+            onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); go(1); }}>›</button>
+        </>
+      )}
+
       {isImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           className="lb__img"
-          src={media.src}
+          src={src}
           alt="첨부 이미지"
           draggable={false}
           style={{

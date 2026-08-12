@@ -40,9 +40,9 @@ export function ChatPane({
   const [messages, setMessages] = useState<ChatMsgDTO[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [input, setInput] = useState("");
-  const [up, setUp] = useState<{ url: string | null; pct: number } | null>(null); // 업로드 미리보기 + 진행률
+  const [up, setUp] = useState<{ url: string | null; pct: number }[] | null>(null); // 업로드 미리보기 + 진행률(여러 장)
   const [err, setErr] = useState("");
-  const [lb, setLb] = useState<{ src: string; type: "image" | "video" } | null>(null);
+  const [lb, setLb] = useState<{ src: string; type: "image" | "video"; group?: string[] } | null>(null);
   const [replyTo, setReplyTo] = useState<ReplyTo | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [mention, setMention] = useState<{ query: string; start: number } | null>(null);
@@ -54,19 +54,31 @@ export function ChatPane({
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const jumpedFor = useRef<string | null>(null);
+  const stick = useRef(true); // 하단 고정 — 바닥 근처면 새 메시지에 자동 스크롤
 
   const activeMembers = useMemo(() => members.filter((m) => m.active), [members]);
   const nameSet = useMemo(() => new Set(members.map((m) => m.name)), [members]);
 
-  const scrollDown = () =>
-    requestAnimationFrame(() => {
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 90;
+  };
+  const scrollDown = () => {
+    stick.current = true; // 실제 스크롤은 아래 messages/up 이펙트가 커밋 후 수행
+  };
+
+  // 메시지/업로드 미리보기가 바뀐 뒤(커밋 후) 하단 고정 상태면 맨 아래로.
+  useEffect(() => {
+    if (stick.current) {
       const el = scrollRef.current;
       if (el) el.scrollTop = el.scrollHeight;
-    });
+    }
+  }, [messages, up]);
 
   const jumpTo = (id: string) => {
     const el = rowRefs.current.get(id);
     if (!el) return;
+    stick.current = false; // 특정 메시지로 점프 중엔 하단 고정 해제(폴링이 바닥으로 끌지 않게)
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     setHighlight(id);
     setTimeout(() => setHighlight((h) => (h === id ? null : h)), 2200);
@@ -79,16 +91,13 @@ export function ChatPane({
     setNotices([]);
     setReplyTo(null);
     jumpedFor.current = null;
+    stick.current = !scrollToId; // 진입 시 하단 고정(멘션 점프면 해제)
     if (!channelId) return;
     const load = async () => {
       const [r, n] = await Promise.all([loadMessengerChannelAction(channelId), loadMessengerNoticesAction(channelId)]);
       if (!alive) return;
       setNotices(n.notices);
-      setMessages((prev) => {
-        const same = prev.length === r.messages.length && prev[prev.length - 1]?.id === r.messages[r.messages.length - 1]?.id;
-        if (!same && !scrollToId) scrollDown();
-        return r.messages;
-      });
+      setMessages(r.messages);
     };
     load();
     const t = setInterval(load, 4000);
@@ -163,40 +172,74 @@ export function ChatPane({
     });
   };
 
+  // 첨부(사진 여러 장 묶어보내기 + 동영상). 사진은 한 메시지(그리드), 동영상은 각각 개별 메시지.
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
-    if (!file || !channelId) return;
-    if (file.size > 100 * 1024 * 1024) return setErr("100MB 이하 파일만 보낼 수 있어요.");
-    const type: "image" | "video" = file.type.startsWith("video") ? "video" : "image";
-    const objectUrl = type === "image" ? URL.createObjectURL(file) : null;
-    setUp({ url: objectUrl, pct: 0 });
+    if (!files.length || !channelId) return;
+    if (files.some((f) => f.size > 100 * 1024 * 1024)) return setErr("100MB 이하 파일만 보낼 수 있어요.");
+    const images = files.filter((f) => !f.type.startsWith("video")).slice(0, 10);
+    const videos = files.filter((f) => f.type.startsWith("video"));
     setErr("");
-    scrollDown();
+    stick.current = true;
+    let bodyLeft = input.trim(); // 타이핑한 글은 첫 메시지에만 붙임
+    setInput("");
+    const objectUrls: string[] = [];
     try {
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/chat/upload",
-        contentType: file.type || undefined,
-        onUploadProgress: (ev) => setUp((u) => (u ? { ...u, pct: Math.round(ev.percentage) } : u)),
-      });
-      const fd = new FormData();
-      fd.set("channelId", channelId);
-      fd.set("body", input.trim());
-      fd.set("mediaUrl", blob.url);
-      fd.set("mediaType", type);
-      setInput("");
-      const r = await sendMessengerMessageAction(fd);
-      if (r?.error) setErr(r.error);
+      // 1) 사진 묶음 → 한 메시지(그리드)
+      if (images.length) {
+        const previews = images.map((f) => URL.createObjectURL(f));
+        objectUrls.push(...previews);
+        setUp(previews.map((u) => ({ url: u, pct: 0 })));
+        const urls = await Promise.all(
+          images.map((f, idx) =>
+            upload(f.name, f, {
+              access: "public",
+              handleUploadUrl: "/api/chat/upload",
+              contentType: f.type || undefined,
+              onUploadProgress: (ev) =>
+                setUp((u) => (u ? u.map((it, i) => (i === idx ? { ...it, pct: Math.round(ev.percentage) } : it)) : u)),
+            }).then((b) => b.url),
+          ),
+        );
+        const fd = new FormData();
+        fd.set("channelId", channelId);
+        fd.set("body", bodyLeft);
+        bodyLeft = "";
+        fd.set("mediaType", "image");
+        urls.forEach((u) => fd.append("mediaUrls", u));
+        const r = await sendMessengerMessageAction(fd);
+        if (r?.error) setErr(r.error);
+        setUp(null);
+      }
+      // 2) 동영상 → 각각 개별 메시지
+      for (const v of videos) {
+        setUp([{ url: null, pct: 0 }]);
+        const b = await upload(v.name, v, {
+          access: "public",
+          handleUploadUrl: "/api/chat/upload",
+          contentType: v.type || undefined,
+          onUploadProgress: (ev) => setUp([{ url: null, pct: Math.round(ev.percentage) }]),
+        });
+        const fd = new FormData();
+        fd.set("channelId", channelId);
+        fd.set("body", bodyLeft);
+        bodyLeft = "";
+        fd.set("mediaUrl", b.url);
+        fd.set("mediaType", "video");
+        const r = await sendMessengerMessageAction(fd);
+        if (r?.error) setErr(r.error);
+        setUp(null);
+      }
       const res = await loadMessengerChannelAction(channelId);
       setMessages(res.messages);
-      scrollDown();
+      stick.current = true;
     } catch (e2) {
       const msg = e2 instanceof Error ? e2.message : "";
       setErr(msg ? `첨부 실패: ${msg}` : "첨부 전송에 실패했어요.");
     } finally {
       setUp(null);
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrls.forEach((u) => URL.revokeObjectURL(u));
     }
   };
 
@@ -262,7 +305,7 @@ export function ChatPane({
         </button>
       )}
 
-      <div className="chatpane__scroll" ref={scrollRef}>
+      <div className="chatpane__scroll" ref={scrollRef} onScroll={onScroll}>
         {messages.length === 0 ? (
           <div className="chatpane__empty">
             <div className="chatpane__emptyhash">#{channelName}</div>
@@ -297,7 +340,20 @@ export function ChatPane({
                             <span className="msgr__quotebody">{m.replyToBody}</span>
                           </div>
                         )}
-                        {m.mediaUrl ? (
+                        {m.mediaUrls && m.mediaUrls.length > 1 ? (
+                          <div className="msgr__grid" data-n={Math.min(m.mediaUrls.length, 4)}>
+                            {m.mediaUrls.slice(0, 4).map((u, gi) => {
+                              const extra = m.mediaUrls.length - 4;
+                              return (
+                                <button key={gi} type="button" className="msgr__gtile" onClick={() => setLb({ src: u, type: "image", group: m.mediaUrls })}>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={u} alt="첨부" />
+                                  {gi === 3 && extra > 0 && <span className="msgr__gmore">+{extra}</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : m.mediaUrl ? (
                           m.mediaType === "video" ? (
                             <video src={m.mediaUrl} controls className="msgr__media" />
                           ) : (
@@ -318,20 +374,36 @@ export function ChatPane({
           })
         )}
 
-        {up && (
+        {up && up.length > 0 && (
           <div className="msgr__row is-mine">
             <div className="msgr__bubblewrap">
               <div className="msgr__bubblerow">
                 <div className="msgr__bubble msgr__bubble--media msgr__uploading">
-                  {up.url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={up.url} alt="업로드 중" className="msgr__media" />
+                  {up.length > 1 ? (
+                    <div className="msgr__grid" data-n={Math.min(up.length, 4)}>
+                      {up.slice(0, 4).map((it, i) => (
+                        <div key={i} className="msgr__gtile">
+                          {it.url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={it.url} alt="업로드 중" />
+                          ) : (
+                            <div className="msgr__upfile" />
+                          )}
+                          <div className="msgr__upoverlay"><span className="msgr__uppct">{it.pct}%</span></div>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <div className="msgr__upfile">동영상 업로드 중</div>
+                    <>
+                      {up[0].url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={up[0].url} alt="업로드 중" className="msgr__media" />
+                      ) : (
+                        <div className="msgr__upfile">동영상 업로드 중</div>
+                      )}
+                      <div className="msgr__upoverlay"><span className="msgr__uppct">{up[0].pct}%</span></div>
+                    </>
                   )}
-                  <div className="msgr__upoverlay">
-                    <span className="msgr__uppct">{up.pct}%</span>
-                  </div>
                 </div>
               </div>
             </div>
@@ -362,7 +434,7 @@ export function ChatPane({
             ))}
           </div>
         )}
-        <input ref={fileRef} type="file" accept="image/*,video/*" hidden onChange={onFile} />
+        <input ref={fileRef} type="file" accept="image/*,video/*" multiple hidden onChange={onFile} />
         <button type="button" className="msgr__attach" onClick={() => fileRef.current?.click()} disabled={!!up || pending} aria-label="사진·영상 첨부">
           {up ? "…" : "＋"}
         </button>
@@ -391,15 +463,15 @@ export function ChatPane({
           <>
             <div className="msgmenu__backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
             <div className="msgmenu" style={{ left: menu.x, top: menu.y }}>
-              <button type="button" className="msgmenu__item" onClick={doReply}>💬 댓글(답장)</button>
-              <button type="button" className="msgmenu__item" onClick={doNotice}>📌 {menu.isNotice ? "공지 해제" : "공지 등록하기"}</button>
-              <button type="button" className="msgmenu__item" onClick={doCopy}>📋 복사</button>
+              <button type="button" className="msgmenu__item" onClick={doReply}>댓글</button>
+              <button type="button" className="msgmenu__item" onClick={doNotice}>{menu.isNotice ? "공지 해제" : "공지 등록"}</button>
+              <button type="button" className="msgmenu__item" onClick={doCopy}>복사</button>
             </div>
           </>,
           document.body,
         )}
 
-      {lb && <MediaLightbox media={lb} onClose={() => setLb(null)} />}
+      {lb && <MediaLightbox media={{ src: lb.src, type: lb.type }} group={lb.group} onClose={() => setLb(null)} />}
     </div>
   );
 }

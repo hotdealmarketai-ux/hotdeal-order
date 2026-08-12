@@ -850,8 +850,9 @@ model MessengerMessage {
   memberId  String
   member    MessengerMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
   body      String
-  mediaUrl  String? // 첨부 사진·영상(Vercel Blob)
+  mediaUrl  String? // 첨부 사진·영상(Vercel Blob) — 단일/대표(하위호환)
   mediaType String? // "image" | "video"
+  mediaUrls String[] @default([]) // 사진 묶어보내기 — 여러 장(2장 이상이면 그리드)
   // 답장(대댓글) — 원본 메시지 미리보기를 비정규화 저장(원본 삭제·변경에도 견고).
   replyToId   String?
   replyToName String?
@@ -871,6 +872,7 @@ model MessengerMention {
   mentionedMemberId String // 언급된 멤버 id
   byMemberId        String // 언급한(보낸) 멤버 id
   preview           String // 메시지 미리보기(비정규화)
+  readAt            DateTime? // 홈에서 확인(클릭)한 시각 — null이면 '받은 멘션'에 노출
   createdAt         DateTime @default(now())
 
   @@index([mentionedMemberId, createdAt])
@@ -894,6 +896,7 @@ model MessengerRead {
 model MessengerTask {
   id          String    @id @default(cuid())
   title       String
+  detail      String? // 상세 설명(제목 클릭 시 팝업)
   done        Boolean   @default(false)
   assigneeId  String? // 받는 사람 멤버 id(toAll=false일 때)
   toAll       Boolean   @default(false) // 받는 사람 = 팀원 전체
