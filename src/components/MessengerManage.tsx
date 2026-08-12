@@ -9,6 +9,7 @@ import {
   addMessengerChannelAction,
   renameMessengerChannelAction,
   deleteMessengerChannelAction,
+  reorderMessengerChannelAction,
 } from "@/app/actions/messenger";
 
 type Member = { id: string; name: string; active: boolean };
@@ -80,6 +81,7 @@ export function MessengerManage({ members, channels }: { members: Member[]; chan
     fd.set("id", id);
     run(() => deleteMessengerChannelAction(fd));
   };
+  const move = (id: string, dir: "up" | "down") => run(() => reorderMessengerChannelAction(id, dir));
 
   return (
     <div className="stack" style={{ gap: 24 }}>
@@ -164,7 +166,7 @@ export function MessengerManage({ members, channels }: { members: Member[]; chan
           {channels.length === 0 ? (
             <div className="empty">채널이 없어요.</div>
           ) : (
-            channels.map((c) => (
+            channels.map((c, i) => (
               <div className="row" key={c.id} style={{ flexWrap: "wrap" }}>
                 <div className="row__main">
                   <div className="row__title">
@@ -173,6 +175,8 @@ export function MessengerManage({ members, channels }: { members: Member[]; chan
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button type="button" className="btn btn--xs btn--soft" onClick={() => move(c.id, "up")} disabled={pending || i === 0} aria-label="위로">↑</button>
+                  <button type="button" className="btn btn--xs btn--soft" onClick={() => move(c.id, "down")} disabled={pending || i === channels.length - 1} aria-label="아래로">↓</button>
                   <button type="button" className="btn btn--xs btn--soft" onClick={() => { setRenFor(renFor === c.id ? null : c.id); setRenVal(c.name); }}>
                     이름 수정
                   </button>

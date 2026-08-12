@@ -438,6 +438,25 @@ export async function deleteMessengerChannelAction(formData: FormData): Promise<
   revalidatePath("/messenger/manage");
   revalidatePath("/messenger");
 }
+// 채널 순서 변경(관리) — 전체를 현재 표시순 인덱스로 정규화 후 인접 스왑(기존 sortOrder 중복/구멍에도 안전).
+export async function reorderMessengerChannelAction(id: string, dir: "up" | "down"): Promise<void> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !id) return;
+  const chans = await prisma.messengerChannel.findMany({
+    orderBy: [{ archived: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+    select: { id: true },
+  });
+  const order = chans.map((c) => c.id);
+  const idx = order.indexOf(id);
+  if (idx < 0) return;
+  const swap = dir === "up" ? idx - 1 : idx + 1;
+  if (swap < 0 || swap >= order.length) return;
+  [order[idx], order[swap]] = [order[swap], order[idx]];
+  await prisma.$transaction(order.map((cid, i) => prisma.messengerChannel.update({ where: { id: cid }, data: { sortOrder: i } })));
+  revalidatePath("/messenger/manage");
+  revalidatePath("/messenger");
+}
 // 채널 즐겨찾기 토글(팀 공용).
 export async function toggleMessengerFavoriteAction(channelId: string): Promise<void> {
   await requireAdmin();
