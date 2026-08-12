@@ -10,7 +10,7 @@ import { kstDateOf } from "@/lib/date";
 import {
   notifyMessengerMessage,
   notifyMessengerTaskAssigned,
-  notifyMessengerTaskDone,
+  notifyMessengerTaskCompleted,
   notifyMessengerNotice,
 } from "@/lib/messenger-push";
 import {
@@ -460,10 +460,24 @@ export async function loadMessengerWeekAgendaAction(): Promise<{ items: WeekItem
   const start = kstMidnight(wsD.toISOString().slice(0, 10));
   const end = kstMidnight(weD.toISOString().slice(0, 10));
   if (!me || !start || !end) return { items: [] };
-  const [events, tasks] = await Promise.all([
+  const [events, allTasks] = await Promise.all([
     prisma.messengerEvent.findMany({ where: { date: { gte: start, lt: end } }, orderBy: { date: "asc" } }),
-    prisma.messengerTask.findMany({ where: { dueDate: { gte: start, lt: end }, done: false }, orderBy: { dueDate: "asc" } }),
+    prisma.messengerTask.findMany({
+      // 나와 관련된 것만(팀원 전체거나 내가 배정) — 남의 할일이 내 '이번 주 일정'에 안 뜨게.
+      where: { dueDate: { gte: start, lt: end }, OR: [{ toAll: true }, { assigneeIds: { has: me.id } }] },
+      orderBy: { dueDate: "asc" },
+    }),
   ]);
+  // 내가 이미 완료한 태스크는 '이번 주 일정'에서 제외(개인별 완료 기준).
+  const allTaskIds = allTasks.map((t) => t.id);
+  const myDoneIds = allTaskIds.length
+    ? new Set(
+        (await prisma.messengerTaskCompletion.findMany({ where: { taskId: { in: allTaskIds }, memberId: me.id }, select: { taskId: true } })).map(
+          (c) => c.taskId,
+        ),
+      )
+    : new Set<string>();
+  const tasks = allTasks.filter((t) => !myDoneIds.has(t.id));
   const idsOf = (t: { assigneeIds: string[]; assigneeId: string | null }) =>
     t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [];
   const ids = [...new Set(tasks.flatMap(idsOf))];
@@ -710,7 +724,7 @@ export type TaskDTO = {
   id: string;
   title: string;
   detail: string | null; // 상세 설명(제목 클릭 시 팝업)
-  done: boolean;
+  done: boolean; // ★ '현재 보는 사람'이 완료했는지(개인별). 그룹핑(열림/완료)은 이 값 기준.
   assigneeId: string | null; // (레거시) 단일
   assigneeIds: string[]; // 받는 사람(다중)
   toAll: boolean; // 받는 사람 = 팀원 전체
@@ -718,55 +732,97 @@ export type TaskDTO = {
   createdById: string; // 보낸 사람(시킨 사람)
   createdAt: string;
   doneAt: string | null;
+  completedNames: string[]; // 완료 체크한 사람 이름들(취합 표시용)
+  canComplete: boolean; // 내가 체크할 수 있는지 = 팀원 전체거나 배정받은 사람
 };
 
-export async function loadMessengerTasksAction(): Promise<{ tasks: TaskDTO[] }> {
-  await requireAdmin();
-  const me = await getMessengerMember();
-  if (!me) return { tasks: [] };
-  const rows = await prisma.messengerTask.findMany({ orderBy: [{ done: "asc" }, { createdAt: "desc" }], take: 500 });
-  return {
-    tasks: rows.map((t) => ({
+type TaskRow = {
+  id: string; title: string; detail: string | null; done: boolean; doneAt: Date | null;
+  assigneeId: string | null; assigneeIds: string[]; toAll: boolean; dueDate: Date | null;
+  createdById: string; createdAt: Date;
+};
+
+// 태스크 행 → DTO. 개인별 완료(MessengerTaskCompletion) 취합: done=내 완료, completedNames=완료자들.
+async function enrichTaskDTOs(rows: TaskRow[], meId: string): Promise<TaskDTO[]> {
+  const ids = rows.map((r) => r.id);
+  const comps = ids.length
+    ? await prisma.messengerTaskCompletion.findMany({ where: { taskId: { in: ids } }, select: { taskId: true, memberId: true } })
+    : [];
+  const nameById = comps.length
+    ? new Map((await prisma.messengerMember.findMany({ select: { id: true, name: true } })).map((m) => [m.id, m.name]))
+    : new Map<string, string>();
+  const byTask = new Map<string, { names: string[]; mine: boolean }>();
+  for (const c of comps) {
+    const cur = byTask.get(c.taskId) ?? { names: [], mine: false };
+    cur.names.push(nameById.get(c.memberId) ?? "지난 멤버");
+    if (c.memberId === meId) cur.mine = true;
+    byTask.set(c.taskId, cur);
+  }
+  return rows.map((t) => {
+    const assignees = t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [];
+    const comp = byTask.get(t.id);
+    return {
       id: t.id,
       title: t.title,
       detail: t.detail,
-      done: t.done,
+      done: comp?.mine ?? false,
       assigneeId: t.assigneeId,
-      assigneeIds: t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [],
+      assigneeIds: assignees,
       toAll: t.toAll,
       due: t.dueDate ? kstDateOf(t.dueDate) : null,
       createdById: t.createdById,
       createdAt: t.createdAt.toISOString(),
       doneAt: t.doneAt ? t.doneAt.toISOString() : null,
-    })),
-  };
+      completedNames: comp?.names ?? [],
+      canComplete: t.toAll || assignees.includes(meId),
+    };
+  });
 }
 
-// 내 할일 — 나에게 배정된(또는 팀원 전체) 할일만. 홈(전체)과 같은 task라 체크는 전역 반영.
+export async function loadMessengerTasksAction(): Promise<{ tasks: TaskDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { tasks: [] };
+  const rows = await prisma.messengerTask.findMany({ orderBy: { createdAt: "desc" }, take: 500 });
+  return { tasks: await enrichTaskDTOs(rows, me.id) };
+}
+
+// 내 할일 — 나에게 배정된(또는 팀원 전체) 할일만.
 export async function loadMyMessengerTasksAction(): Promise<{ tasks: TaskDTO[] }> {
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me) return { tasks: [] };
   const rows = await prisma.messengerTask.findMany({
     where: { OR: [{ toAll: true }, { assigneeIds: { has: me.id } }] },
-    orderBy: [{ done: "asc" }, { createdAt: "desc" }],
+    orderBy: { createdAt: "desc" },
     take: 500,
   });
-  return {
-    tasks: rows.map((t) => ({
-      id: t.id,
-      title: t.title,
-      detail: t.detail,
-      done: t.done,
-      assigneeId: t.assigneeId,
-      assigneeIds: t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [],
-      toAll: t.toAll,
-      due: t.dueDate ? kstDateOf(t.dueDate) : null,
-      createdById: t.createdById,
-      createdAt: t.createdAt.toISOString(),
-      doneAt: t.doneAt ? t.doneAt.toISOString() : null,
-    })),
-  };
+  return { tasks: await enrichTaskDTOs(rows, me.id) };
+}
+
+// 할 일 개인별 완료 토글 — 배정받은 사람(또는 팀원 전체)만. on=클라가 계산한 최종상태(멱등).
+export async function toggleMessengerTaskCompletionAction(taskId: string, on: boolean): Promise<{ error?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !taskId) return { error: "" };
+  const t = await prisma.messengerTask.findUnique({
+    where: { id: taskId },
+    select: { title: true, createdById: true, toAll: true, assigneeIds: true, assigneeId: true },
+  });
+  if (!t) return { error: "할 일을 찾을 수 없어요." };
+  const assignees = t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [];
+  if (!(t.toAll || assignees.includes(me.id))) return { error: "배정받은 사람만 완료 체크할 수 있어요." };
+  if (on) {
+    await prisma.messengerTaskCompletion
+      .upsert({ where: { taskId_memberId: { taskId, memberId: me.id } }, create: { taskId, memberId: me.id }, update: {} })
+      .catch(() => {});
+    // 작성자에게 '○○님이 완료' 알림(본인이 작성자면 생략).
+    if (t.createdById && t.createdById !== me.id)
+      after(() => notifyMessengerTaskCompleted(t.createdById, me.name, t.title).catch(() => {}));
+  } else {
+    await prisma.messengerTaskCompletion.deleteMany({ where: { taskId, memberId: me.id } });
+  }
+  return {};
 }
 
 export async function addMessengerTaskAction(formData: FormData): Promise<{ error?: string }> {
@@ -811,32 +867,7 @@ export async function addMessengerTaskAction(formData: FormData): Promise<{ erro
   return {};
 }
 
-export async function toggleMessengerTaskAction(id: string): Promise<void> {
-  await requireAdmin();
-  const me = await getMessengerMember();
-  if (!me || !id) return;
-  const t = await prisma.messengerTask.findUnique({
-    where: { id },
-    select: { done: true, title: true, createdById: true, toAll: true, assigneeIds: true, assigneeId: true },
-  });
-  if (!t) return;
-  const newDone = !t.done;
-  await prisma.messengerTask.update({ where: { id }, data: { done: newDone, doneAt: newDone ? new Date() : null } });
-  // 완료로 바뀔 때만 — 등록자·공동 배정자에게(완료한 본인 제외) 웹푸시.
-  if (newDone) {
-    const assignees = t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [];
-    after(() =>
-      notifyMessengerTaskDone({
-        doneById: me.id,
-        doneByName: me.name,
-        title: t.title,
-        createdById: t.createdById,
-        toAll: t.toAll,
-        assigneeIds: assignees,
-      }).catch(() => {}),
-    );
-  }
-}
+// (구) 전체 done 토글은 개인별 완료(toggleMessengerTaskCompletionAction)로 대체됨 — 제거.
 
 // 할 일 수정 — 올린 사람(createdById)만 가능. 받는 사람(다중/전체)도 수정.
 export async function updateMessengerTaskAction(formData: FormData): Promise<{ error?: string }> {
@@ -859,6 +890,8 @@ export async function updateMessengerTaskAction(formData: FormData): Promise<{ e
     where: { id },
     data: { title, detail, toAll, assigneeIds, assigneeId: assigneeIds[0] ?? null },
   });
+  // 배정에서 빠진 사람의 완료 기록 정리(전체 배정이면 전원 가능하니 유지).
+  if (!toAll) await prisma.messengerTaskCompletion.deleteMany({ where: { taskId: id, memberId: { notIn: assigneeIds } } }).catch(() => {});
   revalidatePath("/messenger");
   return {};
 }
@@ -867,6 +900,7 @@ export async function deleteMessengerTaskAction(id: string): Promise<void> {
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me || !id) return;
+  await prisma.messengerTaskCompletion.deleteMany({ where: { taskId: id } }).catch(() => {});
   await prisma.messengerTask.delete({ where: { id } }).catch(() => {});
 }
 
@@ -891,13 +925,22 @@ export async function loadMessengerCalendarAction(
     prisma.messengerEvent.findMany({ where: { date: { gte: start, lt: end } }, orderBy: { date: "asc" } }),
     prisma.messengerTask.findMany({ where: { dueDate: { gte: start, lt: end } }, orderBy: { dueDate: "asc" } }),
   ]);
+  // done = '내 개인별 완료' 여부(다른 사람 완료와 무관하게 각자 기준).
+  const taskIds = tasks.map((t) => t.id);
+  const myDone = taskIds.length
+    ? new Set(
+        (await prisma.messengerTaskCompletion.findMany({ where: { taskId: { in: taskIds }, memberId: me.id }, select: { taskId: true } })).map(
+          (c) => c.taskId,
+        ),
+      )
+    : new Set<string>();
   return {
     events: events.map((e) => ({ id: e.id, title: e.title, date: kstDateOf(e.date), memo: e.memo, createdById: e.createdById })),
     tasks: tasks.map((t) => ({
       id: t.id,
       title: t.title,
       due: kstDateOf(t.dueDate!),
-      done: t.done,
+      done: myDone.has(t.id),
       assigneeIds: t.assigneeIds.length ? t.assigneeIds : t.assigneeId ? [t.assigneeId] : [],
     })),
   };

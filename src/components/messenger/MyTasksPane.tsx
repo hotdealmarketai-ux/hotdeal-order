@@ -5,7 +5,7 @@ import { Sheet } from "@/components/Sheet";
 import { TaskFormSheet } from "./TaskFormSheet";
 import {
   loadMyMessengerTasksAction,
-  toggleMessengerTaskAction,
+  toggleMessengerTaskCompletionAction,
   type TaskDTO,
 } from "@/app/actions/messenger";
 
@@ -49,9 +49,17 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
 
   const toggle = (id: string) => {
     const cur = tasks.find((t) => t.id === id);
-    if (cur && !cur.done && !confirm("정말 완료했습니까?")) return; // 완료로 체크할 때만 재확인
-    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-    start(async () => { await toggleMessengerTaskAction(id); await load(); });
+    if (!cur || !cur.canComplete) return;
+    const on = !cur.done;
+    if (on && !confirm("정말 완료했습니까?")) return; // 완료로 체크할 때만 재확인
+    setTasks((ts) =>
+      ts.map((t) => {
+        if (t.id !== id) return t;
+        const names = on ? [...t.completedNames.filter((n) => n !== me.name), me.name] : t.completedNames.filter((n) => n !== me.name);
+        return { ...t, done: on, completedNames: names };
+      }),
+    );
+    start(async () => { await toggleMessengerTaskCompletionAction(id, on); await load(); });
   };
 
   const open = tasks.filter((t) => !t.done);
@@ -69,7 +77,7 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
 
   const Card = (t: TaskDTO) => (
     <div className={`tcard${t.done ? " is-done" : ""}`} key={t.id}>
-      <button type="button" className={`tcard__check${t.done ? " on" : ""}`} onClick={() => toggle(t.id)} aria-label="완료 체크">{t.done ? "✓" : ""}</button>
+      <button type="button" className={`tcard__check${t.done ? " on" : ""}`} onClick={() => toggle(t.id)} disabled={!t.canComplete} aria-label="완료 체크">{t.done ? "✓" : ""}</button>
       <div className="tcard__main">
         <button type="button" className="tcard__title" onClick={() => setDetailTask(t)}>
           {t.title}
@@ -81,6 +89,7 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
           <span className={`tcard__to${t.toAll ? " all" : ""}`}>{t.toAll ? "팀원 전체" : t.assigneeIds.length ? t.assigneeIds.map(nameOf).join(", ") : "미지정"}</span>
           <span className="tcard__time">{fmtClock(t.createdAt)}</span>
         </div>
+        {t.completedNames.length > 0 && <div className="tcard__doneby">✓ {t.completedNames.join(", ")} 완료</div>}
       </div>
     </div>
   );

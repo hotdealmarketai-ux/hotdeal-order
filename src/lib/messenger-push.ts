@@ -142,6 +142,17 @@ export async function notifyMessengerTaskDone(opts: {
   });
 }
 
+// ── 할 일 개인별 완료 ──────────────────────────────────────
+// 개인이 자기 완료를 체크하면 작성자에게 '○○님이 완료' 알림(누가 했는지 확인용).
+export async function notifyMessengerTaskCompleted(creatorId: string, doneByName: string, title: string) {
+  if (!creatorId) return;
+  await sendMessengerPush([creatorId], {
+    title: "할 일이 완료되었습니다",
+    body: `${doneByName}님이 '${clip(title, 60)}'${josaEulReul(title)} 완료했습니다`,
+    url: "/messenger?view=mytasks",
+  });
+}
+
 // ── 공지 등록 ──────────────────────────────────────────────
 export async function notifyMessengerNotice(opts: {
   actorId: string;

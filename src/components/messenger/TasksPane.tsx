@@ -6,7 +6,7 @@ import { AddTaskButton } from "./AddTaskButton";
 import { TaskFormSheet } from "./TaskFormSheet";
 import {
   loadMessengerTasksAction,
-  toggleMessengerTaskAction,
+  toggleMessengerTaskCompletionAction,
   deleteMessengerTaskAction,
   loadMessengerMentionsAction,
   markMentionReadAction,
@@ -93,9 +93,17 @@ export function TasksPane({
 
   const toggle = (id: string) => {
     const cur = tasks.find((t) => t.id === id);
-    if (cur && !cur.done && !confirm("정말 완료했습니까?")) return; // 완료로 체크할 때만 재확인
-    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-    start(async () => { await toggleMessengerTaskAction(id); await load(); });
+    if (!cur || !cur.canComplete) return; // 배정받은 사람(또는 팀원 전체)만 체크 가능
+    const on = !cur.done;
+    if (on && !confirm("정말 완료했습니까?")) return; // 완료로 체크할 때만 재확인
+    setTasks((ts) =>
+      ts.map((t) => {
+        if (t.id !== id) return t;
+        const names = on ? [...t.completedNames.filter((n) => n !== me.name), me.name] : t.completedNames.filter((n) => n !== me.name);
+        return { ...t, done: on, completedNames: names };
+      }),
+    );
+    start(async () => { await toggleMessengerTaskCompletionAction(id, on); await load(); });
   };
   const remove = (id: string) => {
     if (!confirm("이 할 일을 삭제할까요?")) return;
@@ -128,7 +136,7 @@ export function TasksPane({
 
   const Card = (t: TaskDTO) => (
     <div className={`tcard${t.done ? " is-done" : ""}`} key={t.id}>
-      <button type="button" className={`tcard__check${t.done ? " on" : ""}`} onClick={() => toggle(t.id)} aria-label="완료 체크">{t.done ? "✓" : ""}</button>
+      <button type="button" className={`tcard__check${t.done ? " on" : ""}`} onClick={() => toggle(t.id)} disabled={!t.canComplete} aria-label="완료 체크">{t.done ? "✓" : ""}</button>
       <div className="tcard__main">
         <button type="button" className="tcard__title" onClick={() => setDetailTask(t)}>
           {t.title}
@@ -140,6 +148,7 @@ export function TasksPane({
           <span className={`tcard__to${t.toAll ? " all" : ""}`}>{t.toAll ? "팀원 전체" : t.assigneeIds.length ? t.assigneeIds.map(nameOf).join(", ") : "미지정"}</span>
           <span className="tcard__time">{fmtClock(t.createdAt)}</span>
         </div>
+        {t.completedNames.length > 0 && <div className="tcard__doneby">✓ {t.completedNames.join(", ")} 완료</div>}
       </div>
       <button type="button" className="tcard__del" onClick={() => remove(t.id)} aria-label="삭제">✕</button>
     </div>

@@ -6143,6 +6143,8 @@ a.resv-card:active { transform: scale(0.995); }
 .tcard.is-done { background: var(--surface-2); }
 .tcard__check { flex: 0 0 auto; width: 25px; height: 25px; margin-top: 1px; border-radius: 999px; border: 2px solid var(--line-strong); background: #fff; color: #fff; font-size: 14px; font-weight: 900; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .tcard__check.on { background: var(--green-700); border-color: var(--green-700); }
+.tcard__check:disabled { opacity: 0.32; cursor: default; }
+.tcard__doneby { margin-top: 5px; font-size: 12px; font-weight: 800; color: var(--green-700); line-height: 1.35; }
 .tcard__main { flex: 1; min-width: 0; }
 .tcard__title { font-size: 15.5px; font-weight: 700; color: var(--fg); word-break: break-word; }
 .tcard.is-done .tcard__title { text-decoration: line-through; color: var(--muted-2); }

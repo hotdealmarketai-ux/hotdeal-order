@@ -892,6 +892,18 @@ model MessengerMention {
   @@index([messageId])
 }
 
+// 할 일 개인별 완료 — 다중/전체 배정 시 멤버 각자 자기 완료를 체크(누가 했는지 취합).
+// MessengerTask.done(단일 플래그)와 별개: 이 테이블 유무가 '그 멤버의 완료' 진실.
+model MessengerTaskCompletion {
+  id          String   @id @default(cuid())
+  taskId      String
+  memberId    String
+  completedAt DateTime @default(now())
+
+  @@unique([taskId, memberId])
+  @@index([taskId])
+}
+
 // 메신저 웹푸시 구독 — 멤버 단위(핫딜오더 User가 아님, 전원 공용 saerop로 1차 로그인). endpoint=기기.
 model MessengerPushSubscription {
   id        String   @id @default(cuid())
