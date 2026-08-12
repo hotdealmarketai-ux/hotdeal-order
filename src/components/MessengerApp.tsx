@@ -7,6 +7,7 @@ import {
   loadMessengerChannelAction,
   messengerUnreadAction,
 } from "@/app/actions/messenger";
+import { MediaLightbox } from "@/components/MediaLightbox";
 
 type Msg = {
   id: string;
@@ -40,6 +41,7 @@ export function MessengerApp({
   const [input, setInput] = useState("");
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
+  const [lb, setLb] = useState<{ src: string; type: "image" | "video" } | null>(null);
   const [pending, start] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -181,10 +183,14 @@ export function MessengerApp({
                           m.mediaType === "video" ? (
                             <video src={m.mediaUrl} controls className="msgr__media" />
                           ) : (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <a href={m.mediaUrl} target="_blank" rel="noreferrer">
+                            <button
+                              type="button"
+                              className="media-btn"
+                              onClick={() => setLb({ src: m.mediaUrl!, type: "image" })}
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img src={m.mediaUrl} alt="첨부" className="msgr__media" />
-                            </a>
+                            </button>
                           )
                         ) : null}
                         {m.body && <div className="msgr__text">{m.body}</div>}
@@ -229,6 +235,8 @@ export function MessengerApp({
           전송
         </button>
       </div>
+
+      {lb && <MediaLightbox media={lb} onClose={() => setLb(null)} />}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
 } from "@/app/actions/chat";
 import { AiAssistant } from "@/components/AiAssistant";
 import { BroadcastModal } from "@/components/BroadcastModal";
+import { MediaLightbox } from "@/components/MediaLightbox";
 
 const MAX_MEDIA_BYTES = 100 * 1024 * 1024; // 100MB
 
@@ -49,6 +50,7 @@ export function ChatWidget() {
   const [closing, setClosing] = useState(false);
   const [uploading, setUploading] = useState(false); // 첨부 업로드 중
   const [broadcastOpen, setBroadcastOpen] = useState(false); // 전체공지 모달
+  const [lb, setLb] = useState<{ src: string; type: "image" | "video" } | null>(null); // 사진 미리보기
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingChatParam = useRef<string | null>(null);
@@ -615,15 +617,14 @@ export function ChatWidget() {
                             className={`msg__bubble${m.mediaUrl ? " msg__bubble--media" : ""}`}
                           >
                             {m.mediaUrl && m.mediaType === "image" && (
-                              <a
-                                href={m.mediaUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="msg__media"
+                              <button
+                                type="button"
+                                className="msg__media media-btn"
+                                onClick={() => setLb({ src: m.mediaUrl!, type: "image" })}
                               >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={m.mediaUrl} alt="첨부 이미지" loading="lazy" />
-                              </a>
+                              </button>
                             )}
                             {m.mediaUrl && m.mediaType === "video" && (
                               <video
@@ -707,6 +708,8 @@ export function ChatWidget() {
       {broadcastOpen && role === "admin" && (
         <BroadcastModal onClose={() => setBroadcastOpen(false)} />
       )}
+
+      {lb && <MediaLightbox media={lb} onClose={() => setLb(null)} />}
     </>
   );
 }

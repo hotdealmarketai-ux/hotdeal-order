@@ -5915,3 +5915,15 @@ a.resv-card:active { transform: scale(0.995); }
 .msgr__input { flex: 1; min-width: 0; }
 /* .btn 기본이 width:100%라 flex 안에서 통째로 늘어남 → 콘텐츠 폭으로 고정 */
 .msgr__send { flex: 0 0 auto; width: auto; min-height: 46px; padding: 0 20px; }
+
+/* 첨부 이미지 = 버튼(라이트박스 열기). 기본 버튼 스타일 제거하고 이미지 크기 유지 */
+.media-btn { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; -webkit-tap-highlight-color: transparent; }
+.media-btn img { display: block; }
+
+/* 카카오톡식 사진 미리보기(라이트박스) */
+.lb { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; overflow: hidden; overscroll-behavior: contain; }
+.lb__img { max-width: 100vw; max-height: 100vh; object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform; }
+.lb__video { max-width: 94vw; max-height: 86vh; border-radius: 8px; background: #000; }
+.lb__bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2; display: flex; justify-content: flex-end; gap: 8px; padding: max(10px, env(safe-area-inset-top)) 12px 10px; }
+.lb__btn { width: 42px; height: 42px; border-radius: 999px; border: 0; background: rgba(255,255,255,0.14); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.lb__btn:active { background: rgba(255,255,255,0.28); }
