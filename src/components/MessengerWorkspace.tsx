@@ -31,6 +31,8 @@ export function MessengerWorkspace({
   const [view, setView] = useState<View>("home");
   const [chans, setChans] = useState<Channel[]>(channels);
   const [active, setActive] = useState<string>(channels[0]?.id ?? "");
+  // 메신저 '내부' 화면 이동 이력 — 하단 '뒤로가기'는 이 스택만 pop(메신저 밖으로 안 나감).
+  const [navStack, setNavStack] = useState<{ view: View; active: string }[]>([]);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [sideOpen, setSideOpen] = useState(false);
   const [jumpMsg, setJumpMsg] = useState<string | null>(null);
@@ -69,6 +71,8 @@ export function MessengerWorkspace({
   }, []);
 
   const pick = (v: View, ch?: string) => {
+    // 화면이 실제로 바뀔 때만 현재 위치를 이력에 push(중복 방지).
+    if (v !== view || (!!ch && ch !== active)) setNavStack((s) => [...s, { view, active }]);
     setView(v);
     if (ch) setActive(ch);
     setJumpMsg(null);
@@ -76,9 +80,21 @@ export function MessengerWorkspace({
     setSideOpen(false);
   };
   const handleJump = (ch: string, messageId: string) => {
+    if (view !== "chat" || ch !== active) setNavStack((s) => [...s, { view, active }]);
     setActive(ch);
     setJumpMsg(messageId);
     setView("chat");
+    setTool(null);
+    setSideOpen(false);
+  };
+  // 하단 '뒤로가기' — 메신저 내부 이력만 pop(밖으로 안 나감). 이력 없으면 아무것도 안 함.
+  const goBack = () => {
+    if (navStack.length === 0) return;
+    const prev = navStack[navStack.length - 1];
+    setNavStack((s) => s.slice(0, -1));
+    setView(prev.view);
+    setActive(prev.active);
+    setJumpMsg(null);
     setTool(null);
     setSideOpen(false);
   };
@@ -242,10 +258,17 @@ export function MessengerWorkspace({
           )}
         </div>
         <nav className="mw__bottomnav">
-          <Link href="/admin" className="mw__bnitem">
+          <button
+            type="button"
+            className="mw__bnitem"
+            onClick={goBack}
+            disabled={navStack.length === 0}
+            style={navStack.length === 0 ? { opacity: 0.4 } : undefined}
+            aria-label="뒤로가기"
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
             <span>뒤로가기</span>
-          </Link>
+          </button>
           <button type="button" className={`mw__bnitem${view === "home" ? " is-on" : ""}`} onClick={() => pick("home")}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 11l8-7 8 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M6 10v9h12v-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
             <span>홈</span>
