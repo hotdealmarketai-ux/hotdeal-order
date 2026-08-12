@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { upload } from "@vercel/blob/client";
+import { compressImage } from "@/lib/image-compress";
 import {
   chatBootstrap,
   chatUnread,
@@ -339,10 +340,11 @@ export function ChatWidget() {
     setUploading(true);
     setErr("");
     try {
-      const blob = await upload(file.name, file, {
+      const toSend = type === "image" ? await compressImage(file) : file; // 사진은 업로드 전 압축
+      const blob = await upload(toSend.name, toSend, {
         access: "public",
         handleUploadUrl: "/api/chat/upload",
-        contentType: file.type || undefined,
+        contentType: toSend.type || undefined,
       });
       setInput("");
       const tmpId = `tmp-${Date.now()}`;

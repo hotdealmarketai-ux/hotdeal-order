@@ -16,6 +16,7 @@ import {
 } from "@/app/actions/messenger";
 import { MediaLightbox } from "@/components/MediaLightbox";
 import { MessengerComposer } from "@/components/messenger/MessengerComposer";
+import { compressImage } from "@/lib/image-compress";
 
 type Member = { id: string; name: string; active: boolean };
 type Notice = { id: string; body: string; name: string; at: string };
@@ -209,15 +210,17 @@ export function ChatPane({
         objectUrls.push(...previews);
         setUp(previews.map((u) => ({ url: u, pct: 0 })));
         const urls = await Promise.all(
-          images.map((f, idx) =>
-            upload(f.name, f, {
+          images.map(async (f, idx) => {
+            const cf = await compressImage(f); // 업로드 전 리사이즈+압축(원본 실패 시 원본 유지)
+            const b = await upload(cf.name, cf, {
               access: "public",
               handleUploadUrl: "/api/chat/upload",
-              contentType: f.type || undefined,
+              contentType: cf.type || undefined,
               onUploadProgress: (ev) =>
                 setUp((u) => (u ? u.map((it, i) => (i === idx ? { ...it, pct: Math.round(ev.percentage) } : it)) : u)),
-            }).then((b) => b.url),
-          ),
+            });
+            return b.url;
+          }),
         );
         const fd = new FormData();
         fd.set("channelId", channelId);

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
+import { compressImage } from "@/lib/image-compress";
 import { adminListMerchants, sendBroadcast } from "@/app/actions/chat";
 
 const MAX_MEDIA_BYTES = 100 * 1024 * 1024; // 100MB
@@ -62,10 +63,11 @@ export function BroadcastModal({ onClose }: { onClose: () => void }) {
     setUploading(true);
     setErr("");
     try {
-      const blob = await upload(file.name, file, {
+      const toSend = type === "image" ? await compressImage(file) : file; // 사진은 업로드 전 압축
+      const blob = await upload(toSend.name, toSend, {
         access: "public",
         handleUploadUrl: "/api/chat/upload",
-        contentType: file.type || undefined,
+        contentType: toSend.type || undefined,
       });
       setMedia({ url: blob.url, type });
     } catch (e) {
