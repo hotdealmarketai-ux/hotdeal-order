@@ -6182,7 +6182,7 @@ a.resv-card:active { transform: scale(0.995); }
 /* 홈 인사말 줄 + 우측 작은 추가(＋) 버튼 */
 .home__greet { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .home__greetmain { min-width: 0; }
-.home__addfab { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 999px; border: 0; background: var(--green-700); color: #fff; font-size: 24px; font-weight: 700; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(20,48,31,0.22); -webkit-tap-highlight-color: transparent; }
+.home__addfab { flex: 0 0 auto; width: 33px; height: 33px; border-radius: 999px; border: 0; background: var(--green-700); color: #fff; font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 3px 11px rgba(20,48,31,0.22); -webkit-tap-highlight-color: transparent; }
 .home__addfab:active { transform: scale(0.94); }
 
 /* 할 일 — 올린 날짜별 그룹 */
