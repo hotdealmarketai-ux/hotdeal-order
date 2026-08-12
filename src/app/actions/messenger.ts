@@ -971,3 +971,20 @@ export async function deleteMessengerEventAction(id: string): Promise<void> {
   if (!me || !id) return;
   await prisma.messengerEvent.delete({ where: { id } }).catch(() => {});
 }
+
+// 등록된 일정 수정 — 제목·날짜·메모(팀 공용이라 멤버 누구나, 삭제와 동일 권한).
+export async function updateMessengerEventAction(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { error: "메신저 로그인이 필요해요." };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "" };
+  const title = String(formData.get("title") ?? "").trim().slice(0, 200);
+  const date = kstMidnight(String(formData.get("date") ?? "").trim());
+  if (!title) return { error: "일정 제목을 입력하세요." };
+  if (!date) return { error: "날짜를 확인하세요." };
+  const memo = String(formData.get("memo") ?? "").trim().slice(0, 1000) || null;
+  await prisma.messengerEvent.update({ where: { id }, data: { title, date, memo } }).catch(() => {});
+  revalidatePath("/messenger");
+  return {};
+}

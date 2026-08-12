@@ -6088,8 +6088,16 @@ a.resv-card:active { transform: scale(0.995); }
 .mcal__row.is-done .mcal__rowtitle { text-decoration: line-through; color: var(--muted-2); }
 .mcal__doneflag { font-size: 11px; font-weight: 800; color: var(--green-700); }
 .mcal__rowmemo { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+.mcal__edit { flex: 0 0 auto; align-self: center; border: 1px solid var(--line); background: #fff; color: var(--muted); font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 8px; cursor: pointer; }
+.mcal__edit:hover { background: var(--green-100); color: var(--green-800); border-color: var(--green-300, var(--line)); }
 .mcal__add { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mcal__add .btn { width: auto; align-self: flex-start; padding: 0 20px; min-height: 46px; }
+/* 일정 수정 시트 */
+.mcaledit { display: flex; flex-direction: column; gap: 8px; }
+.mcaledit__title { font-size: 17px; font-weight: 800; color: var(--fg); margin-bottom: 4px; }
+.mcaledit__label { font-size: 12px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+.mcaledit__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.mcaledit__actions .btn { width: auto; padding: 0 20px; min-height: 44px; }
 
 /* 관리 페이지 */
 .mw-manage { position: fixed; inset: 0; z-index: 100; background: var(--surface-2); display: flex; flex-direction: column; }

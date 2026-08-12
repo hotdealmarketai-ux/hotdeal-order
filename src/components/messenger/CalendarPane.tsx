@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Sheet } from "@/components/Sheet";
 import {
   loadMessengerCalendarAction,
   addMessengerEventAction,
+  updateMessengerEventAction,
   deleteMessengerEventAction,
   type EventDTO,
   type CalTaskDTO,
@@ -27,6 +29,12 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
   const [err, setErr] = useState("");
+  // 일정 수정
+  const [editEvent, setEditEvent] = useState<EventDTO | null>(null);
+  const [eTitle, setETitle] = useState("");
+  const [eDate, setEDate] = useState("");
+  const [eMemo, setEMemo] = useState("");
+  const [eErr, setEErr] = useState("");
   const [pending, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "?" : null);
 
@@ -103,6 +111,30 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
       await load();
     });
   };
+  const openEdit = (e: EventDTO) => {
+    setEditEvent(e);
+    setETitle(e.title);
+    setEDate(e.date);
+    setEMemo(e.memo ?? "");
+    setEErr("");
+  };
+  const saveEdit = () => {
+    if (!editEvent) return;
+    const ti = eTitle.trim();
+    if (!ti) return setEErr("일정 제목을 입력하세요.");
+    setEErr("");
+    start(async () => {
+      const fd = new FormData();
+      fd.set("id", editEvent.id);
+      fd.set("title", ti);
+      fd.set("date", eDate);
+      if (eMemo.trim()) fd.set("memo", eMemo.trim());
+      const r = await updateMessengerEventAction(fd);
+      if (r?.error) return setEErr(r.error);
+      setEditEvent(null);
+      await load();
+    });
+  };
 
   return (
     <div className="mcal">
@@ -158,6 +190,7 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
               <div className="mcal__rowtitle">{e.title}</div>
               {e.memo && <div className="mcal__rowmemo">{e.memo}</div>}
             </div>
+            <button type="button" className="mcal__edit" onClick={() => openEdit(e)}>수정</button>
             <button type="button" className="task__del" onClick={() => removeEvent(e.id)} aria-label="삭제">✕</button>
           </div>
         ))}
@@ -184,6 +217,25 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
           {err && <div className="notice notice--error">{err}</div>}
         </div>
       </div>
+
+      {editEvent && (
+        <Sheet onClose={() => setEditEvent(null)}>
+          <div className="sheet__panel mcaledit">
+            <div className="mcaledit__title">일정 수정</div>
+            <label className="mcaledit__label">제목</label>
+            <input className="input" value={eTitle} onChange={(e) => setETitle(e.target.value)} placeholder="일정" autoFocus />
+            <label className="mcaledit__label">날짜</label>
+            <input className="input" type="date" value={eDate} onChange={(e) => setEDate(e.target.value)} />
+            <label className="mcaledit__label">메모</label>
+            <input className="input" value={eMemo} onChange={(e) => setEMemo(e.target.value)} placeholder="메모" />
+            {eErr && <div className="notice notice--error">{eErr}</div>}
+            <div className="mcaledit__actions">
+              <button type="button" className="btn btn--ghost" onClick={() => setEditEvent(null)}>취소</button>
+              <button type="button" className="btn btn--primary" onClick={saveEdit} disabled={pending || !eTitle.trim()}>저장</button>
+            </div>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }
