@@ -9,13 +9,14 @@ import { ChatPane, type ChatTool } from "@/components/messenger/ChatPane";
 import { TasksPane } from "@/components/messenger/TasksPane";
 import { MyTasksPane } from "@/components/messenger/MyTasksPane";
 import { CalendarPane } from "@/components/messenger/CalendarPane";
+import { OrgPane } from "@/components/messenger/OrgPane";
 import { AddTaskButton } from "@/components/messenger/AddTaskButton";
 import { MessengerPushBanner } from "@/components/messenger/MessengerPushBanner";
 
 type Channel = { id: string; name: string; favorite: boolean; groupId: string | null };
 type Group = { id: string; name: string };
 type Member = { id: string; name: string; active: boolean };
-type View = "home" | "chat" | "calendar" | "mytasks";
+type View = "home" | "chat" | "calendar" | "mytasks" | "org";
 
 export function MessengerWorkspace({
   me,
@@ -179,6 +180,9 @@ export function MessengerWorkspace({
           <button type="button" className={`mw__navitem${view === "calendar" ? " is-on" : ""}`} onClick={() => pick("calendar")}>
             <span className="mw__navlabel">캘린더</span>
           </button>
+          <button type="button" className={`mw__navitem${view === "org" ? " is-on" : ""}`} onClick={() => pick("org")}>
+            <span className="mw__navlabel">조직도</span>
+          </button>
 
           {chans.length === 0 ? (
             <>
@@ -216,7 +220,7 @@ export function MessengerWorkspace({
       <main className="mw__main">
         <header className={`mw__top${view === "home" ? " mw__top--home" : ""}`}>
           <button type="button" className="mw__ham" onClick={() => setSideOpen(true)} aria-label="메뉴 열기">☰</button>
-          <div className="mw__toptitle">{view === "chat" ? `# ${activeName}` : view === "home" ? "홈" : view === "mytasks" ? "내 할일" : "캘린더"}</div>
+          <div className="mw__toptitle">{view === "chat" ? `# ${activeName}` : view === "home" ? "홈" : view === "mytasks" ? "내 할일" : view === "org" ? "조직도" : "캘린더"}</div>
           {view === "chat" && active && (
             <div className="mw__toptools">
               <AddTaskButton
@@ -253,6 +257,8 @@ export function MessengerWorkspace({
             <TasksPane me={me} members={members} favorites={favorites} channels={chans} unread={unread} onJump={handleJump} onOpenChannel={(id) => pick("chat", id)} />
           ) : view === "mytasks" ? (
             <MyTasksPane me={me} members={members} />
+          ) : view === "org" ? (
+            <OrgPane me={me} />
           ) : (
             <CalendarPane me={me} members={members} />
           )}

@@ -904,6 +904,33 @@ model MessengerTaskCompletion {
   @@index([taskId])
 }
 
+// 반복(기본) 할일 — 요청(배정) 할일과 별개. 멤버 각자에게 정해진 매일/특정요일 체크리스트.
+// 소유자(memberId)만 체크, 추가·수정·삭제는 누구나. 완료는 날짜별(MessengerRecurringCompletion)로
+// 기록 → 자정(KST)마다 자동 리셋(오늘 날짜에 완료행 없으면 미완료), 과거 기록은 보존.
+model MessengerRecurringTask {
+  id          String   @id @default(cuid())
+  memberId    String // 이 반복할일의 주인(체크는 이 멤버만)
+  title       String
+  days        Int      @default(127) // 요일 비트마스크(bit i = 요일 i, 0=일…6=토). 127=매일
+  sortOrder   Int      @default(0)
+  createdById String // 만든 사람(참고)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([memberId, sortOrder])
+}
+
+// 반복 할일 '그 날' 완료 마커 — 존재 = 그 KST 날짜에 체크됨. 없으면 미완료(자정 자동 리셋).
+model MessengerRecurringCompletion {
+  id        String   @id @default(cuid())
+  taskId    String // MessengerRecurringTask.id (느슨 참조)
+  date      String // 체크한 KST 날짜 YYYY-MM-DD
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, date])
+  @@index([taskId])
+}
+
 // 메신저 웹푸시 구독 — 멤버 단위(핫딜오더 User가 아님, 전원 공용 saerop로 1차 로그인). endpoint=기기.
 model MessengerPushSubscription {
   id        String   @id @default(cuid())

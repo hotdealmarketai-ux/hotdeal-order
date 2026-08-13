@@ -574,6 +574,12 @@ export async function deleteMessengerMemberAction(formData: FormData): Promise<v
   if (!id) return;
   // 이 멤버 관련 멘션(문자열 참조, FK 없음)도 정리 — 죽은 '받은 멘션' 방지.
   await prisma.messengerMention.deleteMany({ where: { OR: [{ mentionedMemberId: id }, { byMemberId: id }] } }).catch(() => {});
+  // 이 멤버의 반복 할일 + 완료 마커(문자열 참조, FK 없음)도 정리 — 고아 데이터 방지.
+  const recIds = (await prisma.messengerRecurringTask.findMany({ where: { memberId: id }, select: { id: true } })).map((t) => t.id);
+  if (recIds.length) {
+    await prisma.messengerRecurringCompletion.deleteMany({ where: { taskId: { in: recIds } } }).catch(() => {});
+    await prisma.messengerRecurringTask.deleteMany({ where: { memberId: id } }).catch(() => {});
+  }
   await prisma.messengerMember.delete({ where: { id } }).catch(() => {});
   revalidatePath("/messenger/manage");
   revalidatePath("/messenger");
@@ -987,4 +993,163 @@ export async function updateMessengerEventAction(formData: FormData): Promise<{ 
   await prisma.messengerEvent.update({ where: { id }, data: { title, date, memo } }).catch(() => {});
   revalidatePath("/messenger");
   return {};
+}
+
+// ── 반복(기본) 할일 + 조직도 ─────────────────────────────────
+// 요청(배정) 할일과 별개. 멤버 각자 매일/특정요일 체크리스트. 추가·수정·삭제 누구나, 체크는 본인만.
+// 완료는 날짜별(그날 KST) 마커 → 자정 자동 리셋. 요일 비트마스크 days(bit i=요일 i, 0=일). 127=매일.
+export type RecurringDTO = {
+  id: string;
+  memberId: string;
+  title: string;
+  days: number; // 요일 비트마스크
+  appliesToday: boolean; // 오늘 요일에 해당
+  done: boolean; // 오늘 체크됨(해당분만 의미)
+  canCheck: boolean; // 지금 사용자가 체크 가능(본인 & 오늘 해당)
+};
+export type OrgMemberDTO = { id: string; name: string; total: number; done: number };
+
+// YYYY-MM-DD → 요일(0=일…6=토). 달력상 요일(타임존 무관).
+function dowOfYmd(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1)).getUTCDay();
+}
+const appliesOn = (days: number, dow: number) => ((days >> dow) & 1) === 1;
+
+// 내 반복 할일 — '오늘 요일 해당'분만(내 할일 화면 '기본 내 할일' 섹션).
+export async function loadMyRecurringTasksAction(): Promise<{ tasks: RecurringDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { tasks: [] };
+  const today = kstDateOf(new Date());
+  const dow = dowOfYmd(today);
+  const rows = await prisma.messengerRecurringTask.findMany({ where: { memberId: me.id }, orderBy: { sortOrder: "asc" } });
+  const applicable = rows.filter((r) => appliesOn(r.days, dow));
+  const comps = applicable.length
+    ? await prisma.messengerRecurringCompletion.findMany({ where: { taskId: { in: applicable.map((r) => r.id) }, date: today }, select: { taskId: true } })
+    : [];
+  const doneSet = new Set(comps.map((c) => c.taskId));
+  return {
+    tasks: applicable.map((r) => ({ id: r.id, memberId: r.memberId, title: r.title, days: r.days, appliesToday: true, done: doneSet.has(r.id), canCheck: true })),
+  };
+}
+
+// 반복 할일 완료 토글 — 본인(주인)만. on=최종상태(멱등). 오늘 날짜 마커로 기록(자정 리셋).
+export async function toggleRecurringCompletionAction(taskId: string, on: boolean): Promise<{ error?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !taskId) return { error: "" };
+  const t = await prisma.messengerRecurringTask.findUnique({ where: { id: taskId }, select: { memberId: true, days: true } });
+  if (!t) return { error: "" };
+  if (t.memberId !== me.id) return { error: "본인 반복 할일만 체크할 수 있어요." };
+  const today = kstDateOf(new Date());
+  if (!appliesOn(t.days, dowOfYmd(today))) return { error: "오늘 요일에 해당하지 않는 할일이에요." };
+  if (on) {
+    await prisma.messengerRecurringCompletion
+      .upsert({ where: { taskId_date: { taskId, date: today } }, create: { taskId, date: today }, update: {} })
+      .catch(() => {});
+  } else {
+    await prisma.messengerRecurringCompletion.deleteMany({ where: { taskId, date: today } });
+  }
+  return {};
+}
+
+// 반복 할일 추가 — 누구나(대상 멤버 지정). days=요일 비트마스크(1~127).
+export async function addRecurringTaskAction(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { error: "메신저 로그인이 필요해요." };
+  const memberId = String(formData.get("memberId") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim().slice(0, 200);
+  let days = Math.trunc(Number(formData.get("days") ?? 127));
+  if (!Number.isFinite(days) || days < 1 || days > 127) days = 127;
+  if (!memberId) return { error: "대상 멤버를 선택하세요." };
+  if (!title) return { error: "반복 할일을 입력하세요." };
+  const member = await prisma.messengerMember.findUnique({ where: { id: memberId }, select: { id: true } });
+  if (!member) return { error: "멤버를 찾을 수 없어요." };
+  const max = await prisma.messengerRecurringTask.aggregate({ where: { memberId }, _max: { sortOrder: true } });
+  await prisma.messengerRecurringTask.create({ data: { memberId, title, days, createdById: me.id, sortOrder: (max._max.sortOrder ?? 0) + 1 } });
+  return {};
+}
+
+// 반복 할일 수정(제목·요일) — 누구나.
+export async function updateRecurringTaskAction(formData: FormData): Promise<{ error?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { error: "메신저 로그인이 필요해요." };
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return { error: "" };
+  const title = String(formData.get("title") ?? "").trim().slice(0, 200);
+  let days = Math.trunc(Number(formData.get("days") ?? 127));
+  if (!Number.isFinite(days) || days < 1 || days > 127) days = 127;
+  if (!title) return { error: "반복 할일을 입력하세요." };
+  await prisma.messengerRecurringTask.update({ where: { id }, data: { title, days } }).catch(() => {});
+  return {};
+}
+
+// 반복 할일 삭제 — 누구나. 완료 마커도 함께 정리.
+export async function deleteRecurringTaskAction(id: string): Promise<void> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !id) return;
+  await prisma.messengerRecurringCompletion.deleteMany({ where: { taskId: id } });
+  await prisma.messengerRecurringTask.delete({ where: { id } }).catch(() => {});
+}
+
+// 조직도 — 전 멤버 + 오늘 반복 할일 진행률(완료수/오늘해당수).
+export async function loadOrgChartAction(): Promise<{ members: OrgMemberDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { members: [] };
+  const today = kstDateOf(new Date());
+  const dow = dowOfYmd(today);
+  const [members, tasks] = await Promise.all([
+    prisma.messengerMember.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true } }),
+    prisma.messengerRecurringTask.findMany({ select: { id: true, memberId: true, days: true } }),
+  ]);
+  const todayTasks = tasks.filter((t) => appliesOn(t.days, dow));
+  const idsByMember = new Map<string, string[]>();
+  for (const t of todayTasks) {
+    const arr = idsByMember.get(t.memberId) ?? [];
+    arr.push(t.id);
+    idsByMember.set(t.memberId, arr);
+  }
+  const allIds = todayTasks.map((t) => t.id);
+  const comps = allIds.length
+    ? await prisma.messengerRecurringCompletion.findMany({ where: { taskId: { in: allIds }, date: today }, select: { taskId: true } })
+    : [];
+  const doneSet = new Set(comps.map((c) => c.taskId));
+  return {
+    members: members.map((m) => {
+      const ids = idsByMember.get(m.id) ?? [];
+      return { id: m.id, name: m.name, total: ids.length, done: ids.filter((id) => doneSet.has(id)).length };
+    }),
+  };
+}
+
+// 조직도 멤버 상세 — 그 멤버의 반복 할일 전체(오늘 해당 여부·체크) + 내가 체크 가능한지.
+export async function loadMemberRecurringAction(memberId: string): Promise<{ name: string; canCheck: boolean; tasks: RecurringDTO[] }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !memberId) return { name: "", canCheck: false, tasks: [] };
+  const today = kstDateOf(new Date());
+  const dow = dowOfYmd(today);
+  const [member, rows] = await Promise.all([
+    prisma.messengerMember.findUnique({ where: { id: memberId }, select: { name: true } }),
+    prisma.messengerRecurringTask.findMany({ where: { memberId }, orderBy: { sortOrder: "asc" } }),
+  ]);
+  const todayIds = rows.filter((r) => appliesOn(r.days, dow)).map((r) => r.id);
+  const comps = todayIds.length
+    ? await prisma.messengerRecurringCompletion.findMany({ where: { taskId: { in: todayIds }, date: today }, select: { taskId: true } })
+    : [];
+  const doneSet = new Set(comps.map((c) => c.taskId));
+  const mine = memberId === me.id;
+  return {
+    name: member?.name ?? "지난 멤버",
+    canCheck: mine,
+    tasks: rows.map((r) => {
+      const appliesToday = appliesOn(r.days, dow);
+      return { id: r.id, memberId, title: r.title, days: r.days, appliesToday, done: appliesToday && doneSet.has(r.id), canCheck: mine && appliesToday };
+    }),
+  };
 }

@@ -3,10 +3,15 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Sheet } from "@/components/Sheet";
 import { TaskFormSheet } from "./TaskFormSheet";
+import { RecurringFormSheet, daysLabel } from "./RecurringFormSheet";
 import {
   loadMyMessengerTasksAction,
   toggleMessengerTaskCompletionAction,
+  loadMyRecurringTasksAction,
+  toggleRecurringCompletionAction,
+  deleteRecurringTaskAction,
   type TaskDTO,
+  type RecurringDTO,
 } from "@/app/actions/messenger";
 
 type Member = { id: string; name: string; active: boolean };
@@ -30,22 +35,41 @@ const dayLabel = (ymd: string) => {
 // 내 할일 = 나에게 배정된(또는 팀원 전체) 할 일만. 체크는 전역 반영(같은 task).
 export function MyTasksPane({ me, members }: { me: { id: string; name: string }; members: Member[] }) {
   const [tasks, setTasks] = useState<TaskDTO[]>([]);
+  const [recurring, setRecurring] = useState<RecurringDTO[]>([]);
   const [detailTask, setDetailTask] = useState<TaskDTO | null>(null);
   const [editTask, setEditTask] = useState<TaskDTO | null>(null);
+  const [recAdd, setRecAdd] = useState(false);
+  const [recEdit, setRecEdit] = useState<RecurringDTO | null>(null);
   const [, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
   const load = async () => setTasks((await loadMyMessengerTasksAction()).tasks);
+  const loadRec = async () => setRecurring((await loadMyRecurringTasksAction()).tasks);
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      const t = await loadMyMessengerTasksAction();
-      if (alive) setTasks(t.tasks);
+      const [t, r] = await Promise.all([loadMyMessengerTasksAction(), loadMyRecurringTasksAction()]);
+      if (!alive) return;
+      setTasks(t.tasks);
+      setRecurring(r.tasks);
     };
     run();
     const iv = setInterval(() => { if (typeof document !== "undefined" && document.hidden) return; run(); }, 7000);
     return () => { alive = false; clearInterval(iv); };
   }, []);
+
+  // 기본(반복) 할일 — 내 것만, 오늘 요일 해당분. 체크는 나만(항상 canCheck).
+  const recDone = recurring.filter((t) => t.done).length;
+  const toggleRec = (t: RecurringDTO) => {
+    const on = !t.done;
+    setRecurring((rs) => rs.map((x) => (x.id === t.id ? { ...x, done: on } : x)));
+    start(async () => { await toggleRecurringCompletionAction(t.id, on); await loadRec(); });
+  };
+  const removeRec = (t: RecurringDTO) => {
+    if (!confirm("이 반복 할일을 삭제할까요?")) return;
+    setRecurring((rs) => rs.filter((x) => x.id !== t.id));
+    start(async () => { await deleteRecurringTaskAction(t.id); await loadRec(); });
+  };
 
   const toggle = (id: string) => {
     const cur = tasks.find((t) => t.id === id);
@@ -104,7 +128,30 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
           </div>
         </div>
 
+        <div className="home__recur">
+          <div className="home__recurhead">
+            <span className="home__sectitle">기본 내 할일{recurring.length > 0 ? ` · ${recDone}/${recurring.length}` : ""}</span>
+            <button type="button" className="home__recadd" onClick={() => setRecAdd(true)}>＋ 추가</button>
+          </div>
+          {recurring.length === 0 ? (
+            <div className="home__recempty">오늘 기본 할일이 없어요. ＋로 추가하세요.</div>
+          ) : (
+            recurring.map((t) => (
+              <div className={`rtask${t.done ? " is-done" : ""}`} key={t.id}>
+                <button type="button" className={`rtask__check${t.done ? " on" : ""}`} onClick={() => toggleRec(t)} aria-label="완료 체크">{t.done ? "✓" : ""}</button>
+                <div className="rtask__main">
+                  <div className="rtask__title">{t.title}</div>
+                  <div className="rtask__days">{daysLabel(t.days)}</div>
+                </div>
+                <button type="button" className="rtask__edit" onClick={() => setRecEdit(t)}>수정</button>
+                <button type="button" className="rtask__del" onClick={() => removeRec(t)} aria-label="삭제">✕</button>
+              </div>
+            ))
+          )}
+        </div>
+
         <div className="home__list">
+          <div className="home__sectitle home__sectitle--gap">요청 받은 할일</div>
           {open.length === 0 && done.length === 0 && <div className="home__empty">나에게 배정된 할 일이 없어요.</div>}
           {groups.map(([ymd, list]) => (
             <div className="home__group" key={ymd}>
@@ -144,6 +191,9 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
       )}
 
       {editTask && <TaskFormSheet members={members} editTask={editTask} onClose={() => setEditTask(null)} onDone={load} />}
+
+      {recAdd && <RecurringFormSheet memberId={me.id} memberName={me.name} onClose={() => setRecAdd(false)} onDone={loadRec} />}
+      {recEdit && <RecurringFormSheet memberId={me.id} editTask={recEdit} onClose={() => setRecEdit(null)} onDone={loadRec} />}
     </div>
   );
 }
