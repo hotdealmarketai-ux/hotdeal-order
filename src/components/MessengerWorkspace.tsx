@@ -3,7 +3,15 @@
 import Link from "next/link";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { messengerUnreadAction, toggleMessengerFavoriteAction } from "@/app/actions/messenger";
+import {
+  messengerUnreadAction,
+  toggleMessengerFavoriteAction,
+  loadMyMessengerTasksAction,
+  loadMyRecurringTasksAction,
+  loadOrgChartAction,
+  loadMessengerCalendarAction,
+} from "@/app/actions/messenger";
+import { paneCache } from "@/components/messenger/paneCache";
 import { MessengerLogoutButton } from "@/components/messenger/MessengerLogoutButton";
 import { ChatPane, type ChatTool } from "@/components/messenger/ChatPane";
 import { TasksPane } from "@/components/messenger/TasksPane";
@@ -70,6 +78,22 @@ export function MessengerWorkspace({
       setView("mytasks");
     }
     if (ch || v) window.history.replaceState({}, "", "/messenger");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 진입 후 배경으로 다른 화면(내 할일·조직도·이번 달 캘린더) 데이터를 미리 데워둔다.
+  // 초기 홈 렌더와 경쟁하지 않게 살짝 지연 + 이미 캐시가 있으면 스킵 → 전환 시 즉시 표시.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (!paneCache.myTasks) loadMyMessengerTasksAction().then((r) => { paneCache.myTasks = r.tasks; }).catch(() => {});
+      if (!paneCache.myRecurring) loadMyRecurringTasksAction().then((r) => { paneCache.myRecurring = r.tasks; }).catch(() => {});
+      if (!paneCache.org) loadOrgChartAction().then((r) => { paneCache.org = r.members; }).catch(() => {});
+      const t = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+      const cy = Number(t.slice(0, 4)), cm = Number(t.slice(5, 7)), ck = `${cy}-${cm}`;
+      if (!paneCache.cal[ck]) loadMessengerCalendarAction(cy, cm).then((r) => { paneCache.cal[ck] = { events: r.events, tasks: r.tasks }; }).catch(() => {});
+    }, 1200);
+    return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

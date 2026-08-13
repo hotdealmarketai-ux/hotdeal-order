@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Sheet } from "@/components/Sheet";
 import { TaskFormSheet } from "./TaskFormSheet";
 import { RecurringFormSheet, WEEKDAYS } from "./RecurringFormSheet";
+import { paneCache } from "./paneCache";
 import {
   loadMyMessengerTasksAction,
   toggleMessengerTaskCompletionAction,
@@ -34,8 +35,8 @@ const dayLabel = (ymd: string) => {
 
 // 내 할일 = 나에게 배정된(또는 팀원 전체) 할 일만. 체크는 전역 반영(같은 task).
 export function MyTasksPane({ me, members }: { me: { id: string; name: string }; members: Member[] }) {
-  const [tasks, setTasks] = useState<TaskDTO[]>([]);
-  const [recurring, setRecurring] = useState<RecurringDTO[]>([]);
+  const [tasks, setTasks] = useState<TaskDTO[]>(paneCache.myTasks ?? []);
+  const [recurring, setRecurring] = useState<RecurringDTO[]>(paneCache.myRecurring ?? []);
   const [detailTask, setDetailTask] = useState<TaskDTO | null>(null);
   const [editTask, setEditTask] = useState<TaskDTO | null>(null);
   const [recAdd, setRecAdd] = useState(false);
@@ -44,15 +45,15 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
   const [, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
-  const load = async () => setTasks((await loadMyMessengerTasksAction()).tasks);
-  const loadRec = async () => setRecurring((await loadMyRecurringTasksAction()).tasks);
+  const load = async () => { const r = (await loadMyMessengerTasksAction()).tasks; paneCache.myTasks = r; setTasks(r); };
+  const loadRec = async () => { const r = (await loadMyRecurringTasksAction()).tasks; paneCache.myRecurring = r; setRecurring(r); };
   useEffect(() => {
     let alive = true;
     const run = async () => {
       const [t, r] = await Promise.all([loadMyMessengerTasksAction(), loadMyRecurringTasksAction()]);
       if (!alive) return;
-      setTasks(t.tasks);
-      setRecurring(r.tasks);
+      setTasks(t.tasks); paneCache.myTasks = t.tasks;
+      setRecurring(r.tasks); paneCache.myRecurring = r.tasks;
     };
     run();
     const iv = setInterval(() => { if (typeof document !== "undefined" && document.hidden) return; run(); }, 7000);

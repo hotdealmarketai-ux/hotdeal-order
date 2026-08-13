@@ -10,6 +10,7 @@ import {
   type EventDTO,
   type CalTaskDTO,
 } from "@/app/actions/messenger";
+import { paneCache } from "./paneCache";
 
 type Member = { id: string; name: string; active: boolean };
 
@@ -24,8 +25,8 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
   const [year, setYear] = useState(ty);
   const [month, setMonth] = useState(tm); // 1~12
   const [sel, setSel] = useState<string>(t);
-  const [events, setEvents] = useState<EventDTO[]>([]);
-  const [tasks, setTasks] = useState<CalTaskDTO[]>([]);
+  const [events, setEvents] = useState<EventDTO[]>(paneCache.cal[`${ty}-${tm}`]?.events ?? []);
+  const [tasks, setTasks] = useState<CalTaskDTO[]>(paneCache.cal[`${ty}-${tm}`]?.tasks ?? []);
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
   const [err, setErr] = useState("");
@@ -40,14 +41,19 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
 
   const load = async () => {
     const r = await loadMessengerCalendarAction(year, month);
+    paneCache.cal[`${year}-${month}`] = { events: r.events, tasks: r.tasks };
     setEvents(r.events);
     setTasks(r.tasks);
   };
   useEffect(() => {
     let alive = true;
+    const key = `${year}-${month}`;
+    const cached = paneCache.cal[key];
+    if (cached) { setEvents(cached.events); setTasks(cached.tasks); } // 월 이동 시 직전 데이터 즉시 표시
     const run = async () => {
       const r = await loadMessengerCalendarAction(year, month);
       if (!alive) return;
+      paneCache.cal[key] = { events: r.events, tasks: r.tasks };
       setEvents(r.events);
       setTasks(r.tasks);
     };

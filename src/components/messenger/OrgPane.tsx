@@ -11,6 +11,7 @@ import {
   type RecurringDTO,
 } from "@/app/actions/messenger";
 import { RecurringFormSheet, WEEKDAYS } from "./RecurringFormSheet";
+import { paneCache } from "./paneCache";
 
 type Detail = { name: string; canCheck: boolean; tasks: RecurringDTO[] };
 
@@ -37,7 +38,7 @@ export function OrgPane({
   sel: string | null;
   onSel: (id: string | null) => void;
 }) {
-  const [rows, setRows] = useState<OrgMemberDTO[]>([]);
+  const [rows, setRows] = useState<OrgMemberDTO[]>(paneCache.org ?? []);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [addFor, setAddFor] = useState<{ id: string; name: string } | null>(null);
   const [editTask, setEditTask] = useState<RecurringDTO | null>(null);
@@ -48,7 +49,7 @@ export function OrgPane({
   useEffect(() => {
     if (sel) return;
     let alive = true;
-    const run = async () => { const r = await loadOrgChartAction(); if (alive) setRows(r.members); };
+    const run = async () => { const r = await loadOrgChartAction(); paneCache.org = r.members; if (alive) setRows(r.members); };
     run();
     const iv = setInterval(() => { if (typeof document !== "undefined" && document.hidden) return; run(); }, 8000);
     return () => { alive = false; clearInterval(iv); };

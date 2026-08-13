@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { Sheet } from "@/components/Sheet";
 import { AddTaskButton } from "./AddTaskButton";
 import { TaskFormSheet } from "./TaskFormSheet";
+import { paneCache } from "./paneCache";
 import {
   loadMessengerTasksAction,
   toggleMessengerTaskCompletionAction,
@@ -59,9 +60,9 @@ export function TasksPane({
   onJump: (channelId: string, messageId: string) => void;
   onOpenChannel: (channelId: string) => void;
 }) {
-  const [tasks, setTasks] = useState<TaskDTO[]>([]);
-  const [mentions, setMentions] = useState<Mention[]>([]);
-  const [week, setWeek] = useState<WeekItemDTO[]>([]);
+  const [tasks, setTasks] = useState<TaskDTO[]>(paneCache.homeTasks ?? []);
+  const [mentions, setMentions] = useState<Mention[]>(paneCache.homeMentions ?? []);
+  const [week, setWeek] = useState<WeekItemDTO[]>(paneCache.homeWeek ?? []);
   const [detailTask, setDetailTask] = useState<TaskDTO | null>(null);
   const [editTask, setEditTask] = useState<TaskDTO | null>(null);
   const [menuTask, setMenuTask] = useState<TaskDTO | null>(null);
@@ -73,15 +74,15 @@ export function TasksPane({
   const [, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
-  const load = async () => setTasks((await loadMessengerTasksAction()).tasks);
+  const load = async () => { const r = (await loadMessengerTasksAction()).tasks; paneCache.homeTasks = r; setTasks(r); };
   useEffect(() => {
     let alive = true;
     const run = async () => {
       const [t, m, a] = await Promise.all([loadMessengerTasksAction(), loadMessengerMentionsAction(), loadMessengerWeekAgendaAction()]);
       if (!alive) return;
-      setTasks(t.tasks);
-      setMentions(m.mentions);
-      setWeek(a.items);
+      setTasks(t.tasks); paneCache.homeTasks = t.tasks;
+      setMentions(m.mentions); paneCache.homeMentions = m.mentions;
+      setWeek(a.items); paneCache.homeWeek = a.items;
     };
     run();
     const iv = setInterval(() => { if (typeof document !== "undefined" && document.hidden) return; run(); }, 7000);
@@ -119,13 +120,13 @@ export function TasksPane({
     start(async () => { await deleteMessengerTaskAction(id); await load(); });
   };
   const openMention = (mt: Mention) => {
-    setMentions((xs) => xs.filter((x) => x.id !== mt.id));
+    setMentions((xs) => { const n = xs.filter((x) => x.id !== mt.id); paneCache.homeMentions = n; return n; });
     markMentionReadAction(mt.id).catch(() => {});
     onJump(mt.channelId, mt.messageId);
   };
   // 이동하지 않고 멘션만 지우기(홈에서 ✕).
   const dismissMention = (mt: Mention) => {
-    setMentions((xs) => xs.filter((x) => x.id !== mt.id));
+    setMentions((xs) => { const n = xs.filter((x) => x.id !== mt.id); paneCache.homeMentions = n; return n; });
     markMentionReadAction(mt.id).catch(() => {});
   };
 
