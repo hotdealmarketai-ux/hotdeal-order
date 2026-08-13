@@ -27,9 +27,17 @@ const WdChips = ({ days, off }: { days: number; off?: boolean }) => (
 );
 
 // 조직도 — 멤버별 오늘 반복 할일 진행률(목록) + 멤버 상세(체크·관리).
-export function OrgPane({ me }: { me: { id: string; name: string } }) {
+// sel(선택 멤버)/onSel은 Workspace가 소유(뒤로가기 히스토리에 포함되게).
+export function OrgPane({
+  me,
+  sel,
+  onSel,
+}: {
+  me: { id: string; name: string };
+  sel: string | null;
+  onSel: (id: string | null) => void;
+}) {
   const [rows, setRows] = useState<OrgMemberDTO[]>([]);
-  const [sel, setSel] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [addFor, setAddFor] = useState<{ id: string; name: string } | null>(null);
   const [editTask, setEditTask] = useState<RecurringDTO | null>(null);
@@ -81,7 +89,7 @@ export function OrgPane({ me }: { me: { id: string; name: string } }) {
             const complete = m.total > 0 && m.done === m.total;
             const none = m.total === 0;
             return (
-              <button key={m.id} type="button" className="org__member" onClick={() => setSel(m.id)}>
+              <button key={m.id} type="button" className="org__member" onClick={() => onSel(m.id)}>
                 <span className={`ring${complete ? " full" : ""}${none ? " none" : ""}`} style={pctVar(pct)}>
                   <span className="ring__ava">{m.name.slice(0, 1)}</span>
                 </span>
@@ -117,7 +125,7 @@ export function OrgPane({ me }: { me: { id: string; name: string } }) {
   return (
     <div className="org">
       <div className="org__dbar">
-        <button type="button" className="org__back" onClick={() => setSel(null)}>‹ 조직도</button>
+        <button type="button" className="org__back" onClick={() => onSel(null)}>‹ 조직도</button>
         {detail && <button type="button" className="org__addbtn" onClick={() => setAddFor({ id: sel, name: detail.name })}>＋ 반복 할일</button>}
       </div>
 

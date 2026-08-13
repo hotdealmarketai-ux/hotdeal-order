@@ -32,8 +32,10 @@ export function MessengerWorkspace({
   const [view, setView] = useState<View>("home");
   const [chans, setChans] = useState<Channel[]>(channels);
   const [active, setActive] = useState<string>(channels[0]?.id ?? "");
-  // 메신저 '내부' 화면 이동 이력 — 하단 '뒤로가기'는 이 스택만 pop(메신저 밖으로 안 나감).
-  const [navStack, setNavStack] = useState<{ view: View; active: string }[]>([]);
+  // 조직도 안에서 선택한 멤버(상세). null=멤버 목록. 히스토리(navStack)에 포함해 뒤로가기가 상세→목록도 되돌린다.
+  const [orgSel, setOrgSel] = useState<string | null>(null);
+  // 메신저 '내부' 화면 이동 이력 — 하단 '뒤로가기'는 이 스택만 pop(메신저 밖으로 안 나감). 조직도 상세 상태까지 스냅샷.
+  const [navStack, setNavStack] = useState<{ view: View; active: string; orgSel: string | null }[]>([]);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [sideOpen, setSideOpen] = useState(false);
   const [jumpMsg, setJumpMsg] = useState<string | null>(null);
@@ -73,20 +75,32 @@ export function MessengerWorkspace({
 
   const pick = (v: View, ch?: string) => {
     // 화면이 실제로 바뀔 때만 현재 위치를 이력에 push(중복 방지).
-    if (v !== view || (!!ch && ch !== active)) setNavStack((s) => [...s, { view, active }]);
+    if (v !== view || (!!ch && ch !== active)) setNavStack((s) => [...s, { view, active, orgSel }]);
     setView(v);
     if (ch) setActive(ch);
+    if (v === "org") setOrgSel(null); // 조직도 진입은 멤버 목록부터
     setJumpMsg(null);
     setTool(null);
     setSideOpen(false);
   };
   const handleJump = (ch: string, messageId: string) => {
-    if (view !== "chat" || ch !== active) setNavStack((s) => [...s, { view, active }]);
+    if (view !== "chat" || ch !== active) setNavStack((s) => [...s, { view, active, orgSel }]);
     setActive(ch);
     setJumpMsg(messageId);
     setView("chat");
     setTool(null);
     setSideOpen(false);
+  };
+  // 조직도 멤버 선택(목록↔상세)도 히스토리에 태워 뒤로가기가 상세→목록으로 돌아가게 한다.
+  const selectOrgMember = (id: string | null) => {
+    if (id === null) {
+      // 상세의 '‹ 조직도' = 뒤로가기와 동일하게 진입 때 push한 항목을 되돌리고 목록으로.
+      setNavStack((s) => s.slice(0, -1));
+      setOrgSel(null);
+      return;
+    }
+    setNavStack((s) => [...s, { view, active, orgSel }]);
+    setOrgSel(id);
   };
   // 하단 '뒤로가기' — 메신저 내부 이력만 pop(밖으로 안 나감). 이력 없으면 아무것도 안 함.
   const goBack = () => {
@@ -95,6 +109,7 @@ export function MessengerWorkspace({
     setNavStack((s) => s.slice(0, -1));
     setView(prev.view);
     setActive(prev.active);
+    setOrgSel(prev.orgSel);
     setJumpMsg(null);
     setTool(null);
     setSideOpen(false);
@@ -258,7 +273,7 @@ export function MessengerWorkspace({
           ) : view === "mytasks" ? (
             <MyTasksPane me={me} members={members} />
           ) : view === "org" ? (
-            <OrgPane me={me} />
+            <OrgPane me={me} sel={orgSel} onSel={selectOrgMember} />
           ) : (
             <CalendarPane me={me} members={members} />
           )}
