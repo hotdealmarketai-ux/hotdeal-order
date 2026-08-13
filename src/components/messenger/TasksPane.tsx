@@ -19,7 +19,7 @@ import {
 
 const WEEKDAY = ["일", "월", "화", "수", "목", "금", "토"];
 const wdOf = (ymd: string) => WEEKDAY[new Date(`${ymd}T00:00:00Z`).getUTCDay()];
-const mdOf = (ymd: string) => { const [, m, d] = ymd.split("-"); return `${Number(m)}/${Number(d)}`; };
+const mdOf = (ymd: string) => { const [, m, d] = ymd.split("-"); return `${Number(m)}월 ${Number(d)}일`; };
 
 type Member = { id: string; name: string; active: boolean };
 type Channel = { id: string; name: string };
@@ -64,6 +64,7 @@ export function TasksPane({
   const [week, setWeek] = useState<WeekItemDTO[]>([]);
   const [detailTask, setDetailTask] = useState<TaskDTO | null>(null);
   const [editTask, setEditTask] = useState<TaskDTO | null>(null);
+  const [menuTask, setMenuTask] = useState<TaskDTO | null>(null);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<GlobalHitDTO[]>([]);
   // 섹션 접기(스크롤 축소) — 기본 열림. 이번 주 일정 / 할 일만.
@@ -167,7 +168,7 @@ export function TasksPane({
         </div>
         {t.completedNames.length > 0 && <div className="tcard__doneby">✓ {t.completedNames.join(", ")} 완료</div>}
       </div>
-      <button type="button" className="tcard__del" onClick={() => remove(t.id)} aria-label="삭제">✕</button>
+      <button type="button" className="tcard__more" onClick={() => setMenuTask(t)} aria-label="더보기">⋯</button>
     </div>
   );
 
@@ -230,7 +231,7 @@ export function TasksPane({
               <div className="home__today">
                 <div className="home__sechead">
                   <span className="home__sectitle">이번 주 일정</span>
-                  <button type="button" className="home__fold" onClick={() => setOpenWeek((v) => !v)}>{openWeek ? "목록 접기" : "목록 열기"}</button>
+                  <button type="button" className="home__fold" onClick={() => setOpenWeek((v) => !v)}>{openWeek ? "접기" : "열기"}</button>
                 </div>
                 {openWeek && week.map((it) => {
                   const isToday = it.date === kstYmd(new Date());
@@ -266,7 +267,7 @@ export function TasksPane({
             <div className="home__list">
               <div className="home__sechead">
                 <span className="home__sectitle">할 일{open.length > 0 ? ` ${open.length}` : ""}</span>
-                <button type="button" className="home__fold" onClick={() => setOpenTasks((v) => !v)}>{openTasks ? "목록 접기" : "목록 열기"}</button>
+                <button type="button" className="home__fold" onClick={() => setOpenTasks((v) => !v)}>{openTasks ? "접기" : "열기"}</button>
               </div>
               {openTasks && (
                 <>
@@ -313,6 +314,18 @@ export function TasksPane({
       )}
 
       {editTask && <TaskFormSheet members={members} editTask={editTask} onClose={() => setEditTask(null)} onDone={load} />}
+
+      {menuTask && (
+        <Sheet onClose={() => setMenuTask(null)}>
+          <div className="sheet__panel rmenu">
+            <div className="rmenu__t">{menuTask.title} <span>· 할 일</span></div>
+            {menuTask.createdById === me.id && (
+              <button type="button" className="rmenu__item" onClick={() => { setEditTask(menuTask); setMenuTask(null); }}>수정</button>
+            )}
+            <button type="button" className="rmenu__item rmenu__item--del" onClick={() => { const id = menuTask.id; setMenuTask(null); remove(id); }}>삭제</button>
+          </div>
+        </Sheet>
+      )}
     </div>
   );
 }

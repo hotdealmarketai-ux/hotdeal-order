@@ -656,7 +656,7 @@ export function ChatPane({
 
       {editing && (
         <Sheet onClose={() => setEditing(null)}>
-          <div className="sheet__panel" style={{ maxWidth: 420 }}>
+          <div className="sheet__panel mw-sheet" style={{ maxWidth: 420 }}>
             <div className="confirm__title" style={{ marginBottom: 10 }}>메시지 수정</div>
             <textarea
               className="input"
@@ -675,7 +675,7 @@ export function ChatPane({
 
       {pendingFiles && (
         <Sheet onClose={() => setPendingFiles(null)}>
-          <div className="sheet__panel" style={{ maxWidth: 340 }}>
+          <div className="sheet__panel mw-sheet" style={{ maxWidth: 340 }}>
             <div className="confirm__title" style={{ marginBottom: 0, textAlign: "center" }}>
               {pendingFiles.some((f) => f.type.startsWith("video"))
                 ? `${pendingFiles.length}개 파일을 보내시겠습니까?`

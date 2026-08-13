@@ -84,7 +84,7 @@ export function CalendarPane({ members }: { me: { id: string; name: string }; me
   const selLabel = (() => {
     const [y, m, d] = sel.split("-").map(Number);
     const dow = WEEK[new Date(y, m - 1, d).getDay()];
-    return `${m}월 ${d}일 (${dow})`;
+    return `${m}월 ${d}일 ${dow}`;
   })();
 
   const addEvent = () => {
