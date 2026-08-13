@@ -4,10 +4,11 @@ import { useActionState } from "react";
 import { loginAction, type FormState } from "@/app/actions/auth";
 import { SubmitButton } from "./SubmitButton";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string }) {
   const [state, formAction] = useActionState<FormState, FormData>(loginAction, {});
   return (
     <form action={formAction} className="stack">
+      {next ? <input type="hidden" name="next" value={next} /> : null}
       {state?.error && <div className="notice notice--error">{state.error}</div>}
       <div className="field">
         <label className="label" htmlFor="username">

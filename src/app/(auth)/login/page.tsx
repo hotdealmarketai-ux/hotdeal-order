@@ -4,8 +4,12 @@ import { getCurrentUser } from "@/lib/session";
 import { homePathFor } from "@/lib/constants";
 import { LoginForm } from "@/components/LoginForm";
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const sp = await searchParams;
+  const nextRaw = typeof sp.next === "string" ? sp.next : "";
+  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : undefined;
   const user = await getCurrentUser();
+  // 이미 로그인돼 있으면 자기 홈으로(next는 신선 로그인 때만 사용 — 권한 불일치 리다이렉트 루프 방지).
   if (user) redirect(homePathFor(user.role, user.status));
 
   return (
@@ -20,7 +24,7 @@ export default async function LoginPage() {
             주문은 더 간편하게, 운영은 더 스마트하게.
           </p>
         </div>
-        <LoginForm />
+        <LoginForm next={next} />
         <div className="center" style={{ marginTop: 24 }}>
           <span className="muted" style={{ fontSize: 15 }}>
             아직 회원이 아니신가요?{" "}

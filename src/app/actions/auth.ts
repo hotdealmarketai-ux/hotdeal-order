@@ -16,10 +16,13 @@ export async function loginAction(
   const username = String(formData.get("username") ?? "").trim();
   const password = String(formData.get("password") ?? "");
   const remember = formData.get("remember") ? "true" : "false";
+  // 로그인 후 복귀 경로(same-origin 상대경로만 허용, 없으면 홈). 홈화면 메신저 앱이 /messenger로 돌아오게.
+  const nextRaw = String(formData.get("next") ?? "");
+  const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/";
   if (!username || !password) return { error: "아이디와 비밀번호를 입력하세요." };
 
   try {
-    await signIn("credentials", { username, password, remember, redirectTo: "/" });
+    await signIn("credentials", { username, password, remember, redirectTo: next });
   } catch (e) {
     if (e instanceof AuthError) {
       return { error: "아이디 또는 비밀번호가 올바르지 않습니다." };
