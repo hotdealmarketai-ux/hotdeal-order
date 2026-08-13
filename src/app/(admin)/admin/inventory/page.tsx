@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -26,6 +27,15 @@ export default async function AdminInventory() {
     <>
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
+        {/* PC 전용 재고관리 — 컴퓨터로 접속하면 넓은 화면에서 편하게 관리(모바일은 차단·안내) */}
+        <Link
+          href="/inventory-pc"
+          className="btn btn--soft"
+          style={{ textDecoration: "none", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+        >
+          🖥️ PC 재고관리 접속 <span style={{ opacity: 0.7, fontWeight: 600 }}>(컴퓨터 전용)</span>
+        </Link>
+
         {/* 잘 안 쓰는 기능은 '기능' 토글 안에 숨겨 스크롤을 줄인다(기본 닫힘) */}
         <Collapsible title="기능" hint="백업 · 카테고리 · 시트 · 엑셀">
           <InventoryBackupControl />
