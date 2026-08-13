@@ -6189,6 +6189,10 @@ a.resv-card:active { transform: scale(0.995); }
 .home__hi { font-size: 24px; font-weight: 900; letter-spacing: -0.02em; color: var(--fg); }
 .home__sub { font-size: 13.5px; font-weight: 700; color: var(--green-700); margin-top: 4px; }
 .home__sectitle { font-size: 12.5px; font-weight: 800; color: var(--muted); margin: 4px 2px 6px; }
+.home__sechead { display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 6px; }
+.home__sechead .home__sectitle { margin: 0; }
+.home__fold { border: 0; background: none; color: var(--muted); font-size: 12px; font-weight: 800; cursor: pointer; padding: 3px 6px; border-radius: 8px; }
+.home__fold:hover { color: var(--green-700); background: var(--green-100); }
 .home__mentions { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
 .mtopic { display: flex; align-items: stretch; width: 100%; background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--green-700); border-radius: 12px; overflow: hidden; }
 .mtopic__main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; text-align: left; background: none; border: 0; padding: 10px 12px; cursor: pointer; }

@@ -66,6 +66,9 @@ export function TasksPane({
   const [editTask, setEditTask] = useState<TaskDTO | null>(null);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<GlobalHitDTO[]>([]);
+  // 섹션 접기(스크롤 축소) — 기본 열림. 이번 주 일정 / 할 일만.
+  const [openWeek, setOpenWeek] = useState(true);
+  const [openTasks, setOpenTasks] = useState(true);
   const [, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
@@ -225,8 +228,11 @@ export function TasksPane({
 
             {week.length > 0 && (
               <div className="home__today">
-                <div className="home__sectitle">이번 주 일정</div>
-                {week.map((it) => {
+                <div className="home__sechead">
+                  <span className="home__sectitle">이번 주 일정</span>
+                  <button type="button" className="home__fold" onClick={() => setOpenWeek((v) => !v)}>{openWeek ? "목록 접기" : "목록 열기"}</button>
+                </div>
+                {openWeek && week.map((it) => {
                   const isToday = it.date === kstYmd(new Date());
                   return (
                     <div className="home__todayrow" key={`${it.kind}-${it.id}`}>
@@ -258,18 +264,26 @@ export function TasksPane({
             )}
 
             <div className="home__list">
-              {open.length === 0 && done.length === 0 && <div className="home__empty">할 일이 없어요.</div>}
-              {groups.map(([ymd, list]) => (
-                <div className="home__group" key={ymd}>
-                  <div className="home__daylabel">{dayLabel(ymd)}</div>
-                  {list.map(Card)}
-                </div>
-              ))}
-              {done.length > 0 && (
-                <div className="home__group">
-                  <div className="home__donelabel">완료 {done.length}</div>
-                  {done.map(Card)}
-                </div>
+              <div className="home__sechead">
+                <span className="home__sectitle">할 일{open.length > 0 ? ` ${open.length}` : ""}</span>
+                <button type="button" className="home__fold" onClick={() => setOpenTasks((v) => !v)}>{openTasks ? "목록 접기" : "목록 열기"}</button>
+              </div>
+              {openTasks && (
+                <>
+                  {open.length === 0 && done.length === 0 && <div className="home__empty">할 일이 없어요.</div>}
+                  {groups.map(([ymd, list]) => (
+                    <div className="home__group" key={ymd}>
+                      <div className="home__daylabel">{dayLabel(ymd)}</div>
+                      {list.map(Card)}
+                    </div>
+                  ))}
+                  {done.length > 0 && (
+                    <div className="home__group">
+                      <div className="home__donelabel">완료 {done.length}</div>
+                      {done.map(Card)}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </>
