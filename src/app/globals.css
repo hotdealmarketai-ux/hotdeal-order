@@ -6150,7 +6150,7 @@ a.resv-card:active { transform: scale(0.995); }
 .recform__actions .btn { width: auto; padding: 0 22px; min-height: 44px; }
 
 /* 조직도 목록 */
-.org { padding: 4px 2px 24px; }
+.org { flex: 1; min-width: 0; overflow-y: auto; padding: 18px 16px 32px; background: var(--surface-2); color: var(--fg); }
 .org__head { font-size: 13px; font-weight: 800; color: var(--muted); margin: 6px 2px 12px; }
 .org__empty { font-size: 13.5px; color: var(--muted); padding: 22px 4px; text-align: center; }
 .org__list { display: flex; flex-direction: column; gap: 10px; }
@@ -6204,6 +6204,17 @@ a.resv-card:active { transform: scale(0.995); }
 .mw__side.is-open { transform: translateX(0); box-shadow: 8px 0 40px rgba(0,0,0,0.4); }
 .mw__backdrop { display: block; position: absolute; inset: 0; z-index: 20; background: rgba(0,0,0,0.42); }
 .mw__ham { display: inline-flex; align-items: center; justify-content: center; }
+/* PC(≥600px)에서도 핫딜오더 본체처럼 모바일 폭(430px) 프레임으로 중앙 고정 — 데스크톱 전용 레이아웃 없음. */
+@media (min-width: 600px) {
+  .mw {
+    left: 50%;
+    right: auto;
+    width: 100%;
+    max-width: 430px;
+    transform: translateX(-50%);
+    box-shadow: 0 12px 40px rgba(20, 48, 31, 0.16);
+  }
+}
 .mcal__cell { min-height: 104px; padding: 4px; }
 .mcal__ev, .mcal__task { font-size: 9.5px; }
 
