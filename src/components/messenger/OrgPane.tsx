@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState, useTransition, type CSSProperties } from "react";
+import { Sheet } from "@/components/Sheet";
 import {
   loadOrgChartAction,
   loadMemberRecurringAction,
@@ -9,27 +10,37 @@ import {
   type OrgMemberDTO,
   type RecurringDTO,
 } from "@/app/actions/messenger";
-import { RecurringFormSheet, daysLabel } from "./RecurringFormSheet";
+import { RecurringFormSheet, WEEKDAYS } from "./RecurringFormSheet";
 
 type Detail = { name: string; canCheck: boolean; tasks: RecurringDTO[] };
+
+const pctVar = (p: number) => ({ "--p": p }) as CSSProperties;
+const WdChips = ({ days, off }: { days: number; off?: boolean }) => (
+  <div className="rtask__wd">
+    {days === 127 ? (
+      <span className="wd wd--every">매일</span>
+    ) : (
+      WEEKDAYS.map((w, i) => ((days >> i) & 1 ? <span className="wd" key={i}>{w}</span> : null))
+    )}
+    {off ? <span className="wd">오늘 아님</span> : null}
+  </div>
+);
 
 // 조직도 — 멤버별 오늘 반복 할일 진행률(목록) + 멤버 상세(체크·관리).
 export function OrgPane({ me }: { me: { id: string; name: string } }) {
   const [rows, setRows] = useState<OrgMemberDTO[]>([]);
-  const [sel, setSel] = useState<string | null>(null); // 선택 멤버 id (null=목록)
+  const [sel, setSel] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [addFor, setAddFor] = useState<{ id: string; name: string } | null>(null);
   const [editTask, setEditTask] = useState<RecurringDTO | null>(null);
+  const [menuTask, setMenuTask] = useState<RecurringDTO | null>(null);
   const [, start] = useTransition();
 
-  // 목록 폴링(멤버 상세 볼 땐 중지)
+  // 목록 폴링(상세 볼 땐 중지)
   useEffect(() => {
     if (sel) return;
     let alive = true;
-    const run = async () => {
-      const r = await loadOrgChartAction();
-      if (alive) setRows(r.members);
-    };
+    const run = async () => { const r = await loadOrgChartAction(); if (alive) setRows(r.members); };
     run();
     const iv = setInterval(() => { if (typeof document !== "undefined" && document.hidden) return; run(); }, 8000);
     return () => { alive = false; clearInterval(iv); };
@@ -40,10 +51,7 @@ export function OrgPane({ me }: { me: { id: string; name: string } }) {
   useEffect(() => {
     if (!sel) { setDetail(null); return; }
     let alive = true;
-    const run = async () => {
-      const r = await loadMemberRecurringAction(sel);
-      if (alive) setDetail(r);
-    };
+    const run = async () => { const r = await loadMemberRecurringAction(sel); if (alive) setDetail(r); };
     run();
     const iv = setInterval(() => { if (typeof document !== "undefined" && document.hidden) return; run(); }, 6000);
     return () => { alive = false; clearInterval(iv); };
@@ -65,26 +73,33 @@ export function OrgPane({ me }: { me: { id: string; name: string } }) {
   if (!sel) {
     return (
       <div className="org">
-        <div className="org__head">조직도 · 반복 할일 진행률</div>
+        <div className="org__head">오늘 반복 할일 진행률</div>
         {rows.length === 0 && <div className="org__empty">멤버가 없어요.</div>}
         <div className="org__list">
           {rows.map((m) => {
             const pct = m.total ? Math.round((m.done / m.total) * 100) : 0;
             const complete = m.total > 0 && m.done === m.total;
+            const none = m.total === 0;
             return (
               <button key={m.id} type="button" className="org__member" onClick={() => setSel(m.id)}>
-                <span className="org__ava">{m.name.slice(0, 1)}</span>
+                <span className={`ring${complete ? " full" : ""}${none ? " none" : ""}`} style={pctVar(pct)}>
+                  <span className="ring__ava">{m.name.slice(0, 1)}</span>
+                </span>
                 <span className="org__minfo">
-                  <span className="org__mname">{m.name}{m.id === me.id ? " (나)" : ""}</span>
-                  {m.total === 0 ? (
-                    <span className="org__msub">오늘 반복 할일 없음</span>
+                  <span className="org__mname">{m.name}{m.id === me.id ? <em> (나)</em> : null}</span>
+                  {none ? (
+                    <span className="org__mnone">오늘 반복 할일 없음</span>
                   ) : (
-                    <span className="org__bar"><span className={`org__barfill${complete ? " done" : ""}`} style={{ width: `${pct}%` }} /></span>
+                    <span className="org__msub">오늘 {m.done} / {m.total} 완료</span>
                   )}
                 </span>
-                <span className={`org__pct${complete ? " done" : ""}`}>
-                  {m.total === 0 ? "—" : complete ? "업무 완료" : `${pct}%`}
-                </span>
+                {none ? (
+                  <span className="org__pct org__pct--none">—</span>
+                ) : complete ? (
+                  <span className="org__donechip">업무 완료</span>
+                ) : (
+                  <span className="org__pct">{pct}<small>%</small></span>
+                )}
               </button>
             );
           })}
@@ -103,21 +118,19 @@ export function OrgPane({ me }: { me: { id: string; name: string } }) {
     <div className="org">
       <div className="org__dbar">
         <button type="button" className="org__back" onClick={() => setSel(null)}>‹ 조직도</button>
-        {detail && (
-          <button type="button" className="org__addbtn" onClick={() => setAddFor({ id: sel, name: detail.name })}>＋ 반복 할일</button>
-        )}
+        {detail && <button type="button" className="org__addbtn" onClick={() => setAddFor({ id: sel, name: detail.name })}>＋ 반복 할일</button>}
       </div>
-      <div className="org__dtitle">
-        <span className="org__ava org__ava--lg">{(detail?.name ?? "?").slice(0, 1)}</span>
-        <div className="org__dinfo">
-          <div className="org__dname">{detail?.name ?? ""}{sel === me.id ? " (나)" : ""}</div>
-          <div className={`org__dsub${complete ? " done" : ""}`}>
-            {total === 0 ? "오늘 반복 할일 없음" : complete ? "업무 완료 · 100%" : `오늘 ${done}/${total} · ${pct}%`}
-          </div>
+
+      <div className="org__hero">
+        <div className={`donut${complete ? " full" : ""}`} style={pctVar(pct)}>
+          <span className="donut__v">{total === 0 ? "—" : <>{pct}<small>%</small></>}</span>
+        </div>
+        <div className="org__hname">{detail?.name ?? ""}{sel === me.id ? <em> (나)</em> : null}</div>
+        <div className={`org__hsub${complete ? " done" : ""}`}>
+          {total === 0 ? "오늘 반복 할일 없음" : complete ? "업무 완료 · 100%" : `오늘 ${done} / ${total} 완료`}
         </div>
       </div>
-      {total > 0 && <div className="org__bar org__bar--lg"><span className={`org__barfill${complete ? " done" : ""}`} style={{ width: `${pct}%` }} /></div>}
-      {!detail?.canCheck && total > 0 && <div className="org__hint">체크는 본인만 할 수 있어요 (여기선 보기·관리만).</div>}
+      {detail && !detail.canCheck && total > 0 && <div className="org__hint">체크는 본인만 · 여기선 보기·관리만</div>}
 
       <div className="org__tasks">
         {detail && detail.tasks.length === 0 && <div className="org__empty">등록된 반복 할일이 없어요. ＋로 추가하세요.</div>}
@@ -126,14 +139,22 @@ export function OrgPane({ me }: { me: { id: string; name: string } }) {
             <button type="button" className={`rtask__check${t.done ? " on" : ""}`} onClick={() => toggle(t)} disabled={!t.canCheck} aria-label="완료 체크">{t.done ? "✓" : ""}</button>
             <div className="rtask__main">
               <div className="rtask__title">{t.title}</div>
-              <div className="rtask__days">{daysLabel(t.days)}{!t.appliesToday ? " · 오늘 아님" : ""}</div>
+              <WdChips days={t.days} off={!t.appliesToday} />
             </div>
-            <button type="button" className="rtask__edit" onClick={() => setEditTask(t)}>수정</button>
-            <button type="button" className="rtask__del" onClick={() => remove(t)} aria-label="삭제">✕</button>
+            <button type="button" className="rtask__more" onClick={() => setMenuTask(t)} aria-label="더보기">⋯</button>
           </div>
         ))}
       </div>
 
+      {menuTask && (
+        <Sheet onClose={() => setMenuTask(null)}>
+          <div className="sheet__panel rmenu">
+            <div className="rmenu__t">{menuTask.title} <span>· 반복 할일</span></div>
+            <button type="button" className="rmenu__item" onClick={() => { setEditTask(menuTask); setMenuTask(null); }}>수정</button>
+            <button type="button" className="rmenu__item rmenu__item--del" onClick={() => { const t = menuTask; setMenuTask(null); remove(t); }}>삭제</button>
+          </div>
+        </Sheet>
+      )}
       {addFor && <RecurringFormSheet memberId={addFor.id} memberName={addFor.name} onClose={() => setAddFor(null)} onDone={() => loadDetail(sel)} />}
       {editTask && <RecurringFormSheet memberId={editTask.memberId} editTask={editTask} onClose={() => setEditTask(null)} onDone={() => loadDetail(sel)} />}
     </div>

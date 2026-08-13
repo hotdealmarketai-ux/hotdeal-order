@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Sheet } from "@/components/Sheet";
 import { TaskFormSheet } from "./TaskFormSheet";
-import { RecurringFormSheet, daysLabel } from "./RecurringFormSheet";
+import { RecurringFormSheet, WEEKDAYS } from "./RecurringFormSheet";
 import {
   loadMyMessengerTasksAction,
   toggleMessengerTaskCompletionAction,
@@ -40,6 +40,7 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
   const [editTask, setEditTask] = useState<TaskDTO | null>(null);
   const [recAdd, setRecAdd] = useState(false);
   const [recEdit, setRecEdit] = useState<RecurringDTO | null>(null);
+  const [recMenu, setRecMenu] = useState<RecurringDTO | null>(null);
   const [, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
@@ -130,9 +131,12 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
 
         <div className="home__recur">
           <div className="home__recurhead">
-            <span className="home__sectitle">기본 내 할일{recurring.length > 0 ? ` · ${recDone}/${recurring.length}` : ""}</span>
+            <span className="home__sectitle">기본 내 할일{recurring.length > 0 && <span className="home__reccount">{recDone}/{recurring.length}</span>}</span>
             <button type="button" className="home__recadd" onClick={() => setRecAdd(true)}>＋ 추가</button>
           </div>
+          {recurring.length > 0 && (
+            <div className="rprog"><i style={{ width: `${Math.round((recDone / recurring.length) * 100)}%` }} /></div>
+          )}
           {recurring.length === 0 ? (
             <div className="home__recempty">오늘 기본 할일이 없어요. ＋로 추가하세요.</div>
           ) : (
@@ -141,10 +145,11 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
                 <button type="button" className={`rtask__check${t.done ? " on" : ""}`} onClick={() => toggleRec(t)} aria-label="완료 체크">{t.done ? "✓" : ""}</button>
                 <div className="rtask__main">
                   <div className="rtask__title">{t.title}</div>
-                  <div className="rtask__days">{daysLabel(t.days)}</div>
+                  <div className="rtask__wd">
+                    {t.days === 127 ? <span className="wd wd--every">매일</span> : WEEKDAYS.map((w, i) => ((t.days >> i) & 1 ? <span className="wd" key={i}>{w}</span> : null))}
+                  </div>
                 </div>
-                <button type="button" className="rtask__edit" onClick={() => setRecEdit(t)}>수정</button>
-                <button type="button" className="rtask__del" onClick={() => removeRec(t)} aria-label="삭제">✕</button>
+                <button type="button" className="rtask__more" onClick={() => setRecMenu(t)} aria-label="더보기">⋯</button>
               </div>
             ))
           )}
@@ -191,6 +196,16 @@ export function MyTasksPane({ me, members }: { me: { id: string; name: string };
       )}
 
       {editTask && <TaskFormSheet members={members} editTask={editTask} onClose={() => setEditTask(null)} onDone={load} />}
+
+      {recMenu && (
+        <Sheet onClose={() => setRecMenu(null)}>
+          <div className="sheet__panel rmenu">
+            <div className="rmenu__t">{recMenu.title} <span>· 반복 할일</span></div>
+            <button type="button" className="rmenu__item" onClick={() => { setRecEdit(recMenu); setRecMenu(null); }}>수정</button>
+            <button type="button" className="rmenu__item rmenu__item--del" onClick={() => { const t = recMenu; setRecMenu(null); removeRec(t); }}>삭제</button>
+          </div>
+        </Sheet>
+      )}
 
       {recAdd && <RecurringFormSheet memberId={me.id} memberName={me.name} onClose={() => setRecAdd(false)} onDone={loadRec} />}
       {recEdit && <RecurringFormSheet memberId={me.id} editTask={recEdit} onClose={() => setRecEdit(null)} onDone={loadRec} />}
