@@ -1,0 +1,17 @@
+{
+  "name": "핫딜마켓 메신저",
+  "short_name": "메신저",
+  "description": "핫딜마켓 사내 메신저 — 채팅·할 일·캘린더",
+  "start_url": "/messenger",
+  "scope": "/messenger",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "ko",
+  "background_color": "#f5f6f9",
+  "theme_color": "#1e3a9e",
+  "icons": [
+    { "src": "/messenger-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/messenger-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/messenger-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
