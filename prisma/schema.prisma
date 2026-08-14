@@ -223,6 +223,27 @@ model WeeklyProduct {
   @@index([active, sortOrder])
 }
 
+// 채움채(두부/콩나물) 상품 — 상품관리에서 박스입수·낱개단가·과세/면세를 관리.
+// 발주는 박스 단위(1,2,3)로 들어오지만 계산서엔 낱개 단위로 환산: 계산서수량=박스수×perBox, 단가=piecePrice.
+// hasBox=false(순두부처럼 박스 없이 낱개로 발주)면 발주수량 그대로, 단가만 piecePrice 적용.
+// seq=채움채 사이트 product_seq(자동제출 매핑용, code 카탈로그와 이름으로 조인).
+model ChaeumchaeProduct {
+  id         String   @id @default(cuid())
+  seq        String   @default("") // 채움채 사이트 product_seq(자동제출용)
+  name       String
+  hasBox     Boolean  @default(true) // false=낱개단위 발주(순두부)
+  perBox     Int      @default(1) // 박스당 낱개 입수(hasBox=true일 때 환산 배수)
+  piecePrice Int      @default(0) // 낱개 단가(원) — 계산서 단가
+  unit       String   @default("개") // 낱개 단위 표시(개/모 등)
+  tax        String   @default("") // 과세("TAXABLE")/면세("EXEMPT")/미선택("")
+  sortOrder  Int      @default(0)
+  active     Boolean  @default(true) // false=취급중단(소프트삭제)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
 // 예약발주 — 관리자가 예약일자별로 상품(이름·점주공급가)을 등록하고, 점주(핫딜마켓)가 미리 수량 예약.
 // 각 배치의 '픽업일 전날' 확정 수량이 그날 공구(TOOL) 발주에 읽기전용으로 자동 표시(단일출처).
 // 일일 발주(Order)와 분리, 주간발주(WeeklyOrder) 구조를 따름.
@@ -532,6 +553,8 @@ model InvoiceItem {
   inventoryItemId String @default("")
   // 과세("TAXABLE")/면세("EXEMPT")/미선택("") — 연동상품은 재고값 로드, 수기는 선택. 발행 시 미선택이면 차단.
   tax             String @default("")
+  // 채움채 낱개환산 항목의 박스당 낱개입수(0=박스/일반). qty(낱개)÷unitPerBox=박스로 역환산해 이중청구 델타를 단위정합.
+  unitPerBox      Int    @default(0)
 
   @@index([inventoryItemId])
 }

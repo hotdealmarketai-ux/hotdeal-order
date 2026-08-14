@@ -275,6 +275,7 @@ export default async function AdminInvoiceDetail(props: {
         unitPrice: String(it.unitPrice),
         inventoryItemId: it.inventoryItemId,
         tax: it.tax,
+        unitPerBox: String(it.unitPerBox), // 낱개환산 마커 보존(수정 시 재환산 정합)
       }));
     // 예약분 자동채움 — '공구를 아직 한 번도 확정/저장하지 않은 새 초안'에만 예약 확정분을 공구(TOOL)에 채운다.
     // ⚠ 한 번이라도 공구를 확정하면 그 계산서의 공구 목록(InvoiceItem)이 진실 소스가 된다. 그래야 관리자가 재고부족으로
@@ -391,6 +392,7 @@ export default async function AdminInvoiceDetail(props: {
       unitPrice: String(it.unitPrice),
       inventoryItemId: it.inventoryItemId,
       tax: it.tax,
+      unitPerBox: String(it.unitPerBox), // 낱개환산 마커 보존 — 레거시(박스) 재발송 시 낱개로 오각인 방지(적대리뷰 #1)
     }));
   // 공구칸 재고현황 연동 드롭다운용 — 수정 폼도 계산서 발행처럼 재고 검색·연동 가능하게.
   const reviseInvOptions = canRevise

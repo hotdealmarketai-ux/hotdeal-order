@@ -30,7 +30,7 @@ import { taxSummary, vatBreakdown, defaultTaxFor } from "@/lib/tax";
 const DELIVERY_CAT = "DELIVERY";
 const WEEKLY_CAT = "WEEKLY";
 
-type Row = { id: number; name: string; qty: string; unitPrice: string; inventoryItemId: string; tax: string };
+type Row = { id: number; name: string; qty: string; unitPrice: string; inventoryItemId: string; tax: string; unitPerBox: string };
 type WeeklyRow = { id: number; name: string; qty: string; unitPrice: string; unit: string; tax: string };
 
 // 공구칸 드롭다운용 재고현황 상품(연동 후보). qty=현재 실물 재고(출고 후 잔량 계산용). tax=과세/면세 하드코딩.
@@ -51,6 +51,7 @@ export type InvoiceInitialItem = {
   unitPrice: string;
   inventoryItemId?: string;
   tax?: string;
+  unitPerBox?: string; // 채움채 낱개환산 마커(DB 스냅샷) — 수정 시 그대로 보존해야 재환산 정합
 };
 
 export type InvoiceRefGroup = {
@@ -105,6 +106,7 @@ export function InvoiceForm({
     unitPrice: "",
     inventoryItemId: "",
     tax: "",
+    unitPerBox: "", // 수기 행 = 0(박스/일반). 낱개환산 마커는 '불러오기'로 채워진 행에만 실린다.
   });
 
   // 연동 재고 id/이름 → 과세/면세(하드코딩). 연동·이름일치 품목은 이 값이 자동 선택돼 온다(빈 tax 보정용).
@@ -141,6 +143,7 @@ export function InvoiceForm({
         unitPrice: it.unitPrice,
         inventoryItemId: invId,
         tax,
+        unitPerBox: it.unitPerBox ?? "", // DB 스냅샷 보존(수정 시 재환산 정합)
       });
     }
     for (const c of categories) init[c].push(newRow());
@@ -358,6 +361,8 @@ export function InvoiceForm({
           inventoryItemId: it.inventoryItemId ?? "",
           // 서버가 연동 재고의 과세/면세를 함께 실어 줌(수기 품목은 빈값 → 관리자 선택).
           tax: it.tax ?? "",
+          // 채움채 낱개환산 마커 — 서버가 이번 변환에 쓴 입수. 저장까지 그대로 실려 다음 불러오기 역환산 기준이 됨.
+          unitPerBox: it.unitPerBox ?? "",
         }));
         rows.push(newRow());
         return { ...prev, [cat]: rows };
@@ -389,6 +394,7 @@ export function InvoiceForm({
             unitPrice: r.unitPrice,
             inventoryItemId: r.inventoryItemId,
             tax: r.tax,
+            unitPerBox: r.unitPerBox, // 낱개환산 마커 전달(서버가 이름으로 재추정하지 않음)
           })),
       ),
     [categories, rowsByCat],
@@ -516,7 +522,14 @@ export function InvoiceForm({
         //  발행 정합성은 서버 게이트(용달 품목 있으면 확정 필수)가 보장한다.)
         const byCat: Record<
           string,
-          { name: string; qty: string; unitPrice: string; inventoryItemId: string; tax: string }[]
+          {
+            name: string;
+            qty: string;
+            unitPrice: string;
+            inventoryItemId: string;
+            tax: string;
+            unitPerBox: string;
+          }[]
         > = {};
         for (const it of res.items ?? []) (byCat[it.category] ??= []).push(it);
         setRowsByCat((prev) => {

@@ -60,7 +60,8 @@ export async function computeOrderShipmentDiff(date: string): Promise<OrderShipm
   // ── 출고(계산서) 측: 그 출고일 발행 DAILY+WEEKLY 계산서 품목을 지점×카테고리×이름 합산 ──
   const invoices = await prisma.invoice.findMany({
     where: { date, kind: { in: ["DAILY", "WEEKLY"] }, status: { in: ["ISSUED", "PAID"] } },
-    select: { userId: true, items: { select: { category: true, name: true, qty: true } } },
+    // unitPerBox: 채움채는 계산서에 '낱개'로 잡히므로, 발주(박스 단위 tofuLines)와 대조하려면 박스로 되돌린다.
+    select: { userId: true, items: { select: { category: true, name: true, qty: true, unitPerBox: true } } },
   });
   type CatMaps = { tool: Map<string, number>; tofu: Map<string, number>; weekly: Map<string, number> };
   const invByStore = new Map<string, CatMaps>();
@@ -76,7 +77,9 @@ export async function computeOrderShipmentDiff(date: string): Promise<OrderShipm
     const e = ensureInv(inv.userId);
     for (const it of inv.items) {
       if (it.category === "TOOL") addTo(e.tool, it.name, it.qty);
-      else if (it.category === "TOFU") addTo(e.tofu, it.name, it.qty);
+      // 채움채 계산서 수량(낱개)을 박스로 역환산 — 발주(tofuLines)는 박스 단위라 단위를 맞춰야 유령 불일치가 안 난다.
+      else if (it.category === "TOFU")
+        addTo(e.tofu, it.name, it.unitPerBox > 0 ? it.qty / it.unitPerBox : it.qty);
       else if (it.category === "WEEKLY") addTo(e.weekly, it.name, it.qty);
     }
   }

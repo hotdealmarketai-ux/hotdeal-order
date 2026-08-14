@@ -34,6 +34,11 @@ import {
 import { diffInvoiceItems } from "@/lib/invoice-revision";
 import { logError } from "@/lib/log";
 import { normalizeTax, defaultTaxFor } from "@/lib/tax";
+import {
+  chaeumchaeConversionMaps,
+  type ChaeumchaeProductRow,
+} from "@/lib/chaeumchae-products";
+import { seqForName } from "@/lib/chaeumchae";
 
 export type InvoiceFormState = { error?: string };
 
@@ -44,6 +49,7 @@ type RawItem = {
   unitPrice?: string;
   inventoryItemId?: string; // 공구칸 드롭다운으로 선택한 재고현황 상품 연동(있으면)
   tax?: string; // 과세("TAXABLE")/면세("EXEMPT")/미선택("")
+  unitPerBox?: string; // 채움채 낱개환산 마커 — '불러오기'가 낱개로 변환할 때 사용한 박스당 입수(폼이 그대로 전달). 0=박스/일반.
 };
 
 type CleanItem = {
@@ -54,6 +60,7 @@ type CleanItem = {
   amount: number;
   inventoryItemId: string;
   tax: string; // 과세/면세/미선택 — 발행 시 미선택("") 있으면 차단, 영수증에 세액 표시
+  unitPerBox: number; // 채움채 낱개환산 항목의 박스당 낱개입수(0=일반). 저장 시 서버가 채움(발주↔청구 델타 단위정합).
 };
 
 const MAX_ITEMS = 200;
@@ -100,6 +107,9 @@ function cleanItems(
         category === "TOOL" ? String(r.inventoryItemId ?? "").trim().slice(0, 40) : "",
       // 과세/면세 — 유효값만. 미선택이면 카테고리 기본값(과일·야채=면세, 그 외 "")로 자동 지정.
       tax: normalizeTax(r.tax) || defaultTaxFor(category),
+      // 채움채 낱개환산 마커 — 폼에서 그대로 전달(불러오기가 낱개변환에 쓴 그 perBox). 이름으로 재추정하지 않는다
+      //   (qty가 박스인지 낱개인지 이름만으론 알 수 없어 오각인·이중청구가 났었음 — 로드 시점 값을 신뢰).
+      unitPerBox: Math.max(0, Math.floor(Number(String(r.unitPerBox ?? "").replace(/[^0-9]/g, "")) || 0)),
     });
   }
   return out;
@@ -161,6 +171,7 @@ export async function getInvoiceSyncAction(invoiceId: string): Promise<{
     unitPrice: string;
     inventoryItemId: string;
     tax: string;
+    unitPerBox: string;
   }[];
 }> {
   await requireAdmin();
@@ -184,6 +195,7 @@ export async function getInvoiceSyncAction(invoiceId: string): Promise<{
         unitPrice: String(it.unitPrice),
         inventoryItemId: it.inventoryItemId,
         tax: it.tax,
+        unitPerBox: String(it.unitPerBox), // 낱개환산 마커 보존(동시작성 동기화가 0으로 덮지 않게)
       })),
   };
 }
@@ -434,6 +446,7 @@ export async function saveInvoiceAction(
         amount: number;
         inventoryItemId: string;
         tax: string;
+        unitPerBox: number;
         sortOrder: number;
       }[] = items.map((it, i) => ({ ...it, sortOrder: i }));
       if (deliveryConfirm) {
@@ -445,6 +458,7 @@ export async function saveInvoiceAction(
           amount: deliveryFee,
           inventoryItemId: "",
           tax: "TAXABLE", // 용달 발송은 과세
+          unitPerBox: 0,
           sortOrder: -1,
         });
       }
@@ -499,10 +513,23 @@ export async function loadInvoiceToolItemsAction(
   category: Category = "TOOL",
   excludeInvoiceId?: string,
 ): Promise<{
-  items: { name: string; qty: string; unitPrice: string; inventoryItemId: string; tax: string }[];
+  items: {
+    name: string;
+    qty: string;
+    unitPrice: string;
+    inventoryItemId: string;
+    tax: string;
+    unitPerBox: string;
+  }[];
 }> {
   await requireAdmin();
   if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(shipmentDate)) return { items: [] };
+
+  // '이미 청구된 분'에서 자기 자신(편집 중인 계산서)은 제외한다. 폼이 넘긴 invoiceId 그대로 사용.
+  //   ※ 알려진 한계(채움채 무관·전 카테고리 공통): invoiceId 없는 새 폼에서, 로드~저장 사이에 다른 관리자가
+  //     같은 점포·날짜 초안을 만들거나 발행하면 델타가 어긋날 수 있다(좁은 동시성 레이스, 과/소청구 후 수정·환불로 정정).
+  //     완전 해결은 로드-저장을 원자화(저장 시점 델타 재계산)해야 하므로 별도 과제로 둔다.
+  const exclude = excludeInvoiceId;
 
   const { start, end } = orderRangeForShipment(shipmentDate);
   const [toolOrders, resvItems, invItems, billedItems] = await Promise.all([
@@ -553,17 +580,22 @@ export async function loadInvoiceToolItemsAction(
           userId,
           date: shipmentDate,
           status: { not: "VOID" },
-          ...(excludeInvoiceId ? { id: { not: excludeInvoiceId } } : {}),
+          ...(exclude ? { id: { not: exclude } } : {}),
         },
       },
-      select: { name: true, qty: true },
+      select: { name: true, qty: true, unitPerBox: true },
     }),
   ]);
-  // 이미 청구된 공구(품목명별 합) — 불러올 총량에서 이만큼 빼서 '아직 청구 안 된 분'만 채운다.
-  const billedByName = new Map<string, number>();
+  // 이미 청구된 분(품목명별 합) — '발주 원단위(박스)'로 역환산해서 센다. 불러올 총량(박스)에서 빼 델타만 채운다.
+  //   · 채움채 낱개환산 항목(unitPerBox>0): 낱개qty ÷ unitPerBox = 박스수 (청구 당시 입수로 되돌림 → 입수 변경에도 정확).
+  //   · 그 외(공구·박스없음·레거시 박스단위 청구분, unitPerBox=0): qty 그대로(이미 발주 원단위).
+  //   이렇게 하면 박스단위로 청구되던 과거 분과 낱개단위 신규 분이 섞여도 이중청구가 안 난다.
+  const billedBoxesByName = new Map<string, number>();
   for (const it of billedItems) {
     const k = it.name.trim();
-    if (k) billedByName.set(k, (billedByName.get(k) ?? 0) + it.qty);
+    if (!k) continue;
+    const boxes = it.unitPerBox > 0 ? it.qty / it.unitPerBox : it.qty;
+    billedBoxesByName.set(k, (billedBoxesByName.get(k) ?? 0) + boxes);
   }
 
   const priceByName = new Map<string, number>();
@@ -616,21 +648,67 @@ export async function loadInvoiceToolItemsAction(
     add(it.name, qtyToNum(it.qty), it.supplyPrice, it.inventoryItemId || idByName.get(it.name.trim()) || "");
   }
 
+  // 채움채(TOFU)는 발주가 박스 단위 → 계산서엔 낱개 단위로 환산: 낱개수량 = 박스수 × 낱개입수(perBox), 단가 = 낱개단가.
+  //   조인은 발주 카탈로그 seq(이름변경에 강함) → 없으면 이름 폴백(재추가로 seq 유실돼도 매칭). active 무관(소프트삭제
+  //   상품도 진행 중 발주는 환산돼야 오청구 방지).
+  const { bySeq, byName }: {
+    bySeq: Record<string, ChaeumchaeProductRow>;
+    byName: Record<string, ChaeumchaeProductRow>;
+  } =
+    category === "TOFU"
+      ? await chaeumchaeConversionMaps()
+      : { bySeq: {}, byName: {} };
+  const cpForKey = (name: string): ChaeumchaeProductRow | undefined => {
+    if (category !== "TOFU") return undefined;
+    const seq = seqForName(name);
+    // 후보: seq 매칭(카탈로그, 이름변경에 강함) + 이름 매칭(재추가로 seq 유실 시). 둘 다 모으되 '활성' 상품을 우선한다 —
+    //   소프트삭제 후 같은 상품을 재추가(seq="")하면 삭제된 옛 행이 seq를 쥐고 있어, 그걸 그대로 쓰면
+    //   관리자가 새로 지정한 입수·단가·과세가 아니라 삭제행의 옛 값으로 오청구된다(적대리뷰). 활성 재추가행을 우선.
+    const cands: ChaeumchaeProductRow[] = [];
+    if (seq && bySeq[seq]) cands.push(bySeq[seq]);
+    const bn = byName[name.trim()];
+    if (bn && !cands.includes(bn)) cands.push(bn);
+    return cands.find((c) => c.active) ?? cands[0];
+  };
+
   const items = orderKeys
     .map((k) => {
       const a = agg.get(k)!;
-      const already = billedByName.get(k) ?? 0; // 다른 계산서에 이미 청구된 분
-      const qty = Math.round((a.qty - already) * 100) / 100; // 아직 청구 안 된 델타만(부동소수 정리)
-      return { a, qty };
+      const cp = cpForKey(a.name); // 채움채 상품(있으면) — seq→이름 조인
+      // 낱개로 '환산'하는 조건: 박스 상품이고, 낱개입수와 낱개단가가 둘 다 유효할 때만.
+      //   낱개단가 미설정(0)인 박스상품은 낱개로 부풀리지 않고 박스 그대로 둔다 — 그래야 관리자가 박스단가를
+      //   입력해도 수량과 단위가 맞고, unitPerBox=0으로 저장돼 역환산이 박스로 정확히 되돌린다(과청구 함정 차단).
+      const converted = !!(cp && cp.hasBox && cp.perBox > 0 && cp.piecePrice > 0);
+      const factor = converted ? cp!.perBox : 1;
+      const upb = converted ? cp!.perBox : 0; // 저장할 마커 = 이번에 낱개변환에 쓴 입수(0=박스/일반)
+      // 델타는 '박스 원단위'로 계산: (발주 박스수 − 이미 청구된 박스수) × factor = 아직 청구 안 된 수량.
+      //   billedBoxesByName은 저장된 unitPerBox로 이미 낱개→박스 역환산돼 있어 단위가 일치(과거 박스청구/신규 낱개청구 혼합 안전).
+      const deltaBoxes = a.qty - (billedBoxesByName.get(k) ?? 0);
+      const qty = Math.round(deltaBoxes * factor * 100) / 100; // 환산 델타(부동소수 정리)
+      return { a, cp, qty, upb };
     })
-    .filter((x) => x.qty > 0) // 이미 다 청구됐으면(델타 0) 안 담아 이중차감 방지
-    .map(({ a, qty }) => ({
+    .filter((x) => x.qty > 0) // 이미 다 청구됐으면(델타 ≤ 0) 안 담아 이중차감 방지
+    .map(({ a, cp, qty, upb }) => ({
       name: a.name,
       qty: String(qty),
-      unitPrice: a.priced ? String(a.unitPrice) : "",
+      // 채움채 상품이면 반드시 '낱개단가'만 사용 — 미설정(0)이면 빈칸(관리자 입력). 재고 박스단가로 폴백하면
+      //   박스가격 × 낱개수량이 돼 금액이 크게 틀어지므로 절대 폴백하지 않는다(돈 원칙). 그 외(공구)만 재고 공급가.
+      unitPrice: cp
+        ? cp.piecePrice > 0
+          ? String(cp.piecePrice)
+          : ""
+        : a.priced
+        ? String(a.unitPrice)
+        : "",
       inventoryItemId: a.inventoryItemId,
-      // 연동 재고의 과세/면세를 함께 실어 보낸다(연동 id 우선, 없으면 이름매칭). 미지정이면 "".
-      tax: (a.inventoryItemId && taxById.get(a.inventoryItemId)) || taxByName.get(a.name) || "",
+      // 과세/면세: 채움채 상품 설정 우선, 없으면 연동 재고(연동 id → 이름매칭).
+      tax:
+        (cp && cp.tax) ||
+        (a.inventoryItemId && taxById.get(a.inventoryItemId)) ||
+        taxByName.get(a.name) ||
+        "",
+      // 낱개환산 마커 — 폼→저장까지 그대로 실려 다음 불러오기의 박스 역환산 기준이 된다(이름 재추정 금지).
+      unitPerBox: String(upb),
     }));
   return { items };
 }

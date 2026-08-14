@@ -15,52 +15,109 @@ import { CategoryAutoAssign } from "@/components/CategoryAutoAssign";
 import { InventoryBackupControl } from "@/components/InventoryBackupControl";
 import { Collapsible } from "@/components/Collapsible";
 import { SubmitButton } from "@/components/SubmitButton";
+import { InboundManager } from "@/components/InboundManager";
+import { toInboundRow } from "@/lib/inbound";
+import { WeeklyProductForm } from "@/components/WeeklyProductForm";
+import { getWeeklyProducts } from "@/lib/weekly";
+import { ChaeumchaeProductForm } from "@/components/ChaeumchaeProductForm";
+import { getChaeumchaeProducts } from "@/lib/chaeumchae-products";
 
 export const dynamic = "force-dynamic";
 
-// PC 전용 재고관리 — 창고관리(/warehouse)와 동일 구조(관리자 + 비번 게이트 + 모바일 차단).
-// 재고 페이지(/admin/inventory)의 기능(인라인 편집·자동저장·카테고리·백업·시트·엑셀·예약구분)을
-// InventoryEditor 등 기존 컴포넌트를 그대로 재사용해 넓은 데스크톱 화면으로 제공한다.
+// PC 전용 통합 관리(ERP) — 재고현황·입고·재고마감·주간상품·예약상품·채움채상품을 한 화면 탭으로.
+// 창고관리(/warehouse)와 동일 게이트(관리자 + 비번 + 모바일 차단). 상품/재고 편집기는 기존 컴포넌트 재사용.
+type TabKey =
+  | "inventory"
+  | "inbound"
+  | "chaeumchae"
+  | "weekly"
+  | "closing"
+  | "reservation";
+
+const TABS: { key: TabKey; label: string; hint: string }[] = [
+  { key: "inventory", label: "재고 현황", hint: "품목·수량·공급가·과세" },
+  { key: "inbound", label: "입고", hint: "입고 기록·재고 반영" },
+  { key: "chaeumchae", label: "채움채 상품", hint: "박스입수·낱개단가" },
+  { key: "weekly", label: "주간 상품", hint: "가격·과세" },
+  { key: "closing", label: "재고 마감", hint: "발주↔출고 대조" },
+  { key: "reservation", label: "예약 상품", hint: "예약일자별 등록" },
+];
+
 export default async function InventoryPcPage(props: {
-  searchParams: Promise<{ pw?: string }>;
+  searchParams: Promise<{ pw?: string; tab?: string }>;
 }) {
   await requireAdmin();
-  const { pw } = await props.searchParams;
+  const { pw, tab: tabRaw } = await props.searchParams;
 
-  // PC 전용 — 모바일 접속이면 안내만 하고 막는다.
+  // PC 전용 — 모바일 접속이면 안내만.
   const ua = (await headers()).get("user-agent") ?? "";
   if (isMobileUA(ua)) return <InvPcMobileBlock />;
 
-  // 비밀번호 게이트 — 관리자 로그인 + invpc_unlock 쿠키가 있어야 입장.
+  // 비밀번호 게이트.
   const unlocked = (await cookies()).get(INVPC_UNLOCK_COOKIE)?.value === "1";
   if (!unlocked) return <InvPcUnlock wrong={pw === "bad"} />;
 
-  const items = await prisma.inventoryItem.findMany({
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-  });
-  // 실재고(base) vs 예약 확정 수량(품목별) — 편집기에서 '예약 N개 잡힘' 표시.
-  const reservedByItem = await reservationConfirmedByItem();
-  const idsKey = items.map((i) => i.id).join(",");
-  const totalQty = items.reduce((s, it) => s + (it.qty || 0), 0);
+  const tab: TabKey =
+    (TABS.find((t) => t.key === tabRaw)?.key as TabKey) ?? "inventory";
 
   return (
     <div className="invpc__inner">
       <header className="invpc__top">
         <div>
           <div className="invpc__title">
-            재고관리 <span>· PC</span>
+            통합 관리 <span>· PC</span>
           </div>
           <div className="invpc__sub">
-            품목 {items.length}종 · 총 수량 {totalQty.toLocaleString()}개 · 입력하면 자동 저장됩니다
+            재고·입고·마감·주간·예약·채움채를 한곳에서. 입력하면 저장됩니다.
           </div>
         </div>
         <div className="invpc__topbtns">
-          <Link href="/admin/inbound" className="btn btn--soft btn--sm invpc__link">입고</Link>
-          <Link href="/admin/inventory" className="btn btn--ghost btn--sm invpc__link">← 재고 페이지</Link>
+          <Link href="/admin" className="btn btn--ghost btn--sm invpc__link">← 관리자 홈</Link>
         </div>
       </header>
 
-      {/* 잘 안 쓰는 기능(백업·카테고리·시트·엑셀)은 토글로 접어 둔다(기본 닫힘) */}
+      {/* ERP 탭 — 딱딱 나누어진 섹션 전환 */}
+      <nav className="erptabs">
+        {TABS.map((t) => (
+          <Link
+            key={t.key}
+            href={`/inventory-pc?tab=${t.key}`}
+            className={`erptab ${tab === t.key ? "is-active" : ""}`}
+          >
+            <span className="erptab__label">{t.label}</span>
+            <span className="erptab__hint">{t.hint}</span>
+          </Link>
+        ))}
+      </nav>
+
+      <div className="erppane">
+        {tab === "inventory" && <InventoryTab />}
+        {tab === "inbound" && <InboundTab />}
+        {tab === "chaeumchae" && <ChaeumchaeTab />}
+        {tab === "weekly" && <WeeklyTab />}
+        {tab === "closing" && <ClosingTab />}
+        {tab === "reservation" && <ReservationTab />}
+      </div>
+    </div>
+  );
+}
+
+// ── 재고 현황 ──
+async function InventoryTab() {
+  const items = await prisma.inventoryItem.findMany({
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+  });
+  const reservedByItem = await reservationConfirmedByItem();
+  const idsKey = items.map((i) => i.id).join(",");
+  const totalQty = items.reduce((s, it) => s + (it.qty || 0), 0);
+  return (
+    <>
+      <div className="erphead">
+        <div className="erphead__title">재고 현황</div>
+        <div className="erphead__meta">
+          {items.length}종 · 총 {totalQty.toLocaleString()}개
+        </div>
+      </div>
       <Collapsible title="기능" hint="백업 · 카테고리 자동분류 · 구글시트 · 엑셀 붙여넣기">
         <div className="invpc__tools">
           <InventoryBackupControl />
@@ -70,7 +127,6 @@ export default async function InventoryPcPage(props: {
           <InventoryBulkImport currentNames={items.map((it) => it.name)} />
         </div>
       </Collapsible>
-
       <div className="card">
         <div className="section-label" style={{ margin: "0 0 10px" }}>새 품목 추가</div>
         <form action={addInventoryAction} className="invpc__addrow">
@@ -81,7 +137,6 @@ export default async function InventoryPcPage(props: {
           <button className="btn btn--primary btn--sm" style={{ whiteSpace: "nowrap" }}>추가하기</button>
         </form>
       </div>
-
       <div className="section-label">등록된 재고</div>
       <InventoryEditor
         key={idsKey}
@@ -97,7 +152,107 @@ export default async function InventoryPcPage(props: {
           reserved: reservedByItem[it.id] ?? 0,
         }))}
       />
-    </div>
+    </>
+  );
+}
+
+// ── 입고 ──
+async function InboundTab() {
+  const [logs, catRows] = await Promise.all([
+    prisma.inboundLog.findMany({ orderBy: { createdAt: "desc" }, take: 300 }),
+    prisma.inventoryItem.findMany({
+      where: { deletedAt: null, majorCat: { not: "" } },
+      select: { majorCat: true, minorCat: true },
+      distinct: ["majorCat", "minorCat"],
+      orderBy: [{ majorCat: "asc" }, { minorCat: "asc" }],
+    }),
+  ]);
+  const treeMap = new Map<string, string[]>();
+  for (const r of catRows) {
+    if (!r.majorCat) continue;
+    const minors = treeMap.get(r.majorCat) ?? [];
+    if (r.minorCat && !minors.includes(r.minorCat)) minors.push(r.minorCat);
+    treeMap.set(r.majorCat, minors);
+  }
+  const catTree = [...treeMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "ko"))
+    .map(([major, minors]) => ({ major, minors: minors.sort((a, b) => a.localeCompare(b, "ko")) }));
+  return (
+    <>
+      <div className="erphead">
+        <div className="erphead__title">입고</div>
+        <div className="erphead__meta">품목·수량·공급가·유통기한 입력 → 재고 가산</div>
+      </div>
+      <InboundManager initialRows={logs.map(toInboundRow)} catTree={catTree} />
+    </>
+  );
+}
+
+// ── 채움채 상품 ──
+async function ChaeumchaeTab() {
+  const products = await getChaeumchaeProducts();
+  return (
+    <>
+      <div className="erphead">
+        <div className="erphead__title">채움채 상품</div>
+        <div className="erphead__meta">박스입수·낱개단가·과세 — 계산서에 낱개로 자동 환산</div>
+      </div>
+      <ChaeumchaeProductForm initial={products} />
+    </>
+  );
+}
+
+// ── 주간 상품 ──
+async function WeeklyTab() {
+  const products = await getWeeklyProducts();
+  return (
+    <>
+      <div className="erphead">
+        <div className="erphead__title">주간발주 상품</div>
+        <div className="erphead__meta">카테고리별 가격·과세</div>
+      </div>
+      <WeeklyProductForm initial={products} />
+    </>
+  );
+}
+
+// ── 재고 마감(진입) ──
+function ClosingTab() {
+  return (
+    <>
+      <div className="erphead">
+        <div className="erphead__title">재고 마감</div>
+        <div className="erphead__meta">발주↔출고 대조로 튄 품목 확인</div>
+      </div>
+      <div className="erpcards">
+        <Link href="/admin/stock-reconcile/diff" className="erpcard">
+          <div className="erpcard__t">발주 ↔ 출고 대조</div>
+          <div className="erpcard__d">본사출고 발주 vs 발행 계산서 품목 대조(차감 없음).</div>
+        </Link>
+      </div>
+    </>
+  );
+}
+
+// ── 예약 상품(진입) ──
+function ReservationTab() {
+  return (
+    <>
+      <div className="erphead">
+        <div className="erphead__title">예약발주 상품</div>
+        <div className="erphead__meta">예약일자별 상품 등록·관리</div>
+      </div>
+      <div className="erpcards">
+        <Link href="/admin/reservations" className="erpcard">
+          <div className="erpcard__t">예약발주 관리</div>
+          <div className="erpcard__d">예약일자별 상품 등록·수량·확정(단일 목록).</div>
+        </Link>
+        <Link href="/admin/reservations/new" className="erpcard">
+          <div className="erpcard__t">예약 상품 등록</div>
+          <div className="erpcard__d">새 예약일자·상품 추가.</div>
+        </Link>
+      </div>
+    </>
   );
 }
 
@@ -108,10 +263,10 @@ function InvPcMobileBlock() {
       <div style={{ fontSize: 40 }}>🖥️</div>
       <div style={{ fontSize: 18, fontWeight: 800 }}>PC로 접속해주세요</div>
       <div style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-        PC 재고관리는 데스크톱(컴퓨터)에서만 이용할 수 있어요.
+        통합 관리는 데스크톱(컴퓨터)에서만 이용할 수 있어요.
       </div>
-      <a href="/admin/inventory" className="btn btn--ghost" style={{ marginTop: 10, textDecoration: "none" }}>
-        ← 재고 페이지로
+      <a href="/admin" className="btn btn--ghost" style={{ marginTop: 10, textDecoration: "none" }}>
+        ← 관리자 홈으로
       </a>
     </div>
   );
@@ -123,7 +278,7 @@ function InvPcUnlock({ wrong }: { wrong: boolean }) {
     <div className="invpc__gate">
       <form action={unlockInventoryPcAction} className="invpc__gateform">
         <div style={{ fontSize: 34 }}>📦</div>
-        <div style={{ fontSize: 18, fontWeight: 800 }}>PC 재고관리</div>
+        <div style={{ fontSize: 18, fontWeight: 800 }}>PC 통합 관리</div>
         <div style={{ color: "var(--muted)" }}>비밀번호를 입력하세요.</div>
         <input
           className="input"
@@ -136,8 +291,8 @@ function InvPcUnlock({ wrong }: { wrong: boolean }) {
         />
         {wrong && <div style={{ color: "var(--danger)", fontSize: 13 }}>비밀번호가 올바르지 않습니다.</div>}
         <SubmitButton className="btn btn--primary btn--block" pendingText="확인 중…">입력</SubmitButton>
-        <a href="/admin/inventory" className="btn btn--ghost btn--block" style={{ textDecoration: "none" }}>
-          ← 재고 페이지로
+        <a href="/admin" className="btn btn--ghost btn--block" style={{ textDecoration: "none" }}>
+          ← 관리자 홈으로
         </a>
       </form>
     </div>

@@ -17,6 +17,7 @@ type Row = {
   unitPrice: string;
   inventoryItemId: string; // 공구칸 재고현황 연동 상품 id(있으면)
   tax: string; // 과세/면세/미선택
+  unitPerBox: string; // 채움채 낱개환산 마커(DB 스냅샷 보존, 이름 재추정 금지)
 };
 
 export type InvOption = { id: string; name: string; supplyPrice: number; qty: number; tax: string };
@@ -28,6 +29,7 @@ export type ReviseInitialItem = {
   unitPrice: string;
   inventoryItemId?: string;
   tax?: string;
+  unitPerBox?: string; // 채움채 낱개환산 마커 — 레거시(박스)=0, 신규(낱개)=perBox. 수정 시 그대로 보존해야 재환산 정합.
 };
 
 function isFilled(r: Row) {
@@ -71,6 +73,7 @@ export function ReviseInvoiceForm({
     unitPrice: "",
     inventoryItemId: "",
     tax: "",
+    unitPerBox: "", // 수기 추가 행 = 0(박스/일반)
   });
 
   const [editing, setEditing] = useState(false);
@@ -111,6 +114,7 @@ export function ReviseInvoiceForm({
         unitPrice: it.unitPrice,
         inventoryItemId: invId,
         tax,
+        unitPerBox: it.unitPerBox ?? "", // DB 스냅샷 그대로 보존(레거시=0, 낱개=perBox). 이름으로 재추정하지 않음.
       });
     }
     for (const c of categories) init[c].push(newRow());
@@ -220,6 +224,7 @@ export function ReviseInvoiceForm({
             unitPrice: r.unitPrice,
             inventoryItemId: r.inventoryItemId,
             tax: r.tax,
+            unitPerBox: r.unitPerBox, // 낱개환산 마커 보존 전달(레거시 박스가 낱개로 오각인되지 않게)
           })),
       ),
     [categories, rowsByCat],
