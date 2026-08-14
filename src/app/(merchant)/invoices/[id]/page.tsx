@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
@@ -197,12 +196,6 @@ export default async function MerchantInvoiceDetailPage({
         )}
 
         <WeeklyReceipt items={receipt} totalLabel="총 결제요청 금액" cats={invCats} />
-
-        {/* 이 계산서는 '내역(영수증)'만 보여준다. 입금하실 금액·계좌는 지점 전체 미수 기준이라 입금요청서에서 확인
-            (계산서 낱장 결제 여부는 매칭이 지점 단위라 알 수 없어, 낱장에 '입금하세요'를 띄우면 이중납부 위험). */}
-        <Link href="/invoices" className="btn btn--soft" style={{ marginTop: 12 }}>
-          입금하실 금액(지점 미수)은 입금요청서에서 확인
-        </Link>
 
         <InvoiceRevisionHistory revisions={revisions} />
 

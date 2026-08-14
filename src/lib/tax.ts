@@ -20,6 +20,12 @@ export function normalizeTax(raw: unknown): TaxKind {
   return s === TAX_TAXABLE || s === TAX_EXEMPT ? (s as TaxKind) : "";
 }
 
+// 카테고리별 과세/면세 기본값 — 과일(FRUIT)·야채(VEG)는 면세 품목이라 자동으로 면세로 잡힌다(관리자가 바꿀 수는 있음).
+// 그 외(공구·채움채 등)는 미선택("")으로 두고 관리자가 고른다.
+export function defaultTaxFor(category: string): TaxKind {
+  return category === "FRUIT" || category === "VEG" ? TAX_EXEMPT : "";
+}
+
 // 이 항목이 세금 표시 대상인가 — 과세/면세가 정해진 항목(미선택 제외).
 export function hasTax(items: { tax: string }[]): boolean {
   return items.some((it) => it.tax === TAX_TAXABLE || it.tax === TAX_EXEMPT);

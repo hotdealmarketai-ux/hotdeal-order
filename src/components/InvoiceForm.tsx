@@ -25,7 +25,7 @@ import { sumQty } from "@/lib/qty";
 import { MoneyInput } from "./MoneyInput";
 import { rankStockMatches } from "@/lib/stock-match";
 import { TaxToggle } from "./TaxToggle";
-import { taxSummary, vatBreakdown } from "@/lib/tax";
+import { taxSummary, vatBreakdown, defaultTaxFor } from "@/lib/tax";
 
 const DELIVERY_CAT = "DELIVERY";
 const WEEKLY_CAT = "WEEKLY";
@@ -127,9 +127,10 @@ export function InvoiceForm({
     for (const it of initialItems) {
       if (!init[it.category]) continue;
       const invId = it.inventoryItemId ?? "";
-      // 저장된 tax가 있으면 그대로, 없으면 연동 id → 이름일치 순으로 재고 하드코딩값을 불러온다(수기 품목은 빈값).
+      // 저장된 tax → 카테고리 기본값(과일·야채=면세) → 연동 id → 이름일치 순. (수기 품목·공구/채움채는 빈값=선택)
       const tax =
         it.tax ||
+        defaultTaxFor(it.category) ||
         (invId ? taxByInvId.get(invId) ?? "" : "") ||
         taxByName.get(it.name.trim()) ||
         "";
@@ -251,7 +252,14 @@ export function InvoiceForm({
     setConfirming(false);
     setRowsByCat((prev) => {
       const list = prev[cat].map((r) =>
-        r.id === id ? { ...r, [field]: value } : r,
+        r.id === id
+          ? {
+              ...r,
+              [field]: value,
+              // 과일·야채 행을 채우기 시작하면 면세로 자동 지정(면세 품목). tax 토글 조작 시엔 건드리지 않음.
+              ...(field !== "tax" && !r.tax ? { tax: defaultTaxFor(cat) } : {}),
+            }
+          : r,
       );
       // 채워진 줄 + '지금 편집 중인 줄'만 남기고(포커스 유지), 나머지 빈 줄은 접는다.
       // 끝에는 입력용 빈 줄 하나를 항상 유지 → 항목을 지우면 늘어난 빈 칸이 자동으로 줄어든다.

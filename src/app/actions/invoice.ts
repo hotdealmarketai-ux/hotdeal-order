@@ -33,7 +33,7 @@ import {
 } from "@/lib/invoice-stock";
 import { diffInvoiceItems } from "@/lib/invoice-revision";
 import { logError } from "@/lib/log";
-import { normalizeTax } from "@/lib/tax";
+import { normalizeTax, defaultTaxFor } from "@/lib/tax";
 
 export type InvoiceFormState = { error?: string };
 
@@ -98,8 +98,8 @@ function cleanItems(
       // 연동은 공구(TOOL)만 의미 있음 — 다른 카테고리는 빈값.
       inventoryItemId:
         category === "TOOL" ? String(r.inventoryItemId ?? "").trim().slice(0, 40) : "",
-      // 과세/면세 — 전 카테고리 공통. 유효값만, 그 외 미선택("")(발행 게이트에서 걸러짐).
-      tax: normalizeTax(r.tax),
+      // 과세/면세 — 유효값만. 미선택이면 카테고리 기본값(과일·야채=면세, 그 외 "")로 자동 지정.
+      tax: normalizeTax(r.tax) || defaultTaxFor(category),
     });
   }
   return out;

@@ -8,7 +8,7 @@ import { CATEGORIES, type Category } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { rankStockMatches } from "@/lib/stock-match";
 import { TaxToggle } from "./TaxToggle";
-import { vatBreakdown } from "@/lib/tax";
+import { vatBreakdown, defaultTaxFor } from "@/lib/tax";
 
 type Row = {
   id: number;
@@ -99,6 +99,7 @@ export function ReviseInvoiceForm({
       // 레거시(taxRequired=false)는 저장된 tax만 사용(빈값 유지) — 재고 매칭으로 과세/면세를 무단 주입하지 않는다.
       const tax = taxRequired
         ? it.tax ||
+          defaultTaxFor(it.category) ||
           (invId ? taxByInvId.get(invId) ?? "" : "") ||
           taxByName.get(it.name.trim()) ||
           ""
@@ -145,7 +146,16 @@ export function ReviseInvoiceForm({
   function updateRow(cat: Category, id: number, field: keyof Row, value: string) {
     setConfirming(false);
     setRowsByCat((prev) => {
-      const list = prev[cat].map((r) => (r.id === id ? { ...r, [field]: value } : r));
+      const list = prev[cat].map((r) =>
+        r.id === id
+          ? {
+              ...r,
+              [field]: value,
+              // 과일·야채 행을 채우기 시작하면 면세 자동(신규 계산서 수정 시). 레거시(taxRequired=false)·tax 토글 조작은 제외.
+              ...(taxRequired && field !== "tax" && !r.tax ? { tax: defaultTaxFor(cat) } : {}),
+            }
+          : r,
+      );
       return { ...prev, [cat]: normalizeRows(list, id) };
     });
   }
