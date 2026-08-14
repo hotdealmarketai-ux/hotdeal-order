@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/weekly-invoice";
 import { SubmitButton } from "./SubmitButton";
 import { MoneyInput } from "./MoneyInput";
+import { TaxToggle } from "./TaxToggle";
 import {
   WEEKLY_CATEGORIES,
   boxWord,
@@ -22,6 +23,7 @@ type Row = {
   name: string;
   perBox: string;
   supplyPrice: string;
+  tax: string; // 과세/면세/미선택
   deleted: boolean;
 };
 
@@ -35,6 +37,7 @@ export function WeeklyProductForm({ initial }: { initial: WeeklyProductRow[] }) 
       name: p.name,
       perBox: String(p.perBox),
       supplyPrice: String(p.supplyPrice),
+      tax: p.tax ?? "",
       deleted: false,
     })),
   );
@@ -65,6 +68,7 @@ export function WeeklyProductForm({ initial }: { initial: WeeklyProductRow[] }) 
         name: "",
         perBox: "1",
         supplyPrice: "0",
+        tax: "",
         deleted: false,
       },
     ]);
@@ -79,6 +83,7 @@ export function WeeklyProductForm({ initial }: { initial: WeeklyProductRow[] }) 
         name: r.name,
         perBox: r.perBox,
         supplyPrice: r.supplyPrice,
+        tax: r.tax,
         deleted: r.deleted,
       })),
     [rows],
@@ -147,6 +152,12 @@ export function WeeklyProductForm({ initial }: { initial: WeeklyProductRow[] }) 
                 onChange={(raw) => update(r.key, "supplyPrice", raw)}
               />{" "}
               원
+            </span>
+            <span className="wprow__field wprow__field--tax">
+              <TaxToggle
+                value={r.tax}
+                onChange={(v) => update(r.key, "tax", v)}
+              />
             </span>
             <button
               type="button"

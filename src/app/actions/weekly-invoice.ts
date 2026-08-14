@@ -14,6 +14,7 @@ import {
   setWeeklyShipDowForCategory,
 } from "@/lib/weekly";
 import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
+import { normalizeTax } from "@/lib/tax";
 
 export type WeeklyInvoiceState = { error?: string };
 
@@ -134,6 +135,7 @@ type ProductRow = {
   name?: string;
   perBox?: string | number;
   supplyPrice?: string | number;
+  tax?: string;
   deleted?: boolean;
 };
 const WEEKLY_CATS = new Set(["SNACK", "DAIRY", "DRIED", "EGG"]);
@@ -174,17 +176,18 @@ export async function saveWeeklyProductsAction(
     if (!name) continue; // 이름 없는 줄(빈 추가행)은 무시
     const perBox = Math.max(1, toInt(r.perBox, 1));
     const supplyPrice = toInt(r.supplyPrice, 0);
+    const tax = normalizeTax(r.tax); // 과세/면세/미선택
     if (code) {
       ops.push(
         prisma.weeklyProduct.updateMany({
           where: { code },
-          data: { category, name, perBox, supplyPrice, active: true },
+          data: { category, name, perBox, supplyPrice, tax, active: true },
         }),
       );
     } else {
       ops.push(
         prisma.weeklyProduct.create({
-          data: { category, name, perBox, supplyPrice, sortOrder: nextSort++, active: true },
+          data: { category, name, perBox, supplyPrice, tax, sortOrder: nextSort++, active: true },
         }),
       );
     }

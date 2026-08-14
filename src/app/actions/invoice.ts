@@ -1027,7 +1027,8 @@ export async function loadWeeklyIntoInvoiceAction(formData: FormData) {
         unitPrice: w.unitPrice,
         amount: w.amount,
         unit: boxWord(w.category),
-        tax: weeklyTaxByName.get(w.name.trim()) || "",
+        // 주간발주 상품(상품관리)에서 설정한 과세/면세를 우선 사용, 없으면 재고 이름매칭 폴백.
+        tax: w.tax || weeklyTaxByName.get(w.name.trim()) || "",
       })),
     });
     // 새로 불러온 주간발주는 '미확정' 상태에서 시작 — 기존 확정 토큰이 있으면 제거(내용 바뀌었으니 재확정 필요).

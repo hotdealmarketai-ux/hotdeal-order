@@ -309,6 +309,7 @@ export default async function AdminInvoiceDetail(props: {
         qty: String(it.qty),
         unitPrice: String(it.unitPrice),
         unit: it.unit,
+        tax: it.tax,
       }));
     const weeklyLoadable =
       (

@@ -214,6 +214,7 @@ model WeeklyProduct {
   name        String
   perBox      Int      @default(1) // 1박스에 몇 개(박스단위)
   supplyPrice Int      @default(0) // 박스당 공급가(원) — 가맹점 납품가/결제 단가
+  tax         String   @default("") // 과세("TAXABLE")/면세("EXEMPT")/미선택("") — 상품관리에서 설정, 계산서 세액에 반영
   sortOrder   Int      @default(0)
   active       Boolean  @default(true) // false=삭제(소프트)
   createdAt   DateTime @default(now())

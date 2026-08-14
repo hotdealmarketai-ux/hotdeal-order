@@ -17,6 +17,7 @@ export type WeeklyProductRow = {
   name: string;
   perBox: number;
   supplyPrice: number;
+  tax: string; // 과세/면세/미선택 — 상품관리에서 설정, 계산서 세액에 반영
   sortOrder: number;
 };
 
@@ -31,6 +32,7 @@ export async function getWeeklyProducts(): Promise<WeeklyProductRow[]> {
       name: true,
       perBox: true,
       supplyPrice: true,
+      tax: true,
       sortOrder: true,
     },
   });
@@ -288,6 +290,7 @@ export type WeeklyShipItem = {
   qty: number; // 발주 박스/판 수
   unitPrice: number; // 박스/판 공급가
   amount: number; // qty × unitPrice
+  tax: string; // 과세/면세/미선택 — 상품(WeeklyProduct)의 현재 설정(계산서 세액 반영)
 };
 
 // 그 출고일의 dow 에 출고되는 카테고리 집합. 없으면 빈 Set(그 날 나가는 주간발주 없음).
@@ -317,6 +320,8 @@ export async function getWeeklyItemsForStoreShipment(
   });
   if (!order) return [];
   if (requireConfirmed && !order.confirmed) return [];
+  // 과세/면세는 상품(WeeklyProduct)의 현재 설정을 코드로 조회(가격은 발주 스냅샷, tax는 법적 분류라 현재값 사용).
+  const products = await weeklyProductMap();
   return order.items
     .filter((it) => cats.has(it.category)) // 오늘 출고 요일인 카테고리만
     .map((it) => ({
@@ -327,6 +332,7 @@ export async function getWeeklyItemsForStoreShipment(
       qty: it.qty,
       unitPrice: it.unitPrice,
       amount: it.qty * it.unitPrice,
+      tax: products[it.code]?.tax ?? "",
     }));
 }
 
