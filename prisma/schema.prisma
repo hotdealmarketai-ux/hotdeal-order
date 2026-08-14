@@ -350,6 +350,8 @@ model InventoryItem {
   // 카테고리 목록은 '품목에 붙은 값'에서 도출 → 상품 없는 카테고리는 자동 미노출. 시트 E/F열.
   majorCat  String   @default("")
   minorCat  String   @default("")
+  // 과세("TAXABLE")/면세("EXEMPT")/미선택("") — 품목마다 하드코딩. 계산서 연동 시 이 값을 불러온다.
+  tax       String   @default("")
   memo      String   @default("")
   sortOrder Int      @default(0)
   // #12 시트 삭제 전파용 소프트삭제 마커(선택) — 현재는 미사용, 향후 tombstone
@@ -527,6 +529,8 @@ model InvoiceItem {
   // 재고현황 연동 스냅샷 — 값이 있으면 재고현황 상품과 연동(공구칸 드롭다운 선택). 빈값이면 수기 품목.
   // (매칭용, FK 아님 — 재고 편집/삭제돼도 계산서 스냅샷 보존.) 차감은 이름 기준이라 표시·추적용.
   inventoryItemId String @default("")
+  // 과세("TAXABLE")/면세("EXEMPT")/미선택("") — 연동상품은 재고값 로드, 수기는 선택. 발행 시 미선택이면 차단.
+  tax             String @default("")
 
   @@index([inventoryItemId])
 }

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { normalizeTax } from "@/lib/tax";
 
 // 재고현황(InventoryItem) 스냅샷 백업/복구 — AppMeta 에 JSON 으로 저장(별도 테이블/마이그레이션 없이).
 // 목적: 자동저장 전량삭제·붙여넣기 등으로 재고가 통째로 날아가도 되돌릴 수 있게(감사 #2/H2).
@@ -18,6 +19,7 @@ type SnapItem = {
   minorCat: string;
   memo: string;
   sortOrder: number;
+  tax: string; // 과세/면세 하드코딩 — 복구 시에도 보존
 };
 
 export type SnapshotMeta = {
@@ -36,7 +38,7 @@ export async function snapshotInventory(
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     select: {
       id: true, name: true, status: true, qty: true, supplyPrice: true,
-      expiry: true, majorCat: true, minorCat: true, memo: true, sortOrder: true,
+      expiry: true, majorCat: true, minorCat: true, memo: true, sortOrder: true, tax: true,
     },
   });
   const snap: SnapItem[] = items.map((i) => ({
@@ -50,6 +52,7 @@ export async function snapshotInventory(
     minorCat: i.minorCat ?? "",
     memo: i.memo ?? "",
     sortOrder: i.sortOrder ?? 0,
+    tax: i.tax ?? "",
   }));
   const key = `${PREFIX}${new Date().toISOString()}`;
   await prisma.appMeta.create({
@@ -116,6 +119,7 @@ export async function restoreInventorySnapshot(
       minorCat: String(it.minorCat ?? ""),
       memo: String(it.memo ?? ""),
       sortOrder: Number(it.sortOrder) || 0,
+      tax: normalizeTax(it.tax),
       deletedAt: null,
     };
     await prisma.inventoryItem.upsert({

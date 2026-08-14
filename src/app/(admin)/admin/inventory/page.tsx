@@ -93,6 +93,7 @@ export default async function AdminInventory() {
             expiry: it.expiry ?? "",
             majorCat: it.majorCat ?? "",
             minorCat: it.minorCat ?? "",
+            tax: it.tax ?? "",
             reserved: reservedByItem[it.id] ?? 0,
           }))}
         />

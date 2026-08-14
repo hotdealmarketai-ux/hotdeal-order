@@ -167,6 +167,7 @@ export default async function MerchantInvoiceDetailPage({
         ? `${it.qty}${it.unit} × ${won(it.unitPrice)}`
         : `${it.qty} × ${won(it.unitPrice)}`,
     amount: it.amount,
+    tax: it.tax,
   }));
   // 일반발주 계산서는 용달 발송/과일/야채/공구/채움채(+주간발주 합산분)로 분류(안 넘기면 전부 '기타'로 나옴). 주간은 기본값.
   const invCats =

@@ -746,6 +746,7 @@ export async function autosaveInventoryAction(payloadJson: string) {
     qty?: unknown;
     supplyPrice?: unknown;
     expiry?: unknown; // #9 유통기한 "YY-MM-DD"/"YYYY-MM-DD" (정규화 후 저장)
+    tax?: unknown; // 과세("TAXABLE")/면세("EXEMPT")/미선택("")
     baseQty?: unknown; // 편집기가 로드/직전저장 시점에 본 수량(변경 판별용)
   }[];
   try {
@@ -781,12 +782,16 @@ export async function autosaveInventoryAction(payloadJson: string) {
       const normExp = normalizeExpiry(rawExp);
       const expiryUpdate =
         rawExp === "" ? { expiry: "" } : normExp ? { expiry: normExp } : {};
+      // 과세/면세 — 관리자가 품목마다 하드코딩. supplyPrice처럼 항상 덮어씀(유효값만, 그 외 미선택).
+      const taxRaw = String(r.tax ?? "");
+      const tax = taxRaw === "TAXABLE" || taxRaw === "EXEMPT" ? taxRaw : "";
       await tx.inventoryItem.update({
         where: { id },
         data: {
           ...(name ? { name } : {}),
           ...(qtyChanged ? { qty: toInt(String(r.qty ?? "")) } : {}),
           supplyPrice: toInt(String(r.supplyPrice ?? "")),
+          tax,
           ...expiryUpdate,
         },
       });

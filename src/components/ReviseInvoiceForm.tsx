@@ -7,6 +7,8 @@ import { MoneyInput } from "./MoneyInput";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { rankStockMatches } from "@/lib/stock-match";
+import { TaxToggle } from "./TaxToggle";
+import { vatBreakdown } from "@/lib/tax";
 
 type Row = {
   id: number;
@@ -14,9 +16,10 @@ type Row = {
   qty: string;
   unitPrice: string;
   inventoryItemId: string; // 공구칸 재고현황 연동 상품 id(있으면)
+  tax: string; // 과세/면세/미선택
 };
 
-export type InvOption = { id: string; name: string; supplyPrice: number; qty: number };
+export type InvOption = { id: string; name: string; supplyPrice: number; qty: number; tax: string };
 
 export type ReviseInitialItem = {
   category: Category;
@@ -24,6 +27,7 @@ export type ReviseInitialItem = {
   qty: string;
   unitPrice: string;
   inventoryItemId?: string;
+  tax?: string;
 };
 
 function isFilled(r: Row) {
@@ -49,12 +53,15 @@ export function ReviseInvoiceForm({
   categories,
   initialItems,
   invOptions = [],
+  taxRequired = true,
 }: {
   invoiceId: string;
   date: string;
   categories: Category[];
   initialItems: ReviseInitialItem[];
   invOptions?: InvOption[];
+  // 레거시 계산서(과세/면세 기능 이전 발행분)는 수정 시 과세/면세를 강제하지 않는다(false).
+  taxRequired?: boolean;
 }) {
   const uid = useRef(0);
   const newRow = (): Row => ({
@@ -63,23 +70,46 @@ export function ReviseInvoiceForm({
     qty: "",
     unitPrice: "",
     inventoryItemId: "",
+    tax: "",
   });
 
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [localError, setLocalError] = useState("");
   const [acRow, setAcRow] = useState<number | null>(null); // 공구 자동완성 드롭다운 열린 행
+  // 연동 재고 id/이름 → 과세/면세(하드코딩). 저장된 tax가 없을 때 연동·이름일치값을 채운다.
+  const taxByInvId = useMemo(
+    () => new Map(invOptions.map((o) => [o.id, o.tax])),
+    [invOptions],
+  );
+  const taxByName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of invOptions) {
+      const k = o.name.trim();
+      if (k && !m.has(k)) m.set(k, o.tax);
+    }
+    return m;
+  }, [invOptions]);
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
     const init: Record<string, Row[]> = {};
     for (const c of categories) init[c] = [];
     for (const it of initialItems) {
       if (!init[it.category]) continue;
+      const invId = it.inventoryItemId ?? "";
+      // 레거시(taxRequired=false)는 저장된 tax만 사용(빈값 유지) — 재고 매칭으로 과세/면세를 무단 주입하지 않는다.
+      const tax = taxRequired
+        ? it.tax ||
+          (invId ? taxByInvId.get(invId) ?? "" : "") ||
+          taxByName.get(it.name.trim()) ||
+          ""
+        : it.tax || "";
       init[it.category].push({
         id: ++uid.current,
         name: it.name,
         qty: it.qty,
         unitPrice: it.unitPrice,
-        inventoryItemId: it.inventoryItemId ?? "",
+        inventoryItemId: invId,
+        tax,
       });
     }
     for (const c of categories) init[c].push(newRow());
@@ -120,13 +150,20 @@ export function ReviseInvoiceForm({
     });
   }
 
-  // 공구 이름 직접 입력 — 연동 해제(수기), 자동완성 후보 갱신.
+  // 공구 이름 직접 입력 — 연동 해제(수기), 자동완성 후보 갱신. 이름이 바뀌면 과세/면세도 재평가(이전 연동값 잔존 방지).
   function onToolName(cat: Category, id: number, value: string) {
     setConfirming(false);
     setAcRow(value.trim() ? id : null);
     setRowsByCat((prev) => {
       const list = prev[cat].map((r) =>
-        r.id === id ? { ...r, name: value, inventoryItemId: "" } : r,
+        r.id === id
+          ? {
+              ...r,
+              name: value,
+              inventoryItemId: "",
+              tax: taxRequired ? taxByName.get(value.trim()) || "" : "",
+            }
+          : r,
       );
       return { ...prev, [cat]: normalizeRows(list, id) };
     });
@@ -139,7 +176,13 @@ export function ReviseInvoiceForm({
     setRowsByCat((prev) => {
       const list = prev[cat].map((r) =>
         r.id === id
-          ? { ...r, name: opt.name, unitPrice: String(opt.supplyPrice), inventoryItemId: opt.id }
+          ? {
+              ...r,
+              name: opt.name,
+              unitPrice: String(opt.supplyPrice),
+              inventoryItemId: opt.id,
+              tax: opt.tax || r.tax,
+            }
           : r,
       );
       return { ...prev, [cat]: normalizeRows(list, id) };
@@ -166,6 +209,7 @@ export function ReviseInvoiceForm({
             qty: r.qty,
             unitPrice: r.unitPrice,
             inventoryItemId: r.inventoryItemId,
+            tax: r.tax,
           })),
       ),
     [categories, rowsByCat],
@@ -197,6 +241,10 @@ export function ReviseInvoiceForm({
         }
         if (parsePriceStrict(r.unitPrice) == null) {
           setLocalError(`'${r.name}' 단가를 확인해 주세요. (원 단위 숫자만)`);
+          return false;
+        }
+        if (taxRequired && r.tax !== "TAXABLE" && r.tax !== "EXEMPT") {
+          setLocalError(`'${r.name}' 과세/면세를 선택해 주세요.`);
           return false;
         }
       }
@@ -341,6 +389,20 @@ export function ReviseInvoiceForm({
                     >
                       ✕
                     </button>
+                  )}
+                  {taxRequired && isFilled(r) && (
+                    <div className="invrow__tax">
+                      <TaxToggle
+                        value={r.tax}
+                        onChange={(v) => updateRow(c, r.id, "tax", v)}
+                      />
+                      {r.tax === "TAXABLE" && amt > 0 && (
+                        <span className="invrow__vat">
+                          세액 {fmt(vatBreakdown(amt, "TAXABLE").vat)} · 공급가액{" "}
+                          {fmt(vatBreakdown(amt, "TAXABLE").supply)}
+                        </span>
+                      )}
+                    </div>
                   )}
                   {/* 재고연동 행 — 입력칸 밑에 현재 재고 + 이 수량 출고 시 잔량. */}
                   {c === "TOOL" &&

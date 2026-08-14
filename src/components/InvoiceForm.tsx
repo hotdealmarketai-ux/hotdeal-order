@@ -24,21 +24,24 @@ import { parseQtyStrict, parsePriceStrict } from "@/lib/money";
 import { sumQty } from "@/lib/qty";
 import { MoneyInput } from "./MoneyInput";
 import { rankStockMatches } from "@/lib/stock-match";
+import { TaxToggle } from "./TaxToggle";
+import { taxSummary, vatBreakdown } from "@/lib/tax";
 
 const DELIVERY_CAT = "DELIVERY";
 const WEEKLY_CAT = "WEEKLY";
 
-type Row = { id: number; name: string; qty: string; unitPrice: string; inventoryItemId: string };
-type WeeklyRow = { id: number; name: string; qty: string; unitPrice: string; unit: string };
+type Row = { id: number; name: string; qty: string; unitPrice: string; inventoryItemId: string; tax: string };
+type WeeklyRow = { id: number; name: string; qty: string; unitPrice: string; unit: string; tax: string };
 
-// 공구칸 드롭다운용 재고현황 상품(연동 후보). qty=현재 실물 재고(출고 후 잔량 계산용).
-export type InvOption = { id: string; name: string; supplyPrice: number; qty: number };
+// 공구칸 드롭다운용 재고현황 상품(연동 후보). qty=현재 실물 재고(출고 후 잔량 계산용). tax=과세/면세 하드코딩.
+export type InvOption = { id: string; name: string; supplyPrice: number; qty: number; tax: string };
 
 export type InvoiceWeeklyItem = {
   name: string;
   qty: string;
   unitPrice: string;
   unit: string;
+  tax?: string;
 };
 
 export type InvoiceInitialItem = {
@@ -47,6 +50,7 @@ export type InvoiceInitialItem = {
   qty: string;
   unitPrice: string;
   inventoryItemId?: string;
+  tax?: string;
 };
 
 export type InvoiceRefGroup = {
@@ -100,19 +104,42 @@ export function InvoiceForm({
     qty: "",
     unitPrice: "",
     inventoryItemId: "",
+    tax: "",
   });
+
+  // 연동 재고 id/이름 → 과세/면세(하드코딩). 연동·이름일치 품목은 이 값이 자동 선택돼 온다(빈 tax 보정용).
+  const taxByInvId = useMemo(
+    () => new Map(invOptions.map((o) => [o.id, o.tax])),
+    [invOptions],
+  );
+  const taxByName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of invOptions) {
+      const k = o.name.trim();
+      if (k && !m.has(k)) m.set(k, o.tax);
+    }
+    return m;
+  }, [invOptions]);
 
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
     const init: Record<string, Row[]> = {};
     for (const c of categories) init[c] = [];
     for (const it of initialItems) {
       if (!init[it.category]) continue;
+      const invId = it.inventoryItemId ?? "";
+      // 저장된 tax가 있으면 그대로, 없으면 연동 id → 이름일치 순으로 재고 하드코딩값을 불러온다(수기 품목은 빈값).
+      const tax =
+        it.tax ||
+        (invId ? taxByInvId.get(invId) ?? "" : "") ||
+        taxByName.get(it.name.trim()) ||
+        "";
       init[it.category].push({
         id: ++uid.current,
         name: it.name,
         qty: it.qty,
         unitPrice: it.unitPrice,
-        inventoryItemId: it.inventoryItemId ?? "",
+        inventoryItemId: invId,
+        tax,
       });
     }
     for (const c of categories) init[c].push(newRow());
@@ -131,8 +158,15 @@ export function InvoiceForm({
   // 토글 ON/OFF는 서버 액션(불러오기/빼기)이 리다이렉트로 다시 그리므로, 여기선 서버 기준으로만 판정.
   const weeklyOn = weeklyItems.length > 0;
   const [weeklyRows, setWeeklyRows] = useState<WeeklyRow[]>(() => {
-    const rows = weeklyItems.map((w) => ({ id: ++uid.current, ...w }));
-    rows.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "" });
+    const rows = weeklyItems.map((w) => ({
+      id: ++uid.current,
+      name: w.name,
+      qty: w.qty,
+      unitPrice: w.unitPrice,
+      unit: w.unit,
+      tax: w.tax ?? "",
+    }));
+    rows.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "", tax: "" });
     return rows;
   });
   const [weeklySaving, startWeeklySave] = useTransition();
@@ -171,7 +205,7 @@ export function InvoiceForm({
       const kept = list.filter((r) => isFilled(r) || r.id === id);
       const last = kept[kept.length - 1];
       if (!last || isFilled(last))
-        kept.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "" });
+        kept.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "", tax: "" });
       return kept;
     });
   }
@@ -180,7 +214,7 @@ export function InvoiceForm({
       const list = prev.filter((r) => r.id !== id);
       const last = list[list.length - 1];
       if (!last || isFilled(last))
-        list.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "" });
+        list.push({ id: ++uid.current, name: "", qty: "", unitPrice: "", unit: "", tax: "" });
       return list;
     });
   }
@@ -196,7 +230,7 @@ export function InvoiceForm({
     const t = setTimeout(() => {
       const payload = weeklyRows
         .filter(isFilled)
-        .map((r) => ({ name: r.name, qty: r.qty, unitPrice: r.unitPrice, unit: r.unit }));
+        .map((r) => ({ name: r.name, qty: r.qty, unitPrice: r.unitPrice, unit: r.unit, tax: r.tax }));
       const fd = new FormData();
       fd.set("invoiceId", invoiceId);
       fd.set("weekly", JSON.stringify(payload));
@@ -262,7 +296,11 @@ export function InvoiceForm({
     setAcRow(value.trim() ? id : null);
     setRowsByCat((prev) => {
       const list = prev[cat].map((r) =>
-        r.id === id ? { ...r, name: value, inventoryItemId: "" } : r,
+        // 이름이 바뀌면 연동 해제 + 과세/면세 재평가 — 이전 연동 상품의 과세값이 잘못 잔존하는 것 방지
+        // (이름이 재고와 정확히 일치하면 그 하드코딩값을 자동으로 채움, 아니면 빈값=관리자 선택).
+        r.id === id
+          ? { ...r, name: value, inventoryItemId: "", tax: taxByName.get(value.trim()) || "" }
+          : r,
       );
       const kept = list.filter((r) => isFilled(r) || r.id === id);
       const last = kept[kept.length - 1];
@@ -277,7 +315,14 @@ export function InvoiceForm({
     setRowsByCat((prev) => {
       const list = prev[cat].map((r) =>
         r.id === id
-          ? { ...r, name: opt.name, unitPrice: String(opt.supplyPrice), inventoryItemId: opt.id }
+          ? {
+              ...r,
+              name: opt.name,
+              unitPrice: String(opt.supplyPrice),
+              inventoryItemId: opt.id,
+              // 연동 상품의 하드코딩된 과세/면세를 그대로 불러온다(관리자가 이후 바꿀 수 있음).
+              tax: opt.tax || r.tax,
+            }
           : r,
       );
       const kept = list.filter((r) => isFilled(r) || r.id === id);
@@ -303,6 +348,8 @@ export function InvoiceForm({
           qty: it.qty,
           unitPrice: it.unitPrice,
           inventoryItemId: it.inventoryItemId ?? "",
+          // 서버가 연동 재고의 과세/면세를 함께 실어 줌(수기 품목은 빈값 → 관리자 선택).
+          tax: it.tax ?? "",
         }));
         rows.push(newRow());
         return { ...prev, [cat]: rows };
@@ -333,6 +380,7 @@ export function InvoiceForm({
             qty: r.qty,
             unitPrice: r.unitPrice,
             inventoryItemId: r.inventoryItemId,
+            tax: r.tax,
           })),
       ),
     [categories, rowsByCat],
@@ -354,6 +402,20 @@ export function InvoiceForm({
   const dailyTotal = categories.reduce((n, c) => n + (subtotals[c]?.sum ?? 0), 0);
   const deliveryTotal = deliveryOn ? deliveryFeeNum : 0;
   const total = dailyTotal + weeklyTotal + deliveryTotal; // 주간발주 합산분 + 용달 발송 포함
+
+  // 세금계산서 요약 — 채워진 전 품목(+주간+용달)의 과세/면세 공급가액·세액·합계. 용달은 과세.
+  const taxSum = useMemo(() => {
+    const list: { amount: number; tax: string }[] = [];
+    for (const c of categories)
+      for (const r of (rowsByCat[c] ?? []).filter(isFilled))
+        list.push({ amount: rowAmount(r), tax: r.tax });
+    if (weeklyOn)
+      for (const r of weeklyRows.filter(isFilled))
+        list.push({ amount: rowAmount(r), tax: r.tax });
+    if (deliveryOn && deliveryFeeNum > 0)
+      list.push({ amount: deliveryFeeNum, tax: "TAXABLE" });
+    return taxSummary(list);
+  }, [categories, rowsByCat, weeklyOn, weeklyRows, deliveryOn, deliveryFeeNum]);
   const totalCount =
     categories.reduce((n, c) => n + (subtotals[c]?.count ?? 0), 0) +
     weeklyFilledCount;
@@ -376,7 +438,20 @@ export function InvoiceForm({
             (r) => r && (r.name || r.qty || r.unitPrice),
           );
           if (rows.length)
-            next[c] = [...rows.map((r) => ({ ...r, id: ++uid.current })), newRow()];
+            next[c] = [
+              // 구버전 초안(과세/면세 기능 이전 저장분)엔 tax가 없으므로 초기 빌더와 동일한 폴백을 재적용
+              // (저장된 tax → 연동 id → 이름일치 순). 안 그러면 자동 로드된 과세/면세가 유실돼 매 행 재선택.
+              ...rows.map((r) => ({
+                ...r,
+                id: ++uid.current,
+                tax:
+                  r.tax ||
+                  (r.inventoryItemId ? taxByInvId.get(r.inventoryItemId) ?? "" : "") ||
+                  taxByName.get((r.name || "").trim()) ||
+                  "",
+              })),
+              newRow(),
+            ];
         }
         return next;
       });
@@ -433,7 +508,7 @@ export function InvoiceForm({
         //  발행 정합성은 서버 게이트(용달 품목 있으면 확정 필수)가 보장한다.)
         const byCat: Record<
           string,
-          { name: string; qty: string; unitPrice: string; inventoryItemId: string }[]
+          { name: string; qty: string; unitPrice: string; inventoryItemId: string; tax: string }[]
         > = {};
         for (const it of res.items ?? []) (byCat[it.category] ??= []).push(it);
         setRowsByCat((prev) => {
@@ -449,7 +524,8 @@ export function InvoiceForm({
                 (r, i) =>
                   r.name === srv[i].name &&
                   r.qty === srv[i].qty &&
-                  r.unitPrice === srv[i].unitPrice,
+                  r.unitPrice === srv[i].unitPrice &&
+                  r.tax === srv[i].tax,
               );
             if (same) continue;
             next[c] = [
@@ -486,6 +562,10 @@ export function InvoiceForm({
       }
       if (parsePriceStrict(r.unitPrice) == null) {
         setLocalError(`${CATEGORIES[c].label} '${r.name}' 단가를 확인해 주세요.`);
+        return false;
+      }
+      if (r.tax !== "TAXABLE" && r.tax !== "EXEMPT") {
+        setLocalError(`${CATEGORIES[c].label} '${r.name}' 과세/면세를 선택해 주세요.`);
         return false;
       }
     }
@@ -578,6 +658,10 @@ export function InvoiceForm({
         setLocalError(`주간발주 '${r.name}' 단가를 확인해 주세요.`);
         return false;
       }
+      if (r.tax !== "TAXABLE" && r.tax !== "EXEMPT") {
+        setLocalError(`주간발주 '${r.name}' 과세/면세를 선택해 주세요.`);
+        return false;
+      }
     }
     setLocalError("");
     return true;
@@ -598,7 +682,7 @@ export function InvoiceForm({
     if (on) {
       const weeklyPayload = weeklyRows
         .filter(isFilled)
-        .map((r) => ({ name: r.name, qty: r.qty, unitPrice: r.unitPrice, unit: r.unit }));
+        .map((r) => ({ name: r.name, qty: r.qty, unitPrice: r.unitPrice, unit: r.unit, tax: r.tax }));
       fd.set("weekly", JSON.stringify(weeklyPayload));
     }
     fd.set("allCats", allCatsValue);
@@ -636,6 +720,17 @@ export function InvoiceForm({
           setLocalError(`'${r.name}' 단가를 확인해 주세요. (원 단위 숫자만)`);
           return false;
         }
+        if (r.tax !== "TAXABLE" && r.tax !== "EXEMPT") {
+          setLocalError(`'${r.name}' 과세/면세를 선택해 주세요.`);
+          return false;
+        }
+      }
+    }
+    // 주간발주 합산분도 과세/면세 필수(발행 게이트와 동일).
+    for (const r of weeklyRows.filter(isFilled)) {
+      if (r.tax !== "TAXABLE" && r.tax !== "EXEMPT") {
+        setLocalError(`주간발주 '${r.name}' 과세/면세를 선택해 주세요.`);
+        return false;
       }
     }
     if (totalCount === 0) {
@@ -849,6 +944,22 @@ export function InvoiceForm({
                         ✕
                       </button>
                     )}
+                    {/* 과세/면세 선택 + (과세면) 세액·공급가액 미리보기 — 항목이 입력된 줄에만. */}
+                    {isFilled(r) && (
+                      <div className="invrow__tax">
+                        <TaxToggle
+                          value={r.tax}
+                          disabled={locked}
+                          onChange={(v) => updateRow(c, r.id, "tax", v)}
+                        />
+                        {r.tax === "TAXABLE" && amt > 0 && (
+                          <span className="invrow__vat">
+                            세액 {fmt(vatBreakdown(amt, "TAXABLE").vat)} · 공급가액{" "}
+                            {fmt(vatBreakdown(amt, "TAXABLE").supply)}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {/* 재고연동 행 — 입력칸 밑에 현재 재고 + 이 수량 출고 시 잔량. */}
                     {c === "TOOL" &&
                       r.inventoryItemId &&
@@ -974,6 +1085,21 @@ export function InvoiceForm({
                           ✕
                         </button>
                       )}
+                      {isFilled(r) && (
+                        <div className="invrow__tax">
+                          <TaxToggle
+                            value={r.tax}
+                            disabled={weeklyConfirmed}
+                            onChange={(v) => updateWeekly(r.id, "tax", v)}
+                          />
+                          {r.tax === "TAXABLE" && amt > 0 && (
+                            <span className="invrow__vat">
+                              세액 {fmt(vatBreakdown(amt, "TAXABLE").vat)} · 공급가액{" "}
+                              {fmt(vatBreakdown(amt, "TAXABLE").supply)}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1066,6 +1192,27 @@ export function InvoiceForm({
                 </div>
               </div>
             )}
+            {/* 세금계산서 요약 — 과세 공급가액·세액 / 면세 공급가액 / 합계(발행 전 확인용). */}
+            <div className="taxbreak">
+              {taxSum.taxableSupply > 0 || taxSum.vat > 0 ? (
+                <>
+                  <div className="taxbreak__row">
+                    <span>과세 공급가액</span>
+                    <b>{fmt(taxSum.taxableSupply)}원</b>
+                  </div>
+                  <div className="taxbreak__row">
+                    <span>세액 (부가세)</span>
+                    <b>{fmt(taxSum.vat)}원</b>
+                  </div>
+                </>
+              ) : null}
+              {taxSum.exemptSupply > 0 && (
+                <div className="taxbreak__row">
+                  <span>면세 공급가액</span>
+                  <b>{fmt(taxSum.exemptSupply)}원</b>
+                </div>
+              )}
+            </div>
             <div className="invtotal" style={{ marginTop: 10 }}>
               <span>총 결제요청 금액</span>
               <b>{fmt(total)}원</b>

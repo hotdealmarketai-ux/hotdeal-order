@@ -13,6 +13,7 @@ import {
 import { kstDayRange, labelDate } from "@/lib/date";
 import { formatKDateTime } from "@/lib/format";
 import { sumQty } from "@/lib/qty";
+import { taxSummary, vatBreakdown, taxLabel, hasTax, allTaxClassified } from "@/lib/tax";
 import { getReservationInvoiceItems } from "@/lib/reservation-data";
 import { getWeeklyItemsForStoreShipment } from "@/lib/weekly";
 import {
@@ -273,6 +274,7 @@ export default async function AdminInvoiceDetail(props: {
         qty: String(it.qty),
         unitPrice: String(it.unitPrice),
         inventoryItemId: it.inventoryItemId,
+        tax: it.tax,
       }));
     // 예약분 자동채움 — '공구를 아직 한 번도 확정/저장하지 않은 새 초안'에만 예약 확정분을 공구(TOOL)에 채운다.
     // ⚠ 한 번이라도 공구를 확정하면 그 계산서의 공구 목록(InvoiceItem)이 진실 소스가 된다. 그래야 관리자가 재고부족으로
@@ -318,7 +320,7 @@ export default async function AdminInvoiceDetail(props: {
     // 공구칸 재고현황 연동 드롭다운용 — 활성 재고 품목(id·이름·점주공급가).
     const invOptions = await prisma.inventoryItem.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true, supplyPrice: true, qty: true },
+      select: { id: true, name: true, supplyPrice: true, qty: true, tax: true },
       orderBy: { sortOrder: "asc" },
     });
     // 저장된 용달 발송(용차비용) — 있으면 폼이 토글 ON 상태로 복원.
@@ -387,12 +389,13 @@ export default async function AdminInvoiceDetail(props: {
       qty: String(it.qty),
       unitPrice: String(it.unitPrice),
       inventoryItemId: it.inventoryItemId,
+      tax: it.tax,
     }));
   // 공구칸 재고현황 연동 드롭다운용 — 수정 폼도 계산서 발행처럼 재고 검색·연동 가능하게.
   const reviseInvOptions = canRevise
     ? await prisma.inventoryItem.findMany({
         where: { deletedAt: null },
-        select: { id: true, name: true, supplyPrice: true, qty: true },
+        select: { id: true, name: true, supplyPrice: true, qty: true, tax: true },
         orderBy: { sortOrder: "asc" },
       })
     : [];
@@ -461,7 +464,19 @@ export default async function AdminInvoiceDetail(props: {
             </div>
             {deliveryBilled.map((it) => (
               <div className="invline" key={it.id}>
-                <span>용차비용</span>
+                <span>
+                  용차비용
+                  {it.tax && (
+                    <span
+                      className={`taxtag ${it.tax === "TAXABLE" ? "taxtag--tax" : "taxtag--free"}`}
+                    >
+                      {taxLabel(it.tax)}
+                      {it.tax === "TAXABLE" && vatBreakdown(it.amount, it.tax).vat > 0 && (
+                        <span className="taxtag__vat"> 세액 {fmt(vatBreakdown(it.amount, it.tax).vat)}</span>
+                      )}
+                    </span>
+                  )}
+                </span>
                 <span className="invline__amt">{fmt(it.amount)}원</span>
               </div>
             ))}
@@ -487,6 +502,16 @@ export default async function AdminInvoiceDetail(props: {
                     <span className="invline__meta">
                       {String(it.qty)} × {fmt(it.unitPrice)}
                     </span>
+                    {it.tax && (
+                      <span
+                        className={`taxtag ${it.tax === "TAXABLE" ? "taxtag--tax" : "taxtag--free"}`}
+                      >
+                        {taxLabel(it.tax)}
+                        {it.tax === "TAXABLE" && vatBreakdown(it.amount, it.tax).vat > 0 && (
+                          <span className="taxtag__vat"> 세액 {fmt(vatBreakdown(it.amount, it.tax).vat)}</span>
+                        )}
+                      </span>
+                    )}
                   </span>
                   <span className="invline__amt">{fmt(it.amount)}원</span>
                 </div>
@@ -512,12 +537,50 @@ export default async function AdminInvoiceDetail(props: {
                     {String(it.qty)}
                     {it.unit} × {fmt(it.unitPrice)}
                   </span>
+                  {it.tax && (
+                    <span
+                      className={`taxtag ${it.tax === "TAXABLE" ? "taxtag--tax" : "taxtag--free"}`}
+                    >
+                      {taxLabel(it.tax)}
+                      {it.tax === "TAXABLE" && vatBreakdown(it.amount, it.tax).vat > 0 && (
+                        <span className="taxtag__vat"> 세액 {fmt(vatBreakdown(it.amount, it.tax).vat)}</span>
+                      )}
+                    </span>
+                  )}
                 </span>
                 <span className="invline__amt">{fmt(it.amount)}원</span>
               </div>
             ))}
           </div>
         )}
+
+        {/* 세금계산서 요약 — 과세 공급가액·세액 / 면세 공급가액(모든 항목이 과세/면세로 분류된 계산서만). */}
+        {allTaxClassified(inv.items) &&
+          (() => {
+            const s = taxSummary(inv.items.map((it) => ({ amount: it.amount, tax: it.tax })));
+            return (
+              <div className="taxbreak">
+                {(s.taxableSupply > 0 || s.vat > 0) && (
+                  <>
+                    <div className="taxbreak__row">
+                      <span>과세 공급가액</span>
+                      <b>{fmt(s.taxableSupply)}원</b>
+                    </div>
+                    <div className="taxbreak__row">
+                      <span>세액 (부가세)</span>
+                      <b>{fmt(s.vat)}원</b>
+                    </div>
+                  </>
+                )}
+                {s.exemptSupply > 0 && (
+                  <div className="taxbreak__row">
+                    <span>면세 공급가액</span>
+                    <b>{fmt(s.exemptSupply)}원</b>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
         <div className="invgrand">
           <span>총 결제요청 금액</span>
@@ -535,6 +598,7 @@ export default async function AdminInvoiceDetail(props: {
             categories={reviseCategories}
             initialItems={reviseItems}
             invOptions={reviseInvOptions}
+            taxRequired={hasTax(inv.items)}
           />
         )}
       </div>

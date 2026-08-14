@@ -94,7 +94,7 @@ export default async function NewInvoicePage(props: {
   // 공구칸 재고현황 연동 드롭다운용 — 활성 재고 품목(id·이름·점주공급가).
   const invOptions = await prisma.inventoryItem.findMany({
     where: { deletedAt: null },
-    select: { id: true, name: true, supplyPrice: true, qty: true },
+    select: { id: true, name: true, supplyPrice: true, qty: true, tax: true },
     orderBy: { sortOrder: "asc" },
   });
 

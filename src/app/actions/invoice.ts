@@ -33,6 +33,7 @@ import {
 } from "@/lib/invoice-stock";
 import { diffInvoiceItems } from "@/lib/invoice-revision";
 import { logError } from "@/lib/log";
+import { normalizeTax } from "@/lib/tax";
 
 export type InvoiceFormState = { error?: string };
 
@@ -42,6 +43,7 @@ type RawItem = {
   qty?: string;
   unitPrice?: string;
   inventoryItemId?: string; // 공구칸 드롭다운으로 선택한 재고현황 상품 연동(있으면)
+  tax?: string; // 과세("TAXABLE")/면세("EXEMPT")/미선택("")
 };
 
 type CleanItem = {
@@ -51,6 +53,7 @@ type CleanItem = {
   unitPrice: number;
   amount: number;
   inventoryItemId: string;
+  tax: string; // 과세/면세/미선택 — 발행 시 미선택("") 있으면 차단, 영수증에 세액 표시
 };
 
 const MAX_ITEMS = 200;
@@ -95,6 +98,8 @@ function cleanItems(
       // 연동은 공구(TOOL)만 의미 있음 — 다른 카테고리는 빈값.
       inventoryItemId:
         category === "TOOL" ? String(r.inventoryItemId ?? "").trim().slice(0, 40) : "",
+      // 과세/면세 — 전 카테고리 공통. 유효값만, 그 외 미선택("")(발행 게이트에서 걸러짐).
+      tax: normalizeTax(r.tax),
     });
   }
   return out;
@@ -109,11 +114,11 @@ const WEEKLY_CAT = "WEEKLY";
 const DELIVERY_CAT = "DELIVERY";
 const DELIVERY_NAME = "용달 발송";
 
-type WeeklyRaw = { name?: string; qty?: string; unitPrice?: string; unit?: string };
+type WeeklyRaw = { name?: string; qty?: string; unitPrice?: string; unit?: string; tax?: string };
 function cleanWeeklyItems(
   raw: WeeklyRaw[],
-): { name: string; qty: number; unitPrice: number; amount: number; unit: string }[] {
-  const out: { name: string; qty: number; unitPrice: number; amount: number; unit: string }[] = [];
+): { name: string; qty: number; unitPrice: number; amount: number; unit: string; tax: string }[] {
+  const out: { name: string; qty: number; unitPrice: number; amount: number; unit: string; tax: string }[] = [];
   for (const r of raw.slice(0, MAX_ITEMS)) {
     const name = String(r.name ?? "").trim().slice(0, 100);
     const qty = parseQtyStrict(String(r.qty ?? "").trim());
@@ -125,6 +130,7 @@ function cleanWeeklyItems(
       unitPrice,
       amount: Math.round(qty * unitPrice),
       unit: String(r.unit ?? "").trim().slice(0, 8),
+      tax: normalizeTax(r.tax),
     });
   }
   return out;
@@ -154,6 +160,7 @@ export async function getInvoiceSyncAction(invoiceId: string): Promise<{
     qty: string;
     unitPrice: string;
     inventoryItemId: string;
+    tax: string;
   }[];
 }> {
   await requireAdmin();
@@ -176,6 +183,7 @@ export async function getInvoiceSyncAction(invoiceId: string): Promise<{
         qty: String(it.qty),
         unitPrice: String(it.unitPrice),
         inventoryItemId: it.inventoryItemId,
+        tax: it.tax,
       })),
   };
 }
@@ -218,7 +226,7 @@ export async function saveInvoiceAction(
     if (!invoiceId) return { error: "먼저 카테고리를 확정해 주세요." };
     const inv = await prisma.invoice.findUnique({
       where: { id: invoiceId },
-      include: { items: { select: { amount: true, category: true } } },
+      include: { items: { select: { amount: true, category: true, tax: true } } },
     });
     if (!inv) return { error: "계산서를 찾을 수 없어요." };
     if (inv.status !== "DRAFT") {
@@ -239,6 +247,11 @@ export async function saveInvoiceAction(
     // 주간발주 합산분이 들어 있으면 반드시 확정돼야 발행 — 일반 카테고리와 동일 게이트(서버 권위).
     if (inv.items.some((it) => it.category === WEEKLY_CAT) && !dbConfirmed.has(WEEKLY_CAT)) {
       return { error: "주간발주를 확정해 주세요." };
+    }
+    // 과세/면세 미선택 차단 — 품목이 있는데 과세/면세가 안 정해진 게 하나라도 있으면 발행 불가(서버 권위, 돈 원칙).
+    //   (용달 발송(DELIVERY)은 자동 과세라 tax가 항상 채워짐 — 게이트에서 제외.)
+    if (inv.items.some((it) => it.category !== DELIVERY_CAT && it.tax !== "TAXABLE" && it.tax !== "EXEMPT")) {
+      return { error: "모든 품목의 과세/면세를 선택해야 발행할 수 있어요." };
     }
     if (inv.items.length === 0) {
       return { error: "품목을 한 개 이상 입력하세요." };
@@ -302,6 +315,7 @@ export async function saveInvoiceAction(
     unitPrice: number;
     amount: number;
     unit: string;
+    tax: string;
   }[] = [];
   if (isWeeklyConfirm && confirmOn) {
     let wraw: WeeklyRaw[] = [];
@@ -353,6 +367,7 @@ export async function saveInvoiceAction(
             unitPrice: deliveryFee,
             amount: deliveryFee,
             sortOrder: -1,
+            tax: "TAXABLE", // 용달 발송(운송 용역)은 과세 — 세금계산서 세액 대상.
           },
         });
       }
@@ -374,6 +389,7 @@ export async function saveInvoiceAction(
         unitPrice: it.unitPrice,
         amount: it.amount,
         unit: it.unit,
+        tax: it.tax,
       })),
     });
   };
@@ -417,6 +433,7 @@ export async function saveInvoiceAction(
         unitPrice: number;
         amount: number;
         inventoryItemId: string;
+        tax: string;
         sortOrder: number;
       }[] = items.map((it, i) => ({ ...it, sortOrder: i }));
       if (deliveryConfirm) {
@@ -427,6 +444,7 @@ export async function saveInvoiceAction(
           unitPrice: deliveryFee,
           amount: deliveryFee,
           inventoryItemId: "",
+          tax: "TAXABLE", // 용달 발송은 과세
           sortOrder: -1,
         });
       }
@@ -481,7 +499,7 @@ export async function loadInvoiceToolItemsAction(
   category: Category = "TOOL",
   excludeInvoiceId?: string,
 ): Promise<{
-  items: { name: string; qty: string; unitPrice: string; inventoryItemId: string }[];
+  items: { name: string; qty: string; unitPrice: string; inventoryItemId: string; tax: string }[];
 }> {
   await requireAdmin();
   if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(shipmentDate)) return { items: [] };
@@ -518,10 +536,10 @@ export async function loadInvoiceToolItemsAction(
       : Promise.resolve(
           [] as { name: string; qty: number; supplyPrice: number; inventoryItemId: string }[],
         ),
-    // 공급가·연동 id 이름매칭용(담기 품목엔 가격·연동이 없어 재고현황에서 가져온다)
+    // 공급가·연동 id·과세여부 이름매칭용(담기 품목엔 가격·연동·과세가 없어 재고현황에서 가져온다)
     prisma.inventoryItem.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true, supplyPrice: true },
+      select: { id: true, name: true, supplyPrice: true, tax: true },
     }),
     // ③ 이미 '다른' 계산서(취소 제외, 이 계산서 자신 제외)에 청구된 같은 소스 품목 — 델타만 불러오려고 뺀다.
     //    → 같은 날 추가 발주분(담기 총량 증가)만 새 계산서에 담기고, 같은 걸 또 불러와도 0이라 이중차감이 안 난다.
@@ -550,10 +568,14 @@ export async function loadInvoiceToolItemsAction(
 
   const priceByName = new Map<string, number>();
   const idByName = new Map<string, string>();
+  const taxById = new Map<string, string>();
+  const taxByName = new Map<string, string>();
   for (const it of invItems) {
     const k = it.name.trim();
     if (k && !priceByName.has(k)) priceByName.set(k, it.supplyPrice);
     if (k && !idByName.has(k)) idByName.set(k, it.id);
+    taxById.set(it.id, it.tax);
+    if (k && !taxByName.has(k)) taxByName.set(k, it.tax);
   }
 
   const qtyToNum = (v: string | number): number => {
@@ -607,6 +629,8 @@ export async function loadInvoiceToolItemsAction(
       qty: String(qty),
       unitPrice: a.priced ? String(a.unitPrice) : "",
       inventoryItemId: a.inventoryItemId,
+      // 연동 재고의 과세/면세를 함께 실어 보낸다(연동 id 우선, 없으면 이름매칭). 미지정이면 "".
+      tax: (a.inventoryItemId && taxById.get(a.inventoryItemId)) || taxByName.get(a.name) || "",
     }));
   return { items };
 }
@@ -635,7 +659,7 @@ export async function reviseInvoiceAction(
       total: true, // 수정 전 결제요청(미수) 금액 — 수정 내역에 before로 기록
       items: {
         // 수정 전 품목 스냅샷 — 아래에서 수정 후와 비교해 추가/변경/제거 내역 생성
-        select: { category: true, name: true, qty: true, unitPrice: true, amount: true },
+        select: { category: true, name: true, qty: true, unitPrice: true, amount: true, tax: true },
       },
     },
   });
@@ -647,6 +671,11 @@ export async function reviseInvoiceAction(
   if (inv.kind !== "DAILY") {
     return { error: "주간발주 계산서는 수정할 수 없어요." };
   }
+  // 레거시 계산서(과세/면세 기능 이전 발행분 = 전 품목 tax 미지정)는 수정·재발송 시 과세/면세를 강제하지 않는다.
+  // (사용자 요청: 오늘까지 이미 발행된 계산서는 예외. 기능 도입 후 발행분은 전 품목 tax가 채워져 있어 자연히 강제됨.)
+  const legacyNoTax = !inv.items.some(
+    (it) => it.tax === "TAXABLE" || it.tax === "EXEMPT",
+  );
 
   // 발행(재발송)이므로 엄격 검증(돈 원칙) — 한 줄이라도 형식 오류면 거부.
   let raw: RawItem[] = [];
@@ -657,8 +686,14 @@ export async function reviseInvoiceAction(
   }
   const cleaned = cleanItems(Array.isArray(raw) ? raw : [], true);
   if ("error" in cleaned) return cleaned;
-  const items = cleaned;
+  // 레거시(기능 이전 발행분 = 전 품목 tax 미지정)는 재발송 시에도 tax를 강제로 비워 '순수 레거시'로 유지한다.
+  //   → 일부만 과세로 지정된 '혼합' 계산서(미선택이 세금계산서에서 면세로 오집계돼 부가세 과소표기)를 서버에서 원천 차단.
+  //   신규(기능 이후) 계산서는 전 품목 과세/면세 필수(발행과 동일 게이트). 옛 계산서에 과세/면세를 붙이려면 취소 후 재작성.
+  const items = legacyNoTax ? cleaned.map((it) => ({ ...it, tax: "" })) : cleaned;
   if (items.length === 0) return { error: "품목을 한 개 이상 입력하세요." };
+  if (!legacyNoTax && items.some((it) => it.tax !== "TAXABLE" && it.tax !== "EXEMPT")) {
+    return { error: "모든 품목의 과세/면세를 선택해야 수정·재발송할 수 있어요." };
+  }
 
   // 수정 전 공구 품목 스냅샷 — 아래 재고 재조정(차이만큼)에 사용.
   const oldTool = await invoiceToolByName(invoiceId);
@@ -939,6 +974,17 @@ export async function loadWeeklyIntoInvoiceAction(formData: FormData) {
   });
   if (weekly.length === 0) return;
 
+  // 주간발주 품목의 과세/면세 기본값 — 재고현황 이름매칭(있으면). 없으면 "" (관리자가 선택).
+  const invTax = await prisma.inventoryItem.findMany({
+    where: { deletedAt: null },
+    select: { name: true, tax: true },
+  });
+  const weeklyTaxByName = new Map<string, string>();
+  for (const it of invTax) {
+    const k = it.name.trim();
+    if (k && !weeklyTaxByName.has(k)) weeklyTaxByName.set(k, it.tax);
+  }
+
   // 불러오는 순간 그 주간발주를 자동 '발주 확인' 처리 — 발주서(출고 sheet, 확정분만 표시)에도 함께 실리도록.
   // 카테고리별 출고요일이 달라도 그 주 토요일 사이클을 가리키는 any-day 매핑 사용.
   const weekKey = weeklyKeyForAnyShipmentDay(date);
@@ -981,6 +1027,7 @@ export async function loadWeeklyIntoInvoiceAction(formData: FormData) {
         unitPrice: w.unitPrice,
         amount: w.amount,
         unit: boxWord(w.category),
+        tax: weeklyTaxByName.get(w.name.trim()) || "",
       })),
     });
     // 새로 불러온 주간발주는 '미확정' 상태에서 시작 — 기존 확정 토큰이 있으면 제거(내용 바뀌었으니 재확정 필요).
@@ -1040,6 +1087,7 @@ export async function saveWeeklyItemsAction(
             unitPrice: it.unitPrice,
             amount: it.amount,
             unit: it.unit,
+            tax: it.tax,
           })),
         });
       }
