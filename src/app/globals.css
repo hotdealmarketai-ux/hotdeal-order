@@ -2581,6 +2581,8 @@ a {
 }
 .erphead__title { font-size: 18px; font-weight: 800; color: var(--green-700); }
 .erphead__meta { font-size: 12.5px; color: var(--muted); }
+/* ERP 상단 인라인 바(예: 재고 마감 출고일 선택) */
+.erpbar { display: flex; gap: 8px; align-items: center; margin: 0 0 14px; flex-wrap: wrap; }
 .erpcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .erpcard {
   display: block;

@@ -21,6 +21,12 @@ import { WeeklyProductForm } from "@/components/WeeklyProductForm";
 import { getWeeklyProducts } from "@/lib/weekly";
 import { ChaeumchaeProductForm } from "@/components/ChaeumchaeProductForm";
 import { getChaeumchaeProducts } from "@/lib/chaeumchae-products";
+import { computeOrderShipmentDiff } from "@/lib/order-shipment-diff";
+import { OrderShipmentDiffView } from "@/components/OrderShipmentDiffView";
+import { normalizeDateStr } from "@/lib/date";
+import { listFlatProductsAdmin } from "@/lib/reservation-flat";
+import { getInventoryPickList } from "@/lib/reservation-data";
+import { FlatReservationAdmin } from "@/components/FlatReservationAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -44,10 +50,10 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
 ];
 
 export default async function InventoryPcPage(props: {
-  searchParams: Promise<{ pw?: string; tab?: string }>;
+  searchParams: Promise<{ pw?: string; tab?: string; date?: string }>;
 }) {
   await requireAdmin();
-  const { pw, tab: tabRaw } = await props.searchParams;
+  const { pw, tab: tabRaw, date: dateRaw } = await props.searchParams;
 
   // PC 전용 — 모바일 접속이면 안내만.
   const ua = (await headers()).get("user-agent") ?? "";
@@ -95,7 +101,7 @@ export default async function InventoryPcPage(props: {
         {tab === "inbound" && <InboundTab />}
         {tab === "chaeumchae" && <ChaeumchaeTab />}
         {tab === "weekly" && <WeeklyTab />}
-        {tab === "closing" && <ClosingTab />}
+        {tab === "closing" && <ClosingTab date={normalizeDateStr(dateRaw)} />}
         {tab === "reservation" && <ReservationTab />}
       </div>
     </div>
@@ -216,42 +222,81 @@ async function WeeklyTab() {
   );
 }
 
-// ── 재고 마감(진입) ──
-function ClosingTab() {
+// ── 재고 마감(발주↔출고 대조) — PC 인라인 ──
+async function ClosingTab({ date }: { date: string }) {
+  const data = await computeOrderShipmentDiff(date);
   return (
     <>
       <div className="erphead">
         <div className="erphead__title">재고 마감</div>
-        <div className="erphead__meta">발주↔출고 대조로 튄 품목 확인</div>
+        <div className="erphead__meta">본사출고 발주 vs 발행 계산서 대조 — 튄 품목만 표시(재고 차감 없음)</div>
       </div>
-      <div className="erpcards">
-        <Link href="/admin/stock-reconcile/diff" className="erpcard">
-          <div className="erpcard__t">발주 ↔ 출고 대조</div>
-          <div className="erpcard__d">본사출고 발주 vs 발행 계산서 품목 대조(차감 없음).</div>
-        </Link>
-      </div>
+      {/* 출고일 선택 — 같은 탭 유지(tab=closing) */}
+      <form method="get" className="erpbar">
+        <input type="hidden" name="tab" value="closing" />
+        <span className="row__sub">출고일</span>
+        <input
+          className="input input--compact"
+          type="date"
+          name="date"
+          defaultValue={date}
+          style={{ width: "auto" }}
+        />
+        <button className="btn btn--soft btn--sm" type="submit">보기</button>
+      </form>
+      <OrderShipmentDiffView data={data} />
     </>
   );
 }
 
-// ── 예약 상품(진입) ──
-function ReservationTab() {
+// ── 예약발주 상품 — PC 인라인(등록 + 단일 목록) ──
+async function ReservationTab() {
+  const [products, inventoryItems] = await Promise.all([
+    listFlatProductsAdmin("open"),
+    getInventoryPickList(),
+  ]);
+  const rows = products.map((p) => ({
+    id: p.id,
+    name: p.name,
+    pickupDate: p.pickupDate,
+    supplyPrice: p.supplyPrice,
+    inventoryItemId: p.inventoryItemId,
+    closeAtMs: p.closeAt.getTime(),
+    closeAtLocal: new Date(p.closeAt.getTime() + 9 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 16),
+    stockFixed: p.stockFixed,
+    totalQty: p.totalQty,
+    storeCount: p.storeCount,
+  }));
+
   return (
     <>
       <div className="erphead">
         <div className="erphead__title">예약발주 상품</div>
-        <div className="erphead__meta">예약일자별 상품 등록·관리</div>
+        <div className="erphead__meta">
+          진행 중 {rows.length}종 · 상품별 마감(시분초) 등록, 마감 임박순
+        </div>
       </div>
-      <div className="erpcards">
-        <Link href="/admin/reservations" className="erpcard">
-          <div className="erpcard__t">예약발주 관리</div>
-          <div className="erpcard__d">예약일자별 상품 등록·수량·확정(단일 목록).</div>
+
+      {/* 다른 예약 뷰로 이동(집계·지난 발주·지난 마감) */}
+      <div className="erpcards" style={{ marginBottom: 14 }}>
+        <Link href="/admin/reservations/summary?scope=open" className="erpcard">
+          <div className="erpcard__t">전체 집계 보기</div>
+          <div className="erpcard__d">진행 중 예약 상품·지점 수량 집계.</div>
         </Link>
-        <Link href="/admin/reservations/new" className="erpcard">
-          <div className="erpcard__t">예약 상품 등록</div>
-          <div className="erpcard__d">새 예약일자·상품 추가.</div>
+        <Link href="/admin/reservations/past" className="erpcard">
+          <div className="erpcard__t">지난 예약발주</div>
+          <div className="erpcard__d">픽업 지난 예약발주 열람.</div>
+        </Link>
+        <Link href="/admin/reservations/closed" className="erpcard">
+          <div className="erpcard__t">지난 예약 마감</div>
+          <div className="erpcard__d">마감된 예약 상품 열람.</div>
         </Link>
       </div>
+
+      {/* 등록(상품별 마감 시분초) + 진행 중 목록 — 한 컴포넌트에서. 모바일 /admin/reservations와 동일 기능. */}
+      <FlatReservationAdmin products={rows} inventoryItems={inventoryItems} />
     </>
   );
 }
