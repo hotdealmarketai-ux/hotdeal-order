@@ -6624,15 +6624,18 @@ a.resv-card:active { transform: scale(0.995); }
 /* 홈 오늘 일정 */
 .home__today { margin-bottom: 16px; display: flex; flex-direction: column; }
 .home__today .home__sectitle { margin-bottom: 2px; }
-.home__todayrow { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 6px; }
+.home__todayrow { display: flex; flex-direction: column; gap: 7px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 6px; }
+.home__todaymain { display: flex; align-items: center; gap: 8px; }
 .home__todayday { flex: 0 0 auto; font-size: 12px; font-weight: 800; color: var(--muted); white-space: nowrap; }
 .home__todayday.is-today { color: var(--green-700); }
 .home__todaydot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 999px; }
 .home__todaydot--event { background: var(--green-700); }
 .home__todaydot--task { background: var(--muted-2); }
-.home__todaytitle { font-size: 14.5px; font-weight: 700; color: var(--fg); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.home__todaywho { flex: 0 0 auto; font-size: 11.5px; font-weight: 800; color: var(--green-800); background: var(--green-100); border-radius: 999px; padding: 2px 8px; margin-left: auto; }
-.home__todaymemo { flex: 0 0 auto; font-size: 12px; color: var(--muted); margin-left: auto; }
+.home__todaytitle { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home__todaywho { flex: 0 0 auto; font-size: 11.5px; font-weight: 800; color: var(--green-800); background: var(--green-100); border-radius: 999px; padding: 2px 8px; }
+.home__todaymemobtn { flex: 0 0 auto; border: 0; background: var(--green-100); color: var(--green-700); font-size: 11.5px; font-weight: 800; padding: 3px 11px; border-radius: 999px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.home__todaymemobtn[aria-expanded="true"] { background: var(--green-700); color: #fff; }
+.home__todaymemo { font-size: 12.5px; color: var(--muted); line-height: 1.55; white-space: pre-wrap; word-break: break-word; padding: 9px 11px; background: var(--surface-2); border-radius: 8px; }
 
 /* 관리 채널 추가행(입력 넓게 + 추가 작게) */
 .mwm__addrow { display: flex; gap: 8px; align-items: center; }

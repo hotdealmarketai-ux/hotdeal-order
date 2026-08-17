@@ -75,6 +75,7 @@ export function TasksPane({
   // 섹션 접기(스크롤 축소) — 기본 열림. 이번 주 일정 / 할 일만.
   const [openWeek, setOpenWeek] = useState(true);
   const [openTasks, setOpenTasks] = useState(true);
+  const [memoOpen, setMemoOpen] = useState<Record<string, boolean>>({}); // 이번 주 일정 메모 펼침(행별)
   const [, start] = useTransition();
   const nameOf = (id: string | null) => (id ? members.find((m) => m.id === id)?.name ?? "지난 멤버" : "—");
 
@@ -250,13 +251,27 @@ export function TasksPane({
                 </div>
                 {openWeek && week.map((it) => {
                   const isToday = it.date === kstYmd(new Date());
+                  const key = `${it.kind}-${it.id}`;
+                  const memoShown = !!memoOpen[key];
                   return (
-                    <div className="home__todayrow" key={`${it.kind}-${it.id}`}>
-                      <span className={`home__todayday${isToday ? " is-today" : ""}`}>{mdOf(it.date)} {wdOf(it.date)}</span>
-                      <span className={`home__todaydot home__todaydot--${it.kind}`} />
-                      <span className="home__todaytitle">{it.title}</span>
-                      {it.who && <span className="home__todaywho">{it.who}</span>}
-                      {it.memo && <span className="home__todaymemo">{it.memo}</span>}
+                    <div className="home__todayrow" key={key}>
+                      <div className="home__todaymain">
+                        <span className={`home__todayday${isToday ? " is-today" : ""}`}>{mdOf(it.date)} {wdOf(it.date)}</span>
+                        <span className={`home__todaydot home__todaydot--${it.kind}`} />
+                        <span className="home__todaytitle">{it.title}</span>
+                        {it.who && <span className="home__todaywho">{it.who}</span>}
+                        {it.memo && (
+                          <button
+                            type="button"
+                            className="home__todaymemobtn"
+                            aria-expanded={memoShown}
+                            onClick={() => setMemoOpen((m) => ({ ...m, [key]: !m[key] }))}
+                          >
+                            {memoShown ? "닫기" : "메모"}
+                          </button>
+                        )}
+                      </div>
+                      {it.memo && memoShown && <div className="home__todaymemo">{it.memo}</div>}
                     </div>
                   );
                 })}
