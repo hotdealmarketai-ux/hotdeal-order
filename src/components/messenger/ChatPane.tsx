@@ -191,7 +191,7 @@ export function ChatPane({
       {
         id: tempId, memberId: me.id, memberName: me.name, body: text,
         mediaUrl: null, mediaType: null, mediaUrls: [], fileUrl: null, fileName: null,
-        replyToName: rt?.name ?? null, replyToBody: rt?.body ?? null,
+        replyToId: rt?.id ?? null, replyToName: rt?.name ?? null, replyToBody: rt?.body ?? null,
         notice: false, reactions: [], reactedByMe: false, at: new Date().toISOString(), pending: true,
       },
     ]);
@@ -470,10 +470,18 @@ export function ChatPane({
                         onContextMenu={(e) => { e.preventDefault(); openMenu(m, e.clientX, e.clientY); }}
                       >
                         {m.replyToName && (
-                          <div className="msgr__quote">
+                          <button
+                            type="button"
+                            className="msgr__quote"
+                            // 인용문 클릭 → 원본 메시지로 점프(카톡 답장식). 버블 롱프레스/우클릭 메뉴는 막는다.
+                            onClick={(e) => { e.stopPropagation(); if (m.replyToId) jumpTo(m.replyToId); }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onContextMenu={(e) => e.stopPropagation()}
+                            title="원본 메시지로 이동"
+                          >
                             <span className="msgr__quotename">{m.replyToName}</span>
                             <span className="msgr__quotebody">{m.replyToBody}</span>
-                          </div>
+                          </button>
                         )}
                         {m.mediaUrls && m.mediaUrls.length > 1 ? (
                           <div className="msgr__grid" data-n={Math.min(m.mediaUrls.length, 4)}>

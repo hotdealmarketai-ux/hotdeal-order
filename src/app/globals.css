@@ -6467,9 +6467,16 @@ a.resv-card:active { transform: scale(0.995); }
 .chatpane__noticetag { flex: 0 0 auto; font-size: 11px; font-weight: 800; color: #fff; background: var(--green-700); border-radius: 999px; padding: 2px 9px; }
 .chatpane__noticebody { flex: 1; min-width: 0; font-size: 13px; color: var(--green-800); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chatpane .msgr__bubble { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+/* 마우스(데스크톱)에선 채팅 텍스트를 드래그로 선택·부분복사 가능하게. 터치기기는 롱프레스 메뉴 유지 위해 non-select 유지. */
+@media (hover: hover) and (pointer: fine) {
+  .chatpane .msgr__bubble { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+  .chatpane .msgr__quote { -webkit-user-select: none; user-select: none; } /* 인용문은 점프 버튼이라 선택 대상 아님 */
+}
 .msgr__mention { color: var(--green-700); font-weight: 800; }
 .msgr__bubble.is-mine .msgr__mention { color: #e9eeff; }
-.msgr__quote { border-left: 3px solid var(--line-strong); padding: 2px 0 2px 8px; margin-bottom: 5px; }
+.msgr__quote { display: block; width: 100%; background: transparent; border: 0; border-left: 3px solid var(--line-strong); padding: 2px 6px 2px 8px; margin-bottom: 5px; text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 0 6px 6px 0; transition: background 0.12s; }
+.msgr__quote:hover { background: rgba(11, 122, 75, 0.06); }
+.msgr__bubble.is-mine .msgr__quote:hover { background: rgba(255, 255, 255, 0.12); }
 .msgr__quotename { display: block; font-size: 11.5px; font-weight: 800; color: var(--muted); }
 .msgr__quotebody { display: block; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 240px; }
 .msgr__bubble.is-mine .msgr__quote { border-left-color: rgba(255, 255, 255, 0.4); }

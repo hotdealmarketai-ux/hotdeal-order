@@ -207,6 +207,7 @@ export type ChatMsgDTO = {
   mediaUrls: string[]; // 사진 묶음(2장 이상이면 그리드), 없으면 []
   fileUrl: string | null; // 일반 파일 첨부
   fileName: string | null;
+  replyToId: string | null; // 답장 원본 메시지 id — 인용문 클릭 시 그 위치로 점프
   replyToName: string | null;
   replyToBody: string | null;
   notice: boolean;
@@ -228,7 +229,7 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
       take: 300,
       select: {
         id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, mediaUrls: true, createdAt: true,
-        fileUrl: true, fileName: true, replyToName: true, replyToBody: true, noticeAt: true,
+        fileUrl: true, fileName: true, replyToId: true, replyToName: true, replyToBody: true, noticeAt: true,
         member: { select: { name: true } },
       },
     })
@@ -262,6 +263,7 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
       mediaUrls: m.mediaUrls ?? [],
       fileUrl: m.fileUrl,
       fileName: m.fileName,
+      replyToId: m.replyToId,
       replyToName: m.replyToName,
       replyToBody: m.replyToBody,
       notice: !!m.noticeAt,
