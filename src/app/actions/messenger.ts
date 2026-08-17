@@ -12,6 +12,7 @@ import {
   notifyMessengerTaskAssigned,
   notifyMessengerTaskCompleted,
   notifyMessengerNotice,
+  notifyMessengerMinutes,
 } from "@/lib/messenger-push";
 import {
   setMessengerMemberCookie,
@@ -1154,4 +1155,102 @@ export async function loadMemberRecurringAction(memberId: string): Promise<{ nam
       return { id: r.id, memberId, title: r.title, days: r.days, appliesToday, done: appliesToday && doneSet.has(r.id), canCheck: mine && appliesToday };
     }),
   };
+}
+
+// ── 회의록 ──────────────────────────────────────────────────
+export type MinutesDTO = {
+  id: string;
+  date: string; // yyyy-mm-dd (KST)
+  agenda: string | null;
+  imageUrls: string[];
+  uploaderId: string;
+  uploaderName: string;
+  readers: { id: string; name: string }[];
+  readByMe: boolean;
+  mine: boolean;
+};
+
+// 회의록 목록 — 최신 회의 날짜 우선(같은 날은 올린 순 역순). 업로더·읽은 사람 이름까지 채워 반환.
+export async function loadMessengerMinutesAction(): Promise<MinutesDTO[]> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return [];
+  const rows = await prisma.messengerMinutes.findMany({
+    orderBy: [{ meetingDate: "desc" }, { createdAt: "desc" }],
+    include: { reads: { select: { memberId: true, readAt: true } } },
+  });
+  if (rows.length === 0) return [];
+  // 이름 맵(업로더 + 읽은 사람 전원, 지난 멤버 포함).
+  const ids = new Set<string>();
+  for (const r of rows) {
+    ids.add(r.memberId);
+    for (const rd of r.reads) ids.add(rd.memberId);
+  }
+  const members = await prisma.messengerMember.findMany({ where: { id: { in: [...ids] } }, select: { id: true, name: true } });
+  const nameOf = new Map(members.map((m) => [m.id, m.name]));
+  return rows.map((r) => ({
+    id: r.id,
+    date: kstDateOf(r.meetingDate),
+    agenda: r.agenda,
+    imageUrls: r.imageUrls,
+    uploaderId: r.memberId,
+    uploaderName: nameOf.get(r.memberId) ?? "지난 멤버",
+    // 먼저 읽은 사람부터.
+    readers: [...r.reads]
+      .sort((a, b) => a.readAt.getTime() - b.readAt.getTime())
+      .map((rd) => ({ id: rd.memberId, name: nameOf.get(rd.memberId) ?? "지난 멤버" })),
+    readByMe: r.reads.some((rd) => rd.memberId === me.id),
+    mine: r.memberId === me.id,
+  }));
+}
+
+// 회의록 등록 — 날짜/안건/이미지들. 업로더는 읽음 처리, 나머지 팀원에게 푸시.
+export async function createMessengerMinutesAction(formData: FormData): Promise<{ error?: string; id?: string }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return { error: "로그인이 필요해요." };
+  const ymd = String(formData.get("date") ?? "").trim();
+  const date = kstMidnight(ymd);
+  if (!date) return { error: "회의 날짜를 선택하세요." };
+  const agenda = String(formData.get("agenda") ?? "").trim();
+  const imageUrls = formData.getAll("imageUrls").map((v) => String(v)).filter(Boolean).slice(0, 30);
+  if (imageUrls.length === 0) return { error: "회의록 이미지를 한 장 이상 올려 주세요." };
+  const row = await prisma.messengerMinutes.create({
+    data: { meetingDate: date, agenda: agenda || null, imageUrls, memberId: me.id },
+    select: { id: true },
+  });
+  // 내가 올린 회의록은 '안읽음'으로 안 뜨게 업로더를 읽음 처리.
+  await prisma.messengerMinutesRead.create({ data: { minutesId: row.id, memberId: me.id } }).catch(() => {});
+  const [, mm, dd] = ymd.split("-");
+  const label = `${Number(mm)}월 ${Number(dd)}일`;
+  after(() => notifyMessengerMinutes({ actorId: me.id, dateLabel: label }).catch(() => {}));
+  return { id: row.id };
+}
+
+// 회의록 읽음 — 최초 읽은 시각 보존(업서트).
+export async function markMessengerMinutesReadAction(id: string): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !id) return { ok: false };
+  await prisma.messengerMinutesRead
+    .upsert({
+      where: { minutesId_memberId: { minutesId: id, memberId: me.id } },
+      create: { minutesId: id, memberId: me.id },
+      update: {},
+    })
+    .catch(() => {});
+  return { ok: true };
+}
+
+// 회의록 삭제 — 올린 사람만. 이미지 Blob도 정리(FK Cascade 로 읽음행 동반 삭제).
+export async function deleteMessengerMinutesAction(id: string): Promise<{ error?: string; ok?: boolean }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !id) return { error: "" };
+  const row = await prisma.messengerMinutes.findUnique({ where: { id }, select: { memberId: true, imageUrls: true } });
+  if (!row) return { ok: true };
+  if (row.memberId !== me.id) return { error: "내가 올린 회의록만 삭제할 수 있어요." };
+  const deleted = await prisma.messengerMinutes.delete({ where: { id } }).then(() => true).catch(() => false);
+  if (deleted && row.imageUrls.length) after(() => del(row.imageUrls).catch(() => {}));
+  return { ok: true };
 }

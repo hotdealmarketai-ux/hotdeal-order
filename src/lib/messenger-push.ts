@@ -169,6 +169,16 @@ export async function notifyMessengerNotice(opts: {
   });
 }
 
+// ── 회의록 등록 ────────────────────────────────────────────
+export async function notifyMessengerMinutes(opts: { actorId: string; dateLabel: string }) {
+  const targets = await activeMemberIdsExcept(opts.actorId);
+  await sendMessengerPush(targets, {
+    title: "새 회의록이 올라왔어요",
+    body: `${opts.dateLabel} 회의록을 확인해 보세요`,
+    url: "/messenger?view=minutes",
+  });
+}
+
 // ── 오늘 일정(캘린더) 아침 알림 — 크론에서 호출 ──────────────
 export async function notifyMessengerTodayAgenda(titles: string[]) {
   if (titles.length === 0) return;

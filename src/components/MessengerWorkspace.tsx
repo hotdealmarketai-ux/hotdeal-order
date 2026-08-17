@@ -18,13 +18,14 @@ import { TasksPane } from "@/components/messenger/TasksPane";
 import { MyTasksPane } from "@/components/messenger/MyTasksPane";
 import { CalendarPane } from "@/components/messenger/CalendarPane";
 import { OrgPane } from "@/components/messenger/OrgPane";
+import { MinutesPane } from "@/components/messenger/MinutesPane";
 import { AddTaskButton } from "@/components/messenger/AddTaskButton";
 import { MessengerPushBanner } from "@/components/messenger/MessengerPushBanner";
 
 type Channel = { id: string; name: string; favorite: boolean; groupId: string | null };
 type Group = { id: string; name: string };
 type Member = { id: string; name: string; active: boolean };
-type View = "home" | "chat" | "calendar" | "mytasks" | "org";
+type View = "home" | "chat" | "calendar" | "mytasks" | "org" | "minutes";
 
 export function MessengerWorkspace({
   me,
@@ -76,6 +77,8 @@ export function MessengerWorkspace({
       setView("chat");
     } else if (v === "mytasks") {
       setView("mytasks");
+    } else if (v === "minutes") {
+      setView("minutes");
     }
     if (ch || v) window.history.replaceState({}, "", "/messenger");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -259,7 +262,7 @@ export function MessengerWorkspace({
       <main className="mw__main">
         <header className={`mw__top${view === "home" ? " mw__top--home" : ""}`}>
           <button type="button" className="mw__ham" onClick={() => setSideOpen(true)} aria-label="메뉴 열기">☰</button>
-          <div className="mw__toptitle">{view === "chat" ? `# ${activeName}` : view === "home" ? "홈" : view === "mytasks" ? "내 할일" : view === "org" ? "조직도" : "캘린더"}</div>
+          <div className="mw__toptitle">{view === "chat" ? `# ${activeName}` : view === "home" ? "홈" : view === "mytasks" ? "내 할일" : view === "org" ? "조직도" : view === "minutes" ? "회의록" : "캘린더"}</div>
           {view === "chat" && active && (
             <div className="mw__toptools">
               <AddTaskButton
@@ -298,6 +301,8 @@ export function MessengerWorkspace({
             <MyTasksPane me={me} members={members} />
           ) : view === "org" ? (
             <OrgPane me={me} sel={orgSel} onSel={selectOrgMember} />
+          ) : view === "minutes" ? (
+            <MinutesPane me={me} />
           ) : (
             <CalendarPane me={me} members={members} />
           )}
@@ -321,6 +326,10 @@ export function MessengerWorkspace({
           <button type="button" className={`mw__bnitem${view === "mytasks" ? " is-on" : ""}`} onClick={() => pick("mytasks")}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 6.5l1.6 1.6L8.2 5.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M4 16l1.6 1.6L8.2 13.9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M11 7h9M11 16h9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
             <span>내 할일</span>
+          </button>
+          <button type="button" className={`mw__bnitem${view === "minutes" ? " is-on" : ""}`} onClick={() => pick("minutes")}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="2" /><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            <span>회의록</span>
           </button>
         </nav>
       </main>

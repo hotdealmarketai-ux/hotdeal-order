@@ -1024,3 +1024,29 @@ model MessengerEvent {
 
   @@index([date])
 }
+
+// 회의록 — 회의 사진(A4 세로) 묶음을 날짜별로 보관. 업로더만 삭제 가능.
+model MessengerMinutes {
+  id          String   @id @default(cuid())
+  meetingDate DateTime // 회의 날짜(KST 자정)
+  agenda      String? // 안건 목차(선택)
+  imageUrls   String[] // A4 세로 이미지들(순서 보존)
+  memberId    String // 업로더 멤버 id
+  createdAt   DateTime @default(now())
+
+  reads MessengerMinutesRead[]
+
+  @@index([meetingDate])
+}
+
+// 회의록 읽음 표시 — 누가 읽었는지(멤버×회의록 1건).
+model MessengerMinutesRead {
+  id        String           @id @default(cuid())
+  minutesId String
+  minutes   MessengerMinutes @relation(fields: [minutesId], references: [id], onDelete: Cascade)
+  memberId  String
+  readAt    DateTime         @default(now())
+
+  @@unique([minutesId, memberId])
+  @@index([minutesId])
+}
