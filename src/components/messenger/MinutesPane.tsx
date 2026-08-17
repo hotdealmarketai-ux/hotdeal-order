@@ -31,6 +31,7 @@ const avColor = (name: string) => {
   return AV_COLORS[h % AV_COLORS.length];
 };
 const initial = (name: string) => (name.trim()[0] ?? "?");
+const MAX_IMAGES = 30; // 서버 MINUTES_MAX_IMAGES와 동일하게 유지.
 
 // 회의록 — 회의 사진(A4 세로)을 날짜별로 보관. 카드 누르면 전체화면 슬라이드 뷰어, 하단에 읽은 사람 표시.
 export function MinutesPane({ me }: { me: { id: string; name: string } }) {
@@ -76,7 +77,16 @@ export function MinutesPane({ me }: { me: { id: string; name: string } }) {
             : x,
         ) ?? prev,
       );
-      markMessengerMinutesReadAction(m.id).catch(() => {});
+      // 서버 실패 시 낙관적 '읽음'을 롤백(다른 팀원 화면과 불일치 방지).
+      const rollback = () =>
+        setItems((prev) =>
+          prev?.map((x) => (x.id === m.id ? { ...x, readByMe: false, readers: x.readers.filter((r) => r.id !== me.id) } : x)) ?? prev,
+        );
+      markMessengerMinutesReadAction(m.id)
+        .then((r) => {
+          if (!r?.ok) rollback();
+        })
+        .catch(rollback);
     }
   };
 
@@ -239,19 +249,29 @@ function MinutesUploadSheet({ onClose, onCreated }: { onClose: () => void; onCre
   const [err, setErr] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const keySeq = useRef(0);
+  // 최신 pics를 ref로 추적 — 언마운트 cleanup이 최초 렌더의 빈 배열을 캡처하지 않게(stale closure 방지).
+  const picsRef = useRef<Pic[]>([]);
+  picsRef.current = pics;
 
   // 컴포넌트 해제 시 미리보기 objectURL 정리.
-  useEffect(() => {
-    return () => {
-      pics.forEach((p) => URL.revokeObjectURL(p.preview));
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(
+    () => () => {
+      picsRef.current.forEach((p) => URL.revokeObjectURL(p.preview));
+    },
+    [],
+  );
 
   const addFiles = async (files: File[]) => {
-    const imgs = files.filter((f) => f.type.startsWith("image")).slice(0, 30);
-    if (!imgs.length) return;
     setErr("");
+    const room = MAX_IMAGES - pics.length;
+    if (room <= 0) {
+      setErr(`사진은 최대 ${MAX_IMAGES}장까지 올릴 수 있어요.`);
+      return;
+    }
+    const all = files.filter((f) => f.type.startsWith("image"));
+    const imgs = all.slice(0, room); // 남은 자리만큼만(초과 업로드→유실·고아 방지).
+    if (!imgs.length) return;
+    if (all.length > imgs.length) setErr(`사진은 최대 ${MAX_IMAGES}장까지예요. 초과분은 제외했어요.`);
     const entries: Pic[] = imgs.map((f) => ({ key: `p${keySeq.current++}`, preview: URL.createObjectURL(f), url: null, pct: 0 }));
     setPics((prev) => [...prev, ...entries]);
     await Promise.all(
@@ -350,11 +370,13 @@ function MinutesUploadSheet({ onClose, onCreated }: { onClose: () => void; onCre
                   </button>
                 </div>
               ))}
-              <button type="button" className="mn-ph mn-ph--add" onClick={() => fileRef.current?.click()} aria-label="사진 추가">
-                ＋
-              </button>
+              {pics.length < MAX_IMAGES && (
+                <button type="button" className="mn-ph mn-ph--add" onClick={() => fileRef.current?.click()} aria-label="사진 추가">
+                  ＋
+                </button>
+              )}
             </div>
-            <div className="mn-photos__tag">A4 세로 이미지 · 여러 장 · 올린 순서대로 넘겨보기</div>
+            <div className="mn-photos__tag">A4 세로 이미지 · 올린 순서대로 넘겨보기 · 최대 {MAX_IMAGES}장</div>
             <input
               ref={fileRef}
               type="file"

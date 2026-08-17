@@ -49,16 +49,20 @@ export function TasksPane({
   favorites,
   channels,
   unread,
+  newMinutes,
   onJump,
   onOpenChannel,
+  onOpenMinutes,
 }: {
   me: { id: string; name: string };
   members: Member[];
   favorites: Channel[];
   channels: Channel[];
   unread: Record<string, number>;
+  newMinutes: number;
   onJump: (channelId: string, messageId: string) => void;
   onOpenChannel: (channelId: string) => void;
+  onOpenMinutes: () => void;
 }) {
   const [tasks, setTasks] = useState<TaskDTO[]>(paneCache.homeTasks ?? []);
   const [mentions, setMentions] = useState<Mention[]>(paneCache.homeMentions ?? []);
@@ -207,6 +211,16 @@ export function TasksPane({
           </div>
         ) : (
           <>
+            {newMinutes > 0 && (
+              <button type="button" className="home__minutes" onClick={onOpenMinutes}>
+                <span className="home__minutesic">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="2" /><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+                </span>
+                <span className="home__minutestxt">새 회의록 <b>{newMinutes > 99 ? "99+" : newMinutes}</b>건</span>
+                <span className="home__unreadgo">보기 ›</span>
+              </button>
+            )}
+
             {unreadChannels.length > 0 && (
               <div className="home__unread">
                 <div className="home__sectitle">안 읽은 메시지</div>

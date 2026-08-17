@@ -5,6 +5,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   messengerUnreadAction,
+  messengerUnreadMinutesAction,
   toggleMessengerFavoriteAction,
   loadMyMessengerTasksAction,
   loadMyRecurringTasksAction,
@@ -46,6 +47,7 @@ export function MessengerWorkspace({
   // 메신저 '내부' 화면 이동 이력 — 하단 '뒤로가기'는 이 스택만 pop(메신저 밖으로 안 나감). 조직도 상세 상태까지 스냅샷.
   const [navStack, setNavStack] = useState<{ view: View; active: string; orgSel: string | null }[]>([]);
   const [unread, setUnread] = useState<Record<string, number>>({});
+  const [newMinutes, setNewMinutes] = useState(0);
   const [sideOpen, setSideOpen] = useState(false);
   const [jumpMsg, setJumpMsg] = useState<string | null>(null);
   const [tool, setTool] = useState<ChatTool>(null);
@@ -57,8 +59,11 @@ export function MessengerWorkspace({
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      const u = await messengerUnreadAction();
-      if (alive) setUnread(u);
+      const [u, nm] = await Promise.all([messengerUnreadAction(), messengerUnreadMinutesAction()]);
+      if (alive) {
+        setUnread(u);
+        setNewMinutes(nm);
+      }
     };
     run();
     // 백그라운드 탭에선 스킵(밤새 열어둔 탭이 안읽음 카운트를 계속 폴링하지 않게).
@@ -296,7 +301,7 @@ export function MessengerWorkspace({
               <div className="mw__blank">채널이 없습니다. <Link href="/messenger/manage">관리</Link>에서 채널을 먼저 만들어 주세요.</div>
             )
           ) : view === "home" ? (
-            <TasksPane me={me} members={members} favorites={favorites} channels={chans} unread={unread} onJump={handleJump} onOpenChannel={(id) => pick("chat", id)} />
+            <TasksPane me={me} members={members} favorites={favorites} channels={chans} unread={unread} newMinutes={newMinutes} onJump={handleJump} onOpenChannel={(id) => pick("chat", id)} onOpenMinutes={() => pick("minutes")} />
           ) : view === "mytasks" ? (
             <MyTasksPane me={me} members={members} />
           ) : view === "org" ? (
@@ -328,7 +333,10 @@ export function MessengerWorkspace({
             <span>내 할일</span>
           </button>
           <button type="button" className={`mw__bnitem${view === "minutes" ? " is-on" : ""}`} onClick={() => pick("minutes")}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="2" /><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            <span className="mw__bnicon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="2" /><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              {newMinutes > 0 && <span className="mw__bnbadge">{newMinutes > 99 ? "99+" : newMinutes}</span>}
+            </span>
             <span>회의록</span>
           </button>
         </nav>

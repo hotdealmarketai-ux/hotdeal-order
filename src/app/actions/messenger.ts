@@ -1204,6 +1204,20 @@ export async function loadMessengerMinutesAction(): Promise<MinutesDTO[]> {
   }));
 }
 
+// 회의록 사진 최대 장수(클라 MinutesPane의 MAX_IMAGES와 동일하게 유지). "use server" 파일이라 export 금지(비-async).
+const MINUTES_MAX_IMAGES = 30;
+
+// 업로드로 만들어진 우리 Blob 스토어 URL만 허용 — 임의 외부/data: URL 주입 차단
+// (뷰어 <img src> 비컨·삭제 시 del()의 교차기능 Blob 삭제 방지).
+function isOwnBlobUrl(u: string): boolean {
+  try {
+    const url = new URL(u);
+    return url.protocol === "https:" && url.hostname.endsWith(".blob.vercel-storage.com");
+  } catch {
+    return false;
+  }
+}
+
 // 회의록 등록 — 날짜/안건/이미지들. 업로더는 읽음 처리, 나머지 팀원에게 푸시.
 export async function createMessengerMinutesAction(formData: FormData): Promise<{ error?: string; id?: string }> {
   await requireAdmin();
@@ -1212,9 +1226,12 @@ export async function createMessengerMinutesAction(formData: FormData): Promise<
   const ymd = String(formData.get("date") ?? "").trim();
   const date = kstMidnight(ymd);
   if (!date) return { error: "회의 날짜를 선택하세요." };
-  const agenda = String(formData.get("agenda") ?? "").trim();
-  const imageUrls = formData.getAll("imageUrls").map((v) => String(v)).filter(Boolean).slice(0, 30);
+  const agenda = String(formData.get("agenda") ?? "").trim().slice(0, 2000);
+  const imageUrls = formData.getAll("imageUrls").map((v) => String(v)).filter(Boolean);
   if (imageUrls.length === 0) return { error: "회의록 이미지를 한 장 이상 올려 주세요." };
+  // 초과분을 조용히 잘라내지 않고 명시적으로 거절(유실·고아 Blob 방지).
+  if (imageUrls.length > MINUTES_MAX_IMAGES) return { error: `사진은 최대 ${MINUTES_MAX_IMAGES}장까지 올릴 수 있어요.` };
+  if (!imageUrls.every(isOwnBlobUrl)) return { error: "이미지 형식이 올바르지 않아요. 다시 업로드해 주세요." };
   const row = await prisma.messengerMinutes.create({
     data: { meetingDate: date, agenda: agenda || null, imageUrls, memberId: me.id },
     select: { id: true },
@@ -1232,14 +1249,16 @@ export async function markMessengerMinutesReadAction(id: string): Promise<{ ok: 
   await requireAdmin();
   const me = await getMessengerMember();
   if (!me || !id) return { ok: false };
-  await prisma.messengerMinutesRead
-    .upsert({
+  try {
+    await prisma.messengerMinutesRead.upsert({
       where: { minutesId_memberId: { minutesId: id, memberId: me.id } },
       create: { minutesId: id, memberId: me.id },
       update: {},
-    })
-    .catch(() => {});
-  return { ok: true };
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false }; // 실패를 삼키지 않음 → 클라가 낙관적 '읽음'을 롤백할 수 있게.
+  }
 }
 
 // 회의록 삭제 — 올린 사람만. 이미지 Blob도 정리(FK Cascade 로 읽음행 동반 삭제).
@@ -1250,7 +1269,26 @@ export async function deleteMessengerMinutesAction(id: string): Promise<{ error?
   const row = await prisma.messengerMinutes.findUnique({ where: { id }, select: { memberId: true, imageUrls: true } });
   if (!row) return { ok: true };
   if (row.memberId !== me.id) return { error: "내가 올린 회의록만 삭제할 수 있어요." };
-  const deleted = await prisma.messengerMinutes.delete({ where: { id } }).then(() => true).catch(() => false);
-  if (deleted && row.imageUrls.length) after(() => del(row.imageUrls).catch(() => {}));
+  // 진짜 오류(커넥션/타임아웃 등)를 성공으로 오인하지 않게 — 이미 삭제됨(P2025)만 성공 처리.
+  try {
+    await prisma.messengerMinutes.delete({ where: { id } });
+  } catch (e) {
+    if ((e as { code?: string })?.code === "P2025") return { ok: true };
+    return { error: "삭제에 실패했어요. 잠시 후 다시 시도해 주세요." };
+  }
+  if (row.imageUrls.length) after(() => del(row.imageUrls).catch(() => {}));
   return { ok: true };
+}
+
+// 내가 아직 안 읽은 회의록 수(홈 알림·하단 네비 배지용).
+// = 전체 회의록 − 내가 읽은 수(읽음행은 회의록 삭제 시 FK Cascade라 항상 현존분만 카운트).
+export async function messengerUnreadMinutesAction(): Promise<number> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me) return 0;
+  const [total, mineRead] = await Promise.all([
+    prisma.messengerMinutes.count(),
+    prisma.messengerMinutesRead.count({ where: { memberId: me.id } }),
+  ]);
+  return Math.max(0, total - mineRead);
 }
