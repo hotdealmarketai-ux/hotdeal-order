@@ -90,6 +90,7 @@ export async function parseChatOrderAction(text: string): Promise<ChatParseState
     .filter((g) => g.items.length > 0);
 
   remapBenijimin(groups); // #5 베니지민 고구마 → 과일(이름 '고구마', 설명 '베니지민')
+  remapGoguma(groups); // 고구마는 무조건 과일
 
   if (groups.length === 0) {
     return {
@@ -169,6 +170,7 @@ export async function previewGridOrderAction(
   // Q1: 정규화(AI) 이후 최종적으로 한 번 더 remap — AI가 '베니지민 고구마'로 합쳤어도 여기서
   // name="고구마"/note="베니지민"으로 다시 분리하고, 카테고리도 과일로 확정(미리보기가 최종과 일치).
   remapBenijimin(outGroups);
+  remapGoguma(outGroups); // 고구마는 무조건 과일(reclassify가 야채로 보낸 것도 여기서 되돌림)
   mergeSameItems(outGroups); // R1 같은 품목+설명 합산
 
   return { ok: true, groups: outGroups };
@@ -257,6 +259,30 @@ function remapBenijimin(groups: Group[]): void {
       } else {
         keep.push(it);
       }
+    }
+    g.items = keep;
+  }
+  if (moved.length) {
+    const fruit = groups.find((g) => g.category === "FRUIT");
+    if (fruit) fruit.items.push(...moved);
+    else groups.push({ category: "FRUIT", items: moved });
+  }
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i].items.length === 0) groups.splice(i, 1);
+  }
+}
+
+// 고구마는 무조건 '과일'로 라우팅(과일 파트/서부일광 출고) — 밤·자색·호박고구마 등 '고구마' 들어간 변형 포함.
+// 야채로 분류/이동된 고구마를 과일로 되돌린다. 공구·두부칸(임의 상품명)·이미 과일칸은 건드리지 않음.
+// reclassifyByCatalog·remapBenijimin 이후 마지막에 돌려 '무조건 과일'을 최종 확정한다(#고구마).
+function remapGoguma(groups: Group[]): void {
+  const moved: Group["items"] = [];
+  for (const g of groups) {
+    if (g.category !== "VEG") continue; // 야채칸의 고구마만 과일로(공구·두부·이미 과일은 그대로)
+    const keep: Group["items"] = [];
+    for (const it of g.items) {
+      if (isGoguma(it.name)) moved.push(it);
+      else keep.push(it);
     }
     g.items = keep;
   }
