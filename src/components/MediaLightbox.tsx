@@ -35,27 +35,35 @@ export function MediaLightbox({
   const src = srcs[Math.min(idx, srcs.length - 1)] ?? media.src;
   const many = srcs.length > 1;
 
+  // 현재 이미지의 확대/팬(줌).
   const [scale, setScale] = useState(1);
-  const [tx, setTx] = useState(0);
-  const [ty, setTy] = useState(0);
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  // 캐러셀 드래그(좌우 넘기기)와 아래로 밀어 닫기 오프셋.
+  const [dragX, setDragX] = useState(0);
+  const [dragY, setDragY] = useState(0);
   const [animate, setAnimate] = useState(true);
 
   const ptrs = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const start = useRef<{ tx: number; ty: number; scale: number; dist: number; cx: number; cy: number } | null>(null);
+  const start = useRef<{ panX: number; panY: number; scale: number; dist: number; cx: number; cy: number } | null>(null);
+  const axis = useRef<null | "x" | "y">(null); // 제스처 축 잠금(원본크기)
   const moved = useRef(0);
   const lastTap = useRef(0);
-  const swipeY = useRef(0);
-  const swipeX = useRef(0); // 원본크기에서 좌우로 민 거리(여러 장 넘기기용)
+  const vel = useRef(0); // 최근 수평 속도(px/ms) — 살짝 튕겨도 넘어가게(플릭)
+  const lastX = useRef(0);
+  const lastT = useRef(0);
 
+  const clampIdx = (n: number) => Math.max(0, Math.min(srcs.length - 1, n));
   const go = (dir: number) => {
-    setIdx((i) => (srcs.length ? (i + dir + srcs.length) % srcs.length : i));
+    setAnimate(true);
+    setDragX(0);
+    setIdx((i) => clampIdx(i + dir));
   };
-  // 사진 넘기면 확대/이동 초기화.
+  // 사진 넘기면 확대/팬 초기화(넘김 애니메이션은 트랜지션이 처리).
   useEffect(() => {
     setScale(1);
-    setTx(0);
-    setTy(0);
-    setAnimate(true);
+    setPanX(0);
+    setPanY(0);
   }, [idx]);
 
   useEffect(() => {
@@ -78,15 +86,17 @@ export function MediaLightbox({
     if (!isImage) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
     ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    setAnimate(false);
+    setAnimate(false); // 드래그 중엔 손가락에 딱 붙게(트랜지션 off)
     moved.current = 0;
-    swipeY.current = 0;
-    swipeX.current = 0;
+    axis.current = null;
+    vel.current = 0;
+    lastX.current = e.clientX;
+    lastT.current = e.timeStamp;
     const a = [...ptrs.current.values()];
     if (a.length === 2) {
-      start.current = { tx, ty, scale, dist: dist(a[0], a[1]), cx: 0, cy: 0 };
+      start.current = { panX, panY, scale, dist: dist(a[0], a[1]), cx: 0, cy: 0 };
     } else {
-      start.current = { tx, ty, scale, dist: 0, cx: e.clientX, cy: e.clientY };
+      start.current = { panX, panY, scale, dist: 0, cx: e.clientX, cy: e.clientY };
     }
   };
 
@@ -95,79 +105,97 @@ export function MediaLightbox({
     ptrs.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const a = [...ptrs.current.values()];
     if (a.length >= 2) {
+      // 핀치 줌
       const d = dist(a[0], a[1]);
       const ns = Math.max(1, Math.min(4, start.current.scale * (d / (start.current.dist || d))));
-      const c = clampPan(ns, tx, ty);
+      const c = clampPan(ns, panX, panY);
       setScale(ns);
-      setTx(c.x);
-      setTy(c.y);
-    } else {
-      const dx = e.clientX - start.current.cx;
-      const dy = e.clientY - start.current.cy;
-      moved.current = Math.hypot(dx, dy);
-      if (scale > 1) {
-        const c = clampPan(scale, start.current.tx + dx, start.current.ty + dy);
-        setTx(c.x);
-        setTy(c.y);
-      } else if (many && Math.abs(dx) > Math.abs(dy)) {
-        // 원본크기 + 수평이 우세 → 좌우로 밀어 사진 넘기기
-        swipeX.current = dx;
-        swipeY.current = 0;
-        setTx(dx);
-        setTy(0);
-      } else if (dy > 0) {
-        swipeY.current = dy; // 원본크기에서 아래로 끌기 = 닫기 준비
-        swipeX.current = 0;
-        setTx(0);
-        setTy(dy);
-      }
+      setPanX(c.x);
+      setPanY(c.y);
+      return;
+    }
+    const dx = e.clientX - start.current.cx;
+    const dy = e.clientY - start.current.cy;
+    moved.current = Math.hypot(dx, dy);
+    const dt = e.timeStamp - lastT.current;
+    if (dt > 0) {
+      vel.current = (e.clientX - lastX.current) / dt;
+      lastX.current = e.clientX;
+      lastT.current = e.timeStamp;
+    }
+    if (scale > 1) {
+      // 확대 상태 → 팬(넘기기·닫기 없음)
+      const c = clampPan(scale, start.current.panX + dx, start.current.panY + dy);
+      setPanX(c.x);
+      setPanY(c.y);
+      return;
+    }
+    // 원본크기: 첫 유의미 이동에서 축 잠금
+    if (axis.current === null && moved.current > 8) axis.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    if (axis.current === "x") {
+      let d = dx;
+      const atStart = idx === 0 && d > 0;
+      const atEnd = idx === srcs.length - 1 && d < 0;
+      if (!many || atStart || atEnd) d = d * 0.32; // 양 끝/단일 = 고무줄 저항
+      setDragX(d);
+      setDragY(0);
+    } else if (axis.current === "y") {
+      setDragX(0);
+      setDragY(dy > 0 ? dy : 0); // 아래로만(닫기 준비)
     }
   };
 
   const onUp = (e: React.PointerEvent) => {
     if (!isImage) return;
     ptrs.current.delete(e.pointerId);
-    if (ptrs.current.size === 0) start.current = null;
+    const stillDown = ptrs.current.size > 0;
+    if (!stillDown) start.current = null;
     setAnimate(true);
-    // 좌우로 충분히 밀면 사진 넘기기(여러 장일 때). 왼쪽으로 밀면 다음, 오른쪽이면 이전.
-    if (scale === 1 && many && Math.abs(swipeX.current) > 55) {
-      go(swipeX.current < 0 ? 1 : -1);
-      swipeX.current = 0;
-      setTx(0);
-      setTy(0);
-      return;
+    if (stillDown) return; // 두 손가락 중 하나만 뗌 → 나머지 제스처 유지
+
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    if (scale === 1) {
+      if (axis.current === "x" && many) {
+        // 거리(화면 14%) 또는 빠른 플릭이면 넘어감. dragX<0 = 다음.
+        const passDist = Math.abs(dragX) > W * 0.14;
+        const passFlick = Math.abs(vel.current) > 0.3 && Math.sign(vel.current) === Math.sign(dragX) && Math.abs(dragX) > 10;
+        if ((passDist || passFlick) && dragX !== 0) {
+          setIdx((i) => clampIdx(i + (dragX < 0 ? 1 : -1)));
+        }
+        setDragX(0); // idx 갱신 + dragX 0 → 트랜지션이 부드럽게 스냅
+      } else if (axis.current === "y") {
+        if (dragY > 90) {
+          onClose();
+          return;
+        }
+        setDragY(0);
+      } else if (dragX !== 0) {
+        setDragX(0);
+      }
     }
-    if (scale === 1 && swipeX.current !== 0) {
-      swipeX.current = 0;
-      setTx(0); // 임계 미달 → 제자리
-    }
-    if (scale === 1 && swipeY.current > 90) {
-      onClose();
-      return;
-    }
-    if (scale === 1 && swipeY.current > 0) {
-      setTy(0);
-      swipeY.current = 0;
-    }
-    if (moved.current < 8 && ptrs.current.size === 0) {
+
+    // 더블탭 확대/축소
+    if (moved.current < 8 && !stillDown) {
       const now = Date.now();
       if (now - lastTap.current < 280) {
         lastTap.current = 0;
         if (scale > 1) {
           setScale(1);
-          setTx(0);
-          setTy(0);
+          setPanX(0);
+          setPanY(0);
         } else {
           const ns = 2.5;
-          const c = clampPan(ns, (window.innerWidth / 2 - e.clientX) * (ns - 1), (window.innerHeight / 2 - e.clientY) * (ns - 1));
+          const c = clampPan(ns, (W / 2 - e.clientX) * (ns - 1), (H / 2 - e.clientY) * (ns - 1));
           setScale(ns);
-          setTx(c.x);
-          setTy(c.y);
+          setPanX(c.x);
+          setPanY(c.y);
         }
       } else {
         lastTap.current = now;
       }
     }
+    axis.current = null;
   };
 
   const save = async () => {
@@ -187,7 +215,7 @@ export function MediaLightbox({
     }
   };
 
-  const dimming = scale === 1 ? Math.max(0.4, 0.95 - Math.abs(ty) / 600) : 0.95;
+  const dimming = scale === 1 ? Math.max(0.4, 0.95 - Math.abs(dragY) / 600) : 0.95;
 
   return createPortal(
     <div
@@ -228,17 +256,35 @@ export function MediaLightbox({
       )}
 
       {isImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          className="lb__img"
-          src={src}
-          alt="첨부 이미지"
-          draggable={false}
+        <div
+          className="lb__track"
           style={{
-            transform: `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`,
-            transition: animate ? "transform .18s ease" : "none",
+            transform: `translate3d(calc(${-idx * 100}% + ${dragX}px), ${dragY}px, 0)`,
+            transition: animate ? "transform .3s cubic-bezier(.22,.61,.36,1)" : "none",
           }}
-        />
+        >
+          {srcs.map((s, i) => (
+            <div className="lb__slide" key={i} style={{ left: `${i * 100}%` }}>
+              {Math.abs(i - idx) <= 1 ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  className="lb__img"
+                  src={s}
+                  alt="첨부 이미지"
+                  draggable={false}
+                  style={
+                    i === idx && scale > 1
+                      ? {
+                          transform: `translate3d(${panX}px, ${panY}px, 0) scale(${scale})`,
+                          transition: animate ? "transform .18s ease" : "none",
+                        }
+                      : undefined
+                  }
+                />
+              ) : null}
+            </div>
+          ))}
+        </div>
       ) : (
         <video className="lb__video" src={media.src} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />
       )}

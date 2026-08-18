@@ -6115,6 +6115,9 @@ a.resv-card:active { transform: scale(0.995); }
 
 /* 카카오톡식 사진 미리보기(라이트박스) */
 .lb { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; overflow: hidden; overscroll-behavior: contain; }
+/* 캐러셀(연속 슬라이드) 트랙 — 슬라이드는 좌우로 100vw 간격 배치, 트랙을 translateX 로 밀어 넘긴다. */
+.lb__track { position: absolute; inset: 0; will-change: transform; }
+.lb__slide { position: absolute; top: 0; bottom: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
 .lb__img { max-width: 100vw; max-height: 100vh; object-fit: contain; user-select: none; -webkit-user-drag: none; will-change: transform; }
 .lb__video { max-width: 94vw; max-height: 86vh; border-radius: 8px; background: #000; }
 .lb__bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2; display: flex; justify-content: flex-end; gap: 8px; padding: max(10px, env(safe-area-inset-top)) 12px 10px; }
