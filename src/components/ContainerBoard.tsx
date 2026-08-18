@@ -18,8 +18,8 @@ import {
   type ContainerReturnEntry,
 } from "@/app/actions/container";
 
-// 용기 회수 관리 보드 — 용기 탭 · 요약(나감/회수/미회수) · 지점별 목록 · 회수 기록/취소 · 용기 종류 관리.
-// 나간 수량은 계산서에서 자동 집계(서버). 이 화면은 회수만 기록해 미회수를 남긴다.
+// 비품 출고 보드 — 비품 탭 · 요약(출고/회수/미회수) · 지점별 목록 · 회수 기록/취소 · 비품 종류 관리.
+// 출고 수량은 계산서에서 자동 집계(서버). 이 화면은 회수만 기록하고, 지금 나가있는(미회수>0) 것만 표시한다.
 
 const fmtYmd = (d: string) => {
   const [, m, dd] = d.split("-");
@@ -42,6 +42,12 @@ export function ContainerBoard({
   const [manageOpen, setManageOpen] = useState(false);
   const [returnFor, setReturnFor] = useState<ContainerBranchRow | null>(null);
 
+  // 지금 지점에 나가있는(미회수>0) 것만 표시·집계. 출고=회수면 초기화(목록에서 사라짐).
+  const rows = board ? board.branches.filter((b) => b.outstanding > 0) : [];
+  const shipped = rows.reduce((n, r) => n + r.shipped, 0);
+  const returned = rows.reduce((n, r) => n + r.returned, 0);
+  const outstanding = rows.reduce((n, r) => n + r.outstanding, 0);
+
   return (
     <>
       <div className="cont-tabs">
@@ -59,7 +65,7 @@ export function ContainerBoard({
           className="cont-tab cont-tab--add"
           onClick={() => setManageOpen(true)}
         >
-          ＋ 용기
+          ＋ 추가
         </button>
       </div>
 
@@ -68,50 +74,41 @@ export function ContainerBoard({
           className="card"
           style={{ textAlign: "center", color: "var(--muted)", padding: 20 }}
         >
-          아직 등록된 용기가 없어요. 위 <b>＋ 용기</b>로 아이스박스·우유 콘티를 추가하세요.
+          등록된 비품이 없어요. 위 <b>＋ 추가</b>로 추가하세요.
         </div>
       ) : (
         <>
           <div className="cont-sum">
             <div className="cont-sc">
-              <div className="cont-sc__k">나감</div>
-              <div className="cont-sc__v">{board.shippedTotal}</div>
+              <div className="cont-sc__k">출고</div>
+              <div className="cont-sc__v">{shipped}</div>
             </div>
             <div className="cont-sc">
               <div className="cont-sc__k">회수</div>
-              <div className="cont-sc__v">{board.returnedTotal}</div>
+              <div className="cont-sc__v">{returned}</div>
             </div>
             <div className="cont-sc is-warn">
               <div className="cont-sc__k">미회수</div>
-              <div className="cont-sc__v">{board.outstandingTotal}</div>
+              <div className="cont-sc__v">{outstanding}</div>
             </div>
           </div>
 
-          {board.branches.length === 0 ? (
+          {rows.length === 0 ? (
             <div
               className="card"
               style={{ textAlign: "center", color: "var(--muted)", padding: 20 }}
             >
-              {fmtYmd(board.container.startDate)} 이후 이 용기가 나간 계산서가 아직 없어요.
-              <div className="row__sub" style={{ marginTop: 6 }}>
-                계산서 공구란에 “{board.container.matchKey}”가 들어가면 여기 집계됩니다.
-              </div>
+              출고 중인 비품이 없어요.
             </div>
           ) : (
-            <>
-              <div className="section-label">지점별 · 미회수 많은 순</div>
-              {board.branches.map((b) => (
-                <BranchRow
-                  key={b.userId}
-                  containerId={board.container.id}
-                  row={b}
-                  onReturn={() => setReturnFor(b)}
-                />
-              ))}
-              <p className="row__sub" style={{ marginTop: 12 }}>
-                ‘나감’은 {fmtYmd(board.container.startDate)}부터 발행된 계산서 공구란에서 자동 집계됩니다.
-              </p>
-            </>
+            rows.map((b) => (
+              <BranchRow
+                key={b.userId}
+                containerId={board.container.id}
+                row={b}
+                onReturn={() => setReturnFor(b)}
+              />
+            ))
           )}
         </>
       )}
@@ -186,7 +183,7 @@ function BranchRow({
         <button type="button" className="cont-brow__main" onClick={toggle}>
           <div className="cont-brow__name">{row.store}</div>
           <div className="cont-brow__stat">
-            나감 <b>{row.shipped}</b> · 회수 <b>{row.returned}</b>
+            출고 <b>{row.shipped}</b> · 회수 <b>{row.returned}</b>
             {open ? " · 접기" : " · 상세"}
           </div>
         </button>
@@ -211,7 +208,7 @@ function BranchRow({
             <div className="row__sub">불러오는 중…</div>
           ) : detail ? (
             <>
-              <div className="cont-detail__lbl">나간 내역 · 계산서 기준</div>
+              <div className="cont-detail__lbl">출고</div>
               {detail.shipments.length ? (
                 detail.shipments.map((s) => (
                   <div className="cont-detail__row" key={s.date}>
@@ -220,9 +217,9 @@ function BranchRow({
                   </div>
                 ))
               ) : (
-                <div className="row__sub">나간 내역 없음</div>
+                <div className="row__sub">출고 없음</div>
               )}
-              <div className="cont-detail__lbl">회수 이력</div>
+              <div className="cont-detail__lbl">회수</div>
               {detail.returns.length ? (
                 detail.returns.map((r) => (
                   <div className="cont-detail__row" key={r.id}>
@@ -240,7 +237,7 @@ function BranchRow({
                   </div>
                 ))
               ) : (
-                <div className="row__sub">회수 이력 없음</div>
+                <div className="row__sub">회수 없음</div>
               )}
             </>
           ) : null}
@@ -334,7 +331,7 @@ function ReturnSheet({
             style={{ marginTop: 14 }}
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
-            placeholder="메모 (선택) — 예: 배송기사 편에 회수"
+            placeholder="메모 (선택)"
             maxLength={200}
           />
           {err && (
@@ -382,7 +379,7 @@ function ManageSheet({
   const add = () => {
     setErr("");
     if (!name.trim()) {
-      setErr("용기 이름을 입력하세요.");
+      setErr("비품 이름을 입력하세요.");
       return;
     }
     start(async () => {
@@ -405,13 +402,10 @@ function ManageSheet({
     <Sheet onClose={onClose}>
       <div className="sheet__panel">
         <div className="sheet__head">
-          <div className="sheet__title">용기 종류 관리</div>
+          <div className="sheet__title">비품 종류 관리</div>
           <button type="button" className="sheet__close" onClick={onClose}>
             ✕
           </button>
-        </div>
-        <div className="sheet__hint">
-          계산서 공구란에 이 매칭 키워드가 들어가면 나간 것으로 집계돼요. 기준일 이후 계산서만 셉니다.
         </div>
         <div className="sheet__body">
           {containers.map((c) => (
@@ -423,11 +417,11 @@ function ManageSheet({
               className="row__sub"
               style={{ fontWeight: 800, color: "var(--fg)", marginBottom: 8 }}
             >
-              ＋ 새 용기 추가
+              ＋ 새 비품 추가
             </div>
             <input
               className="input"
-              placeholder="용기 이름 (예: 아이스박스)"
+              placeholder="비품 이름 (예: 아이스박스)"
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={60}
@@ -464,7 +458,7 @@ function ManageSheet({
               disabled={pending || !name.trim()}
               onClick={add}
             >
-              {pending ? "추가 중…" : "용기 추가"}
+              {pending ? "추가 중…" : "추가"}
             </button>
           </div>
         </div>
@@ -491,7 +485,7 @@ function ContainerEditRow({
   const save = () => {
     setErr("");
     if (!name.trim()) {
-      setErr("용기 이름을 입력하세요.");
+      setErr("비품 이름을 입력하세요.");
       return;
     }
     start(async () => {

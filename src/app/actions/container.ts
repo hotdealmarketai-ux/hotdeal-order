@@ -233,7 +233,7 @@ export async function recordContainerReturn(
       select: { id: true, storeName: true },
     }),
   ]);
-  if (!c) return { error: "용기를 찾을 수 없어요." };
+  if (!c) return { error: "비품을 찾을 수 없어요." };
   if (!u) return { error: "지점을 찾을 수 없어요." };
   await prisma.containerReturn.create({
     data: { containerId, userId, qty, memo, adminId: admin.id, adminName: admin.storeName },
@@ -283,7 +283,7 @@ export async function addContainerType(
   const matchKeyRaw = String(fd.get("matchKey") ?? "").trim();
   const matchKey = (matchKeyRaw || name).slice(0, 60);
   const startDate = normalizeDateStr(String(fd.get("startDate") ?? ""));
-  if (!name) return { error: "용기 이름을 입력하세요." };
+  if (!name) return { error: "비품 이름을 입력하세요." };
   if (!norm(matchKey)) return { error: "매칭 키워드가 비어 있어요." };
   const agg = await prisma.returnableContainer.aggregate({
     _max: { sortOrder: true },
@@ -301,7 +301,7 @@ export async function addContainerType(
     action: "container.typeAdd",
     actorId: admin.id,
     actorName: admin.storeName,
-    summary: `용기 종류 추가 — ${name}`,
+    summary: `비품 종류 추가 — ${name}`,
     snapshot: { name, matchKey, startDate },
   }).catch(() => {});
   revalidatePath("/admin/containers");
@@ -319,10 +319,10 @@ export async function updateContainerType(
   const matchKey = (matchKeyRaw || name).slice(0, 60);
   const startDate = normalizeDateStr(String(fd.get("startDate") ?? ""));
   const active = String(fd.get("active") ?? "true") === "true";
-  if (!name) return { error: "용기 이름을 입력하세요." };
+  if (!name) return { error: "비품 이름을 입력하세요." };
   if (!norm(matchKey)) return { error: "매칭 키워드가 비어 있어요." };
   const exists = await prisma.returnableContainer.findUnique({ where: { id }, select: { id: true } });
-  if (!exists) return { error: "용기를 찾을 수 없어요." };
+  if (!exists) return { error: "비품을 찾을 수 없어요." };
   await prisma.returnableContainer.update({
     where: { id },
     data: { name, matchKey, startDate, active },
@@ -331,7 +331,7 @@ export async function updateContainerType(
     action: "container.typeUpdate",
     actorId: admin.id,
     actorName: admin.storeName,
-    summary: `용기 종류 수정 — ${name}`,
+    summary: `비품 종류 수정 — ${name}`,
     snapshot: { id, name, matchKey, startDate, active },
   }).catch(() => {});
   revalidatePath("/admin/containers");

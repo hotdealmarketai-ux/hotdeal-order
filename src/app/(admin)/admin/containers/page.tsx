@@ -21,11 +21,8 @@ export default async function ContainersPage(props: {
 
   return (
     <>
-      <Topbar backHref="/admin" title="용기 회수 관리" />
+      <Topbar backHref="/admin" title="비품 출고" />
       <div className="page">
-        <p className="row__sub" style={{ margin: "0 0 14px" }}>
-          계산서 공구란에 적어 둔 반납 용기가 지점별로 몇 개 나갔는지 보고, 회수되면 차감하세요.
-        </p>
         <ContainerBoard
           allContainers={all}
           selectedId={selectedId}
