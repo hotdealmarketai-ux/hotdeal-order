@@ -56,6 +56,7 @@ model User {
   onboardingItems OnboardingItem[]
   onboardingChecks OnboardingCheck[]
   onboardingApprovals OnboardingApproval[]
+  containerReturns ContainerReturn[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
@@ -1050,4 +1051,39 @@ model MessengerMinutesRead {
 
   @@unique([minutesId, memberId])
   @@index([minutesId])
+}
+
+// ── 반납 용기 관리(아이스박스·우유 콘티 등) ──────────────────────────────
+// 회수 대상 용기 종류. 나간 수량은 별도로 저장하지 않고, 계산서 공구란(InvoiceItem category=TOOL)에서
+// 이름이 matchKey(정규화 후 부분일치)와 매칭되고 date >= startDate 인 것들을 실시간 집계한다.
+// 회수는 ContainerReturn 에만 기록 → 미회수 = 나감 − 회수.
+model ReturnableContainer {
+  id        String            @id @default(cuid())
+  name      String // 표시 이름(예: "아이스박스", "우유 콘티")
+  matchKey  String // 매칭 키워드 — 계산서 품목명과 비교(정규화: 공백제거·소문자 후 contains)
+  startDate String // 집계 시작일 YYYY-MM-DD — 이 날짜(포함) 이후 발행 계산서만 '나감'으로 집계
+  sortOrder Int               @default(0)
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  returns   ContainerReturn[]
+
+  @@index([active, sortOrder])
+}
+
+// 용기 회수 이력(수기). 지점(userId)에서 특정 용기를 회수한 건. 미회수는 이 합을 나감에서 뺀 값.
+model ContainerReturn {
+  id          String              @id @default(cuid())
+  containerId String
+  container   ReturnableContainer @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  qty         Int // 회수 수량(양수)
+  memo        String              @default("")
+  adminId     String // 처리 관리자 id
+  adminName   String              @default("") // 처리 관리자 상호(사후 표시용 스냅샷)
+  returnedAt  DateTime            @default(now())
+  createdAt   DateTime            @default(now())
+
+  @@index([containerId, userId])
+  @@index([userId])
 }

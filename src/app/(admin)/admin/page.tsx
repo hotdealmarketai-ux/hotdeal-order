@@ -109,6 +109,7 @@ export default async function AdminHome() {
         { href: "/admin/inbound", title: "입고" },
         { href: "/admin/inventory", title: "재고" },
         { href: "/admin/stock-reconcile", title: "재고 마감" },
+        { href: "/admin/containers", title: "용기 회수" },
         { href: "/warehouse", title: "창고 관리" },
       ],
     },
