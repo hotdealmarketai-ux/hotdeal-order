@@ -36,7 +36,8 @@ function parseItems(raw: string): { items: Item[]; gross: number } {
     const unitPrice = Math.abs(
       Math.floor(Number(String(r?.unitPrice ?? "").replace(/[^\d]/g, "")) || 0),
     );
-    if (!name || qty <= 0 || unitPrice <= 0) continue;
+    // 단가 0원 허용(무상 출고·샘플 등) — 이름과 수량만 있으면 유효 품목으로 담는다.
+    if (!name || qty <= 0) continue;
     items.push({ name, qty, unitPrice, amount: Math.round(qty * unitPrice) });
   }
   const gross = items.reduce((n, it) => n + it.amount, 0);
@@ -71,7 +72,7 @@ export async function issueSadadreamInvoiceAction(
 
   const { items, gross } = parseItems(String(formData.get("items") ?? "[]"));
   if (items.length === 0) return { error: "품목을 한 개 이상 입력하세요." };
-  if (gross <= 0) return { error: "금액이 0보다 커야 해요." };
+  // 사다드림은 무상 출고(0원)도 발행 허용 — gross 0 이어도 통과(음수는 발생하지 않음).
   const acct = readAccount(formData);
   // 사다드림은 개인/개인업체 계좌로 결제받는 계산서라 입금계좌가 없으면 '결제 불가' 계산서가 된다 → 필수.
   if (!acct.sdBank || !acct.sdAccount) return { error: "입금계좌(은행·계좌번호)를 입력하세요." };
@@ -147,7 +148,7 @@ export async function reviseSadadreamInvoiceAction(
 
   const { items, gross } = parseItems(String(formData.get("items") ?? "[]"));
   if (items.length === 0) return { error: "품목을 한 개 이상 입력하세요." };
-  if (gross <= 0) return { error: "금액이 0보다 커야 해요." };
+  // 사다드림은 무상 출고(0원)도 발행 허용 — gross 0 이어도 통과(음수는 발생하지 않음).
   const acct = readAccount(formData);
   if (!acct.sdBank || !acct.sdAccount) return { error: "입금계좌(은행·계좌번호)를 입력하세요." };
 

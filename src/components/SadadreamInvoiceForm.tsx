@@ -73,6 +73,10 @@ export function SadadreamInvoiceForm({
   const [pending, start] = useTransition();
 
   const total = rows.reduce((n, r) => n + rowAmount(r), 0);
+  // 단가 0원도 발행 가능 — 이름+수량>0 인 품목이 하나라도 있으면 발행 버튼 활성(합계 0원이어도 OK).
+  const hasValidItem = rows.some(
+    (r) => r.name.trim() && (parseFloat(r.qty.replace(/[^\d.]/g, "")) || 0) > 0,
+  );
 
   const setField = (id: number, k: keyof Row, v: string) => {
     setRows((prev) => {
@@ -137,8 +141,8 @@ export function SadadreamInvoiceForm({
         unitPrice: parseInt(r.unitPrice.replace(/[^\d]/g, ""), 10) || 0,
       }));
     if (items.length === 0) return setErr("품목을 한 개 이상 입력하세요.");
-    if (items.some((it) => !it.name || it.qty <= 0 || it.unitPrice <= 0)) {
-      return setErr("품목·수량·단가를 정확히 입력하세요.");
+    if (items.some((it) => !it.name || it.qty <= 0)) {
+      return setErr("품목명과 수량을 정확히 입력하세요. (단가 0원은 가능)");
     }
     if (
       !confirm(
@@ -284,7 +288,7 @@ export function SadadreamInvoiceForm({
         type="button"
         className="btn btn--primary btn--block"
         onClick={submit}
-        disabled={pending || total <= 0}
+        disabled={pending || !hasValidItem}
         style={{ marginTop: 12 }}
       >
         {pending
