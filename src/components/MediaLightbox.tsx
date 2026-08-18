@@ -45,6 +45,7 @@ export function MediaLightbox({
   const moved = useRef(0);
   const lastTap = useRef(0);
   const swipeY = useRef(0);
+  const swipeX = useRef(0); // 원본크기에서 좌우로 민 거리(여러 장 넘기기용)
 
   const go = (dir: number) => {
     setIdx((i) => (srcs.length ? (i + dir + srcs.length) % srcs.length : i));
@@ -80,6 +81,7 @@ export function MediaLightbox({
     setAnimate(false);
     moved.current = 0;
     swipeY.current = 0;
+    swipeX.current = 0;
     const a = [...ptrs.current.values()];
     if (a.length === 2) {
       start.current = { tx, ty, scale, dist: dist(a[0], a[1]), cx: 0, cy: 0 };
@@ -107,8 +109,16 @@ export function MediaLightbox({
         const c = clampPan(scale, start.current.tx + dx, start.current.ty + dy);
         setTx(c.x);
         setTy(c.y);
+      } else if (many && Math.abs(dx) > Math.abs(dy)) {
+        // 원본크기 + 수평이 우세 → 좌우로 밀어 사진 넘기기
+        swipeX.current = dx;
+        swipeY.current = 0;
+        setTx(dx);
+        setTy(0);
       } else if (dy > 0) {
         swipeY.current = dy; // 원본크기에서 아래로 끌기 = 닫기 준비
+        swipeX.current = 0;
+        setTx(0);
         setTy(dy);
       }
     }
@@ -119,6 +129,18 @@ export function MediaLightbox({
     ptrs.current.delete(e.pointerId);
     if (ptrs.current.size === 0) start.current = null;
     setAnimate(true);
+    // 좌우로 충분히 밀면 사진 넘기기(여러 장일 때). 왼쪽으로 밀면 다음, 오른쪽이면 이전.
+    if (scale === 1 && many && Math.abs(swipeX.current) > 55) {
+      go(swipeX.current < 0 ? 1 : -1);
+      swipeX.current = 0;
+      setTx(0);
+      setTy(0);
+      return;
+    }
+    if (scale === 1 && swipeX.current !== 0) {
+      swipeX.current = 0;
+      setTx(0); // 임계 미달 → 제자리
+    }
     if (scale === 1 && swipeY.current > 90) {
       onClose();
       return;
