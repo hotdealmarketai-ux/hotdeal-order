@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
-import { computeToolReconcile } from "@/app/actions/stock-reconcile";
+import {
+  computeToolReconcile,
+  computeSadadreamShipments,
+} from "@/app/actions/stock-reconcile";
 import { StockReconcileForm } from "@/components/StockReconcileForm";
 import { normalizeDateStr } from "@/lib/date";
 
@@ -19,6 +22,7 @@ export default async function StockReconcilePage(props: {
   const date = normalizeDateStr(dateParam);
   const { matched, unmatched, invoiceCount, undeductedCount } =
     await computeToolReconcile(date);
+  const sadadream = await computeSadadreamShipments(date);
   const totalDeducted = matched.reduce((n, r) => n + r.deducted, 0);
 
   return (
@@ -66,6 +70,43 @@ export default async function StockReconcilePage(props: {
           unmatched={unmatched}
           undeducted={undeductedCount}
         />
+
+        {/* 사다드림 출고 — 재고 미반영(입고 즉시 출고·재고 미등록). 참고용 표시만, 실재고 무관. */}
+        {sadadream.rows.length > 0 && (
+          <div style={{ marginTop: 26 }}>
+            <div className="section-label">
+              사다드림 출고 · 재고 미반영 ({sadadream.invoiceCount}건)
+            </div>
+            <p className="row__sub" style={{ margin: "0 0 10px" }}>
+              입고 즉시 나가는 품목이라 실재고는 차감되지 않아요. 이날 나간 내역만 참고로 보여줍니다.
+            </p>
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              {sadadream.rows.map((r, i) => (
+                <div
+                  key={`${r.store} ${r.name}`}
+                  className="spread"
+                  style={{
+                    padding: "11px 14px",
+                    alignItems: "center",
+                    borderTop: i ? "1px solid var(--line)" : "none",
+                  }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    <b style={{ fontSize: 14.5 }}>{r.name}</b>
+                    <span className="row__sub" style={{ display: "block" }}>
+                      {r.store}
+                    </span>
+                  </span>
+                  <b style={{ whiteSpace: "nowrap" }}>{fmt(r.qty)}개</b>
+                </div>
+              ))}
+            </div>
+            <div className="spread" style={{ marginTop: 8 }}>
+              <span className="row__sub">사다드림 총 출고</span>
+              <b>{fmt(sadadream.totalQty)}개</b>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
