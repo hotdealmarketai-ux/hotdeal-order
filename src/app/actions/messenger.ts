@@ -1161,7 +1161,6 @@ export async function loadMemberRecurringAction(memberId: string): Promise<{ nam
 export type MinutesDTO = {
   id: string;
   date: string; // yyyy-mm-dd (KST)
-  agenda: string | null;
   imageUrls: string[];
   uploaderId: string;
   uploaderName: string;
@@ -1191,7 +1190,6 @@ export async function loadMessengerMinutesAction(): Promise<MinutesDTO[]> {
   return rows.map((r) => ({
     id: r.id,
     date: kstDateOf(r.meetingDate),
-    agenda: r.agenda,
     imageUrls: r.imageUrls,
     uploaderId: r.memberId,
     uploaderName: nameOf.get(r.memberId) ?? "지난 멤버",
@@ -1218,7 +1216,7 @@ function isOwnBlobUrl(u: string): boolean {
   }
 }
 
-// 회의록 등록 — 날짜/안건/이미지들. 업로더는 읽음 처리, 나머지 팀원에게 푸시.
+// 회의록 등록 — 날짜/이미지들. 업로더는 읽음 처리, 나머지 팀원에게 푸시. (안건 목차 폐지)
 export async function createMessengerMinutesAction(formData: FormData): Promise<{ error?: string; id?: string }> {
   await requireAdmin();
   const me = await getMessengerMember();
@@ -1226,14 +1224,13 @@ export async function createMessengerMinutesAction(formData: FormData): Promise<
   const ymd = String(formData.get("date") ?? "").trim();
   const date = kstMidnight(ymd);
   if (!date) return { error: "회의 날짜를 선택하세요." };
-  const agenda = String(formData.get("agenda") ?? "").trim().slice(0, 2000);
   const imageUrls = formData.getAll("imageUrls").map((v) => String(v)).filter(Boolean);
   if (imageUrls.length === 0) return { error: "회의록 이미지를 한 장 이상 올려 주세요." };
   // 초과분을 조용히 잘라내지 않고 명시적으로 거절(유실·고아 Blob 방지).
   if (imageUrls.length > MINUTES_MAX_IMAGES) return { error: `사진은 최대 ${MINUTES_MAX_IMAGES}장까지 올릴 수 있어요.` };
   if (!imageUrls.every(isOwnBlobUrl)) return { error: "이미지 형식이 올바르지 않아요. 다시 업로드해 주세요." };
   const row = await prisma.messengerMinutes.create({
-    data: { meetingDate: date, agenda: agenda || null, imageUrls, memberId: me.id },
+    data: { meetingDate: date, imageUrls, memberId: me.id },
     select: { id: true },
   });
   // 내가 올린 회의록은 '안읽음'으로 안 뜨게 업로더를 읽음 처리.

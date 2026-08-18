@@ -144,11 +144,6 @@ export function MinutesPane({ me }: { me: { id: string; name: string } }) {
                   </div>
                   <div className="mncard__main">
                     <div className="mncard__title">{titleOf(m.date)}</div>
-                    {m.agenda ? (
-                      <div className="mncard__agenda">{m.agenda}</div>
-                    ) : (
-                      <div className="mncard__agenda mncard__agenda--none">안건 메모 없음</div>
-                    )}
                     <div className="mncard__foot">
                       <span className="mncard__count">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -243,7 +238,6 @@ type Pic = { key: string; preview: string; url: string | null; pct: number };
 
 function MinutesUploadSheet({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [date, setDate] = useState(kstToday());
-  const [agenda, setAgenda] = useState("");
   const [pics, setPics] = useState<Pic[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -313,7 +307,6 @@ function MinutesUploadSheet({ onClose, onCreated }: { onClose: () => void; onCre
     setErr("");
     const fd = new FormData();
     fd.set("date", date);
-    fd.set("agenda", agenda.trim());
     pics.forEach((p) => p.url && fd.append("imageUrls", p.url));
     const r = await createMessengerMinutesAction(fd).catch(() => ({ error: "등록에 실패했어요." }));
     setBusy(false);
@@ -329,7 +322,7 @@ function MinutesUploadSheet({ onClose, onCreated }: { onClose: () => void; onCre
       <div className="sheet__panel mn-up">
         <div className="mn-up__grip" />
         <div className="mn-up__h">회의록 올리기</div>
-        <div className="mn-up__sub">회의 날짜와 안건을 적고, 회의록 사진을 올려주세요.</div>
+        <div className="mn-up__sub">회의 날짜를 고르고, 회의록 사진을 올려주세요.</div>
 
         <div className="mn-up__scroll">
           <div className="mn-fld">
@@ -337,18 +330,6 @@ function MinutesUploadSheet({ onClose, onCreated }: { onClose: () => void; onCre
               <span className="req">*</span> 회의 날짜
             </div>
             <input type="date" className="mn-input" value={date} max={kstToday()} onChange={(e) => setDate(e.target.value)} />
-          </div>
-
-          <div className="mn-fld">
-            <div className="mn-fld__l">
-              안건 목차 <span className="opt">(간단히)</span>
-            </div>
-            <textarea
-              className="mn-input mn-input--ta"
-              value={agenda}
-              onChange={(e) => setAgenda(e.target.value)}
-              placeholder={"예)\n1. 발주 프로세스 개선\n2. 라벨 재정비\n3. 신규 상품 소싱"}
-            />
           </div>
 
           <div className="mn-fld">

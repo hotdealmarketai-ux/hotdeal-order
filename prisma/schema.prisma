@@ -1029,7 +1029,8 @@ model MessengerEvent {
 model MessengerMinutes {
   id          String   @id @default(cuid())
   meetingDate DateTime // 회의 날짜(KST 자정)
-  agenda      String? // 안건 목차(선택)
+  agenda      String? // (폐지·미사용) 안건 목차 — 코드에서 안 읽고 안 씀. 데이터는 마이그레이션으로 NULL 처리. 컬럼은 드롭 안 함(라이브 구코드 읽기 대비)
+
   imageUrls   String[] // A4 세로 이미지들(순서 보존)
   memberId    String // 업로더 멤버 id
   createdAt   DateTime @default(now())
