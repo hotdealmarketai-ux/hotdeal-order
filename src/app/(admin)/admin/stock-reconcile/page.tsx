@@ -74,87 +74,69 @@ export default async function StockReconcilePage(props: {
           undeducted={undeductedCount}
         />
 
-        {/* 주간발주 출고 — 재고 미반영(항시품목, base 차감 대상 아님). 그 출고일에 나가는 주간발주를 상품별 총 박스수로. */}
-        <div style={{ marginTop: 26 }}>
-          <div className="section-label">주간발주 출고 · 재고 미반영</div>
-          {!weekly.shipping ? (
-            <p className="row__sub" style={{ margin: "0 0 4px" }}>
-              선택한 날짜는 주간발주 출고일이 아니에요. 주간발주 출고 요일(예: 수요일)을 고르면 그 날 나가는 주간발주가 여기 표시됩니다.
-            </p>
-          ) : weekly.rows.length === 0 ? (
-            <p className="row__sub" style={{ margin: "0 0 4px" }}>
-              이 날 나가는 주간발주가 아직 없어요. ({weekly.categoryLabels.join(" · ")} 출고일)
-            </p>
-          ) : (
-            <>
-              <p className="row__sub" style={{ margin: "0 0 10px" }}>
-                {weekly.categoryLabels.join(" · ")} 출고일 · {weekly.storeCount}개 점포. 주간발주는 재고현황 차감 대상이 아니라 참고용 집계입니다.
-              </p>
-              <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                {WEEKLY_CATEGORIES.filter((c) =>
-                  weekly.rows.some((r) => r.category === c.key),
-                ).map((c, ci) => (
-                  <div key={c.key}>
-                    <div
-                      style={{
-                        padding: "8px 14px",
-                        background: "var(--line-soft)",
-                        fontSize: 12,
-                        fontWeight: 800,
-                        color: "var(--muted)",
-                        borderTop: ci ? "1px solid var(--line)" : "none",
-                      }}
-                    >
-                      {c.label}
-                    </div>
-                    {weekly.rows
-                      .filter((r) => r.category === c.key)
-                      .map((r) => (
-                        <div
-                          key={r.code || r.name}
-                          className="spread"
-                          style={{
-                            padding: "11px 14px",
-                            alignItems: "center",
-                            borderTop: "1px solid var(--line)",
-                          }}
-                        >
-                          <span style={{ minWidth: 0 }}>
-                            <b style={{ fontSize: 14.5 }}>{r.name}</b>
-                            <span className="row__sub" style={{ display: "block" }}>
-                              {r.boxUnit ? `${r.boxUnit} · ` : ""}
-                              {r.storeCount}개 점포
-                            </span>
-                          </span>
-                          <b style={{ whiteSpace: "nowrap" }}>
-                            {fmt(r.qty)}
-                            {boxWord(r.category)}
-                          </b>
-                        </div>
-                      ))}
+        {/* 주간발주 출고 — 참고 집계(재고 미반영). 출고 있는 날만 표시(사다드림과 동일). */}
+        {weekly.rows.length > 0 && (
+          <div style={{ marginTop: 26 }}>
+            <div className="section-label">주간발주 출고</div>
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              {WEEKLY_CATEGORIES.filter((c) =>
+                weekly.rows.some((r) => r.category === c.key),
+              ).map((c, ci) => (
+                <div key={c.key}>
+                  <div
+                    style={{
+                      padding: "8px 14px",
+                      background: "var(--line-soft)",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      color: "var(--muted)",
+                      borderTop: ci ? "1px solid var(--line)" : "none",
+                    }}
+                  >
+                    {c.label}
                   </div>
-                ))}
-              </div>
-              <div className="spread" style={{ marginTop: 8 }}>
-                <span className="row__sub">주간발주 총 출고</span>
-                <b>
-                  {fmt(weekly.totalBoxes)}
-                  <span style={{ fontSize: 12, fontWeight: 600 }}> 박스/판</span>
-                </b>
-              </div>
-            </>
-          )}
-        </div>
+                  {weekly.rows
+                    .filter((r) => r.category === c.key)
+                    .map((r) => (
+                      <div
+                        key={r.code || r.name}
+                        className="spread"
+                        style={{
+                          padding: "11px 14px",
+                          alignItems: "center",
+                          borderTop: "1px solid var(--line)",
+                        }}
+                      >
+                        <span style={{ minWidth: 0 }}>
+                          <b style={{ fontSize: 14.5 }}>{r.name}</b>
+                          <span className="row__sub" style={{ display: "block" }}>
+                            {r.boxUnit ? `${r.boxUnit} · ` : ""}
+                            {r.storeCount}개 점포
+                          </span>
+                        </span>
+                        <b style={{ whiteSpace: "nowrap" }}>
+                          {fmt(r.qty)}
+                          {boxWord(r.category)}
+                        </b>
+                      </div>
+                    ))}
+                </div>
+              ))}
+            </div>
+            <div className="spread" style={{ marginTop: 8 }}>
+              <span className="row__sub">주간발주 총 출고</span>
+              <b>
+                {fmt(weekly.totalBoxes)}
+                <span style={{ fontSize: 12, fontWeight: 600 }}> 박스/판</span>
+              </b>
+            </div>
+          </div>
+        )}
 
-        {/* 사다드림 출고 — 재고 미반영(입고 즉시 출고·재고 미등록). 참고용 표시만, 실재고 무관. */}
+        {/* 사다드림 출고 — 참고 집계(재고 미반영). */}
         {sadadream.rows.length > 0 && (
           <div style={{ marginTop: 26 }}>
-            <div className="section-label">
-              사다드림 출고 · 재고 미반영 ({sadadream.invoiceCount}건)
-            </div>
-            <p className="row__sub" style={{ margin: "0 0 10px" }}>
-              입고 즉시 나가는 품목이라 실재고는 차감되지 않아요. 이날 나간 내역만 참고로 보여줍니다.
-            </p>
+            <div className="section-label">사다드림 출고</div>
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
               {sadadream.rows.map((r, i) => (
                 <div
