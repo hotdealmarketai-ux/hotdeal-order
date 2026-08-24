@@ -1087,3 +1087,23 @@ model ContainerReturn {
   @@index([containerId, userId])
   @@index([userId])
 }
+
+// 재고현황 품목 값 변경 기록(감사) — 수기 편집(에디터 자동저장·추가·수정·삭제·붙여넣기·분류)으로
+// 품목의 값이 바뀔 때마다 필드별 before→after 를 남긴다. 오타/의도치 않은 변경 추적용.
+// (자동 차감=계산서/담기, 입고=InboundLog 는 별도 추적이라 여기서 제외.)
+model InventoryChangeLog {
+  id        String   @id @default(cuid())
+  itemId    String // InventoryItem.id (FK 아님 — 품목 삭제돼도 로그 보존)
+  itemName  String // 변경 시점 품목명 스냅샷
+  field     String // name|qty|supplyPrice|expiry|majorCat|minorCat|tax|memo | "(추가)" | "(삭제)"
+  kind      String   @default("update") // create | update | delete
+  before    String   @default("")
+  after     String   @default("")
+  actorId   String   @default("")
+  actorName String   @default("") // 처리자 상호(스냅샷)
+  source    String   @default("") // 재고 편집 | 품목 추가 | 품목 삭제 | 붙여넣기 | AI 분류 등
+  createdAt DateTime @default(now())
+
+  @@index([itemId, createdAt])
+  @@index([createdAt])
+}

@@ -27,6 +27,7 @@ import {
 } from "@/lib/schedule";
 import { hasOrderWindow } from "@/lib/deadline";
 import { restoreStockForOrder } from "@/lib/stock-hold";
+import { recordInventoryChanges, type InvChange } from "@/lib/inventory-log";
 import {
   notifyMerchantOrdersCancelled,
   notifyMerchantSignupApproved,
@@ -260,7 +261,7 @@ const toInt = (v: FormDataEntryValue | null) =>
   Math.max(0, parseInt(String(v ?? "").replace(/[^0-9-]/g, ""), 10) || 0);
 
 export async function addInventoryAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return;
   // #20 품목명 / 남은수량 / 공급가
@@ -273,45 +274,87 @@ export async function addInventoryAction(formData: FormData) {
   // 중복 생성 대신 그 품목을 갱신(재추가 = 수정). #22 리뷰(중복명 데이터 손실 방지)
   const dup = await prisma.inventoryItem.findFirst({
     where: { name, deletedAt: null },
-    select: { id: true },
+    select: { id: true, qty: true, supplyPrice: true, memo: true, expiry: true },
   });
+  const changes: InvChange[] = [];
   if (dup) {
-    await prisma.inventoryItem.update({
-      where: { id: dup.id },
-      data: { qty, supplyPrice, ...(memo ? { memo } : {}), ...(expiry ? { expiry } : {}) },
-    });
+    const data = { qty, supplyPrice, ...(memo ? { memo } : {}), ...(expiry ? { expiry } : {}) };
+    await prisma.inventoryItem.update({ where: { id: dup.id }, data });
+    const cur: Record<string, unknown> = { qty: dup.qty, supplyPrice: dup.supplyPrice, memo: dup.memo, expiry: dup.expiry };
+    for (const f of ["qty", "supplyPrice", "memo", "expiry"] as const) {
+      if (!(f in data)) continue;
+      const b = String(cur[f] ?? "");
+      const a = String((data as Record<string, unknown>)[f] ?? "");
+      if (b !== a) changes.push({ itemId: dup.id, itemName: name, field: f, before: b, after: a });
+    }
   } else {
     const max = await prisma.inventoryItem.aggregate({ _max: { sortOrder: true } });
-    await prisma.inventoryItem.create({
+    const created = await prisma.inventoryItem.create({
       data: { name, qty, supplyPrice, memo, expiry, sortOrder: (max._max.sortOrder ?? 0) + 1 },
     });
+    changes.push({
+      itemId: created.id,
+      itemName: name,
+      field: "(추가)",
+      kind: "create",
+      before: "",
+      after: `${name} · ${qty}개 · ${supplyPrice.toLocaleString("ko-KR")}원${expiry ? ` · ${expiry}` : ""}`,
+    });
   }
+  await recordInventoryChanges(changes, { id: admin.id, name: admin.storeName }, "품목 추가").catch(
+    () => {},
+  );
   await setInventoryPushPending(); // R3 변경 표시 → 다음 크론이 시트로 push(단방향)
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }
 
 export async function updateInventoryAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   const name = String(formData.get("name") ?? "").trim(); // #20 품목명도 수정
   const qty = toInt(formData.get("qty"));
   const supplyPrice = toInt(formData.get("supplyPrice"));
-  await prisma.inventoryItem.update({
+  const old = await prisma.inventoryItem.findUnique({
     where: { id },
-    data: { ...(name ? { name } : {}), qty, supplyPrice },
+    select: { name: true, qty: true, supplyPrice: true },
   });
+  const data = { ...(name ? { name } : {}), qty, supplyPrice };
+  await prisma.inventoryItem.update({ where: { id }, data });
+  if (old) {
+    const cur: Record<string, unknown> = { name: old.name, qty: old.qty, supplyPrice: old.supplyPrice };
+    const changes: InvChange[] = [];
+    for (const f of ["name", "qty", "supplyPrice"] as const) {
+      if (!(f in data)) continue;
+      const b = String(cur[f] ?? "");
+      const a = String((data as Record<string, unknown>)[f] ?? "");
+      if (b !== a) changes.push({ itemId: id, itemName: name || old.name, field: f, before: b, after: a });
+    }
+    await recordInventoryChanges(changes, { id: admin.id, name: admin.storeName }, "재고 편집").catch(
+      () => {},
+    );
+  }
   await setInventoryPushPending(); // R3
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
 }
 
 export async function deleteInventoryAction(formData: FormData) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const id = String(formData.get("id") ?? "");
   if (!id) return;
+  const old = await prisma.inventoryItem.findUnique({
+    where: { id },
+    select: { name: true, qty: true },
+  });
   await prisma.inventoryItem.delete({ where: { id } });
+  if (old)
+    await recordInventoryChanges(
+      [{ itemId: id, itemName: old.name, field: "(삭제)", kind: "delete", before: `${old.name} · ${old.qty}개`, after: "" }],
+      { id: admin.id, name: admin.storeName },
+      "품목 삭제",
+    ).catch(() => {});
   await setInventoryPushPending(); // R3
   revalidatePath("/admin/inventory");
   revalidatePath("/inventory");
@@ -369,10 +412,14 @@ export async function bulkReplaceInventoryAction(
   await snapshotInventory("자동 · 붙여넣기 전").catch(() => {});
 
   const current = await prisma.inventoryItem.findMany({
-    select: { id: true, name: true },
+    select: { id: true, name: true, qty: true, supplyPrice: true, expiry: true },
   });
   const nameToId = new Map<string, string>();
-  for (const it of current) if (!nameToId.has(it.name)) nameToId.set(it.name, it.id);
+  const oldById = new Map<string, { name: string; qty: number; supplyPrice: number; expiry: string }>();
+  for (const it of current) {
+    if (!nameToId.has(it.name)) nameToId.set(it.name, it.id);
+    oldById.set(it.id, { name: it.name, qty: it.qty, supplyPrice: it.supplyPrice, expiry: it.expiry });
+  }
 
   const pastedNames = new Set(clean.map((c) => c.name));
   const keepIds = new Set<string>();
@@ -383,6 +430,21 @@ export async function bulkReplaceInventoryAction(
   // 삭제 대상: 붙여넣기에 없는 기존 품목 + 같은 이름 중복행(첫 id 외)
   const deleteRows = current.filter((it) => !keepIds.has(it.id));
   const deleteIds = deleteRows.map((it) => it.id);
+
+  // 변경 기록(붙여넣기) — 실제 바뀐 필드만. 대량이라 coalesce 없이 createMany 로 한 번에.
+  type LogRow = {
+    itemId: string; itemName: string; field: string; kind: string;
+    before: string; after: string; actorId: string; actorName: string; source: string;
+  };
+  const logRows: LogRow[] = [];
+  const mkLog = (o: Partial<LogRow>): LogRow => ({
+    itemId: "", itemName: "", field: "", kind: "update", before: "", after: "",
+    actorId: admin.id, actorName: admin.storeName, source: "붙여넣기", ...o,
+  });
+  for (const it of deleteRows) {
+    const o = oldById.get(it.id);
+    logRows.push(mkLog({ itemId: it.id, itemName: it.name, field: "(삭제)", kind: "delete", before: o ? `${o.name} · ${o.qty}개` : it.name }));
+  }
 
   let added = 0;
   let updated = 0;
@@ -406,8 +468,17 @@ export async function bulkReplaceInventoryAction(
             },
           });
           updated++;
+          const o = oldById.get(id);
+          if (o) {
+            if (o.qty !== c.qty)
+              logRows.push(mkLog({ itemId: id, itemName: c.name, field: "qty", before: String(o.qty), after: String(c.qty) }));
+            if (o.supplyPrice !== c.supplyPrice)
+              logRows.push(mkLog({ itemId: id, itemName: c.name, field: "supplyPrice", before: String(o.supplyPrice), after: String(c.supplyPrice) }));
+            if (c.expiry && (o.expiry ?? "") !== c.expiry)
+              logRows.push(mkLog({ itemId: id, itemName: c.name, field: "expiry", before: String(o.expiry ?? ""), after: c.expiry }));
+          }
         } else {
-          await tx.inventoryItem.create({
+          const created = await tx.inventoryItem.create({
             data: {
               name: c.name,
               qty: c.qty,
@@ -417,11 +488,14 @@ export async function bulkReplaceInventoryAction(
             },
           });
           added++;
+          logRows.push(mkLog({ itemId: created.id, itemName: c.name, field: "(추가)", kind: "create", after: `${c.name} · ${c.qty}개 · ${c.supplyPrice.toLocaleString("ko-KR")}원${c.expiry ? ` · ${c.expiry}` : ""}` }));
         }
       }
     },
     { timeout: 20000 },
   );
+  if (logRows.length)
+    await prisma.inventoryChangeLog.createMany({ data: logRows }).catch(() => {});
 
   await setInventoryPushPending(); // 단방향: 다음 크론이 시트로 반영
   await writeAudit({
@@ -739,7 +813,7 @@ export async function diagnoseSheetSyncAction(): Promise<SheetSyncDiag> {
 // R4 재고 자동저장 — 편집기 입력을 디바운스로 계속 저장. 현재 목록으로 DB를 맞춘다(이름/수량/공급가
 // 갱신 + 목록에서 빠진 항목 삭제). 시트 반영은 push하지 않고 'pending' 표시만 → 다음 크론이 반영(단방향).
 export async function autosaveInventoryAction(payloadJson: string) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   let rows: {
     id?: string;
     name?: string;
@@ -757,11 +831,19 @@ export async function autosaveInventoryAction(payloadJson: string) {
   if (!Array.isArray(rows)) return;
 
   const keepIds = rows.map((r) => String(r.id ?? "")).filter(Boolean);
+  const keepSet = new Set(keepIds);
   // 감사 #2/H2: 삭제가 발생할 때(현재 품목 수 > 남길 수)는 지우기 전에 자동 백업 → 실수로 날아가도 복구 가능.
   const currentCount = await prisma.inventoryItem.count({ where: { deletedAt: null } });
   if (currentCount > keepIds.length) {
     await snapshotInventory("자동 · 재고 삭제 전").catch(() => {});
   }
+  // 변경 기록용 — 편집 전 값 스냅샷(필드별 before→after 로그).
+  const olds = await prisma.inventoryItem.findMany({
+    select: { id: true, name: true, qty: true, supplyPrice: true, expiry: true, tax: true },
+  });
+  const oldById = new Map(olds.map((o) => [o.id, o]));
+
+  const changes: InvChange[] = [];
   await prisma.$transaction(async (tx) => {
     // 편집기에서 제거된(목록에 없는) 항목 삭제
     await tx.inventoryItem.deleteMany({
@@ -785,21 +867,59 @@ export async function autosaveInventoryAction(payloadJson: string) {
       // 과세/면세 — 관리자가 품목마다 하드코딩. supplyPrice처럼 항상 덮어씀(유효값만, 그 외 미선택).
       const taxRaw = String(r.tax ?? "");
       const tax = taxRaw === "TAXABLE" || taxRaw === "EXEMPT" ? taxRaw : "";
-      await tx.inventoryItem.update({
-        where: { id },
-        data: {
-          ...(name ? { name } : {}),
-          ...(qtyChanged ? { qty: toInt(String(r.qty ?? "")) } : {}),
-          supplyPrice: toInt(String(r.supplyPrice ?? "")),
-          tax,
-          ...expiryUpdate,
-        },
-      });
+      const data: {
+        name?: string;
+        qty?: number;
+        supplyPrice: number;
+        tax: string;
+        expiry?: string;
+      } = {
+        ...(name ? { name } : {}),
+        ...(qtyChanged ? { qty: toInt(String(r.qty ?? "")) } : {}),
+        supplyPrice: toInt(String(r.supplyPrice ?? "")),
+        tax,
+        ...expiryUpdate,
+      };
+      await tx.inventoryItem.update({ where: { id }, data });
+      // 변경 기록 — 실제 쓰인 필드만 편집 전 값과 비교해 diff.
+      const old = oldById.get(id);
+      if (old) {
+        const cur: Record<string, unknown> = {
+          name: old.name,
+          qty: old.qty,
+          supplyPrice: old.supplyPrice,
+          tax: old.tax,
+          expiry: old.expiry,
+        };
+        for (const f of ["name", "qty", "supplyPrice", "tax", "expiry"] as const) {
+          if (!(f in data)) continue;
+          const b = String(cur[f] ?? "");
+          const a = String((data as Record<string, unknown>)[f] ?? "");
+          if (b !== a)
+            changes.push({ itemId: id, itemName: name || old.name, field: f, before: b, after: a });
+        }
+      }
     }
   });
+  // 삭제 기록(편집기 목록에서 빠진 품목)
+  for (const o of olds)
+    if (!keepSet.has(o.id))
+      changes.push({
+        itemId: o.id,
+        itemName: o.name,
+        field: "(삭제)",
+        kind: "delete",
+        before: `${o.name} · ${o.qty}개`,
+        after: "",
+      });
+  await recordInventoryChanges(changes, { id: admin.id, name: admin.storeName }, "재고 편집").catch(
+    () => {},
+  );
+
   await setInventoryPushPending(); // R3 변경 표시 → 다음 크론이 시트로 push
   // 자동저장은 편집기 상태가 이미 정확하므로 /admin/inventory 재검증 생략(편집 중 리셋 방지).
   revalidatePath("/inventory");
+  revalidatePath("/admin/inventory/history");
 }
 
 // #2 재고 백업/복구 — 위험작업(자동저장 삭제·붙여넣기) 전 자동백업 + 수동 백업/복구.
