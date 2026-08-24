@@ -48,51 +48,22 @@ export function diffInventoryFields(
   return out;
 }
 
-// 같은 (품목·필드·작성자) 를 5분 내 연속 수정하면 마지막 로그의 after 만 갱신(타이핑 중간값 누적 방지).
-// 최종값이 원래 before 로 되돌아오면 그 로그를 삭제(순변화 없음).
-const COALESCE_MS = 5 * 60 * 1000;
-
+// 값이 바뀔 때마다 '한 건씩' 영구 기록한다. 원래 값으로 되돌리는 것도 하나의 변경이므로 그대로 남긴다
+// (되돌렸다고 지우지 않음 — 사장 요청). 자동저장 디바운스(0.8s)라 연속 타이핑은 대개 순변화 1건으로 저장된다.
 export async function recordInventoryChanges(
   changes: InvChange[],
   actor: { id: string; name: string },
   source: string,
 ): Promise<void> {
-  const now = Date.now();
   for (const c of changes) {
     if (!c.itemId || !c.field) continue;
     try {
-      const kind = c.kind ?? "update";
-      if (kind === "update") {
-        const prev = await prisma.inventoryChangeLog.findFirst({
-          where: {
-            itemId: c.itemId,
-            field: c.field,
-            kind: "update",
-            actorId: actor.id,
-            source, // 같은 진입점(경로)끼리만 병합 — 경로 라벨이 뒤섞이지 않게
-            createdAt: { gte: new Date(now - COALESCE_MS) },
-          },
-          orderBy: { createdAt: "desc" },
-        });
-        if (prev) {
-          if (prev.before === c.after) {
-            // 원래 값으로 되돌림 → 순변화 없음, 로그 제거
-            await prisma.inventoryChangeLog.delete({ where: { id: prev.id } });
-          } else {
-            await prisma.inventoryChangeLog.update({
-              where: { id: prev.id },
-              data: { after: c.after, itemName: c.itemName, createdAt: new Date() },
-            });
-          }
-          continue;
-        }
-      }
       await prisma.inventoryChangeLog.create({
         data: {
           itemId: c.itemId,
           itemName: c.itemName,
           field: c.field,
-          kind,
+          kind: c.kind ?? "update",
           before: c.before,
           after: c.after,
           actorId: actor.id,
