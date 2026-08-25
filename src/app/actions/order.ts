@@ -425,6 +425,7 @@ export async function createOrderAction(
   }
 
   remapBenijimin(groups); // #5 베니지민 고구마 → 과일
+  remapGoguma(groups); // 고구마는 무조건 과일 — 저장 경로에서도 확정(미리보기만 하던 걸 저장에도 적용)
   mergeSameItems(groups); // R1 같은 품목+설명 합산
 
   if (groups.length === 0) {
@@ -976,6 +977,7 @@ export async function updateDayOrderAction(
     groups.push({ category, items });
   }
   remapBenijimin(groups); // #5 베니지민 고구마 → 과일
+  remapGoguma(groups); // 고구마는 무조건 과일 — 수정 경로에서도 확정
   mergeSameItems(groups); // R1 같은 품목+설명 합산
 
   // 공구(TOOL) = 담기원장(myHolds)로 재구성. 담은 게 없으면 공구는 손대지 않음(그대로 둠).
