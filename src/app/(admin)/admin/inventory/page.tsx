@@ -33,7 +33,7 @@ export default async function AdminInventory() {
           className="btn btn--soft"
           style={{ textDecoration: "none", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
         >
-          🖥️ PC 재고관리 접속 <span style={{ opacity: 0.7, fontWeight: 600 }}>(컴퓨터 전용)</span>
+          PC 재고관리 접속
         </Link>
 
         {/* 재고 값이 언제·누가·무엇을 바꿨는지 기록(오타/의도치 않은 변경 추적) */}
@@ -42,7 +42,7 @@ export default async function AdminInventory() {
           className="btn btn--soft"
           style={{ textDecoration: "none", marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
         >
-          🕘 변경 기록 <span style={{ opacity: 0.7, fontWeight: 600 }}>(값이 바뀐 내역)</span>
+          변경 기록
         </Link>
 
         {/* 잘 안 쓰는 기능은 '기능' 토글 안에 숨겨 스크롤을 줄인다(기본 닫힘) */}
