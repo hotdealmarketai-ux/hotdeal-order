@@ -33,6 +33,14 @@ import { currentWindowStartUtc, windowKeyAt } from "@/lib/schedule";
 import { myHolds } from "@/lib/stock-hold";
 import { displayQty } from "@/lib/qty";
 import { orderOpenNow } from "@/lib/order-open";
+import {
+  orderChannelConfig,
+  effectiveChannels,
+  fixedNameSets,
+  isFixedCategory,
+  normFixedName,
+  type OrderChannelConfig,
+} from "@/lib/order-flags";
 import { logError } from "@/lib/log";
 import { orderLockOf } from "@/lib/receivable";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
@@ -63,6 +71,14 @@ export async function parseChatOrderAction(text: string): Promise<ChatParseState
     return {
       ok: false,
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
+    };
+  }
+
+  // 일반 발주 관리 — 채팅 발주 잠금(관리자 설정 또는 품목 고정 시 자동)
+  if (effectiveChannels(await orderChannelConfig()).chatDisabled) {
+    return {
+      ok: false,
+      error: "지금은 채팅 발주를 사용할 수 없어요. 칸으로 발주해 주세요.",
     };
   }
 
@@ -115,6 +131,12 @@ export async function previewGridOrderAction(
     };
   }
 
+  // 일반 발주 관리 — 칸 발주 잠금(관리자 설정)
+  const channelCfg = await orderChannelConfig();
+  if (effectiveChannels(channelCfg).gridDisabled) {
+    return { ok: false, error: "지금은 칸 발주를 사용할 수 없어요." };
+  }
+
   let payload: { category?: string; items?: RawRow[] }[] = [];
   try {
     payload = JSON.parse(String(payloadJson ?? "[]"));
@@ -132,7 +154,7 @@ export async function previewGridOrderAction(
     groups.push({ category, items });
   }
 
-  remapBenijimin(groups); // #5 베니지민 고구마 → 과일
+  remapBenijimin(groups, channelCfg.fixedFruit); // #5 베니지민 고구마 → 과일(과일 고정 시 이동 보류)
 
   if (groups.length === 0) {
     return { ok: false, error: "발주할 품목을 한 개 이상 입력하세요." };
@@ -142,7 +164,9 @@ export async function previewGridOrderAction(
   // 재고 매칭/취소 복구가 어긋남 → 원본 그대로 통과.
   const normalized = await Promise.all(
     groups.map((g) =>
-      g.category === "TOFU" || g.category === "TOOL"
+      g.category === "TOFU" ||
+      g.category === "TOOL" ||
+      isFixedCategory(g.category, channelCfg)
         ? Promise.resolve({ engine: "rule" as const, items: g.items, summary: "" })
         : normalizeOrder({ categoryLabel: CATEGORIES[g.category].label, items: g.items }),
     ),
@@ -165,12 +189,16 @@ export async function previewGridOrderAction(
     // TOFU는 시트가 tofuQty로 직접 그리므로 미리보기 응답에선 제외(비-TOFU만 rowsByCat 갱신용)
     .filter((g) => g.category !== "TOFU");
 
+  // 품목 고정 카테고리로의 유입을 막기 위한 고정 집합(고정 카탈로그로 remap돼 유실되는 문제 차단).
+  const fixedSet = new Set<"FRUIT" | "VEG">();
+  if (channelCfg.fixedFruit) fixedSet.add("FRUIT");
+  if (channelCfg.fixedVeg) fixedSet.add("VEG");
   // R6: 매장 취급 목록 기준으로 과일↔야채 교차 재분류(AI가 이름을 매장 이름으로 맞춘 뒤).
-  reclassifyByCatalog(outGroups, allowed as Category[]);
+  reclassifyByCatalog(outGroups, allowed as Category[], fixedSet);
   // Q1: 정규화(AI) 이후 최종적으로 한 번 더 remap — AI가 '베니지민 고구마'로 합쳤어도 여기서
   // name="고구마"/note="베니지민"으로 다시 분리하고, 카테고리도 과일로 확정(미리보기가 최종과 일치).
-  remapBenijimin(outGroups);
-  remapGoguma(outGroups); // 고구마는 무조건 과일(reclassify가 야채로 보낸 것도 여기서 되돌림)
+  remapBenijimin(outGroups, channelCfg.fixedFruit);
+  remapGoguma(outGroups, channelCfg.fixedFruit); // 고구마는 무조건 과일(단 과일 고정 시 이동 보류)
   mergeSameItems(outGroups); // R1 같은 품목+설명 합산
 
   return { ok: true, groups: outGroups };
@@ -240,7 +268,10 @@ const hasBeni = (s: string) => {
   return t.includes("베니지민") || new RegExp(BENI_PAT).test(t);
 };
 const isGoguma = (s: string) => (s || "").replace(/\s+/g, "").includes("고구마");
-function remapBenijimin(groups: Group[]): void {
+function remapBenijimin(groups: Group[], fruitFixed = false): void {
+  // 과일 품목 고정 ON이면 과일은 관리자 지정 카탈로그다 — 이름을 바꾸거나 과일칸으로 옮기지 않는다
+  // (개명/이동이 화이트리스트에 걸려 무경고 유실되던 문제 차단. 지정명 원형 보존).
+  if (fruitFixed) return;
   // '베니지민'이 name에 있거나, 품목이 '고구마'인데 설명(note)에 베니지민(오타 포함)이 있으면 대상
   const isBeni = (it: { name: string; note: string }) =>
     hasBeni(it.name) || (isGoguma(it.name) && hasBeni(it.note));
@@ -275,7 +306,11 @@ function remapBenijimin(groups: Group[]): void {
 // 고구마는 무조건 '과일'로 라우팅(과일 파트/서부일광 출고) — 밤·자색·호박고구마 등 '고구마' 들어간 변형 포함.
 // 야채로 분류/이동된 고구마를 과일로 되돌린다. 공구·두부칸(임의 상품명)·이미 과일칸은 건드리지 않음.
 // reclassifyByCatalog·remapBenijimin 이후 마지막에 돌려 '무조건 과일'을 최종 확정한다(#고구마).
-function remapGoguma(groups: Group[]): void {
+function remapGoguma(groups: Group[], fruitFixed = false): void {
+  // 과일 품목 고정 ON이면 과일칸이 관리자 지정 카탈로그라 임의 고구마를 옮겨 담을 수 없다 →
+  // 야채칸에 적힌 고구마는 그 자리에 그대로 둔다(무경고 유실 방지). 관리자가 고구마를 과일로 받으려면
+  // 고정 과일 목록에 '고구마'를 등록하면 된다.
+  if (fruitFixed) return;
   const moved: Group["items"] = [];
   for (const g of groups) {
     if (g.category !== "VEG") continue; // 야채칸의 고구마만 과일로(공구·두부·이미 과일은 그대로)
@@ -329,7 +364,11 @@ function mergeSameItems(groups: Group[]): void {
 const catNorm = (s: string) => (s || "").replace(/\s+/g, "").replace(/\(.*?\)/g, "");
 const VEG_SET = new Set(DS_VEG.map(catNorm));
 const FRUIT_SET = new Set(DS_FRUIT.map(catNorm));
-function reclassifyByCatalog(groups: Group[], allowed: Category[]): void {
+function reclassifyByCatalog(
+  groups: Group[],
+  allowed: Category[],
+  fixedCats?: Set<"FRUIT" | "VEG">,
+): void {
   if (!allowed.includes("FRUIT") || !allowed.includes("VEG")) return;
   const moved: Record<"FRUIT" | "VEG", Group["items"]> = { FRUIT: [], VEG: [] };
   for (const g of groups) {
@@ -343,7 +382,8 @@ function reclassifyByCatalog(groups: Group[], allowed: Category[]): void {
         : VEG_SET.has(n)
           ? "VEG"
           : cur;
-      if (correct !== cur) moved[correct].push(it);
+      // 목적지 카테고리가 '품목 고정'이면 옮기지 않는다(고정 카탈로그로 유입돼 유실되던 문제 차단).
+      if (correct !== cur && !fixedCats?.has(correct)) moved[correct].push(it);
       else keep.push(it);
     }
     g.items = keep;
@@ -357,6 +397,35 @@ function reclassifyByCatalog(groups: Group[], allowed: Category[]): void {
   for (let i = groups.length - 1; i >= 0; i--) {
     if (groups[i].items.length === 0) groups.splice(i, 1);
   }
+}
+
+// 품목 고정 카테고리 화이트리스트 — 관리자 지정 품목만 허용(서버 권위). remap 이후 호출.
+// 지정 목록에 없는 '채워진(품목명 있는)' 항목이 있으면 조용히 버리지 말고 그 이름을 반환(호출부가 오류로 알림).
+// extraAllow: 수정 경로에서 '이미 발주된 품목명'을 추가 허용(관리자가 발주창 중 미노출/개명해도 기존 발주 보존).
+function enforceFixedWhitelist(
+  groups: Group[],
+  cfg: OrderChannelConfig,
+  nameSets: Record<"FRUIT" | "VEG", Set<string>>,
+  extraAllow?: Record<"FRUIT" | "VEG", Set<string>>,
+): string | null {
+  for (const g of groups) {
+    if (!isFixedCategory(g.category, cfg)) continue;
+    if (g.category !== "FRUIT" && g.category !== "VEG") continue;
+    const base = nameSets[g.category];
+    const extra = extraAllow?.[g.category];
+    const keep: Group["items"] = [];
+    for (const it of g.items) {
+      const key = normFixedName(it.name);
+      if (base.has(key) || extra?.has(key)) keep.push(it);
+      else if (it.name.trim()) return it.name; // 채워진 비지정 품목 → 오류
+      // 이름 없는 빈 항목은 조용히 버림(원래 미제출 대상)
+    }
+    g.items = keep;
+  }
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (groups[i].items.length === 0) groups.splice(i, 1);
+  }
+  return null;
 }
 
 export async function createOrderAction(
@@ -377,6 +446,19 @@ export async function createOrderAction(
   const lock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
   if (lock.locked) {
     return { error: "지난 발주가 결제되지 않아 발주가 잠겨 있어요. 입금 확인 후 가능해요." };
+  }
+
+  // 일반 발주 관리 — 발주 방식(칸/채팅) 잠금 서버 최종 검증(UI 우회 방지, fail-closed).
+  // 잠긴 채널이 있으면 '허용된 채널의 source'가 명시된 요청만 통과(빈/미지 source 차단).
+  // effectiveChannels가 칸·채팅 동시 잠금을 막으므로 정상 제출은 영향 없음.
+  const channelCfg = await orderChannelConfig();
+  const { gridDisabled, chatDisabled } = effectiveChannels(channelCfg);
+  const source = String(formData.get("source") ?? "");
+  if (gridDisabled && source !== "chat") {
+    return { error: "지금은 칸 발주를 사용할 수 없어요." };
+  }
+  if (chatDisabled && source !== "grid") {
+    return { error: "지금은 채팅 발주를 사용할 수 없어요. 칸으로 발주해 주세요." };
   }
 
   // 이번 발주 창에 '이미 넣은 카테고리'만 중복 생성 차단(수정에서 고치게) — 아직 안 넣은
@@ -424,9 +506,17 @@ export async function createOrderAction(
     groups.push({ category, items });
   }
 
-  remapBenijimin(groups); // #5 베니지민 고구마 → 과일
-  remapGoguma(groups); // 고구마는 무조건 과일 — 저장 경로에서도 확정(미리보기만 하던 걸 저장에도 적용)
+  remapBenijimin(groups, channelCfg.fixedFruit); // #5 베니지민 고구마 → 과일(과일 고정 시 이동 보류)
+  remapGoguma(groups, channelCfg.fixedFruit); // 고구마는 무조건 과일(과일 고정 시 이동 보류)
   mergeSameItems(groups); // R1 같은 품목+설명 합산
+
+  // 품목 고정 카테고리 — 관리자 지정 품목만 허용(remap 이후 검증). 지정 외 품목이 채워져 있으면 저장 차단.
+  if (channelCfg.fixedFruit || channelCfg.fixedVeg) {
+    const dropped = enforceFixedWhitelist(groups, channelCfg, await fixedNameSets());
+    if (dropped) {
+      return { error: `‘${dropped}’은(는) 지정 품목이 아니에요. 지정 품목에서 선택해 주세요.` };
+    }
+  }
 
   if (groups.length === 0) {
     return { error: "발주할 품목을 한 개 이상 입력하세요." };
@@ -460,6 +550,15 @@ export async function createOrderAction(
           engine: "rule" as const,
           items: g.items,
           summary: `채움채 발주 ${g.items.length}건`,
+        });
+      }
+      if (isFixedCategory(g.category, channelCfg)) {
+        // 품목 고정 — 관리자 지정 품목명 그대로 보존(AI 개명 금지)
+        const noteTags = [...new Set(g.items.map((it) => it.note).filter(Boolean))];
+        return Promise.resolve({
+          engine: "rule" as const,
+          items: g.items,
+          summary: noteTags.join(" · "),
         });
       }
       if (preNormalized) {
@@ -955,6 +1054,8 @@ export async function updateDayOrderAction(
   }
 
   const allowed = allowedCategoriesFor(user.role);
+  // 일반 발주 관리 — 과일/야채 품목 고정 설정(수정 경로도 지정 품목명 보존·검증)
+  const channelCfg = await orderChannelConfig();
 
   // payload: 멀티 카테고리(공구는 여기서 무시 — 아래 myHolds로 재구성)
   let payload: { category?: string; items?: RawRow[] }[] = [];
@@ -976,9 +1077,41 @@ export async function updateDayOrderAction(
     if (badQty) return { error: `‘${badQty}’ 수량을 입력해 주세요.` };
     groups.push({ category, items });
   }
-  remapBenijimin(groups); // #5 베니지민 고구마 → 과일
-  remapGoguma(groups); // 고구마는 무조건 과일 — 수정 경로에서도 확정
+  remapBenijimin(groups, channelCfg.fixedFruit); // #5 베니지민 고구마 → 과일(과일 고정 시 이동 보류)
+  remapGoguma(groups, channelCfg.fixedFruit); // 고구마는 무조건 과일(과일 고정 시 이동 보류)
   mergeSameItems(groups); // R1 같은 품목+설명 합산
+
+  // 칸 발주 잠금(gridDisabled) 시 편집 경로로 '새 카테고리' 신규 생성 우회 차단(기존 카테고리 수정은 허용).
+  const { gridDisabled } = effectiveChannels(channelCfg);
+  if (gridDisabled) {
+    const existingCats = new Set(existing.map((o) => o.category));
+    const newCat = groups.find((g) => !existingCats.has(g.category));
+    if (newCat) {
+      return { error: "지금은 칸 발주로 새 품목을 추가할 수 없어요." };
+    }
+  }
+
+  // 품목 고정 카테고리 — 관리자 지정 품목만 허용(remap 이후). 발주창 중 관리자가 미노출/개명해도
+  // '이미 발주된 품목명'은 보존(extraAllow)해 무경고 삭제를 막고, 지정 외 채워진 품목은 오류로 차단.
+  if (channelCfg.fixedFruit || channelCfg.fixedVeg) {
+    const extraAllow = { FRUIT: new Set<string>(), VEG: new Set<string>() };
+    for (const o of existing) {
+      if (o.category === "FRUIT" || o.category === "VEG") {
+        for (const it of o.items) extraAllow[o.category].add(normFixedName(it.name));
+      }
+    }
+    const dropped = enforceFixedWhitelist(
+      groups,
+      channelCfg,
+      await fixedNameSets(),
+      extraAllow,
+    );
+    if (dropped) {
+      return {
+        error: `‘${dropped}’은(는) 지금 발주할 수 없어요. 새로고침 후 다시 시도해 주세요.`,
+      };
+    }
+  }
 
   // 공구(TOOL) = 담기원장(myHolds)로 재구성. 담은 게 없으면 공구는 손대지 않음(그대로 둠).
   const holds = await myHolds(user.id, windowKeyAt());
@@ -1003,6 +1136,15 @@ export async function updateDayOrderAction(
           engine: "rule" as const,
           items: g.items,
           summary: `채움채 발주 ${g.items.length}건`,
+        });
+      }
+      if (isFixedCategory(g.category, channelCfg)) {
+        // 품목 고정 — 관리자 지정 품목명 그대로 보존(AI 개명 금지)
+        const noteTags = [...new Set(g.items.map((it) => it.note).filter(Boolean))];
+        return Promise.resolve({
+          engine: "rule" as const,
+          items: g.items,
+          summary: noteTags.join(" · "),
         });
       }
       if (preNormalized) {

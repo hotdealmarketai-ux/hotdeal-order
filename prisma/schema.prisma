@@ -361,6 +361,20 @@ model AppMeta {
   value    String   @default("")
 }
 
+// 일반 발주 '품목 고정' — 관리자가 과일/야채 발주 칸에 고정으로 노출할 품목.
+// 켜지면(order_fixed_fruit/veg AppMeta 플래그) 가맹점은 이 품목만 발주(수량·설명만 입력, 품목명 고정).
+model FixedOrderItem {
+  id        String   @id @default(cuid())
+  category  String // FRUIT | VEG (constants.Category 하위집합)
+  name      String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true) // 노출/미노출
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category, sortOrder])
+}
+
 // 재고현황 — 새롭(본사)이 작성/구글시트 동기화, 핫딜마켓 가맹점만 열람
 model InventoryItem {
   id        String   @id @default(cuid())

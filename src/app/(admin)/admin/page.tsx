@@ -87,6 +87,7 @@ export default async function AdminHome() {
         },
       ],
       items: [
+        { href: "/admin/order-config", title: "일반 발주 관리" },
         { href: "/admin/weekly", title: "주간발주", badge: weeklyCount > 0 ? weeklyCount : undefined },
         { href: "/admin/calendar", title: "예약 일정" },
         { href: "/admin/holds", title: "담기 현황" },

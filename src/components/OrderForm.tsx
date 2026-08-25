@@ -77,6 +77,11 @@ export function OrderForm({
   initialPickup = "",
   initialFulfillment = "",
   invOptions = [],
+  gridDisabled = false,
+  chatDisabled = false,
+  fixedFruit = false,
+  fixedVeg = false,
+  fixedItems = { FRUIT: [], VEG: [] },
 }: {
   categories: Category[];
   needsPickup: boolean;
@@ -103,15 +108,34 @@ export function OrderForm({
   initialFulfillment?: "" | Fulfillment;
   /** 공구 '재고에서 검색·담기' 팝업용 재고현황 품목(남은 재고 포함). 없으면 팝업 숨김. */
   invOptions?: StockPickItem[];
+  /** 일반 발주 관리 — 칸/채팅 발주 잠금(서버에서 유효값 계산해 전달). */
+  gridDisabled?: boolean;
+  chatDisabled?: boolean;
+  /** 과일/야채 품목 고정 여부. */
+  fixedFruit?: boolean;
+  fixedVeg?: boolean;
+  /** 고정 품목 목록(카테고리별). 고정 ON인 카테고리만 사용. */
+  fixedItems?: {
+    FRUIT: { id: string; name: string }[];
+    VEG: { id: string; name: string }[];
+  };
 }) {
   // 수정 모드 = editDate 존재. 저장은 updateDayOrderAction, 초안(localStorage)·채팅 진입 비활성.
   const editMode = !!editDate;
+  // 일반 발주 관리 — 과일/야채 '품목 고정' 여부와 고정 품목 목록.
+  const isFixedCat = (c: Category) =>
+    (c === "FRUIT" && fixedFruit) || (c === "VEG" && fixedVeg);
+  const fixedItemsFor = (c: Category): { id: string; name: string }[] =>
+    c === "FRUIT" ? fixedItems.FRUIT ?? [] : c === "VEG" ? fixedItems.VEG ?? [] : [];
   const router = useRouter();
   const [toolPickerOpen, setToolPickerOpen] = useState(false);
   const uid = useRef(0);
   const newRow = (): Row => ({ id: ++uid.current, name: "", qty: "", note: "" });
 
-  const [mode, setMode] = useState<"grid" | "chat">("grid");
+  // 칸 발주가 잠겨 있으면 채팅으로 시작(수정 모드는 항상 칸). 서버가 둘 다 잠기지 않도록 보장.
+  const [mode, setMode] = useState<"grid" | "chat">(
+    editMode ? "grid" : gridDisabled ? "chat" : "grid",
+  );
   const [active, setActive] = useState<Category>(categories[0]);
   const [rowsByCat, setRowsByCat] = useState<Record<string, Row[]>>(() => {
     const init: Record<string, Row[]> = {};
@@ -140,6 +164,22 @@ export function OrderForm({
   const [tofuQty, setTofuQty] = useState<Record<string, string>>(
     () => initialTofuQty ?? {},
   );
+  // 고정 품목 입력값(id → {수량, 설명}). 수정 모드면 기존 발주 품목에서 이름으로 매칭해 시드.
+  const [fixedVals, setFixedVals] = useState<
+    Record<string, { qty: string; note: string }>
+  >(() => {
+    const out: Record<string, { qty: string; note: string }> = {};
+    const norm = (s: string) => (s || "").replace(/\s+/g, " ").trim();
+    for (const cat of ["FRUIT", "VEG"] as const) {
+      if (!isFixedCat(cat)) continue;
+      const seed = initialRowsByCat?.[cat] ?? [];
+      for (const it of fixedItemsFor(cat)) {
+        const match = seed.find((r) => norm(r.name) === norm(it.name));
+        if (match) out[it.id] = { qty: match.qty ?? "", note: match.note ?? "" };
+      }
+    }
+    return out;
+  });
   const [confirming, setConfirming] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [confirmTab, setConfirmTab] = useState<Category>(categories[0]);
@@ -287,13 +327,25 @@ export function OrderForm({
               .map((t) => ({ name: t.name, qty: t.qty, note: "" }));
             return { category: c, items };
           }
+          if (isFixedCat(c)) {
+            // 품목 고정 — 지정 품목명 그대로(수정 불가), 수량 입력분만 발주에 포함.
+            const items = fixedItemsFor(c)
+              .filter((it) => (fixedVals[it.id]?.qty ?? "").trim())
+              .map((it) => ({
+                name: it.name,
+                qty: (fixedVals[it.id]?.qty ?? "").trim(),
+                note: (fixedVals[it.id]?.note ?? "").trim(),
+              }));
+            return { category: c, items };
+          }
           const items = (rowsByCat[c] ?? [])
             .filter(isFilled)
             .map((r) => ({ name: r.name, qty: r.qty, note: r.note }));
           return { category: c, items };
         })
         .filter((g) => g.items.length > 0),
-    [categories, rowsByCat, tofuQty, toolCart],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [categories, rowsByCat, tofuQty, toolCart, fixedVals, fixedFruit, fixedVeg],
   );
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
@@ -329,9 +381,18 @@ export function OrderForm({
       return;
     }
     setLocalError("");
+    // 품목 고정 카테고리는 AI 정리 대상에서 제외(관리자 지정 품목명 그대로 보존).
+    const previewPayload = payload.filter(
+      (g) => !isFixedCat(g.category as Category),
+    );
+    if (previewPayload.length === 0) {
+      // 고정 품목만 있는 발주 — AI 정리 없이 바로 확인 시트.
+      setConfirming(true);
+      return;
+    }
     setPreviewing(true);
     try {
-      const res = await previewGridOrderAction(JSON.stringify(payload));
+      const res = await previewGridOrderAction(JSON.stringify(previewPayload));
       if (!res.ok) {
         setLocalError(res.error ?? "정리에 실패했어요. 다시 시도해 주세요.");
         return;
@@ -351,8 +412,9 @@ export function OrderForm({
           (res.groups ?? []).map((g) => [g.category as Category, g.items]),
         );
         // 제출한 카테고리는 응답값으로 교체(응답에 없으면 = 옮겨감 → 빈칸)
+        // 고정 카테고리는 rowsByCat 소스가 아니므로(fixedVals) 교체 대상에서 제외.
         for (const g of payload) {
-          if (g.category === "TOFU") continue;
+          if (g.category === "TOFU" || isFixedCat(g.category as Category)) continue;
           next[g.category] = normalizeRows((byCat.get(g.category) ?? []).map(toRow));
         }
         // 응답에만 있는 카테고리(remap 목적지, 예: 과일)도 반영
@@ -374,22 +436,24 @@ export function OrderForm({
   if (mode === "chat") {
     return (
       <div>
-        <button
-          type="button"
-          className="entrycard"
-          onClick={() => setMode("grid")}
-        >
-          <span className="entrycard__ic">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="4" y="4" width="16" height="16" rx="2" />
-              <path d="M4 10h16M10 4v16" />
-            </svg>
-          </span>
-          <span className="entrycard__main">
-            <span className="entrycard__title">칸에 직접 입력하기</span>
-          </span>
-          <span className="entrycard__chev">›</span>
-        </button>
+        {!gridDisabled && (
+          <button
+            type="button"
+            className="entrycard"
+            onClick={() => setMode("grid")}
+          >
+            <span className="entrycard__ic">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+                <path d="M4 10h16M10 4v16" />
+              </svg>
+            </span>
+            <span className="entrycard__main">
+              <span className="entrycard__title">칸에 직접 입력하기</span>
+            </span>
+            <span className="entrycard__chev">›</span>
+          </button>
+        )}
         <ChatOrder
           categories={categories}
           needsPickup={needsPickup}
@@ -412,11 +476,13 @@ export function OrderForm({
       {/* 확인 시트의 값은 이미 AI가 정리한(그리고 점주가 확인·수정한) 결과 →
           저장 시 재정규화하지 않고 그대로 저장(승인=저장 보장). */}
       <input type="hidden" name="preNormalized" value="1" />
+      {/* 칸/채팅 구분 — 저장 액션이 방식별 잠금을 서버에서 최종 검증(UI 우회 방지) */}
+      <input type="hidden" name="source" value="grid" />
       {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
       {editMode && <input type="hidden" name="date" value={editDate} />}
 
-      {/* 채팅 발주 진입 카드 — 수정 모드에선 숨김(수정은 칸으로만) */}
-      {!editMode && (
+      {/* 채팅 발주 진입 카드 — 수정 모드/채팅 잠금 시 숨김 */}
+      {!editMode && !chatDisabled && (
         <button
           type="button"
           className="entrycard"
@@ -504,7 +570,61 @@ export function OrderForm({
           )}
         </div>
 
-        {active === "TOFU" ? (
+        {isFixedCat(active) ? (
+          /* 품목 고정 — 지정 품목만(품목명 고정), 수량·설명만 입력 */
+          <div className="oitems">
+            {fixedItemsFor(active).length === 0 ? (
+              <div className="empty">
+                등록된 고정 품목이 없어요. 관리자에게 문의해 주세요.
+              </div>
+            ) : (
+              fixedItemsFor(active).map((it, i) => {
+                const v = fixedVals[it.id] ?? { qty: "", note: "" };
+                const filled = !!(v.qty.trim() || v.note.trim());
+                return (
+                  <div className={`oitem ${filled ? "is-filled" : ""}`} key={it.id}>
+                    <span className="oitem__num">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <div className="oitem__fields">
+                      <div className="oitem__row1">
+                        <div className="input input--lock">
+                          <span className="input--lock__name">{it.name}</span>
+                          <span className="input--lock__tag">고정</span>
+                        </div>
+                        <input
+                          className="input"
+                          inputMode="numeric"
+                          value={v.qty}
+                          onChange={(e) => {
+                            setConfirming(false);
+                            setFixedVals((prev) => ({
+                              ...prev,
+                              [it.id]: { qty: e.target.value, note: prev[it.id]?.note ?? "" },
+                            }));
+                          }}
+                          placeholder="수량"
+                        />
+                      </div>
+                      <input
+                        className="input"
+                        value={v.note}
+                        onChange={(e) => {
+                          setConfirming(false);
+                          setFixedVals((prev) => ({
+                            ...prev,
+                            [it.id]: { qty: prev[it.id]?.qty ?? "", note: e.target.value },
+                          }));
+                        }}
+                        placeholder="설명"
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : active === "TOFU" ? (
           <div className="tofulist">
             {CHAEUMCHAE_CATALOG.map((p) => {
               const q = tofuQty[p.seq] ?? "";
@@ -753,6 +873,58 @@ export function OrderForm({
               <div className="sheet__body">
                 {(() => {
                   const c = activeConfirm;
+                  if (isFixedCat(c)) {
+                    // 품목 고정 — 품목명 읽기전용, 수량·설명만 수정 가능
+                    const list = fixedItemsFor(c).filter(
+                      (it) => (fixedVals[it.id]?.qty ?? "").trim(),
+                    );
+                    if (list.length === 0) return null;
+                    return (
+                      <div className="confsec">
+                        <div className="confsec__head">
+                          <span className="chip">{CATEGORIES[c].label}</span>
+                          <span className="confsec__dest">
+                            {receiverLabel(c, role)} · {list.length}건
+                          </span>
+                        </div>
+                        {list.map((it) => (
+                          <div className="confitem confitem--edit" key={it.id}>
+                            <div className="input confitem__name confitem__name--lock">
+                              {it.name}
+                            </div>
+                            <input
+                              className="input confitem__qty"
+                              value={fixedVals[it.id]?.qty ?? ""}
+                              onChange={(e) =>
+                                setFixedVals((prev) => ({
+                                  ...prev,
+                                  [it.id]: {
+                                    qty: e.target.value,
+                                    note: prev[it.id]?.note ?? "",
+                                  },
+                                }))
+                              }
+                              placeholder="수량"
+                            />
+                            <input
+                              className="input confitem__note"
+                              value={fixedVals[it.id]?.note ?? ""}
+                              onChange={(e) =>
+                                setFixedVals((prev) => ({
+                                  ...prev,
+                                  [it.id]: {
+                                    qty: prev[it.id]?.qty ?? "",
+                                    note: e.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder="설명"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
                   if (c === "TOFU") {
                     const items = CHAEUMCHAE_CATALOG.filter(
                       (p) => (tofuQty[p.seq] ?? "").trim(),

@@ -507,6 +507,8 @@ export function ChatOrder({
             {/* 채팅 미리보기에서 이미 AI가 정리했고 점주가 확인·수정까지 마친 결과 →
                 서버가 저장 시 '재정규화'하지 않고 그대로 저장하도록 표시(승인=저장 보장, 버그 #3). */}
             <input type="hidden" name="preNormalized" value="1" />
+            {/* 채팅 발주 표시 — 저장 액션이 채팅 잠금을 서버에서 최종 검증(UI 우회 방지) */}
+            <input type="hidden" name="source" value="chat" />
             {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
 
             {/* 수령 방식(직접 픽업/배송) — 핫딜마켓 가맹점, 발주 전 필수 선택 */}

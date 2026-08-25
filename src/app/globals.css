@@ -6798,3 +6798,84 @@ a.resv-card:active { transform: scale(0.995); }
 .cont-step { display: flex; align-items: center; border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden; width: max-content; }
 .cont-step button { width: 46px; height: 44px; background: var(--green-100); font-size: 22px; font-weight: 700; color: var(--green-700); border: none; cursor: pointer; }
 .cont-step input { width: 72px; height: 44px; text-align: center; font-size: 18px; font-weight: 900; border: none; border-left: 1px solid var(--line); border-right: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   일반 발주 관리 (order-config) + 가맹점 '품목 고정' 잠금 칸
+   ============================================================ */
+
+/* 가맹점 발주 칸 — 고정 품목명(읽기전용) */
+.input--lock {
+  background: var(--surface-2, #f4f7f2);
+  border-color: var(--line, #e3e7e0);
+  font-weight: 800;
+  color: var(--fg, #191d19);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.input--lock__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.input--lock__tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted, #6b7a6e);
+}
+
+/* 확인 시트 — 고정 품목명(읽기전용) */
+.confitem__name--lock {
+  background: var(--surface-2, #f4f7f2);
+  border-color: var(--line, #e3e7e0);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+}
+
+/* 관리자 일반 발주 관리 */
+.ocfg { display: flex; flex-direction: column; gap: 14px; }
+.ocfg-card { margin-bottom: 0; }
+.ocfg-card__title { font-size: 15px; font-weight: 800; color: var(--green-ink, #184028); margin-bottom: 4px; }
+.ocfg-card__title--row { display: flex; align-items: baseline; justify-content: space-between; }
+.ocfg-count { font-size: 12px; font-weight: 700; color: var(--muted, #6b7a6e); }
+
+.ocfg-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; }
+.ocfg-row + .ocfg-row { border-top: 1px solid var(--line, #e9ede6); }
+.ocfg-row__main { flex: 1; min-width: 0; }
+.ocfg-row__lab { font-size: 14.5px; font-weight: 600; color: var(--fg, #191d19); }
+.ocfg-row__sub { font-size: 11.5px; color: var(--muted, #6b7a6e); margin-top: 3px; font-weight: 500; }
+.ocfg-row__sub--warn { color: var(--warn, #b8541f); }
+.ocfg-lock { flex: 0 0 auto; font-size: 11.5px; font-weight: 800; color: var(--warn, #b8541f); background: var(--warn-bg, #f6e7de); border-radius: 999px; padding: 6px 12px; }
+.ocfg-hint { font-size: 11.5px; color: var(--muted, #6b7a6e); font-weight: 500; line-height: 1.55; margin-top: 10px; }
+
+.ocfg-items { display: flex; flex-direction: column; }
+.ocfg-item { padding: 12px 0; }
+.ocfg-item:first-child { padding-top: 4px; }
+.ocfg-item + .ocfg-item { border-top: 1px solid var(--line, #e9ede6); }
+.ocfg-item__top { display: flex; align-items: center; gap: 10px; }
+.ocfg-item__name { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--fg, #191d19); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ocfg-item__name.is-off { color: var(--muted-2, #9aa29a); text-decoration: line-through; }
+.ocfg-item__acts { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.ocfg-item__sp { flex: 1; }
+.ocfg-item--edit { display: flex; align-items: center; gap: 8px; }
+.ocfg-item--edit .input { flex: 1; }
+.ocfg-item__editbtns { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+
+.ocfg-pill { font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px; border: 0; cursor: pointer; font-family: inherit; }
+.ocfg-pill--on { color: var(--green-700, #1c4a2f); background: var(--green-100, #e7f1e8); }
+.ocfg-pill--off { color: var(--muted, #6b7a6e); background: #edefea; }
+
+.ocfg-add { display: flex; gap: 8px; margin-top: 14px; }
+.ocfg-add .input { flex: 1; }
+
+/* 텍스트 액션 버튼(수정/삭제/순서) */
+.tbtn { font-size: 12.5px; font-weight: 700; color: var(--green-700, #1c4a2f); background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; }
+.tbtn:disabled { opacity: 0.4; cursor: default; }
+.tbtn--del { color: var(--warn, #b8541f); }
+.tbtn--mute { color: var(--muted, #6b7a6e); }
+.tbtn--ord { color: var(--ink-2, #40503f); }

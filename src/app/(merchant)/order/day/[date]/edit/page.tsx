@@ -29,6 +29,7 @@ import { orderLockOf } from "@/lib/receivable";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
 import { myHolds, heldByItem } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
+import { orderChannelConfig, fixedItemsByCat } from "@/lib/order-flags";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 import { OrderForm, type ToolHold } from "@/components/OrderForm";
 import { type StockPickItem } from "@/components/StockPickerSheet";
@@ -80,6 +81,13 @@ export default async function EditDayOrderPage(props: {
 
   const categories = allowedCategoriesFor(user.role);
 
+  // 일반 발주 관리 — 과일/야채 품목 고정(수정 시에도 고정 렌더 유지)
+  const channelCfg = await orderChannelConfig();
+  const fixedItems =
+    channelCfg.fixedFruit || channelCfg.fixedVeg
+      ? await fixedItemsByCat(true)
+      : { FRUIT: [], VEG: [] };
+
   // 시드 — 종류별 기존 품목(현재 표시값=정리본). 공구=담기로 시드, 채움채=수량맵.
   const initialRowsByCat: Record<
     string,
@@ -106,6 +114,23 @@ export default async function EditDayOrderPage(props: {
       qty: it.qty,
       note: it.note,
     }));
+  }
+
+  // 품목 고정 카테고리에서 '이미 발주했으나 현재 목록에 없는(미노출/개명)' 품목은 고정 목록에 합류시켜
+  // 수정 화면에 그대로 표시·수량 시드되게 한다(무경고 삭제 방지, 리뷰 #5).
+  if (channelCfg.fixedFruit || channelCfg.fixedVeg) {
+    const norm = (s: string) => (s || "").replace(/\s+/g, " ").trim();
+    for (const cat of ["FRUIT", "VEG"] as const) {
+      const on = cat === "FRUIT" ? channelCfg.fixedFruit : channelCfg.fixedVeg;
+      if (!on) continue;
+      const have = new Set(fixedItems[cat].map((i) => norm(i.name)));
+      (initialRowsByCat[cat] ?? []).forEach((r, i) => {
+        if (r.name && !have.has(norm(r.name))) {
+          fixedItems[cat].push({ id: `legacy-${cat}-${i}`, name: r.name });
+          have.add(norm(r.name));
+        }
+      });
+    }
   }
 
   // 공구 담기(toolCart) + 예약분(reservedTool) — order/page.tsx와 동일.
@@ -179,6 +204,9 @@ export default async function EditDayOrderPage(props: {
           initialTofuQty={initialTofuQty}
           initialFulfillment={initialFulfillment}
           invOptions={invOptions}
+          fixedFruit={channelCfg.fixedFruit}
+          fixedVeg={channelCfg.fixedVeg}
+          fixedItems={fixedItems}
         />
       </div>
     </>

@@ -24,6 +24,11 @@ import {
 import { kstDateOf, kstToday, kstDayRange, shiftDate, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { orderOpenNow } from "@/lib/order-open";
+import {
+  orderChannelConfig,
+  effectiveChannels,
+  fixedItemsByCat,
+} from "@/lib/order-flags";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
 import { myHolds, heldByItem } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
@@ -40,6 +45,14 @@ export default async function OrderPage(props: {
   if (needsOnboarding(user)) redirect("/onboarding");
   const windowed = hasOrderWindow(user.role);
   const open = await orderOpenNow(user.role); // 운영시간 또는 관리자 임시 오픈
+
+  // 일반 발주 관리 — 발주 방식(칸/채팅) 잠금 + 과일/야채 품목 고정
+  const channelCfg = await orderChannelConfig();
+  const { gridDisabled, chatDisabled } = effectiveChannels(channelCfg);
+  const fixedItems =
+    channelCfg.fixedFruit || channelCfg.fixedVeg
+      ? await fixedItemsByCat(true)
+      : { FRUIT: [], VEG: [] };
 
   // 1일 미수 잠금 — 지난 날짜 미입금 계산서가 있으면 발주 잠금(관리자 해제 시 예외)
   const receivableLock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
@@ -211,6 +224,11 @@ export default async function OrderPage(props: {
             reservedLabel={reservedLabel}
             toolCart={toolCart}
             windowKey={windowKeyAt()}
+            gridDisabled={gridDisabled}
+            chatDisabled={chatDisabled}
+            fixedFruit={channelCfg.fixedFruit}
+            fixedVeg={channelCfg.fixedVeg}
+            fixedItems={fixedItems}
           />
         )}
       </div>
