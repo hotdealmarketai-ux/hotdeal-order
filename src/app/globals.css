@@ -5300,7 +5300,7 @@ a.resv-card:active { transform: scale(0.995); }
 .rstep__val { min-width: 34px; text-align: center; font-size: 15px; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums; }
 /* 스테퍼 가운데 값 = 직접 타이핑 입력칸(+/- 와 동일 흐름, 포커스 아웃 시 커밋) */
 .rstep__input {
-  flex: 1; min-width: 34px; width: 100%; text-align: center;
+  flex: 0 0 auto; width: 44px; min-width: 44px; box-sizing: border-box; text-align: center;
   font-size: 15px; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums;
   border: 0; background: transparent; padding: 2px 0; margin: 0; appearance: none; -moz-appearance: textfield;
 }
