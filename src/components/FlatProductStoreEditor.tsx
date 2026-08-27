@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { adminSetReservationStoreQtyAction } from "@/app/actions/reservation";
 
@@ -105,7 +105,12 @@ export function FlatProductStoreEditor({
                   >
                     −
                   </button>
-                  <span className="rstep__val">{busy ? "…" : s.qty}</span>
+                  <QtyInput
+                    value={s.qty}
+                    busy={busy}
+                    disabled={pending || s.stockDeducted}
+                    onCommit={(n) => save(s, n)}
+                  />
                   <button
                     type="button"
                     className="rstep__btn"
@@ -147,5 +152,56 @@ export function FlatProductStoreEditor({
         발주 지점 {orderedCount}곳 · 전체 가맹점 {stores.length}곳
       </div>
     </div>
+  );
+}
+
+// 스테퍼 가운데 값 = 직접 입력. 타이핑 중엔 서버 저장 안 하고, 포커스 아웃/Enter 때만 커밋.
+function QtyInput({
+  value,
+  busy,
+  disabled,
+  onCommit,
+}: {
+  value: number;
+  busy: boolean;
+  disabled: boolean;
+  onCommit: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const [editing, setEditing] = useState(false);
+  // 저장 후 refresh 등으로 외부 값이 바뀌면 동기화(편집 중엔 사용자가 친 값 유지)
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [value, editing]);
+
+  const commit = () => {
+    setEditing(false);
+    const digits = draft.replace(/[^0-9]/g, "");
+    const n = digits === "" ? 0 : parseInt(digits, 10);
+    setDraft(String(n));
+    if (n !== value) onCommit(n); // save 쪽에서 동일값/음수는 무시
+  };
+
+  return (
+    <input
+      className="rstep__input"
+      type="text"
+      inputMode="numeric"
+      value={busy ? "…" : draft}
+      disabled={disabled}
+      onFocus={(e) => {
+        setEditing(true);
+        e.currentTarget.select();
+      }}
+      onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
+      aria-label="수량 직접 입력"
+    />
   );
 }
