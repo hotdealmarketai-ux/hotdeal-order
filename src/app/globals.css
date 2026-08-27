@@ -2193,6 +2193,26 @@ a {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
+/* 수량 직접 입력 — +/− 스텝퍼 사이에서 타이핑 가능 */
+.resvedit__qtyinput {
+  width: 48px;
+  height: 30px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+  padding: 0 4px;
+  -moz-appearance: textfield;
+}
+.resvedit__qtyinput:focus {
+  outline: none;
+  border-color: var(--green-700);
+  box-shadow: 0 0 0 3px rgba(28, 74, 47, 0.14);
+}
 .resvedit__del {
   border: none;
   background: none;

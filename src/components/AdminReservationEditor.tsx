@@ -147,7 +147,18 @@ export function AdminReservationEditor({
                           >
                             −
                           </button>
-                          <span className="resvedit__qty">{q}</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className="resvedit__qtyinput"
+                            value={q}
+                            onChange={(e) => {
+                              const digits = e.target.value.replace(/[^0-9]/g, "");
+                              setQty(it.itemId, digits === "" ? 0 : parseInt(digits, 10));
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            aria-label="수량 직접 입력"
+                          />
                           <button
                             type="button"
                             className="resvedit__step"
