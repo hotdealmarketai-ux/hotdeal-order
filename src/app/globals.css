@@ -5313,7 +5313,8 @@ a.resv-card:active { transform: scale(0.995); }
   padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
 }
 .fpse__row + .fpse__row { margin-top: 8px; }
-.fpse__store { font-size: 14px; font-weight: 700; color: var(--fg); min-width: 0; }
+/* 좁은 폰에서 지점명이 세로로 접히지 않게 한 줄 고정(넘치면 …). 컨트롤(−/입력/+/삭제)은 우측 고정. */
+.fpse__store { flex: 1 1 auto; font-size: 14px; font-weight: 700; color: var(--fg); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fpse__out { font-size: 12px; font-weight: 700; color: var(--danger); }
 .fpse__none { font-size: 12px; font-weight: 600; color: var(--muted); }
 .fpse__step { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
