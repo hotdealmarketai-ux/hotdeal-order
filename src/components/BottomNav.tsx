@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { canViewInventory, canOrderWeekly, type Role } from "@/lib/constants";
+import { canOrderWeekly, type Role } from "@/lib/constants";
 
 const ICONS = {
   weekly: (
@@ -68,9 +68,8 @@ export function BottomNav({
     ...(role === "MERCHANT_HOTDEAL"
       ? [{ href: "/reservations", label: "예약발주", icon: ICONS.reserve, badge: 0 }]
       : []),
-    ...(canViewInventory(role)
-      ? [{ href: "/inventory", label: "재고현황", icon: ICONS.inventory, badge: 0 }]
-      : []),
+    // 재고현황 — 공구=예약발주 단일 소스 전환으로 하단 네비에서 숨김(담기 폐지).
+    //   (페이지 자체는 열람 전용으로 남아 있고 직접 URL로는 접근 가능)
     { href: "/mypage", label: "마이", icon: ICONS.my, badge: myBadge },
   ];
 
