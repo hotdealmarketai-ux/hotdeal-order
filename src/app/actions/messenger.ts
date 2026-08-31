@@ -1203,7 +1203,7 @@ export async function loadMessengerMinutesAction(): Promise<MinutesDTO[]> {
 }
 
 // 회의록 사진 최대 장수(클라 MinutesPane의 MAX_IMAGES와 동일하게 유지). "use server" 파일이라 export 금지(비-async).
-const MINUTES_MAX_IMAGES = 30;
+const MINUTES_MAX_IMAGES = 100;
 
 // 업로드로 만들어진 우리 Blob 스토어 URL만 허용 — 임의 외부/data: URL 주입 차단
 // (뷰어 <img src> 비컨·삭제 시 del()의 교차기능 Blob 삭제 방지).

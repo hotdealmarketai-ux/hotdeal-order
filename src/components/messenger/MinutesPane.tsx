@@ -31,7 +31,7 @@ const avColor = (name: string) => {
   return AV_COLORS[h % AV_COLORS.length];
 };
 const initial = (name: string) => (name.trim()[0] ?? "?");
-const MAX_IMAGES = 30; // 서버 MINUTES_MAX_IMAGES와 동일하게 유지.
+const MAX_IMAGES = 100; // 서버 MINUTES_MAX_IMAGES와 동일하게 유지.
 
 // 회의록 — 회의 사진(A4 세로)을 날짜별로 보관. 카드 누르면 전체화면 슬라이드 뷰어, 하단에 읽은 사람 표시.
 export function MinutesPane({ me }: { me: { id: string; name: string } }) {
