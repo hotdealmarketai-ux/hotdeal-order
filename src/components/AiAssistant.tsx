@@ -89,7 +89,7 @@ export function AiAssistant() {
               <div className="msg__col">
                 <div className="msg__bubble">{m.content}</div>
                 {m.stock && m.stock.length > 0 && (
-                  <AiStockList items={m.stock} canAdd={m.canAdd ?? false} />
+                  <AiStockList items={m.stock} />
                 )}
               </div>
             </div>

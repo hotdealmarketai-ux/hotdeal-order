@@ -29,8 +29,7 @@ import {
   shipmentDayOf,
   normalizeDateStr,
 } from "@/lib/date";
-import { currentWindowStartUtc, windowKeyAt } from "@/lib/schedule";
-import { myHolds } from "@/lib/stock-hold";
+import { currentWindowStartUtc } from "@/lib/schedule";
 import { displayQty } from "@/lib/qty";
 import { orderOpenNow } from "@/lib/order-open";
 import {
@@ -494,6 +493,8 @@ export async function createOrderAction(
   for (const g of payload) {
     const category = String(g.category ?? "") as Category;
     if (!allowed.includes(category)) continue;
+    // 공구(TOOL)는 예약발주 단일 소스 — 일일 발주로는 저장하지 않는다(담기 폐지, UI 우회 방지).
+    if (category === "TOOL") continue;
     const items = cleanItems(Array.isArray(g.items) ? g.items : []);
     if (items.length === 0) continue;
     if (!items.some((r) => r.name)) {
@@ -708,17 +709,13 @@ export async function updateOrderAction(
 
   const category = order.category as Category;
 
-  // 공구(TOOL) 수정 = 담기원장(StockHold)이 단일 소스. 점주는 수정 화면에서 실시간으로 담기/빼기 하고,
-  // 저장 시 그 담은 상태(myHolds)로 주문 품목을 재구성한다(클라이언트 items 무시 → 담기와 주문이 어긋나지 않음).
-  // 수정은 항상 '이번 발주창'으로 게이트되므로 windowKeyAt()=발주 당시 창 → myHolds가 그 공구 담기와 일치.
-  let items: { name: string; qty: string; note: string }[];
+  // 공구(TOOL)는 예약발주 단일 소스로 전환 — 재고현황 담기 폐지. 일일 발주(수정 포함)에서 공구는 다루지 않는다.
+  // 레거시로 남아있는 공구 발주의 편집 진입은 명시적으로 차단(빈 담기로 인한 오류·유실 방지).
   if (category === "TOOL") {
-    const holds = await myHolds(user.id, windowKeyAt());
-    items = holds.map((h) => ({ name: h.name, qty: String(h.qty), note: "" }));
-    if (items.length === 0) {
-      return { error: "담은 공구가 없어요. 재고에서 담아 주세요." };
-    }
-  } else {
+    return { error: "공구는 예약발주에서만 관리해요. 이 발주는 수정할 수 없어요." };
+  }
+  let items: { name: string; qty: string; note: string }[];
+  {
     let parsed: RawRow[] = [];
     try {
       parsed = JSON.parse(String(formData.get("items") ?? "[]"));
@@ -739,17 +736,13 @@ export async function updateOrderAction(
   const ful = readFulfillment(user.role, formData);
   if (ful.error) return { error: ful.error };
 
-  // 채움채(TOFU)·공구(TOOL)는 정규화 없이 정확한 이름 보존
-  // (공구는 재고 매칭·취소 복구가 이름 기준이라 AI 개명 시 어긋남 → 원본 그대로).
+  // 채움채(TOFU)는 정규화 없이 정확한 이름 보존(공구 TOOL은 위에서 차단됨).
   const result =
-    category === "TOFU" || category === "TOOL"
+    category === "TOFU"
       ? {
           engine: "rule" as const,
           items,
-          summary:
-            category === "TOFU"
-              ? `채움채 발주 ${items.length}건`
-              : `공구 발주 ${items.length}건`,
+          summary: `채움채 발주 ${items.length}건`,
         }
       : await normalizeOrder({
           categoryLabel: CATEGORIES[category].label,
@@ -1113,11 +1106,8 @@ export async function updateDayOrderAction(
     }
   }
 
-  // 공구(TOOL) = 담기원장(myHolds)로 재구성. 담은 게 없으면 공구는 손대지 않음(그대로 둠).
-  const holds = await myHolds(user.id, windowKeyAt());
-  const toolItems = holds.map((h) => ({ name: h.name, qty: String(h.qty), note: "" }));
-
-  if (groups.length === 0 && toolItems.length === 0) {
+  // 공구(TOOL)는 예약발주 단일 소스로 전환 — 일일 발주 수정에서 공구는 재구성하지 않는다(담기 폐지).
+  if (groups.length === 0) {
     return { error: "발주할 품목을 한 개 이상 입력하세요." };
   }
 
@@ -1204,24 +1194,7 @@ export async function updateDayOrderAction(
     };
   });
 
-  // 공구 그룹(담기원장, 정규화 없음 — 이름 보존)
-  if (toolItems.length > 0) {
-    prepared.push({
-      category: "TOOL",
-      rawText: toolItems.map((r, i) => `${i + 1}. ${r.name} ${r.qty}`).join("\n"),
-      summary: `공구 발주 ${toolItems.length}건`,
-      engine: "rule",
-      itemRows: toolItems.map((r, i) => ({
-        sortOrder: i,
-        rawName: r.name,
-        rawQty: r.qty,
-        rawNote: r.note,
-        name: r.name,
-        qty: displayQty(r.qty),
-        note: r.note,
-      })),
-    });
-  }
+  // (공구 TOOL 그룹 재구성 제거 — 공구는 예약발주 단일 소스로 전환, 일일 발주에서 다루지 않음)
 
   // 종류별 upsert — 없던 종류=생성, 있고 내용이 바뀐 종류=수정(확정해제·알림),
   // 내용이 그대로면 손대지 않음(그 업체 확정·알림 유지). 같은 종류 중복 Order(레이스 잔재)는

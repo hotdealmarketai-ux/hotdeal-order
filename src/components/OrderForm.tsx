@@ -712,16 +712,9 @@ export function OrderForm({
             )}
             {reservedTool.length === 0 && toolCart.length === 0 && (
               <div className="empty">
-                {invOptions.length > 0 ? (
-                  <>담은 공구가 없어요. 아래 ‘재고에서 검색·담기’로 담아주세요.</>
-                ) : (
-                  <>
-                    공구는 직접 적을 수 없어요.
-                    <br />
-                    재고 현황에서 ‘담기’로 담아주세요. 예약분은 픽업 전날 자동으로
-                    표시됩니다.
-                  </>
-                )}
+                공구는 예약발주에서 담아 주세요.
+                <br />
+                예약·확정한 공구는 픽업 전날 여기에 자동으로 표시됩니다.
               </div>
             )}
             {invOptions.length > 0 && (

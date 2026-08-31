@@ -15,8 +15,6 @@ import {
   currentWindowStartUtc,
 } from "@/lib/deadline";
 import { kstDateOf } from "@/lib/date";
-import { heldByItem, myHolds } from "@/lib/stock-hold";
-import { windowKeyAt } from "@/lib/schedule";
 import { EditOrderForm } from "@/components/EditOrderForm";
 import type { ToolHold } from "@/components/OrderForm";
 import type { StockPickItem } from "@/components/StockPickerSheet";
@@ -44,58 +42,17 @@ export default async function EditOrderPage(props: {
     if (!isOrderOpen() || !inWindow) redirect(backHref);
   }
 
+  // 공구(TOOL)는 예약발주 단일 소스로 전환 — 재고현황 담기 폐지. 레거시 공구 발주 편집은 차단.
+  if (order.category === "TOOL") redirect(backHref);
+
   const initialItems = order.items.map((it) => ({
     name: it.rawName,
     qty: it.rawQty,
     note: it.rawNote,
   }));
 
-  // 공구(TOOL) 수정 = 실시간 담기. toolCart(내 담기, 발주 당시 창)를 실시간 스테퍼로 조절하고,
-  // 없는 품목은 재고 검색 팝업(invOptions)으로 담는다(holdStockAction). 저장 시 서버가 myHolds로 재구성.
-  // 남은수량 = base − Σ담기홀드. 수정은 항상 이번 발주창이라 windowKeyAt()=발주 당시 창.
-  let toolCart: ToolHold[] = [];
-  let invOptions: StockPickItem[] = [];
-  if (order.category === "TOOL") {
-    const holdKey = windowKeyAt();
-    const [mine, held, invItems] = await Promise.all([
-      myHolds(user.id, holdKey),
-      heldByItem(holdKey),
-      prisma.inventoryItem.findMany({
-        where: { deletedAt: null },
-        orderBy: { sortOrder: "asc" },
-        select: {
-          id: true,
-          name: true,
-          qty: true,
-          supplyPrice: true,
-          expiry: true,
-          majorCat: true,
-          minorCat: true,
-        },
-      }),
-    ]);
-    const invById = new Map(invItems.map((i) => [i.id, i]));
-    toolCart = mine.map((h) => {
-      const inv = invById.get(h.itemId);
-      const base = inv?.qty ?? 0;
-      return {
-        itemId: h.itemId,
-        name: h.name,
-        qty: String(h.qty),
-        mine: h.qty,
-        available: Math.max(0, base - (held[h.itemId] ?? 0)),
-        supplyPrice: inv?.supplyPrice ?? 0,
-        expiry: inv?.expiry ?? "",
-        majorCat: inv?.majorCat ?? "",
-        minorCat: inv?.minorCat ?? "",
-      };
-    });
-    invOptions = invItems.map((it) => ({
-      id: it.id,
-      name: it.name,
-      available: Math.max(0, it.qty - (held[it.id] ?? 0)),
-    }));
-  }
+  const toolCart: ToolHold[] = [];
+  const invOptions: StockPickItem[] = [];
 
   return (
     <>

@@ -383,7 +383,7 @@ export function ChatOrder({
           {/* 카테고리 탭 — 발주가 많아도 종류별로 나눠 확인/수정(세로 스크롤 짧게) */}
           {droppedTool && (
             <div className="notice notice--mute" style={{ marginTop: 12 }}>
-              공구 품목은 직접 적을 수 없어요. 재고현황 ‘담기’로 담아주세요.
+              공구 품목은 직접 적을 수 없어요. 예약발주에서 담아 주세요.
             </div>
           )}
 

@@ -86,7 +86,7 @@ async function findStock(
   return { matches, canAdd, found: true };
 }
 
-function stockContext(matches: StockMatch[], canAdd: boolean): string {
+function stockContext(matches: StockMatch[]): string {
   const lines = matches
     .map(
       (m) =>
@@ -101,11 +101,7 @@ ${lines}
 
 답변 규칙:
 - 찾은 품목의 남은 수량을 알려주세요. 여러 개면 어떤 게 맞는지 되물어도 좋아요.
-${
-  canAdd
-    ? '- 담고 싶어 하시면 "아래 담기 버튼으로 바로 담으실 수 있어요"라고 안내하세요(버튼은 이 답변 아래에 자동으로 나와요).'
-    : '- 지금은 발주 시간이 아니라 담기는 안 돼요. 남은 수량만 알려드리고 "발주 시간(낮 12시~저녁 8시)에 담으실 수 있어요"라고 안내하세요.'
-}
+- 재고현황 담기는 폐지됐어요. 여기서는 남은 수량만 알려드리고, 공구 발주는 "예약발주에서 담아 주세요"라고 안내하세요.
 - 위 목록에 없는 품목을 물으시면 "재고현황에 그 품목은 없어요. 관리자 문의로 여쭤봐 주세요"라고 하세요.`;
 }
 
@@ -141,7 +137,7 @@ export async function askAssistantAction(
     if (found) {
       stock = found.matches;
       canAdd = found.canAdd;
-      systemExtra = stockContext(found.matches, found.canAdd);
+      systemExtra = stockContext(found.matches);
     }
   } catch {
     /* 재고 조회 실패해도 일반 답변은 진행 */

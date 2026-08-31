@@ -27,8 +27,6 @@ import {
 } from "@/lib/date";
 import { orderLockOf } from "@/lib/receivable";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
-import { myHolds, heldByItem } from "@/lib/stock-hold";
-import { windowKeyAt } from "@/lib/schedule";
 import { orderChannelConfig, fixedItemsByCat } from "@/lib/order-flags";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 import { OrderForm, type ToolHold } from "@/components/OrderForm";
@@ -141,46 +139,9 @@ export default async function EditDayOrderPage(props: {
       ? `픽업 ${labelDate(shiftDate(orderDay, 1))} 예약분`
       : "";
 
-  const holdKey = windowKeyAt();
-  const [mine, held, invItems] = await Promise.all([
-    myHolds(user.id, holdKey),
-    heldByItem(holdKey),
-    prisma.inventoryItem.findMany({
-      where: { deletedAt: null },
-      orderBy: { sortOrder: "asc" },
-      select: {
-        id: true,
-        name: true,
-        qty: true,
-        supplyPrice: true,
-        expiry: true,
-        majorCat: true,
-        minorCat: true,
-      },
-    }),
-  ]);
-  const invById = new Map(invItems.map((i) => [i.id, i]));
-  // 공구 '재고에서 검색·담기' 팝업용 — 남은 재고(base − Σ담기홀드) 포함.
-  const invOptions: StockPickItem[] = invItems.map((it) => ({
-    id: it.id,
-    name: it.name,
-    available: Math.max(0, it.qty - (held[it.id] ?? 0)),
-  }));
-  const toolCart: ToolHold[] = mine.map((h) => {
-    const inv = invById.get(h.itemId);
-    const base = inv?.qty ?? 0;
-    return {
-      itemId: h.itemId,
-      name: h.name,
-      qty: String(h.qty),
-      mine: h.qty,
-      available: Math.max(0, base - (held[h.itemId] ?? 0)),
-      supplyPrice: inv?.supplyPrice ?? 0,
-      expiry: inv?.expiry ?? "",
-      majorCat: inv?.majorCat ?? "",
-      minorCat: inv?.minorCat ?? "",
-    };
-  });
+  // 공구(TOOL)는 예약발주 단일 소스로 전환 — 재고현황 담기 폐지. 공구칸엔 예약분(reservedTool)만.
+  const invOptions: StockPickItem[] = [];
+  const toolCart: ToolHold[] = [];
 
   return (
     <>
