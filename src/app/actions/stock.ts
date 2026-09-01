@@ -3,23 +3,83 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
+import { orderOpenNow } from "@/lib/order-open";
 import { windowKeyAt } from "@/lib/schedule";
+import { isItemReservationLocked } from "@/lib/reservation-stock";
+import { logError } from "@/lib/log";
 
 export type HoldResult = { ok: boolean; error?: string; available?: number };
 
-// ⚠ 재고현황 '담기' 종료 — 공구(공산품)는 예약발주 단일 소스로 전환.
-// 담기(StockHold) 신규 생성은 서버에서 하드 차단(UI 우회 방지). 모델·기존 데이터는 휴면 유지.
-export async function holdStockAction(_input: {
+// 담기 = 실시간 보류(HELD). qty 0이면 빼기. 발주창 열려있을 때만.
+// 초과 담기 방지: InventoryItem 행을 FOR UPDATE 로 잠가 동시성 직렬화.
+export async function holdStockAction(input: {
   itemId: string;
   qty: number;
 }): Promise<HoldResult> {
-  return {
-    ok: false,
-    error: "재고현황 담기는 종료됐어요. 공구는 예약발주에서 담아 주세요.",
-  };
+  const user = await getCurrentUser();
+  if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
+    return { ok: false, error: "권한이 없어요." };
+  }
+  if (!(await orderOpenNow(user.role))) {
+    return { ok: false, error: "지금은 담기 시간이 아니에요." };
+  }
+  const itemId = String(input.itemId ?? "");
+  const qty = Math.max(0, Math.floor(Number(input.qty) || 0));
+  const windowDate = windowKeyAt();
+  if (!itemId) return { ok: false, error: "품목을 찾을 수 없어요." };
+  // 예약발주에 잡힌 품목은 재고현황에서 담을 수 없음(오직 예약발주에서만).
+  if (await isItemReservationLocked(itemId)) {
+    return { ok: false, error: "예약발주 진행 중인 품목이에요. 예약발주에서 담아 주세요." };
+  }
+
+  try {
+    const res = await prisma.$transaction(async (tx) => {
+      // 이 품목의 담기 요청을 직렬화(동시 담기 경쟁 방지)
+      await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${itemId} FOR UPDATE`;
+      const item = await tx.inventoryItem.findUnique({
+        where: { id: itemId },
+        select: { name: true, qty: true, deletedAt: true },
+      });
+      if (!item || item.deletedAt) return { ok: false, error: "품목을 찾을 수 없어요." };
+
+      const agg = await tx.stockHold.aggregate({
+        where: { itemId, windowDate },
+        _sum: { qty: true },
+      });
+      const mine = await tx.stockHold.findUnique({
+        where: { userId_itemId_windowDate: { userId: user.id, itemId, windowDate } },
+        select: { qty: true },
+      });
+      const othersHeld = (agg._sum.qty ?? 0) - (mine?.qty ?? 0);
+      const availableForMe = item.qty - othersHeld; // 내가 담을 수 있는 최대
+
+      if (qty <= 0) {
+        await tx.stockHold.deleteMany({ where: { userId: user.id, itemId, windowDate } });
+        return { ok: true, available: Math.max(0, availableForMe) };
+      }
+      if (qty > availableForMe) {
+        return {
+          ok: false,
+          error: `남은 수량이 부족해요. (담을 수 있는 최대 ${Math.max(0, availableForMe)}개)`,
+          available: Math.max(0, availableForMe),
+        };
+      }
+      await tx.stockHold.upsert({
+        where: { userId_itemId_windowDate: { userId: user.id, itemId, windowDate } },
+        create: { userId: user.id, itemId, name: item.name, qty, windowDate },
+        update: { qty, name: item.name },
+      });
+      return { ok: true, available: Math.max(0, availableForMe - qty) };
+    });
+    revalidatePath("/inventory");
+    revalidatePath("/order");
+    return res;
+  } catch (err) {
+    logError("stock.hold", err, { itemId, userId: user.id });
+    return { ok: false, error: "담기에 실패했어요. 다시 시도해 주세요." };
+  }
 }
 
-// 빼기(회수)는 남겨둠 — 혹시 남아있는 옛 담기(휴면 데이터)를 정리할 수 있게. 신규 담기는 위에서 차단.
 export async function releaseHoldAction(itemId: string): Promise<HoldResult> {
   const user = await getCurrentUser();
   if (!user || user.role !== "MERCHANT_HOTDEAL") return { ok: false };

@@ -2,12 +2,15 @@ import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { canViewInventory } from "@/lib/constants";
+import { hasOrderWindow, currentWindowStartUtc } from "@/lib/deadline";
+import { orderOpenNow } from "@/lib/order-open";
 import { prisma } from "@/lib/prisma";
+import { heldByItem, myHolds } from "@/lib/stock-hold";
+import { windowKeyAt } from "@/lib/schedule";
 import { lockedInventoryItemIds } from "@/lib/reservation-stock";
 import { MerchantInventoryList } from "@/components/MerchantInventoryList";
 
-// 재고현황 — 앱 기준(단방향 시트 미러). 열람 전용.
-// 공구=예약발주 단일 소스 전환으로 '담기'는 폐지 → 여기선 재고를 보기만 한다(공구는 예약발주에서).
+// 재고현황 — 앱 기준(단방향 시트 미러, R3). '담기'로 오늘 발주(공구)에 자동 임시저장(#6).
 export default async function InventoryPage() {
   const user = await requireMerchant();
   if (!canViewInventory(user.role)) redirect("/order");
@@ -16,7 +19,24 @@ export default async function InventoryPage() {
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 
-  // 예약발주에 잡힌(연동) 품목은 '예약발주 진행 중'으로 표시(정보용).
+  // #6 담을 수 있는 조건: 발주 시간(또는 관리자 임시 오픈) + 이번 창에 아직 발주 없음.
+  const windowed = hasOrderWindow(user.role);
+  let canAdd = await orderOpenNow(user.role);
+  if (canAdd && windowed) {
+    const since = new Date(currentWindowStartUtc());
+    const existing = await prisma.order.findFirst({
+      where: { userId: user.id, createdAt: { gte: since }, status: { not: "CANCELLED" } },
+      select: { id: true },
+    });
+    if (existing) canAdd = false; // 이미 발주함 → 발주창에서 수정
+  }
+  const holdKey = windowKeyAt(); // 담기 창키(주말 연속창=토요일 하나)
+  // 실시간 남은수량 = 기준재고 − Σ담기(모든 점주, 현재 발주창). 내 담기 수량도 함께.
+  const held = await heldByItem(holdKey);
+  const mineRows = await myHolds(user.id, holdKey);
+  const mine: Record<string, number> = {};
+  for (const h of mineRows) mine[h.itemId] = h.qty;
+  // 예약발주에 잡힌(연동) 품목은 재고현황에서 잠금 — 담기 불가, '예약발주 진행 중' 표시.
   const lockedIds = await lockedInventoryItemIds();
 
   return (
@@ -32,14 +52,20 @@ export default async function InventoryPage() {
             items={items.map((it) => ({
               id: it.id,
               name: it.name,
-              available: Math.max(0, it.qty),
+              available: Math.max(0, it.qty - (held[it.id] ?? 0)),
+              mine: mine[it.id] ?? 0,
               supplyPrice: it.supplyPrice,
               expiry: it.expiry ?? "",
               majorCat: it.majorCat ?? "",
               minorCat: it.minorCat ?? "",
               locked: lockedIds.has(it.id),
             }))}
-            hint="공구는 예약발주에서 담아 주세요."
+            canAdd={canAdd}
+            hint={
+              canAdd
+                ? "담기를 누르면 오늘 발주에 담깁니다."
+                : "발주 시간에만 담을 수 있습니다."
+            }
           />
         )}
       </div>

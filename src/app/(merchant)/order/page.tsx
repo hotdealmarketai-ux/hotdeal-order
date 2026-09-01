@@ -30,6 +30,7 @@ import {
   fixedItemsByCat,
 } from "@/lib/order-flags";
 import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { myHolds, heldByItem } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
@@ -94,8 +95,45 @@ export default async function OrderPage(props: {
   const reservedLabel =
     reservedTool.length > 0 ? `픽업 ${labelDate(shiftDate(orderDay, 1))} 예약분` : "";
 
-  // 공구(TOOL)는 예약발주 단일 소스로 전환 — 재고현황 담기 폐지.
-  // 발주 화면 공구칸엔 예약분(reservedTool)만 읽기전용으로 노출하므로 담기(toolCart)는 항상 빈 배열.
+  // 공구 담기 = 서버 담기원장(오늘 발주창). 발주 화면에서 바로 +/- 하도록 남은수량·공급가까지 실어보낸다.
+  // 남은수량(available) = 기준재고 − 전체 담기(내 것 포함). 실시간 공유 = 모든 가맹점이 같은 값을 본다.
+  const toolCart =
+    user.role === "MERCHANT_HOTDEAL"
+      ? await (async () => {
+          const holdKey = windowKeyAt(); // 담기 창키(주말 연속창=토요일 하나). orderDay(캘린더)와 구분.
+          const [mine, held, invItems] = await Promise.all([
+            myHolds(user.id, holdKey),
+            heldByItem(holdKey),
+            prisma.inventoryItem.findMany({
+              where: { deletedAt: null },
+              select: {
+                id: true,
+                qty: true,
+                supplyPrice: true,
+                expiry: true,
+                majorCat: true,
+                minorCat: true,
+              },
+            }),
+          ]);
+          const invById = new Map(invItems.map((i) => [i.id, i]));
+          return mine.map((h) => {
+            const inv = invById.get(h.itemId);
+            const base = inv?.qty ?? 0;
+            return {
+              itemId: h.itemId,
+              name: h.name,
+              qty: String(h.qty),
+              mine: h.qty,
+              available: Math.max(0, base - (held[h.itemId] ?? 0)),
+              supplyPrice: inv?.supplyPrice ?? 0,
+              expiry: inv?.expiry ?? "",
+              majorCat: inv?.majorCat ?? "",
+              minorCat: inv?.minorCat ?? "",
+            };
+          });
+        })()
+      : [];
 
   return (
     <>
@@ -184,7 +222,7 @@ export default async function OrderPage(props: {
             role={user.role}
             reservedTool={reservedTool}
             reservedLabel={reservedLabel}
-            toolCart={[]}
+            toolCart={toolCart}
             windowKey={windowKeyAt()}
             gridDisabled={gridDisabled}
             chatDisabled={chatDisabled}
