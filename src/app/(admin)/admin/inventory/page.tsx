@@ -9,6 +9,7 @@ import { SheetImportButton } from "@/components/SheetImportButton";
 import { SheetSyncDiagnose } from "@/components/SheetSyncDiagnose";
 import { CategoryAutoAssign } from "@/components/CategoryAutoAssign";
 import { InventoryBackupControl } from "@/components/InventoryBackupControl";
+import { RecatApplyButton } from "@/components/RecatApplyButton";
 import { Collapsible } from "@/components/Collapsible";
 import { reservationConfirmedByItem } from "@/lib/reservation-stock";
 
@@ -27,6 +28,8 @@ export default async function AdminInventory() {
     <>
       <Topbar backHref="/admin" title="재고현황 작성" />
       <div className="page">
+        {/* ⚠ 임시 — 전체 카테고리 재분류 1회 적용(검증 후 제거) */}
+        <RecatApplyButton />
         {/* PC 전용 재고관리 — 컴퓨터로 접속하면 넓은 화면에서 편하게 관리(모바일은 차단·안내) */}
         <Link
           href="/inventory-pc"
