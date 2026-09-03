@@ -149,6 +149,34 @@ export async function setMemberStatusAction(formData: FormData) {
   revalidatePath(`/admin/members/${userId}`);
 }
 
+// 지점별 예약발주 노출 on/off — 회원관리에서 토글. off면 그 지점은 하단 네비 '예약발주' 탭과 /reservations 가 숨겨진다.
+export async function setMemberReservationEnabledAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const enabled = String(formData.get("enabled") ?? "") === "1";
+  if (!userId) return;
+  const before = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { reservationEnabled: true, storeName: true, username: true },
+  });
+  if (!before) return;
+  if (before.reservationEnabled === enabled) {
+    revalidatePath(`/admin/members/${userId}`);
+    return; // 변경 없음
+  }
+  await prisma.user.update({ where: { id: userId }, data: { reservationEnabled: enabled } });
+  await writeAudit({
+    action: "member.reservationEnabled",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "user",
+    targetId: userId,
+    summary: `예약발주 노출 ${enabled ? "켜짐" : "꺼짐"}: ${before.storeName}(${before.username})`,
+  });
+  revalidatePath("/admin/members");
+  revalidatePath(`/admin/members/${userId}`);
+}
+
 // 회원 삭제 — 본인 제외. 발주 이력(+항목)도 함께 삭제(되돌릴 수 없음).
 export async function deleteMemberAction(formData: FormData) {
   const admin = await requireAdmin();

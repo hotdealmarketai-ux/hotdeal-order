@@ -19,6 +19,7 @@ export type AppUser = {
   weeklyOrderUnlockAt: Date | null;
   onboardingStartedAt: Date | null;
   onboardingCompletedAt: Date | null;
+  reservationEnabled: boolean;
 };
 
 export async function getCurrentUser(): Promise<AppUser | null> {
@@ -43,6 +44,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       weeklyOrderUnlockAt: u.weeklyOrderUnlockAt,
       onboardingStartedAt: u.onboardingStartedAt,
       onboardingCompletedAt: u.onboardingCompletedAt,
+      reservationEnabled: u.reservationEnabled,
     };
   } catch (err) {
     // DB 미연결/장애 시 앱이 죽지 않고 비로그인으로 처리(로그인 화면 표시)

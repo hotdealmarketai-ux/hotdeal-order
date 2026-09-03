@@ -269,6 +269,7 @@ export async function purgeHiddenReservationsAction(): Promise<{
 export async function confirmReservationAction(formData: FormData) {
   const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
+  if (!user.reservationEnabled) redirect("/order"); // 지점 예약발주 노출 off — 직접 호출 방어
   if (needsOnboarding(user)) redirect("/onboarding");
   const batchId = String(formData.get("batchId") ?? "");
   let raw: { productId?: string; qty?: number | string }[] = [];
@@ -345,6 +346,7 @@ export async function confirmReservationAction(formData: FormData) {
 export async function unlockReservationAction(formData: FormData) {
   const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
+  if (!user.reservationEnabled) redirect("/order"); // 지점 예약발주 노출 off — 직접 호출 방어
   const batchId = String(formData.get("batchId") ?? "");
   const batch = await prisma.reservationBatch.findFirst({
     where: { id: batchId, active: true },
@@ -387,7 +389,7 @@ export async function holdReservationAction(input: {
   qty: number;
 }): Promise<ResvHoldResult> {
   const user = await getCurrentUser();
-  if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
+  if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL" || !user.reservationEnabled) {
     return { ok: false, error: "권한이 없어요." };
   }
   const batchId = String(input.batchId ?? "");

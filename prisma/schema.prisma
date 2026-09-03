@@ -43,6 +43,10 @@ model User {
   onboardingStartedAt   DateTime?
   onboardingCompletedAt DateTime?
 
+  // 지점별 예약발주 노출 on/off — off면 하단 네비 '예약발주' 탭과 /reservations 페이지가 숨겨진다(기본 켜짐).
+  // 관리자 회원관리에서 지점마다 토글. 기존 점주는 default true 라 영향 없음.
+  reservationEnabled Boolean @default(true)
+
   orders          Order[]
   weeklyOrders    WeeklyOrder[]
   reservationOrders ReservationOrder[]

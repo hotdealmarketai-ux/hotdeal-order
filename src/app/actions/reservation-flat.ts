@@ -16,6 +16,11 @@ async function requireHotdealMerchant() {
   if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
     return null;
   }
+  // 지점별 예약발주 노출 off면 현행(flat) 예약 액션(확정·해제·담기)도 전부 차단 — UI는 라우트 게이트로
+  // 가려지지만 서버액션은 POST 엔드포인트라 직접 호출 방어가 필요하다(회원관리 토글).
+  if (!user.reservationEnabled) {
+    return null;
+  }
   return user;
 }
 

@@ -5,6 +5,7 @@ import {
   updateMemberAction,
   resetMemberPasswordAction,
   setMemberStatusAction,
+  setMemberReservationEnabledAction,
   deleteMemberAction,
   type MemberFormState,
 } from "@/app/actions/admin";
@@ -27,6 +28,7 @@ export function MemberEditForm({
     role: string;
     status: string;
     payerNames: string[];
+    reservationEnabled: boolean;
   };
 }) {
   const [state, formAction] = useActionState<MemberFormState, FormData>(
@@ -62,6 +64,34 @@ export function MemberEditForm({
               />
               <button className={`btn btn--sm ${suspended ? "btn--primary" : "btn--danger"}`}>
                 {suspended ? "정지 해제" : "계정 정지"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 예약발주 노출 on/off — 핫딜마켓 가맹점만(예약발주를 보는 역할). off면 그 지점은
+          하단 네비 '예약발주' 탭과 예약발주 페이지가 아예 안 보인다. */}
+      {initial.role === "MERCHANT_HOTDEAL" && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="spread" style={{ alignItems: "center" }}>
+            <div>
+              <div className="row__title">예약발주 노출</div>
+              <div className="row__sub">
+                현재 {initial.reservationEnabled ? "켜짐 — 예약발주 사용 가능" : "꺼짐 — 예약발주 숨김"}
+              </div>
+            </div>
+            <form action={setMemberReservationEnabledAction}>
+              <input type="hidden" name="userId" value={userId} />
+              <input
+                type="hidden"
+                name="enabled"
+                value={initial.reservationEnabled ? "0" : "1"}
+              />
+              <button
+                className={`btn btn--sm ${initial.reservationEnabled ? "btn--danger" : "btn--primary"}`}
+              >
+                {initial.reservationEnabled ? "예약발주 끄기" : "예약발주 켜기"}
               </button>
             </form>
           </div>

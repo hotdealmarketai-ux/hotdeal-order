@@ -47,6 +47,7 @@ export default async function MerchantLayout({
         role={user.role}
         myBadge={owes ? 1 : 0}
         weeklyBadge={owes && weekly.count > 0 ? 1 : 0}
+        reservationEnabled={user.reservationEnabled}
       />
     </div>
   );

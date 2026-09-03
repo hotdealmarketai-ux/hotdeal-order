@@ -46,6 +46,7 @@ export default async function AdminMemberDetail(props: {
             role: user.role,
             status: user.status,
             payerNames: user.payerNames,
+            reservationEnabled: user.reservationEnabled,
           }}
         />
       </div>
