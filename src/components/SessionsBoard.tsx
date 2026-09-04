@@ -79,7 +79,7 @@ export function SessionsBoard({ initial }: { initial: AdminSessionGroup[] }) {
         </div>
         <div className="sess-strip__item">
           <b>{totalSessions}</b>
-          <span>활성 로그인</span>
+          <span>로그인 유지(오프라인 포함)</span>
         </div>
         <div className="sess-strip__live">
           <span className="sess-dot sess-dot--on" /> 6초마다 자동 갱신

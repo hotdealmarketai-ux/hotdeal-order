@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { signIn, signOut } from "@/auth";
-import { SESSION_COOKIE } from "@/lib/user-session";
+import { SESSION_COOKIE, SESSION_COOKIE_OPTS, createUserSession } from "@/lib/user-session";
 import { saveBusinessCert } from "@/lib/storage";
 import { notifyAdminSignupRequest } from "@/lib/push";
 
@@ -23,16 +23,31 @@ export async function loginAction(
   const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/";
   if (!username || !password) return { error: "아이디와 비밀번호를 입력하세요." };
 
-  // 이전 로그인의 세션을 정리 → 이 로그인은 첫 하트비트에서 새 레코드로 잡힌다.
-  // 옛 쿠키가 가리키던 행도 revoke 처리한다(JWT만 만료되고 재로그인하는 경우 옛 행이
-  // revokedAt=null 로 남아 '유령 기기'로 목록에 뜨는 것을 방지). 강제로그아웃 후 재로그인 루프도 방지.
-  const oldJar = await cookies();
-  const oldSid = oldJar.get(SESSION_COOKIE)?.value;
+  // 옛 세션 정리: 이전 쿠키가 가리키던 행을 revoke (JWT만 만료 후 재로그인 시 옛 행이 '유령 기기'로
+  // 남는 것 방지 + 강제로그아웃 후 재로그인 루프 방지).
+  const jar = await cookies();
+  const oldSid = jar.get(SESSION_COOKIE)?.value;
   if (oldSid) {
     await prisma.userSession
       .update({ where: { id: oldSid }, data: { revokedAt: new Date() } })
       .catch(() => {});
-    oldJar.delete(SESSION_COOKIE);
+    jar.delete(SESSION_COOKIE);
+  }
+
+  // '로그인 즉시 기록' — 비밀번호를 미리 확인(signIn 이 리다이렉트로 throw 하므로 그 전에)해서
+  // 로그인 성공이면 세션 레코드를 바로 만들고 hd_sid 쿠키를 심는다. 앱을 열지 않아도 관리자
+  // '로그인 현황'에 즉시 뜬다. 실패면 아무것도 안 만들고 아래 signIn 이 에러를 돌려준다.
+  try {
+    const u = await prisma.user.findUnique({
+      where: { username },
+      select: { id: true, passwordHash: true },
+    });
+    if (u && (await bcrypt.compare(password, u.passwordHash))) {
+      const newSid = await createUserSession(u.id);
+      if (newSid) jar.set(SESSION_COOKIE, newSid, SESSION_COOKIE_OPTS);
+    }
+  } catch (e) {
+    console.error("[login] 세션 선기록 실패:", e);
   }
 
   try {
