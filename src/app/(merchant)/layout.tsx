@@ -6,6 +6,7 @@ import { maintenanceOn } from "@/lib/maintenance";
 import { needsOnboarding } from "@/lib/onboarding";
 import { BottomNav } from "@/components/BottomNav";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
+import { SessionHeartbeat } from "@/components/SessionHeartbeat";
 
 export default async function MerchantLayout({
   children,
@@ -25,7 +26,12 @@ export default async function MerchantLayout({
   // 잠금의 실제 강제는 각 발주 페이지 리다이렉트(order/day·weekly·reservations) + 발주 생성 액션 가드에서 한다.
   // (여기서 리다이렉트하면 /onboarding 자체도 이 레이아웃을 거쳐 무한 루프가 되므로 네비만 숨긴다.)
   if (needsOnboarding(user)) {
-    return <div className="app">{children}</div>;
+    return (
+      <div className="app">
+        <SessionHeartbeat />
+        {children}
+      </div>
+    );
   }
   // 탭 배지는 '지점 총미수(receivableOf)가 남아 있을 때만' 표시한다(2026-08-05~). 매칭·수동조정으로 다 갚으면
   // 배지가 사라진다. 계산서 status는 결제돼도 ISSUED로 남아(입금확인 폐지) count만으로는 완납 후에도 안 사라지므로,
@@ -42,6 +48,7 @@ export default async function MerchantLayout({
   void count;
   return (
     <div className="app app--nav">
+      <SessionHeartbeat />
       {children}
       <BottomNav
         role={user.role}

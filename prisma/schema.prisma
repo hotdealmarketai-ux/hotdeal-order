@@ -61,8 +61,26 @@ model User {
   onboardingChecks OnboardingCheck[]
   onboardingApprovals OnboardingApproval[]
   containerReturns ContainerReturn[]
+  sessions     UserSession[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// 로그인(기기)별 서버 세션 레코드 — JWT는 무상태라 별도로 활성 로그인을 추적한다.
+// 한 아이디를 여러 명이 각자 폰에서 로그인하면 각 로그인마다 1행. 관리자가 개별 강제 로그아웃 가능.
+// 로그인 시 생성(JWT의 sid), 매 요청 lastSeenAt 갱신(실시간 접속 현황), revokedAt 세팅=강제/정상 로그아웃.
+model UserSession {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String    @default("") // 기기/브라우저 식별용(원문)
+  ip         String    @default("") // 접속 IP(표시용)
+  createdAt  DateTime  @default(now()) // 로그인 시각
+  lastSeenAt DateTime  @default(now()) // 마지막 활동(온라인 판정)
+  revokedAt  DateTime? // 강제 로그아웃/정상 로그아웃 시각(있으면 무효 세션)
+
+  @@index([userId])
+  @@index([revokedAt, lastSeenAt])
 }
 
 // 1:1 문의 채팅 — 가맹점주 1명당 스레드 1개(관리자 조직과 대화). #9

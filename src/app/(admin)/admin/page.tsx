@@ -119,6 +119,7 @@ export default async function AdminHome() {
       items: [
         { href: "/admin/approvals", title: "가입 대기", badge: pending > 0 ? pending : undefined },
         { href: "/admin/members", title: "회원 관리" },
+        { href: "/admin/sessions", title: "로그인 현황" },
         { href: "/admin/onboarding", title: "튜토리얼" },
         { href: "/admin/audit", title: "로그" },
       ],

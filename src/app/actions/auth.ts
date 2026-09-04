@@ -3,7 +3,9 @@
 import { AuthError } from "next-auth";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
 import { signIn, signOut } from "@/auth";
+import { SESSION_COOKIE } from "@/lib/user-session";
 import { saveBusinessCert } from "@/lib/storage";
 import { notifyAdminSignupRequest } from "@/lib/push";
 
@@ -20,6 +22,18 @@ export async function loginAction(
   const nextRaw = String(formData.get("next") ?? "");
   const next = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/";
   if (!username || !password) return { error: "아이디와 비밀번호를 입력하세요." };
+
+  // 이전 로그인의 세션을 정리 → 이 로그인은 첫 하트비트에서 새 레코드로 잡힌다.
+  // 옛 쿠키가 가리키던 행도 revoke 처리한다(JWT만 만료되고 재로그인하는 경우 옛 행이
+  // revokedAt=null 로 남아 '유령 기기'로 목록에 뜨는 것을 방지). 강제로그아웃 후 재로그인 루프도 방지.
+  const oldJar = await cookies();
+  const oldSid = oldJar.get(SESSION_COOKIE)?.value;
+  if (oldSid) {
+    await prisma.userSession
+      .update({ where: { id: oldSid }, data: { revokedAt: new Date() } })
+      .catch(() => {});
+    oldJar.delete(SESSION_COOKIE);
+  }
 
   try {
     await signIn("credentials", { username, password, remember, redirectTo: next });
@@ -111,5 +125,14 @@ export async function signupAction(
 }
 
 export async function logoutAction(): Promise<void> {
+  // 정상 로그아웃도 이 기기의 서버 세션을 무효 처리 → 관리자 '접속 현황'에서 사라진다.
+  const jar = await cookies();
+  const sid = jar.get(SESSION_COOKIE)?.value;
+  if (sid) {
+    await prisma.userSession
+      .update({ where: { id: sid }, data: { revokedAt: new Date() } })
+      .catch(() => {});
+    jar.delete(SESSION_COOKIE);
+  }
   await signOut({ redirectTo: "/login" });
 }
