@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isMerchant, type Role } from "@/lib/constants";
 import { labelDateLong } from "@/lib/date";
 import {
+  getWeeklyProducts,
   weeklyKeyAt,
   weeklyReceivableOf,
   weeklyStatusOf,
@@ -12,6 +13,7 @@ import {
 import { WeeklyReceipt } from "@/components/WeeklyReceipt";
 import { VoidWeeklyButton } from "@/components/VoidWeeklyButton";
 import { DeleteWeeklyOrderButton } from "@/components/DeleteWeeklyOrderButton";
+import { AdminWeeklyEditor } from "@/components/AdminWeeklyEditor";
 import { confirmWeeklyOrderAction } from "@/app/actions/weekly-invoice";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -31,7 +33,7 @@ export default async function AdminWeeklyStorePage({
   const store = await prisma.user.findUnique({ where: { id: userId } });
   if (!store || !isMerchant(store.role as Role)) notFound();
 
-  const [order, invoice, receivable] = await Promise.all([
+  const [order, invoice, receivable, products] = await Promise.all([
     prisma.weeklyOrder.findUnique({
       where: { userId_weekKey: { userId, weekKey } },
       include: { items: { orderBy: { sortOrder: "asc" } } },
@@ -41,16 +43,15 @@ export default async function AdminWeeklyStorePage({
       include: { items: { orderBy: { sortOrder: "asc" } } },
     }),
     weeklyReceivableOf(userId),
+    getWeeklyProducts(),
   ]);
 
   const status = weeklyStatusOf(order, invoice);
 
-  const orderReceipt = (order?.items ?? []).map((it) => ({
-    category: it.category,
-    name: it.name,
-    sub: `${it.qty}박스 × ${won(it.unitPrice)}`,
-    amount: it.qty * it.unitPrice,
-  }));
+  // 편집기 초기 수량 — 현재 발주의 품목별 박스 수
+  const initialQty: Record<string, string> = {};
+  for (const it of order?.items ?? []) initialQty[it.code] = String(it.qty);
+
   const invoiceReceipt = (invoice?.items ?? []).map((it) => ({
     category: it.category,
     name: it.name,
@@ -87,9 +88,7 @@ export default async function AdminWeeklyStorePage({
           </div>
         )}
 
-        {!order ? (
-          <div className="notice notice--mute">이 지점의 주간발주가 없습니다.</div>
-        ) : invoice ? (
+        {invoice ? (
           <>
             <div className="invcat" style={{ marginBottom: 4 }}>
               <div className="invcat__head">
@@ -104,28 +103,24 @@ export default async function AdminWeeklyStorePage({
               </div>
             )}
           </>
-        ) : !order.confirmed ? (
-          <>
-            <WeeklyReceipt items={orderReceipt} totalLabel="예상 금액" />
-            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-              <form action={confirmWeeklyOrderAction}>
-                <input type="hidden" name="orderId" value={order.id} />
-                <button className="btn btn--primary btn--block">발주 확인</button>
-              </form>
-            </div>
-          </>
         ) : (
           <>
-            <WeeklyReceipt items={orderReceipt} totalLabel="확인된 주간발주 금액" />
-            <div className="notice notice--ai" style={{ marginTop: 14 }}>
-              이 주간발주는 <b>출고일 계산서에 합산</b>해 청구됩니다.
+            <AdminWeeklyEditor
+              userId={userId}
+              weekKey={weekKey}
+              products={products}
+              initialQty={initialQty}
+            />
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+              {order && !order.confirmed && (
+                <form action={confirmWeeklyOrderAction}>
+                  <input type="hidden" name="orderId" value={order.id} />
+                  <button className="btn btn--soft btn--block">발주 확인</button>
+                </form>
+              )}
+              {order && <DeleteWeeklyOrderButton orderId={order.id} />}
             </div>
           </>
-        )}
-        {order && (
-          <div style={{ marginTop: 14 }}>
-            <DeleteWeeklyOrderButton orderId={order.id} />
-          </div>
         )}
       </div>
     </>

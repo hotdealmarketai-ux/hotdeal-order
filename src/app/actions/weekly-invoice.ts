@@ -12,6 +12,7 @@ import {
   setWeeklyForceOpen,
   setWeeklyShipDow,
   setWeeklyShipDowForCategory,
+  weeklyProductMap,
 } from "@/lib/weekly";
 import { WEEKLY_CATEGORIES } from "@/lib/weekly-catalog";
 import { normalizeTax } from "@/lib/tax";
@@ -284,6 +285,96 @@ export async function confirmWeeklyOrderAction(formData: FormData) {
   });
   revalidatePath("/admin/weekly");
   if (o) revalidatePath(`/admin/weekly/${o.userId}`);
+}
+
+// 관리자 주간발주 편집 — 지점의 그 주 발주에 품목 추가/제거/수량조절. 관리자 전용.
+// 조용히 아이템만 교체한다: 점주쪽 '수정 요청' 플래그(edited)나 알림을 남기지 않고, 확인 상태도 그대로 둔다.
+// payload = [{code, qty}] 전체 목록(qty>0만 반영). 카탈로그(weeklyProductMap)의 단가를 스냅샷한다.
+export async function adminEditWeeklyOrderAction(formData: FormData) {
+  const admin = await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const weekKey = String(formData.get("weekKey") ?? "");
+  if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) return;
+
+  const store = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true, storeName: true },
+  });
+  if (!store || !isMerchant(store.role as Role)) return;
+
+  // 입금요청서(ISSUED/PAID) 발행 후에는 청구액↔발주 불일치 방지로 편집 차단(취소 후 재편집).
+  const issued = await prisma.invoice.findFirst({
+    where: { userId, kind: "WEEKLY", date: weekKey, status: { in: ["ISSUED", "PAID"] } },
+    select: { id: true },
+  });
+  if (issued) return;
+
+  let payload: { code?: string; qty?: string | number }[] = [];
+  try {
+    payload = JSON.parse(String(formData.get("payload") ?? "[]"));
+  } catch {
+    payload = [];
+  }
+
+  const productMap = await weeklyProductMap(); // DB 카탈로그(단가 포함)
+  const rows: {
+    sortOrder: number;
+    code: string;
+    category: string;
+    name: string;
+    boxUnit: string;
+    qty: number;
+    unitPrice: number;
+  }[] = [];
+  let sort = 0;
+  for (const p of Array.isArray(payload) ? payload : []) {
+    const item = productMap[String(p.code ?? "")];
+    if (!item) continue; // 카탈로그에 없는 코드는 무시(위조 방지)
+    const qty = Math.floor(Number(String(p.qty ?? "").replace(/[^0-9.]/g, "")));
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    rows.push({
+      sortOrder: sort++,
+      code: item.code,
+      category: item.category,
+      name: item.name,
+      boxUnit: `1박스 ${item.perBox}개`,
+      qty: Math.min(qty, 9999),
+      unitPrice: item.supplyPrice, // 편집 시점 단가 스냅샷
+    });
+  }
+
+  const existing = await prisma.weeklyOrder.findUnique({
+    where: { userId_weekKey: { userId, weekKey } },
+    select: { id: true },
+  });
+
+  if (rows.length === 0) {
+    // 전부 비우면 그 주 발주 자체를 삭제
+    if (existing) await prisma.weeklyOrder.delete({ where: { id: existing.id } });
+  } else if (existing) {
+    // 아이템만 통째 교체 — 상태 플래그·알림은 건드리지 않는다
+    await prisma.$transaction([
+      prisma.weeklyOrderItem.deleteMany({ where: { weeklyOrderId: existing.id } }),
+      prisma.weeklyOrder.update({
+        where: { id: existing.id },
+        data: { items: { create: rows } },
+      }),
+    ]);
+  } else {
+    await prisma.weeklyOrder.create({ data: { userId, weekKey, items: { create: rows } } });
+  }
+
+  await writeAudit({
+    action: "weeklyOrder.adminEdit",
+    actorId: admin.id,
+    actorName: admin.storeName,
+    targetType: "weeklyOrder",
+    targetId: existing?.id ?? userId,
+    summary: `주간발주 관리자 편집 · ${store.storeName} · ${weekKey} · ${rows.length}품목`,
+  });
+  revalidatePath("/admin/weekly");
+  revalidatePath(`/admin/weekly/${userId}`);
+  redirect(`/admin/weekly/${userId}?week=${weekKey}`);
 }
 
 // 주간발주 입금요청서 취소(VOID) — 잘못 발행 시. 발행(ISSUED) 상태만.
