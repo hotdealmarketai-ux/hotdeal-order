@@ -10,7 +10,6 @@ import { SheetSyncDiagnose } from "@/components/SheetSyncDiagnose";
 import { CategoryAutoAssign } from "@/components/CategoryAutoAssign";
 import { InventoryBackupControl } from "@/components/InventoryBackupControl";
 import { Collapsible } from "@/components/Collapsible";
-import { RecatApplyButton } from "@/components/RecatApplyButton";
 import { reservationConfirmedByItem } from "@/lib/reservation-stock";
 
 export default async function AdminInventory() {
@@ -45,9 +44,6 @@ export default async function AdminInventory() {
         >
           변경 기록
         </Link>
-
-        {/* ⚠ 임시(1회성) — 현재고 245개 카테고리 재분류 적용 버튼. 적용·검증 후 제거. */}
-        <RecatApplyButton />
 
         {/* 잘 안 쓰는 기능은 '기능' 토글 안에 숨겨 스크롤을 줄인다(기본 닫힘) */}
         <Collapsible title="기능" hint="백업 · 카테고리 · 시트 · 엑셀">
