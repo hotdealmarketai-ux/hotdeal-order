@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { upload } from "@vercel/blob/client";
 import {
   sendMessengerMessageAction,
   loadMessengerChannelAction,
+  loadOlderMessengerMessagesAction,
   loadMessengerNoticesAction,
   markMessengerReadAction,
   toggleMessengerNoticeAction,
@@ -68,6 +69,9 @@ export function ChatPane({
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchHitDTO[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaItemDTO[] | null>(null);
+  const [older, setOlder] = useState<Msg[]>([]); // '더 보기'로 불러온 과거 메시지(폴링과 별개 — 폴링이 안 지움)
+  const [hasMore, setHasMore] = useState(false); // 더 불러올 과거 메시지가 있는가
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [, start] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -76,6 +80,8 @@ export function ChatPane({
   const jumpedFor = useRef<string | null>(null);
   const lastReadId = useRef<string | null>(null);
   const stick = useRef(true); // 하단 고정
+  const olderAnchor = useRef<number | null>(null); // '더 보기' 시 스크롤 위치 보존용(이전 scrollHeight)
+  const firstLoad = useRef(true); // 채널당 최초 로드에서만 hasMore(과거 존재) 판정
   const tmpSeq = useRef(0);
 
   const nameSet = useMemo(() => new Set(members.map((m) => m.name)), [members]);
@@ -110,6 +116,9 @@ export function ChatPane({
   useEffect(() => {
     let alive = true;
     setMessages([]);
+    setOlder([]);
+    setHasMore(false);
+    firstLoad.current = true;
     setPending([]);
     setNotices([]);
     setReplyTo(null);
@@ -122,6 +131,11 @@ export function ChatPane({
       if (!alive) return;
       setNotices(n.notices);
       setMessages(r.messages); // 서버 진실만 갱신 — 낙관적 pending 은 별도 상태라 안전
+      // 최초 로드에서만 '과거 더 있음' 판정 — 최신 300개가 꽉 찼으면 그 이전이 더 있을 수 있다.
+      if (firstLoad.current) {
+        firstLoad.current = false;
+        setHasMore(r.messages.length >= 300);
+      }
       // 읽음 처리는 '새 메시지가 실제로 도착했고 지금 화면을 보고 있을 때'만(폴링마다 write 방지).
       const newest = r.messages.length ? r.messages[r.messages.length - 1].id : null;
       if (newest && newest !== lastReadId.current && (typeof document === "undefined" || !document.hidden)) {
@@ -430,7 +444,45 @@ export function ChatPane({
   };
 
   const mediaImageUrls = useMemo(() => (mediaItems ?? []).filter((i) => i.type === "image").map((i) => i.url), [mediaItems]);
-  const view = useMemo(() => [...messages, ...pending], [messages, pending]); // 서버 + 낙관적 합쳐서 렌더
+  // 렌더 = 과거('더 보기') + 서버(최신 300) + 낙관적. id 중복 제거(폴링 윈도우와 older 경계 안전).
+  const view = useMemo(() => {
+    const seen = new Set(messages.map((m) => m.id));
+    const olderClean = older.filter((m) => !seen.has(m.id));
+    return [...olderClean, ...messages, ...pending];
+  }, [older, messages, pending]);
+
+  // '이전 메시지 더 보기' — 현재 맨 위 메시지보다 오래된 메시지를 불러와 위에 붙인다(삭제된 게 아니라 안 불러온 것).
+  const loadOlder = async () => {
+    if (loadingOlder) return;
+    const topId = view[0]?.id;
+    if (!topId || !channelId) return;
+    const el = scrollRef.current;
+    olderAnchor.current = el ? el.scrollHeight : null; // 붙인 뒤 스크롤 위치 보존용
+    stick.current = false; // 위를 보는 중 — 하단 자동고정 해제
+    setLoadingOlder(true);
+    try {
+      const r = await loadOlderMessengerMessagesAction(channelId, topId);
+      setOlder((prev) => {
+        const seen = new Set(prev.map((m) => m.id));
+        const add = r.messages.filter((m) => !seen.has(m.id));
+        return [...add, ...prev];
+      });
+      setHasMore(r.hasMore);
+    } catch {
+      /* 실패 시 조용히 — 다시 누르면 재시도 */
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  // 과거 메시지를 위에 붙인 직후 스크롤 위치 보존(늘어난 높이만큼 내려 보던 지점 유지).
+  useLayoutEffect(() => {
+    if (olderAnchor.current != null) {
+      const el = scrollRef.current;
+      if (el) el.scrollTop += el.scrollHeight - olderAnchor.current;
+      olderAnchor.current = null;
+    }
+  }, [older]);
 
   return (
     <div className="chatpane">
@@ -442,6 +494,18 @@ export function ChatPane({
       )}
 
       <div className="chatpane__scroll" ref={scrollRef} onScroll={onScroll}>
+        {hasMore && view.length > 0 && (
+          <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 4px" }}>
+            <button
+              type="button"
+              className="btn btn--soft btn--sm"
+              onClick={loadOlder}
+              disabled={loadingOlder}
+            >
+              {loadingOlder ? "불러오는 중…" : "이전 메시지 더 보기"}
+            </button>
+          </div>
+        )}
         {view.length === 0 ? (
           <div className="chatpane__empty">
             <div className="chatpane__emptyhash">#{channelName}</div>

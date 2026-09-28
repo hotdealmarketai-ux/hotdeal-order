@@ -275,6 +275,71 @@ export async function loadMessengerChannelAction(channelId: string): Promise<{ m
   };
 }
 
+// '이전 메시지 더 보기' — 최신 300개(loadMessengerChannelAction) 밖으로 밀려난 과거 메시지 열람용.
+// beforeId(현재 화면 맨 위 메시지 id) 기준으로 그보다 오래된 메시지를 최신순 300개 불러와 오름차순 반환.
+// 메시지는 삭제되지 않고 그대로 보관돼 있으며, 커서 페이지네이션으로 계속 거슬러 올라갈 수 있다.
+export async function loadOlderMessengerMessagesAction(
+  channelId: string,
+  beforeId: string,
+): Promise<{ messages: ChatMsgDTO[]; hasMore: boolean }> {
+  await requireAdmin();
+  const me = await getMessengerMember();
+  if (!me || !channelId || !beforeId) return { messages: [], hasMore: false };
+  const PAGE = 300;
+  // 커서(현재 맨 위 메시지)가 실제로 존재할 때만 진행 — 삭제됐으면 안전 종료(잘못된 커서 예외 방지).
+  const anchor = await prisma.messengerMessage.findUnique({ where: { id: beforeId }, select: { id: true } });
+  if (!anchor) return { messages: [], hasMore: false };
+  const rows = await prisma.messengerMessage.findMany({
+    where: { channelId },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    cursor: { id: beforeId },
+    skip: 1, // 커서(현재 맨 위 메시지) 자신은 제외하고 그 이전부터
+    take: PAGE + 1, // hasMore 판정용 1개 더
+    select: {
+      id: true, memberId: true, body: true, mediaUrl: true, mediaType: true, mediaUrls: true, createdAt: true,
+      fileUrl: true, fileName: true, replyToId: true, replyToName: true, replyToBody: true, noticeAt: true,
+      member: { select: { name: true } },
+    },
+  });
+  const hasMore = rows.length > PAGE;
+  const page = rows.slice(0, PAGE).reverse(); // 오름차순(오래된→최근)
+  const ids = page.map((m) => m.id);
+  const reacts = ids.length
+    ? await prisma.messengerReaction.findMany({ where: { messageId: { in: ids } }, select: { messageId: true, memberId: true } })
+    : [];
+  const nameById = reacts.length
+    ? new Map((await prisma.messengerMember.findMany({ select: { id: true, name: true } })).map((m) => [m.id, m.name]))
+    : new Map<string, string>();
+  const reactByMsg = new Map<string, { names: string[]; mine: boolean }>();
+  for (const r of reacts) {
+    const cur = reactByMsg.get(r.messageId) ?? { names: [], mine: false };
+    cur.names.push(nameById.get(r.memberId) ?? "지난 멤버");
+    if (r.memberId === me.id) cur.mine = true;
+    reactByMsg.set(r.messageId, cur);
+  }
+  return {
+    hasMore,
+    messages: page.map((m) => ({
+      id: m.id,
+      memberId: m.memberId,
+      memberName: m.member.name,
+      body: m.body,
+      mediaUrl: m.mediaUrl,
+      mediaType: m.mediaType,
+      mediaUrls: m.mediaUrls ?? [],
+      fileUrl: m.fileUrl,
+      fileName: m.fileName,
+      replyToId: m.replyToId,
+      replyToName: m.replyToName,
+      replyToBody: m.replyToBody,
+      notice: !!m.noticeAt,
+      reactions: reactByMsg.get(m.id)?.names ?? [],
+      reactedByMe: reactByMsg.get(m.id)?.mine ?? false,
+      at: m.createdAt.toISOString(),
+    })),
+  };
+}
+
 // 메시지 공감(체크) — 클라가 원하는 최종 상태(on)를 넘겨 멱등하게 반영(빠른 더블탭 경합 방지).
 // 누가 눌렀는지는 로드 시 이름으로 표시.
 export async function toggleMessengerReactionAction(messageId: string, on: boolean): Promise<{ error?: string }> {
