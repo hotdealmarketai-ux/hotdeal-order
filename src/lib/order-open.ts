@@ -33,7 +33,9 @@ export async function setDailyForceOpen(on: boolean): Promise<void> {
 export async function orderOpenNow(role: Role, now: number = Date.now()): Promise<boolean> {
   if (!hasOrderWindow(role)) return true;
   if (isOrderOpen(now)) return true;
-  return dailyForceOpen();
+  if (await dailyForceOpen()) return true;
+  // 전체 잠금해제(관리자)가 켜져 있으면 시간창도 개방 — 발주 시간을 놓친 점주도 임의로 발주 가능.
+  return orderLockOverride();
 }
 
 // 전체 미수 잠금해제 토글 — ON이면 OFF할 때까지(자동 만료 없음) 미수가 있어도 모든 지점의

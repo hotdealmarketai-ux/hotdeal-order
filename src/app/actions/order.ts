@@ -67,7 +67,7 @@ export type ChatParseState = {
 export async function parseChatOrderAction(text: string): Promise<ChatParseState> {
   const user = await requireMerchant();
 
-  if (hasOrderWindow(user.role) && !isOrderOpen()) {
+  if (!(await orderOpenNow(user.role))) {
     return {
       ok: false,
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
@@ -124,7 +124,7 @@ export async function previewGridOrderAction(
 ): Promise<ChatParseState> {
   const user = await requireMerchant();
 
-  if (hasOrderWindow(user.role) && !isOrderOpen()) {
+  if (!(await orderOpenNow(user.role))) {
     return {
       ok: false,
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
