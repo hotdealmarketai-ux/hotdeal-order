@@ -300,18 +300,7 @@ export default async function AdminDepositStore(props: {
         {/* 발주 '시간' 1회 열기 — 미수 잠금해제와 완전 별개. 발주 시간(12~20시)을 놓친 지점을 위해 임의로 열어줌. */}
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="row__sub" style={{ fontWeight: 700, color: "var(--fg)" }}>
-            발주 시간 밖 허용 (미수 잠금과 별개)
-          </div>
-          <div
-            style={{
-              fontSize: 13,
-              color: "var(--muted)",
-              marginTop: 4,
-              lineHeight: 1.55,
-            }}
-          >
-            발주 시간(낮 12시~저녁 8시)이 지났을 때, 이 지점만 이번 발주창에 한해 일반 발주를
-            넣을 수 있게 1회 열어줘요. 다음 발주창부터 자동으로 다시 시간 제한이 적용돼요.
+            발주 시간 밖 허용
           </div>
           <div
             style={{
