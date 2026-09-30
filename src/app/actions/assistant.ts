@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
 import { orderTimeOpenForUser } from "@/lib/receivable";
-import { hasOrderWindow, currentWindowStartUtc } from "@/lib/deadline";
+import { hasOrderWindow, currentWindowFloorUtc } from "@/lib/deadline";
 import { askAssistant, type AssistantMsg } from "@/lib/assistant";
 import {
   rankStockMatches,
@@ -64,7 +64,7 @@ async function findStock(
   // 담기 가능 조건 — 재고현황 페이지와 동일: 발주 시간(또는 강제오픈) + 이번 창에 아직 발주 없음.
   let canAdd = await orderTimeOpenForUser({ role: role as Role, timeUnlock, timeUnlockAt });
   if (canAdd && hasOrderWindow(role)) {
-    const since = new Date(currentWindowStartUtc());
+    const since = new Date(currentWindowFloorUtc());
     const existing = await prisma.order.findFirst({
       where: { userId, createdAt: { gte: since }, status: { not: "CANCELLED" } },
       select: { id: true },

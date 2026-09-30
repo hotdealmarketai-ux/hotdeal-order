@@ -3,6 +3,7 @@ import type { Role } from "@/lib/constants";
 import {
   isOrderOpen,
   currentWindowStartUtc,
+  currentWindowFloorUtc,
   OPEN_HOUR,
   CLOSE_HOUR,
   ORDER_DEADLINE_LABEL,
@@ -12,6 +13,7 @@ import {
 export {
   isOrderOpen,
   currentWindowStartUtc,
+  currentWindowFloorUtc,
   ORDER_DEADLINE_LABEL,
   ORDER_OPEN_LABEL,
 };

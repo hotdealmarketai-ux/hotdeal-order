@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireMerchant, requireAdmin } from "@/lib/session";
-import { currentWindowStartUtc, currentDeadlineUtc } from "@/lib/schedule";
+import { currentWindowFloorUtc, currentDeadlineUtc } from "@/lib/schedule";
 import { kstDateOf, shipmentDayOf } from "@/lib/date";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -35,7 +35,10 @@ export async function requestCancelOrderAction(formData: FormData) {
   const user = await requireMerchant();
   if (String(formData.get("confirm") ?? "") !== "REQUEST-CANCEL") redirect("/order");
 
-  const start = new Date(currentWindowStartUtc());
+  // 창 시작(정오)만 쓰면 강제오픈·지점별 '발주 시간 열기'로 정오 이전에 넣은 발주를 못 찾아
+  // 취소 요청이 통째로 먹통이 된다(orders.length===0 → 조용히 redirect). createOrderAction과
+  // 동일하게 '창 시작'과 '오늘 0시' 중 이른 쪽을 하한으로 잡아 같은 발주창 소속을 모두 포함.
+  const start = new Date(currentWindowFloorUtc());
   const end = new Date(currentDeadlineUtc());
   const orders = await prisma.order.findMany({
     where: {

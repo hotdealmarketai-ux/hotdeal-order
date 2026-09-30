@@ -6,7 +6,7 @@ import {
   type SubmitItem,
 } from "@/lib/chaeumchae-submit";
 import { sendPushToRole } from "@/lib/push";
-import { currentWindowStartUtc, windowKeyAt } from "@/lib/schedule";
+import { currentWindowFloorUtc, windowKeyAt } from "@/lib/schedule";
 import { kstDateOf } from "@/lib/date";
 import { logError } from "@/lib/log";
 
@@ -54,8 +54,9 @@ export async function GET(request: Request) {
   const now = atParam ? new Date(atParam).getTime() : Date.now();
   const orderDay = kstDateOf(new Date(now + DAY_MS));
 
-  // 이번 발주 창(평일=당일 12시~, 주말=토 12시~)의 핫딜 가맹점 두부류 발주 취합
-  const since = new Date(currentWindowStartUtc(now));
+  // 이번 발주 창의 핫딜 가맹점 두부류 발주 취합. 창 시작(12시)만 쓰면 강제오픈·'발주 시간 열기'로
+  // 정오 이전에 넣은 두부 발주가 자동제출에서 누락된다 → 창 시작과 그날 0시 중 이른 쪽을 하한으로.
+  const since = new Date(currentWindowFloorUtc(now));
   const orders = await prisma.order.findMany({
     where: {
       category: "TOFU",

@@ -15,7 +15,7 @@ import {
 import {
   hasOrderWindow,
   isOrderOpen,
-  currentWindowStartUtc,
+  currentWindowFloorUtc,
 } from "@/lib/deadline";
 import {
   kstToday,
@@ -58,8 +58,8 @@ export default async function EditDayOrderPage(props: {
     orderBy: { createdAt: "asc" },
   });
   if (orders.length === 0) redirect(backHref);
-  // 지난 창(이미 출고 준비) 발주는 수정 불가
-  if (orders.some((o) => o.createdAt.getTime() < currentWindowStartUtc())) {
+  // 지난 창(이미 출고 준비) 발주는 수정 불가. 단 정오 이전 '시간 열기' 발주는 이번 창 소속이므로 허용.
+  if (orders.some((o) => o.createdAt.getTime() < currentWindowFloorUtc())) {
     redirect(backHref);
   }
 

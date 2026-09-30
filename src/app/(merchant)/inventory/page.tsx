@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { canViewInventory } from "@/lib/constants";
-import { hasOrderWindow, currentWindowStartUtc } from "@/lib/deadline";
+import { hasOrderWindow, currentWindowFloorUtc } from "@/lib/deadline";
 import { orderTimeOpenForUser } from "@/lib/receivable";
 import { prisma } from "@/lib/prisma";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
@@ -23,7 +23,7 @@ export default async function InventoryPage() {
   const windowed = hasOrderWindow(user.role);
   let canAdd = await orderTimeOpenForUser(user);
   if (canAdd && windowed) {
-    const since = new Date(currentWindowStartUtc());
+    const since = new Date(currentWindowFloorUtc());
     const existing = await prisma.order.findFirst({
       where: { userId: user.id, createdAt: { gte: since }, status: { not: "CANCELLED" } },
       select: { id: true },

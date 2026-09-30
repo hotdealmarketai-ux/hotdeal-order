@@ -22,7 +22,7 @@ import {
   type SnapshotMeta,
 } from "@/lib/inventory-backup";
 import {
-  currentWindowStartUtc,
+  currentWindowFloorUtc,
   currentDeadlineUtc,
 } from "@/lib/schedule";
 import { hasOrderWindow } from "@/lib/deadline";
@@ -1055,7 +1055,9 @@ export async function cancelStoreOrdersAction(
   let end: Date;
   if (hasOrderWindow(target.role as Role)) {
     const noonMs = new Date(`${date}T12:00:00+09:00`).getTime();
-    start = new Date(currentWindowStartUtc(noonMs));
+    // 창 시작(정오)만 쓰면 강제오픈·지점 '발주 시간 열기'로 정오 이전에 넣은 발주를 놓쳐
+    // 관리자 임의취소가 먹통이 된다 → 창 시작과 그날 0시 중 이른 쪽을 하한으로.
+    start = new Date(currentWindowFloorUtc(noonMs));
     end = new Date(currentDeadlineUtc(noonMs));
   } else {
     ({ start, end } = kstDayRange(date));

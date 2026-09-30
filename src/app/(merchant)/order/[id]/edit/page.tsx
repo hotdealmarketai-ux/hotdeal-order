@@ -12,7 +12,7 @@ import {
 import {
   hasOrderWindow,
   isOrderOpen,
-  currentWindowStartUtc,
+  currentWindowFloorUtc,
 } from "@/lib/deadline";
 import { kstDateOf } from "@/lib/date";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
@@ -40,7 +40,7 @@ export default async function EditOrderPage(props: {
 
   // 가맹점: 운영시간 + '이번 발주 창에 넣은 발주'만 수정 가능
   if (hasOrderWindow(user.role)) {
-    const inWindow = order.createdAt.getTime() >= currentWindowStartUtc();
+    const inWindow = order.createdAt.getTime() >= currentWindowFloorUtc();
     if (!isOrderOpen() || !inWindow) redirect(backHref);
   }
 

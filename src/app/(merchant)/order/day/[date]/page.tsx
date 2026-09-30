@@ -14,7 +14,7 @@ import {
 import {
   hasOrderWindow,
   isOrderOpen,
-  currentWindowStartUtc,
+  currentWindowFloorUtc,
 } from "@/lib/deadline";
 import { formatKDateTime } from "@/lib/format";
 import {
@@ -63,7 +63,7 @@ export default async function DayReceiptPage(props: {
       CATEGORY_ORDER.indexOf(a.category as Category) -
       CATEGORY_ORDER.indexOf(b.category as Category),
   );
-  const windowStart = currentWindowStartUtc();
+  const windowStart = currentWindowFloorUtc();
   const canEditOrder = (createdAt: Date) =>
     !hasOrderWindow(user.role) ||
     (isOrderOpen() && createdAt.getTime() >= windowStart);

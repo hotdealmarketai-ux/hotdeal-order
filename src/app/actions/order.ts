@@ -29,7 +29,7 @@ import {
   shipmentDayOf,
   normalizeDateStr,
 } from "@/lib/date";
-import { currentWindowStartUtc, windowKeyAt } from "@/lib/schedule";
+import { currentWindowStartUtc, currentWindowFloorUtc, windowKeyAt } from "@/lib/schedule";
 import { myHolds } from "@/lib/stock-hold";
 import { displayQty } from "@/lib/qty";
 import {
@@ -680,7 +680,7 @@ export async function updateOrderAction(
   // 고칠 수 있으면 실제 출고와 어긋난다.
   if (
     hasOrderWindow(user.role) &&
-    order.createdAt.getTime() < currentWindowStartUtc()
+    order.createdAt.getTime() < currentWindowFloorUtc()
   ) {
     return { error: "지난 발주는 수정할 수 없어요. 본사에 문의해 주세요." };
   }
@@ -1035,7 +1035,7 @@ export async function updateDayOrderAction(
     if (!isOrderOpen()) {
       return { error: `지금은 수정 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL})` };
     }
-    if (existing.some((o) => o.createdAt.getTime() < currentWindowStartUtc())) {
+    if (existing.some((o) => o.createdAt.getTime() < currentWindowFloorUtc())) {
       return { error: "지난 발주는 수정할 수 없어요. 본사에 문의해 주세요." };
     }
   }

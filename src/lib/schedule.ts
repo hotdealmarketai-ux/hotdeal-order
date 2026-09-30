@@ -56,6 +56,17 @@ export function currentWindowStartUtc(now: number = Date.now()): number {
   return utcAt(y, mo, da, OPEN_HOUR);
 }
 
+// 발주가 '이번 발주창 소속'인지 판정할 때 쓰는 createdAt 하한.
+// 창 시작(정오)만 쓰면, 강제오픈·지점별 '발주 시간 열기'로 정오 이전에 넣은 발주가
+// (미래인 창 시작 기준) 누락된다 → 창 시작과 '오늘 0시' 중 이른 쪽을 하한으로 쓴다.
+// createOrderAction·order 페이지가 인라인으로 쓰던 기준과 100% 동일(취소·수정 게이트도 이걸 공유).
+// (주말 연속창은 토12시 < 일0시라 토12시가 그대로 유지된다)
+export function currentWindowFloorUtc(now: number = Date.now()): number {
+  const { y, mo, da } = parts(now);
+  const todayMidnight = utcAt(y, mo, da, 0);
+  return Math.min(currentWindowStartUtc(now), todayMidnight);
+}
+
 /**
  * 현재 발주창을 식별하는 키(그 창 시작일, KST YYYY-MM-DD).
  * 평일=그날, 주말(토12시~일20시)=토요일 하나의 키.
