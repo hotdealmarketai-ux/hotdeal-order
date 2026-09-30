@@ -106,7 +106,7 @@ export async function parseChatOrderAction(text: string): Promise<ChatParseState
     .filter((g) => g.items.length > 0);
 
   remapBenijimin(groups); // #5 베니지민 고구마 → 과일(이름 '고구마', 설명 '베니지민')
-  remapGoguma(groups); // 고구마는 무조건 과일
+  remapGoguma(groups); // 고구마는 무조건 야채
 
   if (groups.length === 0) {
     return {
@@ -196,9 +196,9 @@ export async function previewGridOrderAction(
   // R6: 매장 취급 목록 기준으로 과일↔야채 교차 재분류(AI가 이름을 매장 이름으로 맞춘 뒤).
   reclassifyByCatalog(outGroups, allowed as Category[], fixedSet);
   // Q1: 정규화(AI) 이후 최종적으로 한 번 더 remap — AI가 '베니지민 고구마'로 합쳤어도 여기서
-  // name="고구마"/note="베니지민"으로 다시 분리하고, 카테고리도 과일로 확정(미리보기가 최종과 일치).
+  // name="고구마"/note="베니지민"으로 다시 분리한다. 일반 고구마는 야채로, 베니지민만은 과일로 확정(미리보기가 최종과 일치).
   remapBenijimin(outGroups, channelCfg.fixedFruit);
-  remapGoguma(outGroups, channelCfg.fixedFruit); // 고구마는 무조건 과일(단 과일 고정 시 이동 보류)
+  remapGoguma(outGroups, channelCfg.fixedVeg); // 고구마는 무조건 야채(단 야채 고정 시 이동 보류)
   mergeSameItems(outGroups); // R1 같은 품목+설명 합산
 
   return { ok: true, groups: outGroups };
@@ -303,28 +303,30 @@ function remapBenijimin(groups: Group[], fruitFixed = false): void {
   }
 }
 
-// 고구마는 무조건 '과일'로 라우팅(과일 파트/서부일광 출고) — 밤·자색·호박고구마 등 '고구마' 들어간 변형 포함.
-// 야채로 분류/이동된 고구마를 과일로 되돌린다. 공구·두부칸(임의 상품명)·이미 과일칸은 건드리지 않음.
-// reclassifyByCatalog·remapBenijimin 이후 마지막에 돌려 '무조건 과일'을 최종 확정한다(#고구마).
-function remapGoguma(groups: Group[], fruitFixed = false): void {
-  // 과일 품목 고정 ON이면 과일칸이 관리자 지정 카탈로그라 임의 고구마를 옮겨 담을 수 없다 →
-  // 야채칸에 적힌 고구마는 그 자리에 그대로 둔다(무경고 유실 방지). 관리자가 고구마를 과일로 받으려면
-  // 고정 과일 목록에 '고구마'를 등록하면 된다.
-  if (fruitFixed) return;
+// 고구마는 무조건 '야채'로 라우팅(야채 파트/조은팜 출고) — 밤·자색·호박고구마 등 '고구마' 들어간 변형 포함.
+// 과일로 분류/이동된 고구마를 야채로 되돌린다. 공구·두부칸(임의 상품명)·이미 야채칸은 건드리지 않음.
+// ⚠ 단, '베니지민 고구마'는 과일 특례(remapBenijimin이 과일칸에 둔 것)라 제외한다 — 베니지민만은 과일/서부일광 유지.
+// reclassifyByCatalog·remapBenijimin 이후 마지막에 돌려 '무조건 야채'를 최종 확정한다(#고구마).
+function remapGoguma(groups: Group[], vegFixed = false): void {
+  // 야채 품목 고정 ON이면 야채칸이 관리자 지정 카탈로그라 임의 고구마를 옮겨 담을 수 없다 →
+  // 과일칸에 적힌 고구마는 그 자리에 그대로 둔다(무경고 유실 방지). 관리자가 고구마를 야채로 받으려면
+  // 고정 야채 목록에 '고구마'를 등록하면 된다.
+  if (vegFixed) return;
   const moved: Group["items"] = [];
   for (const g of groups) {
-    if (g.category !== "VEG") continue; // 야채칸의 고구마만 과일로(공구·두부·이미 과일은 그대로)
+    if (g.category !== "FRUIT") continue; // 과일칸의 고구마만 야채로(공구·두부·이미 야채는 그대로)
     const keep: Group["items"] = [];
     for (const it of g.items) {
-      if (isGoguma(it.name)) moved.push(it);
+      // 베니지민 고구마는 과일 특례 → 야채로 되돌리지 않는다.
+      if (isGoguma(it.name) && !hasBeni(it.name) && !hasBeni(it.note)) moved.push(it);
       else keep.push(it);
     }
     g.items = keep;
   }
   if (moved.length) {
-    const fruit = groups.find((g) => g.category === "FRUIT");
-    if (fruit) fruit.items.push(...moved);
-    else groups.push({ category: "FRUIT", items: moved });
+    const veg = groups.find((g) => g.category === "VEG");
+    if (veg) veg.items.push(...moved);
+    else groups.push({ category: "VEG", items: moved });
   }
   for (let i = groups.length - 1; i >= 0; i--) {
     if (groups[i].items.length === 0) groups.splice(i, 1);
@@ -507,7 +509,7 @@ export async function createOrderAction(
   }
 
   remapBenijimin(groups, channelCfg.fixedFruit); // #5 베니지민 고구마 → 과일(과일 고정 시 이동 보류)
-  remapGoguma(groups, channelCfg.fixedFruit); // 고구마는 무조건 과일(과일 고정 시 이동 보류)
+  remapGoguma(groups, channelCfg.fixedVeg); // 고구마는 무조건 야채(야채 고정 시 이동 보류)
   mergeSameItems(groups); // R1 같은 품목+설명 합산
 
   // 품목 고정 카테고리 — 관리자 지정 품목만 허용(remap 이후 검증). 지정 외 품목이 채워져 있으면 저장 차단.
@@ -1078,7 +1080,7 @@ export async function updateDayOrderAction(
     groups.push({ category, items });
   }
   remapBenijimin(groups, channelCfg.fixedFruit); // #5 베니지민 고구마 → 과일(과일 고정 시 이동 보류)
-  remapGoguma(groups, channelCfg.fixedFruit); // 고구마는 무조건 과일(과일 고정 시 이동 보류)
+  remapGoguma(groups, channelCfg.fixedVeg); // 고구마는 무조건 야채(야채 고정 시 이동 보류)
   mergeSameItems(groups); // R1 같은 품목+설명 합산
 
   // 칸 발주 잠금(gridDisabled) 시 편집 경로로 '새 카테고리' 신규 생성 우회 차단(기존 카테고리 수정은 허용).
