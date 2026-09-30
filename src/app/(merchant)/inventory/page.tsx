@@ -3,7 +3,7 @@ import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
 import { canViewInventory } from "@/lib/constants";
 import { hasOrderWindow, currentWindowStartUtc } from "@/lib/deadline";
-import { orderOpenNow } from "@/lib/order-open";
+import { orderTimeOpenForUser } from "@/lib/receivable";
 import { prisma } from "@/lib/prisma";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
@@ -21,7 +21,7 @@ export default async function InventoryPage() {
 
   // #6 담을 수 있는 조건: 발주 시간(또는 관리자 임시 오픈) + 이번 창에 아직 발주 없음.
   const windowed = hasOrderWindow(user.role);
-  let canAdd = await orderOpenNow(user.role);
+  let canAdd = await orderTimeOpenForUser(user);
   if (canAdd && windowed) {
     const since = new Date(currentWindowStartUtc());
     const existing = await prisma.order.findFirst({

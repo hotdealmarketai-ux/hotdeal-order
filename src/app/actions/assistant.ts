@@ -1,11 +1,11 @@
 "use server";
 
 import { getCurrentUser } from "@/lib/session";
-import { isMerchant } from "@/lib/constants";
+import { isMerchant, type Role } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
-import { orderOpenNow } from "@/lib/order-open";
+import { orderTimeOpenForUser } from "@/lib/receivable";
 import { hasOrderWindow, currentWindowStartUtc } from "@/lib/deadline";
 import { askAssistant, type AssistantMsg } from "@/lib/assistant";
 import {
@@ -28,6 +28,8 @@ export type AssistantReply = {
 async function findStock(
   userId: string,
   role: string,
+  timeUnlock: boolean,
+  timeUnlockAt: Date | null,
   query: string,
 ): Promise<{ matches: StockMatch[]; canAdd: boolean; found: boolean } | null> {
   // 재고 담기는 핫딜마켓 가맹점 기능 — 그 외 역할은 재고 카드 없음.
@@ -60,7 +62,7 @@ async function findStock(
   for (const h of mineRows) mineMap[h.itemId] = h.qty;
 
   // 담기 가능 조건 — 재고현황 페이지와 동일: 발주 시간(또는 강제오픈) + 이번 창에 아직 발주 없음.
-  let canAdd = await orderOpenNow(role);
+  let canAdd = await orderTimeOpenForUser({ role: role as Role, timeUnlock, timeUnlockAt });
   if (canAdd && hasOrderWindow(role)) {
     const since = new Date(currentWindowStartUtc());
     const existing = await prisma.order.findFirst({
@@ -137,7 +139,7 @@ export async function askAssistantAction(
   let canAdd: boolean | undefined;
   let systemExtra = "";
   try {
-    const found = await findStock(user.id, user.role, lastMsg);
+    const found = await findStock(user.id, user.role, user.timeUnlock, user.timeUnlockAt, lastMsg);
     if (found) {
       stock = found.matches;
       canAdd = found.canAdd;

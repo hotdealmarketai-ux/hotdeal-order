@@ -23,7 +23,7 @@ import {
 } from "@/lib/deadline";
 import { kstDateOf, kstToday, kstDayRange, shiftDate, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
-import { orderOpenNow } from "@/lib/order-open";
+import { orderTimeOpenForUser } from "@/lib/receivable";
 import {
   orderChannelConfig,
   effectiveChannels,
@@ -44,7 +44,7 @@ export default async function OrderPage(props: {
   // 가맹 오픈 온보딩 중이면 발주 대신 '오픈 준비' 퀘스트로.
   if (needsOnboarding(user)) redirect("/onboarding");
   const windowed = hasOrderWindow(user.role);
-  const open = await orderOpenNow(user.role); // 운영시간 또는 관리자 임시 오픈
+  const open = await orderTimeOpenForUser(user); // 운영시간·강제오픈 또는 이 지점 '시간 1회 열기'
 
   // 일반 발주 관리 — 발주 방식(칸/채팅) 잠금 + 과일/야채 품목 고정
   const channelCfg = await orderChannelConfig();

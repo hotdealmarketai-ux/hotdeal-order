@@ -6,7 +6,8 @@ import {
   isOrderOpen,
   nextOpenUtc,
 } from "@/lib/schedule";
-import { orderLockOverride } from "@/lib/order-open";
+import { orderLockOverride, orderOpenNow } from "@/lib/order-open";
+import type { Role } from "@/lib/constants";
 
 // 어떤 시각(instant)이 '어느 발주창'에 속하는지 식별하는 키(그 창 시작일, KST).
 // 평일=그날 12시창, 주말(토12시~일20시)=토요일 하나의 창.
@@ -35,6 +36,19 @@ export function isUnlockActiveThisWindow(
     !!orderUnlockAt &&
     unlockTargetWindowKey(orderUnlockAt.getTime()) === windowKeyAt(nowMs)
   );
+}
+
+// 이 지점이 지금 '일반 발주(담기 포함)'를 넣을 수 있는가 — 발주 '시간' 기준.
+//  1) 평소 판정(orderOpenNow): 창 없는 역할=항상 / 운영시간(12~20) / 관리자 강제오픈
+//  2) 지점별 '발주 시간 1회 열기'(timeUnlock): 시간 밖이어도 이 지점만 이번 창 1회 허용(다음 창 자동 재잠금)
+// ※ 미수 잠금해제(orderUnlock)와는 완전 별개. 여기서는 '시간'만 본다.
+//    1회성 창-키 판정은 미수 해제(isUnlockActiveThisWindow)와 동일 로직을 그대로 공유한다.
+export async function orderTimeOpenForUser(
+  u: { role: Role; timeUnlock: boolean; timeUnlockAt: Date | null },
+  nowMs: number = Date.now(),
+): Promise<boolean> {
+  if (await orderOpenNow(u.role, nowMs)) return true;
+  return isUnlockActiveThisWindow(u.timeUnlock, u.timeUnlockAt, nowMs);
 }
 
 // 점포의 미수 잔액(발행·미입금 계산서 합 + 관리자 조정) + 미입금 계산서 건수.

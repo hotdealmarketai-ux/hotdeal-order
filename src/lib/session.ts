@@ -22,6 +22,8 @@ export type AppUser = {
   businessCert: string | null;
   orderUnlock: boolean;
   orderUnlockAt: Date | null;
+  timeUnlock: boolean;
+  timeUnlockAt: Date | null;
   weeklyOrderUnlock: boolean;
   weeklyOrderUnlockAt: Date | null;
   onboardingStartedAt: Date | null;
@@ -67,6 +69,8 @@ export async function getCurrentUser(): Promise<AppUser | null> {
       businessCert: u.businessCert,
       orderUnlock: u.orderUnlock,
       orderUnlockAt: u.orderUnlockAt,
+      timeUnlock: u.timeUnlock,
+      timeUnlockAt: u.timeUnlockAt,
       weeklyOrderUnlock: u.weeklyOrderUnlock,
       weeklyOrderUnlockAt: u.weeklyOrderUnlockAt,
       onboardingStartedAt: u.onboardingStartedAt,

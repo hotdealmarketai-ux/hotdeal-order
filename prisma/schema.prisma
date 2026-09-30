@@ -34,6 +34,12 @@ model User {
   // 해제한 시각 — 그 '발주창'에만 유효(1회성). 다음 창엔 미수가 남아있으면 다시 잠긴다.
   orderUnlockAt DateTime?
 
+  // 발주 '시간' 1회성 열기(미수 해제와 완전 별개) — 발주창(낮12~저녁8시)이 아니어도 이 지점만 이번 창에 발주 허용.
+  // 발주 시간을 놓친 점주를 위해 관리자가 임의로 열어줌. 다음 발주창부터 자동으로 다시 시간 제한.
+  timeUnlock   Boolean  @default(false)
+  // 시간 열어준 시각 — 그 '발주창'에만 유효(1회성). orderUnlockAt과 동일한 창-키 판정 공유.
+  timeUnlockAt DateTime?
+
   // 주간발주 미수 잠금 1회성 해제(일일 발주 잠금과 독립) — 주간 미납이 있어도 이번 주간발주 허용
   weeklyOrderUnlock   Boolean   @default(false)
   weeklyOrderUnlockAt DateTime?

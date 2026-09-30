@@ -32,7 +32,6 @@ import {
 import { currentWindowStartUtc, windowKeyAt } from "@/lib/schedule";
 import { myHolds } from "@/lib/stock-hold";
 import { displayQty } from "@/lib/qty";
-import { orderOpenNow } from "@/lib/order-open";
 import {
   orderChannelConfig,
   effectiveChannels,
@@ -42,7 +41,7 @@ import {
   type OrderChannelConfig,
 } from "@/lib/order-flags";
 import { logError } from "@/lib/log";
-import { orderLockOf } from "@/lib/receivable";
+import { orderLockOf, orderTimeOpenForUser } from "@/lib/receivable";
 import { normalizeOrder, normalizePickupTime, parseChatOrder } from "@/lib/ai";
 import { DS_VEG, DS_FRUIT } from "@/lib/ds-catalog";
 import {
@@ -67,7 +66,7 @@ export type ChatParseState = {
 export async function parseChatOrderAction(text: string): Promise<ChatParseState> {
   const user = await requireMerchant();
 
-  if (!(await orderOpenNow(user.role))) {
+  if (!(await orderTimeOpenForUser(user))) {
     return {
       ok: false,
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
@@ -124,7 +123,7 @@ export async function previewGridOrderAction(
 ): Promise<ChatParseState> {
   const user = await requireMerchant();
 
-  if (!(await orderOpenNow(user.role))) {
+  if (!(await orderTimeOpenForUser(user))) {
     return {
       ok: false,
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
@@ -438,7 +437,7 @@ export async function createOrderAction(
   if (needsOnboarding(user)) return { error: "오픈 준비를 먼저 완료해 주세요." };
 
   // 발주 운영시간 가드 — 핫딜마켓 가맹점만 (낮 12시~오후 8시, 또는 관리자 임시 오픈)
-  if (!(await orderOpenNow(user.role))) {
+  if (!(await orderTimeOpenForUser(user))) {
     return {
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
     };
@@ -997,7 +996,7 @@ export async function updateDayOrderAction(
   if (!date) return { error: "잘못된 요청이에요." };
 
   // 발주 운영시간 가드
-  if (!(await orderOpenNow(user.role))) {
+  if (!(await orderTimeOpenForUser(user))) {
     return {
       error: `지금은 발주 시간이 아니에요. (${ORDER_OPEN_LABEL} ~ ${ORDER_DEADLINE_LABEL} 발주 가능)`,
     };

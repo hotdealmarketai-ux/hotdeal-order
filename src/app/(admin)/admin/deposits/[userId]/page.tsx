@@ -9,7 +9,7 @@ import {
   orderLockOf,
   isUnlockActiveThisWindow,
 } from "@/lib/receivable";
-import { setOrderUnlockAction } from "@/app/actions/deposit";
+import { setOrderUnlockAction, setTimeUnlockAction } from "@/app/actions/deposit";
 import { ReceivableAdjustControl } from "@/components/ReceivableAdjustControl";
 import { DepositUnmatchButton } from "@/components/DepositUnmatchButton";
 import { ReceivableAdjustDeleteButton } from "@/components/ReceivableAdjustDeleteButton";
@@ -120,6 +120,11 @@ export default async function AdminDepositStore(props: {
   const unlockedThisWindow = isUnlockActiveThisWindow(
     user.orderUnlock,
     user.orderUnlockAt,
+  );
+  // 발주 '시간' 1회 열기가 이번 발주창에 유효한지(미수 해제와 별개, 동일한 창-키 판정 공유).
+  const timeOpenThisWindow = isUnlockActiveThisWindow(
+    user.timeUnlock,
+    user.timeUnlockAt,
   );
 
   // 총 청구 = 발행(ISSUED) 계산서 합(레거시 PAID 제외), 총 입금 = 미수에 반영된(매칭조정 있는) 입금 합.
@@ -287,6 +292,54 @@ export default async function AdminDepositStore(props: {
                 style={{ minHeight: 36 }}
               >
                 {unlockedThisWindow ? "발주 다시 잠금" : "발주 1회 잠금 해제"}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* 발주 '시간' 1회 열기 — 미수 잠금해제와 완전 별개. 발주 시간(12~20시)을 놓친 지점을 위해 임의로 열어줌. */}
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="row__sub" style={{ fontWeight: 700, color: "var(--fg)" }}>
+            발주 시간 밖 허용 (미수 잠금과 별개)
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              color: "var(--muted)",
+              marginTop: 4,
+              lineHeight: 1.55,
+            }}
+          >
+            발주 시간(낮 12시~저녁 8시)이 지났을 때, 이 지점만 이번 발주창에 한해 일반 발주를
+            넣을 수 있게 1회 열어줘요. 다음 발주창부터 자동으로 다시 시간 제한이 적용돼요.
+          </div>
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+            }}
+          >
+            <span
+              className={`badge ${timeOpenThisWindow ? "badge--wait" : ""}`}
+              style={{ minHeight: 36, padding: "0 16px", fontSize: 13, borderRadius: 999 }}
+            >
+              {timeOpenThisWindow ? "이번 발주창 시간 열림" : "발주 시간 제한 중"}
+            </span>
+            <form action={setTimeUnlockAction} style={{ margin: 0 }}>
+              <input type="hidden" name="userId" value={userId} />
+              <input
+                type="hidden"
+                name="unlock"
+                value={timeOpenThisWindow ? "false" : "true"}
+              />
+              <button
+                type="submit"
+                className="btn btn--xs btn--soft"
+                style={{ minHeight: 36 }}
+              >
+                {timeOpenThisWindow ? "시간 열기 취소" : "발주 시간 1회 열기"}
               </button>
             </form>
           </div>

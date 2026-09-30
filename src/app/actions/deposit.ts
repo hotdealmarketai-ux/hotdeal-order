@@ -292,6 +292,25 @@ export async function setOrderUnlockAction(formData: FormData) {
   revalidatePath("/weekly");
 }
 
+// 지점별 '발주 시간 1회 열기' — 미수 해제(setOrderUnlockAction)와 완전 별개.
+// 발주창(낮12~저녁8시)이 아니어도 이 지점만 이번 발주창에 한해 일반 발주(담기 포함) 허용.
+// 1회성: timeUnlockAt 이 겨냥한 발주창에서만 유효 → 다음 창부터 자동 재잠금(orderTimeOpenForUser 판정).
+export async function setTimeUnlockAction(formData: FormData) {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const unlock = formData.get("unlock") === "true";
+  if (!userId) return;
+  const at = unlock ? new Date() : null;
+  await prisma.user.update({
+    where: { id: userId },
+    data: { timeUnlock: unlock, timeUnlockAt: at },
+  });
+  revalidatePath(`/admin/deposits/${userId}`);
+  revalidatePath(`/admin/members/${userId}`);
+  revalidatePath("/order");
+  revalidatePath("/inventory");
+}
+
 // 전체 잠금해제 토글 — ON이면 OFF할 때까지 모든 지점이 미수 있어도 일반/주간발주 가능(예약은 원래 미수잠금 없음).
 export async function setOrderLockOverrideAction(formData: FormData) {
   await requireAdmin();
