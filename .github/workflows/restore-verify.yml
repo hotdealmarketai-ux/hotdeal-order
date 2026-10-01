@@ -1,0 +1,70 @@
+name: restore-verify
+
+# 백업이 '진짜 복원되는지' 자동 검증(복원 리허설). 한 번도 복원 안 해본 백업은 백업이 아니다.
+# 최신 db-backup 덤프를 받아 깨끗한 postgres:17 에 pg_restore 하고, 테이블/주요 행 수를 확인한다.
+# 주 1회 + 수동 실행.
+on:
+  schedule:
+    - cron: "0 23 * * 0" # 일요일 08:00 KST
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - name: Download latest successful db-backup dump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RID=$(gh run list -R "${{ github.repository }}" --workflow db-backup.yml --status success -L 1 --json databaseId -q '.[0].databaseId')
+          if [ -z "$RID" ]; then echo "::error::성공한 db-backup 실행이 없습니다"; exit 1; fi
+          echo "최신 성공 db-backup run: $RID"
+          gh run download "$RID" -R "${{ github.repository }}" -D dump
+          DUMP=$(find dump -name '*.dump' | head -1)
+          if [ -z "$DUMP" ]; then echo "::error::덤프 파일(*.dump)을 찾지 못함"; exit 1; fi
+          echo "DUMP=$DUMP" >> "$GITHUB_ENV"
+          ls -lh "$DUMP"
+      - name: Restore into fresh postgres:17 and verify
+        run: |
+          set -e
+          docker run -d --name pg -e POSTGRES_PASSWORD=verify -e POSTGRES_DB=verify postgres:17
+          echo "postgres 기동 대기..."
+          for i in $(seq 1 30); do docker exec pg pg_isready -U postgres >/dev/null 2>&1 && break; sleep 2; done
+          docker cp "$DUMP" pg:/tmp/db.dump
+          echo "=== pg_restore 실행 ==="
+          # --no-owner/--no-privileges: 역할 없는 깨끗한 DB라 소유권/권한은 무시(데이터 복원이 목적)
+          docker exec -e PGPASSWORD=verify pg pg_restore -U postgres -d verify --no-owner --no-privileges /tmp/db.dump || echo "pg_restore 경고와 함께 완료(역할/권한 경고는 정상)"
+          echo ""
+          echo "=== 복원된 public 테이블 수 ==="
+          TABLES=$(docker exec -e PGPASSWORD=verify pg psql -U postgres -d verify -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';")
+          echo "테이블 수: $TABLES"
+          echo ""
+          echo "=== 주요 테이블 행 수 ==="
+          FAIL=0
+          for t in User Order OrderItem Invoice InvoiceItem WeeklyOrder ReservationProduct ReservationOrder InventoryItem MessengerMessage Deposit AuditLog; do
+            C=$(docker exec -e PGPASSWORD=verify pg psql -U postgres -d verify -tAc "SELECT count(*) FROM \"$t\";" 2>/dev/null | tr -d '[:space:]' || echo "ERR")
+            echo "  $t: $C"
+            if [ "$C" = "ERR" ]; then echo "::warning::테이블 $t 조회 실패(복원 누락 가능)"; FAIL=1; fi
+          done
+          if [ "${TABLES:-0}" -lt 30 ]; then echo "::error::복원된 테이블이 너무 적음($TABLES) — 복원 실패 의심"; exit 1; fi
+          if [ "$FAIL" = "1" ]; then echo "::error::주요 테이블 일부 복원 실패"; exit 1; fi
+          echo ""
+          echo "✅ 복원 검증 성공: $TABLES개 테이블, 주요 테이블 정상"
+      - name: Alert on failure (open/append issue)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "⚠️ 백업 복원 검증 실패 (restore-verify)";
+            const body = `restore-verify 가 실패했습니다 — 백업이 실제로 복원되지 않을 수 있습니다. 즉시 확인 필요.\n실행: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n시각(UTC): ${new Date().toISOString()}`;
+            const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}"`;
+            const found = await github.rest.search.issuesAndPullRequests({ q });
+            if (found.data.total_count > 0) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: found.data.items[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body });
+            }
