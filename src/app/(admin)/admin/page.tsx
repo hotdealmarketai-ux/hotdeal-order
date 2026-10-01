@@ -122,6 +122,7 @@ export default async function AdminHome() {
         { href: "/admin/sessions", title: "로그인 현황" },
         { href: "/admin/onboarding", title: "튜토리얼" },
         { href: "/admin/audit", title: "로그" },
+        { href: "/admin/backup", title: "백업 관리" },
       ],
       patch: true, // 패치(유지보수) 토글 카드 = 로그 옆, 이 그룹 끝에 렌더
     },
