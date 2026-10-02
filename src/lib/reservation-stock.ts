@@ -34,19 +34,30 @@ export async function lockedInventoryItemIds(
   now: number = Date.now(),
 ): Promise<Set<string>> {
   const gte = minLockedPickupDate(now);
-  const rows = await prisma.reservationProduct.findMany({
-    where: {
-      active: true,
-      inventoryItemId: { not: "" },
-      batch: { active: true },
-      // 잠금 = ①픽업이 아직 안 지남(레거시·flat 공통) 또는 ②flat 예약이 아직 열려 있음(closeAt 미래).
-      // ②가 없으면 '당일 픽업' flat 상품이 오전 10시 이후 pickupDate 조건에서 빠져(minLockedPickupDate=today+1)
-      // 예약이 20시까지 열려 있는데도 일일 담기가 풀려 같은 재고를 이중 배정(초과판매)한다. closeAt은 flat만 non-null.
-      OR: [{ pickupDate: { gte } }, { closeAt: { gt: new Date(now) } }],
-    },
-    select: { inventoryItemId: true },
-  });
-  return new Set(rows.map((r) => r.inventoryItemId).filter(Boolean));
+  // 잠금 = ①픽업이 아직 안 지남(레거시·flat 공통) 또는 ②flat 예약이 아직 열려 있음(closeAt 미래).
+  // ②가 없으면 '당일 픽업' flat 상품이 오전 10시 이후 pickupDate 조건에서 빠져(minLockedPickupDate=today+1)
+  // 예약이 20시까지 열려 있는데도 일일 담기가 풀려 같은 재고를 이중 배정(초과판매)한다. closeAt은 flat만 non-null.
+  const lockOr = [{ pickupDate: { gte } }, { closeAt: { gt: new Date(now) } }];
+  const [singles, sets] = await Promise.all([
+    prisma.reservationProduct.findMany({
+      where: { active: true, batch: { active: true }, inventoryItemId: { not: "" }, OR: lockOr },
+      select: { inventoryItemId: true },
+    }),
+    // 세트 상품: 연동 구성품의 재고품목도 함께 잠근다.
+    prisma.reservationProduct.findMany({
+      where: {
+        active: true,
+        batch: { active: true },
+        components: { some: { inventoryItemId: { not: "" } } },
+        OR: lockOr,
+      },
+      select: { components: { where: { inventoryItemId: { not: "" } }, select: { inventoryItemId: true } } },
+    }),
+  ]);
+  const s = new Set<string>();
+  for (const r of singles) if (r.inventoryItemId) s.add(r.inventoryItemId);
+  for (const p of sets) for (const c of p.components) if (c.inventoryItemId) s.add(c.inventoryItemId);
+  return s;
 }
 
 // 이 품목 1건이 지금 예약발주에 잠겨 있는가(일일 담기 차단용).
@@ -57,34 +68,76 @@ export async function isItemReservationLocked(
   if (!itemId) return false;
   const found = await prisma.reservationProduct.findFirst({
     where: {
-      inventoryItemId: itemId,
       active: true,
       batch: { active: true },
-      // 픽업 대기(레거시·flat) 또는 flat 예약이 열려 있는 동안 잠금 — lockedInventoryItemIds와 동일 규칙.
-      // 당일 픽업 flat이 10시 이후 초과판매 나던 구멍을 closeAt 조건으로 막는다.
-      OR: [{ pickupDate: { gte: minLockedPickupDate(now) } }, { closeAt: { gt: new Date(now) } }],
+      AND: [
+        // 픽업 대기(레거시·flat) 또는 flat 예약이 열려 있는 동안 잠금 — lockedInventoryItemIds와 동일 규칙.
+        // 당일 픽업 flat이 10시 이후 초과판매 나던 구멍을 closeAt 조건으로 막는다.
+        { OR: [{ pickupDate: { gte: minLockedPickupDate(now) } }, { closeAt: { gt: new Date(now) } }] },
+        // 단일 연동이 이 품목이거나, 세트 구성품 중 이 품목이 있으면 잠금.
+        { OR: [{ inventoryItemId: itemId }, { components: { some: { inventoryItemId: itemId } } }] },
+      ],
     },
     select: { id: true },
   });
   return !!found;
 }
 
-// 품목별 예약 홀드 합계(전 점주). = Σ ReservationOrderItem.qty
+// 세트 예약분을 '구성품(재고연동)'으로 전개해 품목별 수요(Σ 세트수량×세트당수량)를 돌려준다.
+// 세트 주문행은 inventoryItemId="" 라 위 단일-연동 집계에 안 잡히므로, 여기서 따로 더한다(이중집계 없음).
+async function setComponentDemand(confirmedOnly: boolean): Promise<Record<string, number>> {
+  const sets = await prisma.reservationProduct.findMany({
+    where: { active: true, components: { some: { inventoryItemId: { not: "" } } } },
+    select: {
+      id: true,
+      components: {
+        where: { inventoryItemId: { not: "" } },
+        select: { inventoryItemId: true, qtyPerUnit: true },
+      },
+    },
+  });
+  if (sets.length === 0) return {};
+  const compsByProduct = new Map(sets.map((s) => [s.id, s.components]));
+  const items = await prisma.reservationOrderItem.findMany({
+    where: {
+      productId: { in: sets.map((s) => s.id) },
+      stockDeductedAt: null,
+      qty: { gt: 0 },
+      order: { batch: { active: true } },
+      ...(confirmedOnly
+        ? { OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }] }
+        : {}),
+    },
+    select: { productId: true, qty: true },
+  });
+  const m: Record<string, number> = {};
+  for (const it of items) {
+    for (const c of compsByProduct.get(it.productId) ?? []) {
+      m[c.inventoryItemId] = (m[c.inventoryItemId] ?? 0) + it.qty * c.qtyPerUnit;
+    }
+  }
+  return m;
+}
+
+// 품목별 예약 홀드 합계(전 점주). = Σ ReservationOrderItem.qty + 세트 구성품 전개분.
 //  (연동 아이템 · 아직 재고 차감 안 됨(stockDeductedAt null) · 활성 배치). 연동은 즉시 담기(홀드)라 confirmed 무관 전부 집계.
 // ⚠ 예전엔 '픽업 10시 전'으로 릴리스했으나, 10시 자동차감을 없애고 '재고 정산(다음날) 차감' 방식으로 바꿈에 따라
 //   홀드도 그 시점(stockDeductedAt 설정)에 풀린다 → 판매가능이 base 차감과 어긋나지 않음.
 // groupBy 는 관계필터를 못 받아 findMany + JS 합산(예약 아이템 수는 소규모).
 export async function reservationHeldByItem(): Promise<Record<string, number>> {
-  const rows = await prisma.reservationOrderItem.findMany({
-    where: {
-      inventoryItemId: { not: "" },
-      stockDeductedAt: null,
-      qty: { gt: 0 },
-      order: { batch: { active: true } },
-    },
-    select: { inventoryItemId: true, qty: true },
-  });
-  const m: Record<string, number> = {};
+  const [rows, setDemand] = await Promise.all([
+    prisma.reservationOrderItem.findMany({
+      where: {
+        inventoryItemId: { not: "" },
+        stockDeductedAt: null,
+        qty: { gt: 0 },
+        order: { batch: { active: true } },
+      },
+      select: { inventoryItemId: true, qty: true },
+    }),
+    setComponentDemand(false),
+  ]);
+  const m: Record<string, number> = { ...setDemand };
   for (const r of rows) m[r.inventoryItemId] = (m[r.inventoryItemId] ?? 0) + r.qty;
   return m;
 }
@@ -93,45 +146,65 @@ export async function reservationHeldByItem(): Promise<Record<string, number>> {
 // = reservationHeldByItem 와 같되 확정 게이트(order.confirmed OR item.confirmedAt) 추가.
 // ⚠ 부족분(납품처 추가주문) 신호용으로만 쓴다. 판매가능·담기 캡은 미확정 홀드까지 세는 reservationHeldByItem 사용.
 export async function reservationConfirmedByItem(): Promise<Record<string, number>> {
-  const rows = await prisma.reservationOrderItem.findMany({
-    where: {
-      inventoryItemId: { not: "" },
-      stockDeductedAt: null,
-      qty: { gt: 0 },
-      order: { batch: { active: true } },
-      OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
-    },
-    select: { inventoryItemId: true, qty: true },
-  });
-  const m: Record<string, number> = {};
+  const [rows, setDemand] = await Promise.all([
+    prisma.reservationOrderItem.findMany({
+      where: {
+        inventoryItemId: { not: "" },
+        stockDeductedAt: null,
+        qty: { gt: 0 },
+        order: { batch: { active: true } },
+        OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
+      },
+      select: { inventoryItemId: true, qty: true },
+    }),
+    setComponentDemand(true),
+  ]);
+  const m: Record<string, number> = { ...setDemand };
   for (const r of rows) m[r.inventoryItemId] = (m[r.inventoryItemId] ?? 0) + r.qty;
   return m;
 }
 
 // 연동 상품들의 남은수량(productId → available). available = base − 예약홀드 − 일일홀드.
 // (SSR 초기값 — 클라 폴링 useLiveReservationStock 이 이후 실시간 갱신)
+// 단일 연동 상품은 남은수량, 세트는 '만들 수 있는 세트 수'(구성품별 남은÷세트당수량 중 최소)를 돌려준다.
 export async function availableForReservationProducts(
-  products: { id: string; inventoryItemId: string }[],
+  products: {
+    id: string;
+    inventoryItemId: string;
+    components?: { inventoryItemId: string; qtyPerUnit: number }[];
+  }[],
 ): Promise<Record<string, number>> {
-  const linked = products.filter((p) => p.inventoryItemId);
-  if (linked.length === 0) return {};
-  const itemIds = [...new Set(linked.map((p) => p.inventoryItemId))];
+  const relevant = products.filter(
+    (p) => p.inventoryItemId || (p.components ?? []).some((c) => c.inventoryItemId),
+  );
+  if (relevant.length === 0) return {};
+  const itemIds = new Set<string>();
+  for (const p of relevant) {
+    if (p.inventoryItemId) itemIds.add(p.inventoryItemId);
+    for (const c of p.components ?? []) if (c.inventoryItemId) itemIds.add(c.inventoryItemId);
+  }
   const [resvHeld, dailyHeld, items] = await Promise.all([
     reservationHeldByItem(),
     heldByItem(),
     prisma.inventoryItem.findMany({
-      where: { id: { in: itemIds } },
+      where: { id: { in: [...itemIds] } },
       select: { id: true, qty: true },
     }),
   ]);
   const baseById: Record<string, number> = {};
   for (const it of items) baseById[it.id] = it.qty;
+  const remainOf = (itemId: string) =>
+    Math.max(0, (baseById[itemId] ?? 0) - ((resvHeld[itemId] ?? 0) + (dailyHeld[itemId] ?? 0)));
   const out: Record<string, number> = {};
-  for (const p of linked) {
-    const base = baseById[p.inventoryItemId] ?? 0;
-    const held =
-      (resvHeld[p.inventoryItemId] ?? 0) + (dailyHeld[p.inventoryItemId] ?? 0);
-    out[p.id] = Math.max(0, base - held);
+  for (const p of relevant) {
+    const linkedComps = (p.components ?? []).filter((c) => c.inventoryItemId);
+    if (linkedComps.length > 0) {
+      out[p.id] = Math.min(
+        ...linkedComps.map((c) => Math.floor(remainOf(c.inventoryItemId) / Math.max(1, c.qtyPerUnit))),
+      );
+    } else if (p.inventoryItemId) {
+      out[p.id] = remainOf(p.inventoryItemId);
+    }
   }
   return out;
 }

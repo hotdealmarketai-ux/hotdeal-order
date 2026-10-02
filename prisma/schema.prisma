@@ -311,11 +311,32 @@ model ReservationProduct {
   // 재고 고정 — true면 이 연동 상품은 재고(base)까지만 담기 가능(하드 캡, 예전 동작).
   // false(기본) = 초과발주 허용: 재고 넘어서 담기고 부족분은 관리자가 납품처에 추가 주문.
   stockFixed  Boolean          @default(false)
+  // 세트 상품 구성품 — 비어있으면 단일 상품(기존 동작), 1개 이상이면 '세트'.
+  // 세트일 때 이 상품의 name=세트명, supplyPrice=구성품 합(캐시), inventoryItemId="" (연동은 구성품이 각자).
+  components  ReservationProductComponent[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
   @@index([batchId, active, sortOrder])
   @@index([active, closeAt])
+}
+
+// 세트 상품 구성품 — 세트 1개를 이루는 개별 품목. 개수 제한 없음.
+// 재고·계산서는 '구성품' 단위로 전개해 처리(세트수량 × qtyPerUnit). 공구 표시만 세트명 한 줄.
+model ReservationProductComponent {
+  id          String            @id @default(cuid())
+  productId   String
+  product     ReservationProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sortOrder   Int               @default(0)
+  name        String // 구성품 품목명(계산서/재고차감 매칭 기준)
+  // 재고현황 연동 — 값 있으면 InventoryItem.id 참조(재고 잠금·차감 대상). 빈값=수기 구성품(재고 무관, 표시/출고만).
+  inventoryItemId String        @default("")
+  qtyPerUnit  Int               @default(1) // 세트 1개당 이 구성품 수량
+  // 구성품 공급가(원) — 연동이면 등록 시 재고 공급가 자동 기본값, 수정하면 그 값 우선(저장값이 진실). 수기면 직접 입력.
+  supplyPrice Int               @default(0)
+
+  @@index([productId, sortOrder])
+  @@index([inventoryItemId])
 }
 
 // 점주×배치 1건 — 확정/수정 잠금(confirmed). 마감(예약+1 12시) 후엔 강제 잠금(판정은 앱에서).

@@ -19,9 +19,22 @@ export type FlatMerchantCard = {
   myConfirmed: boolean;
   available: number;
   stockFixed: boolean; // 재고 고정(초과발주 금지). false면 재고 넘어 담기 가능.
+  components: { name: string; qtyPerUnit: number }[]; // 세트 구성품(비어있으면 단일 상품)
+  isSet: boolean;
+  hasLinked: boolean; // 재고연동(단일/세트 구성품) → 스테퍼(담기), 아니면 수량입력(수기)
 };
 
 const won = (n: number) => n.toLocaleString("ko-KR");
+
+// 세트 구성품 요약 "사과 2 + 배 3" (세트 카드에만). unit 라벨도 세트/개로 구분.
+function CompLine({ p }: { p: FlatMerchantCard }) {
+  if (!p.isSet || p.components.length === 0) return null;
+  return (
+    <div className="rcard__comp" style={{ fontSize: 12, color: "var(--text-muted, var(--muted))", marginTop: 2 }}>
+      구성: {p.components.map((c) => `${c.name} ${c.qtyPerUnit}`).join(" + ")}
+    </div>
+  );
+}
 
 // ms → KST 달력 날짜(YYYY-MM-DD). '오늘 마감' 섹터 분리에 사용.
 function kstDateStr(ms: number): string {
@@ -68,6 +81,7 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
   const [err, setErr] = useState("");
   const [pending, start] = useTransition();
   const closed = useNow() >= p.closeAtMs;
+  const unit = p.isSet ? "세트" : "개";
 
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
     setErr("");
@@ -84,7 +98,11 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
 
   return (
     <div className="rcard">
-      <div className="rcard__name">{p.name}</div>
+      <div className="rcard__name">
+        {p.name}
+        {p.isSet && <span className="rcard__tag">세트</span>}
+      </div>
+      <CompLine p={p} />
       <Countdown ms={p.closeAtMs} />
       <div className="rcard__info">
         <div>
@@ -95,7 +113,7 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
         </div>
         {p.myQty > 0 && (!p.myConfirmed || closed) && (
           <div className="rcard__mine">
-            {closed ? "내 발주" : "내 예약"} <b>{p.myQty}</b>개
+            {closed ? "내 발주" : "내 예약"} <b>{p.myQty}</b>{unit}
           </div>
         )}
       </div>
@@ -107,7 +125,7 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
           </button>
         ) : p.myConfirmed ? (
           <>
-            <span className="rcard__done">예약 {p.myQty}개 · 확정됨</span>
+            <span className="rcard__done">예약 {p.myQty}{unit} · 확정됨</span>
             <button
               className="btn btn--sm btn--soft"
               disabled={pending}
@@ -131,7 +149,7 @@ function ManualCard({ p }: { p: FlatMerchantCard }) {
               disabled={pending || (n === 0 && p.myQty === 0)}
               onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty: n }))}
             >
-              {n === 0 && p.myQty > 0 ? "예약 취소" : `발주 확정${n > 0 ? ` (${n}개)` : ""}`}
+              {n === 0 && p.myQty > 0 ? "예약 취소" : `발주 확정${n > 0 ? ` (${n}${unit})` : ""}`}
             </button>
           </>
         )}
@@ -152,6 +170,7 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
   // 재고 고정이면 재고(전체가용+내수량)까지만. 기본(초과발주 허용)이면 상한 없음(큰 값).
   const max = p.stockFixed ? p.available : 99999;
   const stockLeft = Math.max(0, p.available - qty); // 재고 기준 남은수량(0에서 바닥)
+  const unit = p.isSet ? "세트" : "개";
 
   // 담기 = 재고 홀드(qty)만. 확정은 별도 버튼.
   const hold = (next: number) => {
@@ -186,8 +205,9 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
     <div className="rcard">
       <div className="rcard__name">
         {p.name}
-        <span className="rcard__tag">재고연동</span>
+        <span className="rcard__tag">{p.isSet ? "세트" : "재고연동"}</span>
       </div>
+      <CompLine p={p} />
       <Countdown ms={p.closeAtMs} />
       <div className="rcard__info">
         <div>
@@ -198,7 +218,7 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
           {!closed &&
             (stockLeft > 0 ? (
               <>
-                {" "}· 남은 <b>{stockLeft}개</b>
+                {" "}· 남은 <b>{stockLeft}{unit}</b>
               </>
             ) : p.stockFixed ? (
               <>
@@ -212,7 +232,7 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
         </div>
         {/* 확정분만 '내 발주'로 표시 — 미확정 담기는 마감 후 자동 해제되므로 발주로 오인시키지 않는다. */}
         {closed && p.myConfirmed && p.myQty > 0 && (
-          <div className="rcard__mine">내 발주 {p.myQty}개</div>
+          <div className="rcard__mine">내 발주 {p.myQty}{unit}</div>
         )}
       </div>
 
@@ -223,7 +243,7 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
           </button>
         ) : p.myConfirmed ? (
           <>
-            <span className="rcard__done">예약 {p.myQty}개 · 확정됨</span>
+            <span className="rcard__done">예약 {p.myQty}{unit} · 확정됨</span>
             <button
               className="btn btn--sm btn--soft"
               disabled={pending}
@@ -279,7 +299,7 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
               disabled={pending || qty <= 0}
               onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty }))}
             >
-              발주 확정{qty > 0 ? ` (${qty}개)` : ""}
+              발주 확정{qty > 0 ? ` (${qty}${unit})` : ""}
             </button>
           </>
         )}
@@ -290,7 +310,8 @@ function LinkedCard({ p }: { p: FlatMerchantCard }) {
 }
 
 function renderCard(p: FlatMerchantCard) {
-  return p.inventoryItemId ? (
+  // 재고연동(단일 또는 세트 구성품) → 스테퍼 담기 카드. 수기(단일/수기전용 세트) → 수량입력 카드.
+  return p.hasLinked ? (
     <LinkedCard key={`${p.id}:${p.myQty}:${p.myConfirmed}:${p.available}`} p={p} />
   ) : (
     <ManualCard key={`${p.id}:${p.myQty}:${p.myConfirmed}`} p={p} />

@@ -28,6 +28,7 @@ export default async function AdminReservationsPage() {
     stockFixed: p.stockFixed,
     totalQty: p.totalQty,
     storeCount: p.storeCount,
+    components: p.components,
   }));
 
   return (

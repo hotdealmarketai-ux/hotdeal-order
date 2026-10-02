@@ -70,6 +70,13 @@ export async function deductInvoiceStock(
   });
   if (!inv || inv.kind !== "DAILY" || inv.stockDeductedAt) return false; // 빠른 사전 스킵(정상 경로)
   const byName = await invoiceToolByName(invoiceId);
+  // 세트 상품 id — 세트 예약분(inventoryItemId="")도 '차감됨' 표시 대상에 포함(아래 updateMany).
+  const setProductIds = (
+    await prisma.reservationProduct.findMany({
+      where: { components: { some: {} } },
+      select: { id: true },
+    })
+  ).map((p) => p.id);
   const at = new Date(now);
   const snap: Record<string, number> = {}; // InventoryItem.id → 실제차감량
   let claimed = false;
@@ -92,14 +99,17 @@ export async function deductInvoiceStock(
       where: { id: inv.id },
       data: { stockDeductedSnap: JSON.stringify(snap) },
     });
-    // 이 출고일에 픽업하는 이 점포의 예약(재고연동) 확정분을 '차감됨'으로 표시(이중집계 방지).
+    // 이 출고일에 픽업하는 이 점포의 예약(재고연동 단일 + 세트) 확정분을 '차감됨'으로 표시(이중집계 방지).
     await tx.reservationOrderItem.updateMany({
       where: {
         pickupDate: inv.date,
-        inventoryItemId: { not: "" },
         stockDeductedAt: null,
         order: { userId: inv.userId, batch: { active: true } },
-        OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
+        AND: [
+          { OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }] },
+          // 연동 단일(inventoryItemId 있음) 또는 세트 상품(구성품으로 재고 차감되는 주문행).
+          { OR: [{ inventoryItemId: { not: "" } }, { productId: { in: setProductIds } }] },
+        ],
       },
       data: { stockDeductedAt: at },
     });

@@ -56,6 +56,7 @@ export type FlatProductRow = {
   stockFixed: boolean; // 재고 고정(초과발주 금지)
   totalQty: number; // 취합 수량(전 점포 합)
   storeCount: number; // 예약 점포 수
+  components: { name: string; inventoryItemId: string; qtyPerUnit: number; supplyPrice: number }[];
 };
 
 // 관리자 flat 상품 목록. open=마감 전(임박순), closed=지난 예약 마감(픽업 전), pickupClosed=지난 픽업 마감.
@@ -74,6 +75,10 @@ export async function listFlatProductsAdmin(
       inventoryItemId: true,
       closeAt: true,
       stockFixed: true,
+      components: {
+        orderBy: { sortOrder: "asc" },
+        select: { name: true, inventoryItemId: true, qtyPerUnit: true, supplyPrice: true },
+      },
     },
   });
   if (products.length === 0) return [];
@@ -110,6 +115,7 @@ export async function listFlatProductsAdmin(
       stockFixed: p.stockFixed,
       totalQty: a?.qty ?? 0,
       storeCount: a?.stores.size ?? 0,
+      components: p.components,
     };
   });
   // 정렬: ①마감 임박순(closeAt) ②같은 마감시각이면 ㄱㄴㄷ(이름). DB 콜레이션 대신 JS localeCompare로 한글 순서 보장.
@@ -129,10 +135,13 @@ export type FlatMerchantRow = {
   supplyPrice: number;
   inventoryItemId: string;
   closeAtMs: number;
-  myQty: number; // 내가 예약한 수량
+  myQty: number; // 내가 예약한 수량(세트면 세트 수)
   myConfirmed: boolean; // 품목별 확정(confirmedAt) 여부
-  available: number; // 재고연동 상품의 남은수량(수기는 무시)
+  available: number; // 재고연동 상품의 남은수량(세트면 담을 수 있는 세트 수, 수기는 무시)
   stockFixed: boolean; // 재고 고정(초과발주 금지) — false면 재고 넘어 담기 가능
+  components: { name: string; qtyPerUnit: number }[]; // 세트 구성품(비어있으면 단일 상품)
+  isSet: boolean;
+  hasLinked: boolean; // 재고연동(단일 또는 세트 구성품) — true면 스테퍼(담기), false면 수량입력(수기)
 };
 
 // 점주 flat 상품 목록. scope "open"=마감 전(임박순), "closed"=마감 후. 재고연동 상품은 남은수량 시드.
@@ -156,6 +165,10 @@ export async function listFlatProductsMerchant(
       inventoryItemId: true,
       closeAt: true,
       stockFixed: true,
+      components: {
+        orderBy: { sortOrder: "asc" },
+        select: { name: true, qtyPerUnit: true, inventoryItemId: true },
+      },
     },
   });
   if (products.length === 0) return [];
@@ -167,9 +180,11 @@ export async function listFlatProductsMerchant(
       select: { productId: true, qty: true, confirmedAt: true },
     }),
     availableForReservationProducts(
-      products
-        .filter((p) => p.inventoryItemId)
-        .map((p) => ({ id: p.id, inventoryItemId: p.inventoryItemId })),
+      products.map((p) => ({
+        id: p.id,
+        inventoryItemId: p.inventoryItemId,
+        components: p.components.map((c) => ({ inventoryItemId: c.inventoryItemId, qtyPerUnit: c.qtyPerUnit })),
+      })),
     ),
   ]);
   const myMap = new Map(mine.map((i) => [i.productId, i]));
@@ -177,6 +192,8 @@ export async function listFlatProductsMerchant(
   const rows = products.map((p) => {
     const m = myMap.get(p.id);
     const myQty = m?.qty ?? 0;
+    const isSet = p.components.length > 0;
+    const hasLinked = !!p.inventoryItemId || p.components.some((c) => c.inventoryItemId);
     return {
       id: p.id,
       name: p.name,
@@ -187,8 +204,11 @@ export async function listFlatProductsMerchant(
       myQty,
       myConfirmed: !!m?.confirmedAt,
       stockFixed: p.stockFixed,
-      // 재고연동: 표시용 남은수량 = 전체가용 + 내가 이미 담은 만큼(내 수량은 내가 줄일 수 있으니 더함)
-      available: p.inventoryItemId ? (availMap[p.id] ?? 0) + myQty : 0,
+      // 재고연동(단일·세트): 표시용 남은수량 = 전체가용 + 내가 이미 담은 만큼(내 수량은 내가 줄일 수 있으니 더함)
+      available: hasLinked ? (availMap[p.id] ?? 0) + myQty : 0,
+      components: p.components.map((c) => ({ name: c.name, qtyPerUnit: c.qtyPerUnit })),
+      isSet,
+      hasLinked,
     };
   });
   // 정렬: ①마감 임박순(closeAtMs) ②같은 마감시각이면 ㄱㄴㄷ(이름). JS localeCompare로 한글 순서 보장.
@@ -351,8 +371,12 @@ export async function flatProductStores(
 // 발주 확정을 안 한 채 상품이 마감되면 그 홀드가 계산서로 차감되지도 해제되지도 않아
 // 같은 재고품목의 다른 발주·재고현황 가용을 영구히 갉아먹는다 → 마감 후 정리.
 export async function releaseClosedFlatHolds(now: Date = new Date()): Promise<number> {
+  // 연동 단일 + 세트(연동 구성품 보유) 둘 다 — 마감됐는데 미확정이면 홀드가 재고를 영구 점유하므로 해제.
   const closed = await prisma.reservationProduct.findMany({
-    where: { closeAt: { not: null, lte: now }, inventoryItemId: { not: "" } },
+    where: {
+      closeAt: { not: null, lte: now },
+      OR: [{ inventoryItemId: { not: "" } }, { components: { some: { inventoryItemId: { not: "" } } } }],
+    },
     select: { id: true },
   });
   if (closed.length === 0) return 0;
@@ -363,7 +387,6 @@ export async function releaseClosedFlatHolds(now: Date = new Date()): Promise<nu
       confirmedAt: null, // 확정분은 계산서로 차감되므로 건드리지 않음
       qty: { gt: 0 },
       stockDeductedAt: null,
-      inventoryItemId: { not: "" },
     },
   });
   return res.count;

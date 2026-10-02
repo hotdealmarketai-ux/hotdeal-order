@@ -358,16 +358,34 @@ export async function getReservationInvoiceItems(
       // 확정(예약 확정)한 예약분만 공구/계산서에 로드 — 연동·수기 모두 동일 게이트.
       order: { userId, batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
     },
-    select: { name: true, qty: true, supplyPrice: true },
+    select: { productId: true, name: true, qty: true, supplyPrice: true },
     orderBy: { sortOrder: "asc" },
   });
+  if (items.length === 0) return [];
+  // 세트 상품은 계산서에 '구성품 개별 줄'로 전개(품목명·세트수×세트당수량·구성품 공급가). 단일/수기는 그대로.
+  const setProducts = await prisma.reservationProduct.findMany({
+    where: { id: { in: [...new Set(items.map((i) => i.productId))] }, components: { some: {} } },
+    select: {
+      id: true,
+      components: { orderBy: { sortOrder: "asc" }, select: { name: true, qtyPerUnit: true, supplyPrice: true } },
+    },
+  });
+  const compMap = new Map(setProducts.map((p) => [p.id, p.components]));
   // 같은 품목명은 수량 합산(공급가는 처음 값 유지)
   const merged = new Map<string, { name: string; qty: number; supplyPrice: number }>();
-  for (const it of items) {
-    const key = it.name.trim();
+  const push = (name: string, qty: number, supplyPrice: number) => {
+    const key = name.trim();
     const cur = merged.get(key);
-    if (cur) cur.qty += it.qty;
-    else merged.set(key, { name: it.name, qty: it.qty, supplyPrice: it.supplyPrice });
+    if (cur) cur.qty += qty;
+    else merged.set(key, { name, qty, supplyPrice });
+  };
+  for (const it of items) {
+    const comps = compMap.get(it.productId);
+    if (comps && comps.length > 0) {
+      for (const c of comps) push(c.name, it.qty * c.qtyPerUnit, c.supplyPrice);
+    } else {
+      push(it.name, it.qty, it.supplyPrice);
+    }
   }
   return [...merged.values()];
 }
