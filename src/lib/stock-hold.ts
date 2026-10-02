@@ -1,8 +1,9 @@
 // 재고 담기원장(StockHold) 서버 helper. 남은수량 = 기준재고 − Σ HELD(현재 발주창).
 import { prisma } from "@/lib/prisma";
 import { isOrderOpen } from "@/lib/deadline";
-import { windowKeyAt, currentWindowStartUtc } from "@/lib/schedule";
+import { windowKeyAt, currentWindowFloorUtc } from "@/lib/schedule";
 import { dailyForceOpen } from "@/lib/order-open";
+import { isUnlockActiveThisWindow } from "@/lib/receivable";
 
 // 현재 발주창 기준, 품목별 보류 합계. windowDate=창키(주말=토요일 하나) — kstToday() 아님.
 export async function heldByItem(
@@ -104,7 +105,9 @@ export async function deductWindowToolOrders(
   now: number = Date.now(),
 ): Promise<number> {
   if (isOrderOpen() || (await dailyForceOpen())) return 0; // 마감 전엔 정산 안 함
-  const start = new Date(currentWindowStartUtc(now));
+  // 창 시작(정오)만 쓰면 강제오픈·지점 '발주 시간 열기'로 정오 이전에 넣은 공구 발주가 차감에서
+  // 빠져 재고가 안 맞는다 → 창 시작과 그날 0시 중 이른 쪽을 하한으로.
+  const start = new Date(currentWindowFloorUtc(now));
   const orders = await prisma.order.findMany({
     where: {
       category: "TOOL",
@@ -124,9 +127,31 @@ export async function deductWindowToolOrders(
 export async function releaseStaleHolds(): Promise<number> {
   const key = windowKeyAt();
   const live = isOrderOpen() || (await dailyForceOpen());
-  const where = live
-    ? { windowDate: { lt: key } }
-    : { windowDate: { lte: key } };
-  const res = await prisma.stockHold.deleteMany({ where });
+  if (live) {
+    // 창이 살아있으면(정규 오픈/강제오픈) 지난 창 잔여만 해제, 현재 창 담기는 보존.
+    const res = await prisma.stockHold.deleteMany({ where: { windowDate: { lt: key } } });
+    return res.count;
+  }
+  // 마감 상태: 현재 창 미발주 담기까지 해제. 단 지점별 '발주 시간 열기'(timeUnlock)가 이번 창에
+  // 유효한 지점은 아직 담기/발주 중이므로 그 지점의 '현재 창' 담기는 보존한다(지난 창 잔여는 그래도 해제).
+  // (이 처리를 안 하면 시간 밖에 담은 담기를 크론이 통째로 지워 "담은 게 사라진다".)
+  const now = Date.now();
+  const unlocked = await prisma.user.findMany({
+    where: { timeUnlock: true },
+    select: { id: true, timeUnlockAt: true },
+  });
+  const keepIds = unlocked
+    .filter((u) => isUnlockActiveThisWindow(true, u.timeUnlockAt, now))
+    .map((u) => u.id);
+  const res = await prisma.stockHold.deleteMany({
+    where: {
+      OR: [
+        { windowDate: { lt: key } },
+        keepIds.length > 0
+          ? { windowDate: key, userId: { notIn: keepIds } }
+          : { windowDate: key },
+      ],
+    },
+  });
   return res.count;
 }
