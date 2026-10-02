@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/session";
-import { dispatchWorkflow } from "@/lib/github-backup";
+import { dispatchWorkflow, RESTORE_BRANCH_WORKFLOW } from "@/lib/github-backup";
 
 // 지금 백업 — DB/미디어 워크플로를 수동 실행(workflow_dispatch).
 export async function triggerBackupAction(
@@ -21,6 +21,14 @@ export async function triggerBackupAction(
 export async function triggerRestoreVerifyAction(): Promise<{ ok: boolean }> {
   await requireAdmin();
   const ok = await dispatchWorkflow("restore-verify.yml");
+  revalidatePath("/admin/backup");
+  return { ok };
+}
+
+// 복원 마법사 — 최신 백업을 새 Neon 브랜치(격리)에 복원. 운영 데이터는 건드리지 않음.
+export async function triggerRestoreToBranchAction(): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const ok = await dispatchWorkflow(RESTORE_BRANCH_WORKFLOW);
   revalidatePath("/admin/backup");
   return { ok };
 }

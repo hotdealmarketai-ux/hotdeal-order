@@ -12,7 +12,10 @@ export const BACKUP_WORKFLOWS = [
   { key: "db", name: "DB 전체 백업", file: "db-backup.yml" },
   { key: "media", name: "미디어(사진·첨부) 백업", file: "media-backup.yml" },
   { key: "verify", name: "복원 자동검증", file: "restore-verify.yml" },
+  { key: "restoreBranch", name: "복원 마법사", file: "restore-to-branch.yml" },
 ] as const;
+
+export const RESTORE_BRANCH_WORKFLOW = "restore-to-branch.yml";
 
 export type WfRun = {
   status: string; // queued | in_progress | completed

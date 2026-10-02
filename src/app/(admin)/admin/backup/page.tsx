@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/session";
 import { getBackupStatus, type WfStatus, type ArtifactInfo } from "@/lib/github-backup";
 import { formatKDateTime } from "@/lib/format";
 import { BackupActions } from "@/components/BackupActions";
+import { BackupRestoreWizard } from "@/components/BackupRestoreWizard";
 
 // 백업 현황판 — 백업이 '잘 되고 있는지'를 관리자가 한눈에. (조용한 실패 재발 방지)
 export const dynamic = "force-dynamic";
@@ -94,7 +95,7 @@ export default async function AdminBackupPage() {
         {/* 워크플로 상태 */}
         <div className="section-label">백업 상태</div>
         <div className="list" style={{ marginBottom: 16 }}>
-          {st.workflows.map((w) => {
+          {st.workflows.filter((w) => w.key !== "restoreBranch").map((w) => {
             const b = badgeOf(w.lastRun);
             return (
               <div className="row" key={w.key}>
@@ -131,6 +132,10 @@ export default async function AdminBackupPage() {
         </div>
 
         <BackupActions />
+
+        <BackupRestoreWizard
+          lastRun={st.workflows.find((w) => w.key === "restoreBranch")?.lastRun ?? null}
+        />
       </div>
     </>
   );

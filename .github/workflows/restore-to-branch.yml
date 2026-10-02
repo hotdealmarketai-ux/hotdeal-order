@@ -1,0 +1,108 @@
+name: restore-to-branch
+
+# 복원 마법사 — 최신 DB 백업을 '새 Neon 브랜치'(격리된 공간)에 복원한다.
+# 운영(main) 브랜치는 전혀 건드리지 않는다. 진짜 사고 때 이 브랜치를 Neon 콘솔에서 확인/승격해 복구.
+# ⚠ 필요한 시크릿: NEON_API_KEY (Neon 콘솔 > Account settings > API keys)
+#    프로젝트 id는 기존 NEON_DATABASE_URL 의 엔드포인트로 자동 탐색한다(추가 입력 불필요).
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: restore-to-branch
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+    steps:
+      - name: Download latest successful db-backup dump
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RID=$(gh run list -R "${{ github.repository }}" --workflow db-backup.yml --status success -L 1 --json databaseId -q '.[0].databaseId')
+          if [ -z "$RID" ]; then echo "::error::성공한 db-backup 실행이 없습니다"; exit 1; fi
+          gh run download "$RID" -R "${{ github.repository }}" -D dump
+          DUMP=$(find dump -name '*.dump' | head -1)
+          if [ -z "$DUMP" ]; then echo "::error::덤프 파일(*.dump)을 찾지 못함"; exit 1; fi
+          echo "DUMP=$DUMP" >> "$GITHUB_ENV"
+          ls -lh "$DUMP"
+      - name: Create fresh Neon branch and restore the backup into it
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NEON_API_KEY:-}" ]; then echo "::error::NEON_API_KEY 시크릿이 없습니다"; exit 1; fi
+          API="https://console.neon.tech/api/v2"
+          AUTH="Authorization: Bearer $NEON_API_KEY"
+
+          # 1) 프로젝트 자동 탐색 — NEON_DATABASE_URL 의 엔드포인트(ep-xxxx)가 속한 프로젝트.
+          EP=$(printf '%s' "$NEON_DATABASE_URL" | sed -E 's#.*@(ep-[^.]+).*#\1#')
+          echo "운영 엔드포인트: $EP"
+          PROJECT_ID=""
+          for pid in $(curl -fsS -H "$AUTH" "$API/projects" | jq -r '.projects[].id'); do
+            if curl -fsS -H "$AUTH" "$API/projects/$pid/endpoints" | jq -e --arg ep "$EP" '.endpoints[] | select(.id==$ep)' >/dev/null 2>&1; then
+              PROJECT_ID="$pid"; break
+            fi
+          done
+          if [ -z "$PROJECT_ID" ]; then echo "::error::운영 엔드포인트($EP)가 속한 Neon 프로젝트를 못 찾음(API 키 권한 확인)"; exit 1; fi
+          echo "프로젝트: $PROJECT_ID"
+
+          # 2) 이전 복원 브랜치(restore-*) 정리 — 브랜치 한도 초과 방지. (main/production 은 건드리지 않음)
+          for b in $(curl -fsS -H "$AUTH" "$API/projects/$PROJECT_ID/branches" | jq -r '.branches[] | select(.name|startswith("restore-")) | .id'); do
+            echo "이전 복원 브랜치 삭제: $b"
+            curl -fsS -X DELETE -H "$AUTH" "$API/projects/$PROJECT_ID/branches/$b" >/dev/null || true
+          done
+
+          # 3) 새 복원 브랜치 생성(+읽기쓰기 엔드포인트). COW 복사본이지만 아래에서 비우고 백업으로 덮는다.
+          BR="restore-$(date -u +%Y%m%d-%H%M%S)"
+          RESP=$(curl -fsS -X POST -H "$AUTH" -H "Content-Type: application/json" \
+            -d "{\"branch\":{\"name\":\"$BR\"},\"endpoints\":[{\"type\":\"read_write\"}]}" \
+            "$API/projects/$PROJECT_ID/branches")
+          URI=$(printf '%s' "$RESP" | jq -r '.connection_uris[0].connection_uri // empty')
+          if [ -z "$URI" ]; then echo "::error::브랜치 연결 주소 획득 실패: $RESP"; exit 1; fi
+          echo "새 복원 브랜치: $BR"
+
+          # 4) 엔드포인트가 접속 가능해질 때까지 잠깐 대기(최대 ~60초)
+          for i in $(seq 1 20); do
+            if docker run --rm -e URI="$URI" postgres:17 psql "$URI" -tAc "select 1" >/dev/null 2>&1; then break; fi
+            sleep 3
+          done
+
+          # 5) 브랜치를 비우고(public 스키마 재생성) 최신 백업을 복원 → 이 브랜치 = 백업 시점 전체 복원본
+          docker run --rm -e URI="$URI" postgres:17 psql "$URI" -v ON_ERROR_STOP=1 \
+            -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
+          docker run --rm -e URI="$URI" -e DUMP="$DUMP" -v "$PWD:/w" postgres:17 \
+            sh -c 'pg_restore --no-owner --no-privileges -d "$URI" "/w/$DUMP"' || echo "pg_restore 경고와 함께 완료(역할/권한 경고는 정상)"
+
+          # 6) 검증 + 요약
+          TABLES=$(docker run --rm -e URI="$URI" postgres:17 psql "$URI" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" | tr -d '[:space:]')
+          ORDERS=$(docker run --rm -e URI="$URI" postgres:17 psql "$URI" -tAc "SELECT count(*) FROM \"Order\";" 2>/dev/null | tr -d '[:space:]' || echo "?")
+          {
+            echo "## 복원본 생성 완료 ✅"
+            echo ""
+            echo "- 새 브랜치: **$BR**"
+            echo "- 복원된 테이블: **${TABLES}개**, 발주(Order) ${ORDERS}건"
+            echo "- 이 브랜치는 **최신 백업 시점의 전체 데이터 복원본**입니다(운영 데이터는 그대로)."
+            echo "- 실제 복구: Neon 콘솔에서 이 브랜치를 확인한 뒤, 필요하면 승격(또는 앱 연결을 이 브랜치로). 자세한 절차는 저장소 RESTORE.md 참고."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${TABLES:-0}" -lt 30 ]; then echo "::error::복원된 테이블이 너무 적음($TABLES) — 복원 실패 의심"; exit 1; fi
+          echo "✅ $BR 에 $TABLES개 테이블 복원 완료"
+      - name: Alert on failure (open/append issue)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "⚠️ 복원 마법사 실패 (restore-to-branch)";
+            const body = `restore-to-branch 가 실패했습니다.\n실행: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n시각(UTC): ${new Date().toISOString()}`;
+            const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}"`;
+            const found = await github.rest.search.issuesAndPullRequests({ q });
+            if (found.data.total_count > 0) {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: found.data.items[0].number, body });
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body });
+            }
