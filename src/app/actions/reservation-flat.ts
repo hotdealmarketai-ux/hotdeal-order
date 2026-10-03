@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin, getCurrentUser } from "@/lib/session";
 import { writeAudit } from "@/lib/audit";
 import { getOrCreateFlatBatchId } from "@/lib/reservation-flat";
+import { minLockedPickupDate } from "@/lib/reservation-stock";
 import { windowKeyAt } from "@/lib/schedule";
 import { logError } from "@/lib/log";
 import { notifyMerchantsReservationProductAdded } from "@/lib/push";
@@ -349,6 +350,7 @@ export async function holdFlatProductAction(input: {
           inventoryItemId: itemId,
           stockDeductedAt: null,
           qty: { gt: 0 },
+          pickupDate: { gte: minLockedPickupDate() }, // 픽업 지난 홀드는 자동 해제(집계 제외)
           order: { batch: { active: true } },
         },
         select: { qty: true, productId: true, order: { select: { userId: true } } },
@@ -466,13 +468,14 @@ async function holdSetProduct(
       });
       const compMap = new Map(allSets.map((s) => [s.id, s.components]));
       const setIds = allSets.map((s) => s.id);
+      const gate = minLockedPickupDate(); // 픽업 지난 홀드는 자동 해제(집계 제외)
       const [singleRows, setRows, dayHolds] = await Promise.all([
         tx.reservationOrderItem.findMany({
-          where: { inventoryItemId: { in: itemIds }, stockDeductedAt: null, qty: { gt: 0 }, order: { batch: { active: true } } },
+          where: { inventoryItemId: { in: itemIds }, stockDeductedAt: null, qty: { gt: 0 }, pickupDate: { gte: gate }, order: { batch: { active: true } } },
           select: { inventoryItemId: true, qty: true },
         }),
         tx.reservationOrderItem.findMany({
-          where: { productId: { in: setIds }, stockDeductedAt: null, qty: { gt: 0 }, order: { batch: { active: true } } },
+          where: { productId: { in: setIds }, stockDeductedAt: null, qty: { gt: 0 }, pickupDate: { gte: gate }, order: { batch: { active: true } } },
           select: { productId: true, qty: true, order: { select: { userId: true } } },
         }),
         tx.stockHold.groupBy({ by: ["itemId"], where: { itemId: { in: itemIds }, windowDate: windowKeyAt() }, _sum: { qty: true } }),

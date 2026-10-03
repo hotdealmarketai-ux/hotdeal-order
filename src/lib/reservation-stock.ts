@@ -103,6 +103,8 @@ async function setComponentDemand(confirmedOnly: boolean): Promise<Record<string
       productId: { in: sets.map((s) => s.id) },
       stockDeductedAt: null,
       qty: { gt: 0 },
+      // 픽업 지난 홀드는 자동 해제(예약=임시 홀드, 실제 차감은 계산서). 잠금 해제와 동일한 픽업 10시 기준.
+      pickupDate: { gte: minLockedPickupDate() },
       order: { batch: { active: true } },
       ...(confirmedOnly
         ? { OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }] }
@@ -131,6 +133,8 @@ export async function reservationHeldByItem(): Promise<Record<string, number>> {
         inventoryItemId: { not: "" },
         stockDeductedAt: null,
         qty: { gt: 0 },
+        // 픽업 지난 홀드 자동 해제(예약=임시 홀드). 잠금 해제와 동일한 픽업 10시 기준.
+        pickupDate: { gte: minLockedPickupDate() },
         order: { batch: { active: true } },
       },
       select: { inventoryItemId: true, qty: true },
@@ -152,6 +156,7 @@ export async function reservationConfirmedByItem(): Promise<Record<string, numbe
         inventoryItemId: { not: "" },
         stockDeductedAt: null,
         qty: { gt: 0 },
+        pickupDate: { gte: minLockedPickupDate() }, // 픽업 지난 홀드 자동 해제
         order: { batch: { active: true } },
         OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
       },

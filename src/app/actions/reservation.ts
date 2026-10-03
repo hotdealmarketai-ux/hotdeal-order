@@ -755,6 +755,7 @@ export async function adminSetReservationStoreQtyAction(input: {
             inventoryItemId: iid,
             stockDeductedAt: null,
             qty: { gt: 0 },
+            pickupDate: { gte: minLockedPickupDate() }, // 픽업 지난 홀드 자동 해제(집계 제외)
             order: { batch: { active: true } },
           },
           select: { qty: true },
