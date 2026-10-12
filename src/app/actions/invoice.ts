@@ -557,11 +557,11 @@ export async function loadInvoiceToolItemsAction(
             qty: { gt: 0 },
             order: { userId, batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
           },
-          select: { name: true, qty: true, supplyPrice: true, inventoryItemId: true },
+          select: { productId: true, name: true, qty: true, supplyPrice: true, inventoryItemId: true },
           orderBy: { sortOrder: "asc" },
         })
       : Promise.resolve(
-          [] as { name: string; qty: number; supplyPrice: number; inventoryItemId: string }[],
+          [] as { productId: string; name: string; qty: number; supplyPrice: number; inventoryItemId: string }[],
         ),
     // 공급가·연동 id·과세여부 이름매칭용(담기 품목엔 가격·연동·과세가 없어 재고현황에서 가져온다)
     prisma.inventoryItem.findMany({
@@ -586,6 +586,29 @@ export async function loadInvoiceToolItemsAction(
       select: { name: true, qty: true, unitPerBox: true },
     }),
   ]);
+
+  // 세트 예약은 '구성품 개별 줄'로 전개(초기 자동채움 getReservationInvoiceItems 와 동일). productId→구성품.
+  const setCompMap = new Map<
+    string,
+    { name: string; inventoryItemId: string; qtyPerUnit: number; supplyPrice: number }[]
+  >();
+  if (resvItems.length > 0) {
+    const setProducts = await prisma.reservationProduct.findMany({
+      where: {
+        id: { in: [...new Set(resvItems.map((i) => i.productId))] },
+        components: { some: {} },
+      },
+      select: {
+        id: true,
+        components: {
+          orderBy: { sortOrder: "asc" },
+          select: { name: true, inventoryItemId: true, qtyPerUnit: true, supplyPrice: true },
+        },
+      },
+    });
+    for (const p of setProducts) setCompMap.set(p.id, p.components);
+  }
+
   // 이미 청구된 분(품목명별 합) — '발주 원단위(박스)'로 역환산해서 센다. 불러올 총량(박스)에서 빼 델타만 채운다.
   //   · 채움채 낱개환산 항목(unitPerBox>0): 낱개qty ÷ unitPerBox = 박스수 (청구 당시 입수로 되돌림 → 입수 변경에도 정확).
   //   · 그 외(공구·박스없음·레거시 박스단위 청구분, unitPerBox=0): qty 그대로(이미 발주 원단위).
@@ -643,9 +666,22 @@ export async function loadInvoiceToolItemsAction(
       add(nm, qtyToNum(it.qty || it.rawQty), priceByName.get(nm) ?? null, idByName.get(nm) ?? "");
     }
   }
-  // ② 예약 확정분(픽업==출고일) — 공급가는 예약 스냅샷, 연동 id는 예약 스냅샷 우선(없으면 이름매칭)
+  // ② 예약 확정분(픽업==출고일) — 공급가는 예약 스냅샷, 연동 id는 예약 스냅샷 우선(없으면 이름매칭).
+  //   세트 상품은 세트명 한 줄이 아니라 '구성품 개별 줄'(세트수×세트당수량·구성품 공급가)로 전개한다.
   for (const it of resvItems) {
-    add(it.name, qtyToNum(it.qty), it.supplyPrice, it.inventoryItemId || idByName.get(it.name.trim()) || "");
+    const comps = setCompMap.get(it.productId);
+    if (comps && comps.length > 0) {
+      for (const c of comps) {
+        add(
+          c.name,
+          qtyToNum(it.qty) * c.qtyPerUnit,
+          c.supplyPrice,
+          c.inventoryItemId || idByName.get(c.name.trim()) || "",
+        );
+      }
+    } else {
+      add(it.name, qtyToNum(it.qty), it.supplyPrice, it.inventoryItemId || idByName.get(it.name.trim()) || "");
+    }
   }
 
   // 채움채(TOFU)는 발주가 박스 단위 → 계산서엔 낱개 단위로 환산: 낱개수량 = 박스수 × 낱개입수(perBox), 단가 = 낱개단가.
