@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getCurrentUser } from "@/lib/session";
 import { writeAudit } from "@/lib/audit";
@@ -45,6 +46,46 @@ function kstDateOf(d: Date): string {
 }
 
 export type FlatProductState = { ok?: boolean; error?: string };
+
+// 관리자가 그 사이 상품의 연동·종류(세트/단일)를 바꿨을 때 — 옛 정보로 예약 줄을 쓰지 않고 다시 보게 한다.
+const PRODUCT_CHANGED = "상품 정보가 방금 바뀌었어요. 새로고침 후 다시 해 주세요.";
+
+/**
+ * 예약 줄을 쓰기 전에 상품 행을 함께 잠그고(FOR SHARE — 관리자 저장의 FOR UPDATE 와 줄 세움) 지금 값을 다시 읽는다.
+ * 트랜잭션 밖에서 읽은 값과 다르면(관리자가 그 사이 저장) 옛 값으로 예약 줄을 쓰지 않게 호출부가 거절한다.
+ */
+async function lockProductLink(tx: Prisma.TransactionClient, productId: string) {
+  await tx.$executeRaw`SELECT id FROM "ReservationProduct" WHERE id = ${productId} FOR SHARE`;
+  return tx.reservationProduct.findUnique({
+    where: { id: productId },
+    select: {
+      inventoryItemId: true,
+      name: true,
+      supplyPrice: true,
+      pickupDate: true,
+      closeAt: true,
+      stockFixed: true,
+      active: true,
+      components: { where: { inventoryItemId: { not: "" } }, select: { inventoryItemId: true, qtyPerUnit: true } },
+      _count: { select: { components: true } },
+    },
+  });
+}
+
+/** 예약 줄에 스냅샷으로 들어가는 상품 값(이름·공급가·픽업일)과 판정에 쓰는 값(마감·재고 고정)이 그대로인가. */
+function sameSnapshot(
+  a: { name: string; supplyPrice: number; pickupDate: string; closeAt?: Date | null; stockFixed?: boolean },
+  b: { name: string; supplyPrice: number; pickupDate: string; closeAt: Date | null; stockFixed: boolean; active: boolean },
+): boolean {
+  return (
+    b.active &&
+    a.name === b.name &&
+    a.supplyPrice === b.supplyPrice &&
+    a.pickupDate === b.pickupDate &&
+    (a.closeAt === undefined || (a.closeAt?.getTime() ?? null) === (b.closeAt?.getTime() ?? null)) &&
+    (a.stockFixed === undefined || a.stockFixed === b.stockFixed)
+  );
+}
 
 // 관리자: 신규 '단일 목록' 예약상품 등록/수정/삭제. 상품별 마감(closeAt, 시분초) + 픽업(출고)일.
 export async function saveFlatProductAction(
@@ -128,52 +169,60 @@ export async function saveFlatProductAction(
   }));
 
   if (id) {
-    const existing = await prisma.reservationProduct.findFirst({
-      where: { id, closeAt: { not: null } },
-      select: { id: true, _count: { select: { components: true } } },
-    });
-    if (!existing) return { error: "상품을 찾을 수 없어요." };
-    const existingIsSet = existing._count.components > 0;
-
-    // 이미 예약이 들어온 상품은 세트↔단일을 바꾸지 않는다 — 예약 줄의 재고연동 스냅샷(inventoryItemId)이
-    //  옛 종류 그대로 남아 홀드가 두 번 잡히거나(단일→세트) 빠진다(세트→단일). 새 상품으로 등록하게 안내.
-    //  계산서 발행으로 '차감됨'이 된 줄도 센다 — 계산서를 취소하면 그 줄이 다시 홀드로 살아나기 때문.
-    if (componentsProvided && existingIsSet !== isSet) {
-      const booked = await prisma.reservationOrderItem.count({
-        where: { productId: id, qty: { gt: 0 } },
+    // 확인과 저장을 한 트랜잭션에서 — 상품 행을 잠그고(FOR UPDATE) 예약 수를 센 뒤 저장한다.
+    //  점주 담기·확정·관리자 점포 수량 저장도 같은 행을 잠그고(FOR SHARE) 연동을 다시 읽으므로,
+    //  '예약 0건 확인' 직후 옛 연동으로 예약 줄이 생기는 틈이 없다.
+    const out = await prisma.$transaction(async (tx): Promise<FlatProductState | null> => {
+      await tx.$executeRaw`SELECT id FROM "ReservationProduct" WHERE id = ${id} FOR UPDATE`;
+      const existing = await tx.reservationProduct.findFirst({
+        where: { id, closeAt: { not: null } },
+        select: { id: true, inventoryItemId: true, _count: { select: { components: true } } },
       });
-      if (booked > 0) {
-        return {
-          error: existingIsSet
-            ? "이미 예약이 들어온 세트라 구성품을 모두 뺄(단일로 바꿀) 수 없어요. 새 상품으로 등록해 주세요."
-            : "이미 예약이 들어온 상품이라 세트로 바꿀 수 없어요. 새 세트 상품으로 등록해 주세요.",
-        };
-      }
-    }
+      if (!existing) return { error: "상품을 찾을 수 없어요." };
+      const existingIsSet = existing._count.components > 0;
 
-    if (componentsProvided) {
-      // 구성품을 관리하는 폼(관리자 세트 폼) — 구성품 전량 교체(삭제 후 재생성), 세트가/연동도 구성품 기준.
-      await prisma.$transaction([
-        prisma.reservationProduct.update({
+      // 이미 예약이 들어온 상품은 세트↔단일·단일 상품의 재고 연동을 바꾸지 않는다 — 예약 줄은 담을 때의
+      //  연동(inventoryItemId)을 스냅샷으로 들고 있어, 상품만 바꾸면 홀드가 옛 재고에 남거나(유령 홀드·옛 재고
+      //  잠금 풀림으로 초과판매) 두 번 잡힌다. 줄까지 옮기는 건 계산서 발행·취소와 얽혀 안전하지 않아 막고
+      //  새 상품으로 등록하게 안내한다. 계산서 발행으로 '차감됨'이 된 줄도 센다(취소하면 홀드로 살아나므로).
+      const typeChange = componentsProvided && existingIsSet !== isSet;
+      const writesLink = componentsProvided || !existingIsSet; // 이번 저장이 상품 연동 칸을 쓰는가
+      const relink = !existingIsSet && !isSet && writesLink && existing.inventoryItemId !== inventoryItemId;
+      if (typeChange || relink) {
+        const booked = await tx.reservationOrderItem.count({ where: { productId: id, qty: { gt: 0 } } });
+        if (booked > 0) {
+          if (typeChange) {
+            return {
+              error: existingIsSet
+                ? "이미 예약이 들어온 세트라 구성품을 모두 뺄(단일로 바꿀) 수 없어요. 새 상품으로 등록해 주세요."
+                : "이미 예약이 들어온 상품이라 세트로 바꿀 수 없어요. 새 세트 상품으로 등록해 주세요.",
+            };
+          }
+          return {
+            error: !inventoryItemId
+              ? "이미 예약이 들어온 상품이라 재고 연동을 풀 수 없어요. 새 상품으로 등록해 주세요."
+              : !existing.inventoryItemId
+                ? "이미 예약이 들어온 수기 상품이라 재고에 연동할 수 없어요. 새 상품으로 등록해 주세요."
+                : "이미 예약이 들어온 상품이라 연동 재고를 바꿀 수 없어요. 새 상품으로 등록해 주세요.",
+          };
+        }
+      }
+
+      if (componentsProvided) {
+        // 구성품을 관리하는 폼(관리자 세트 폼) — 구성품 전량 교체(삭제 후 재생성), 세트가/연동도 구성품 기준.
+        await tx.reservationProduct.update({
           where: { id },
           data: { name, closeAt, pickupDate, supplyPrice, inventoryItemId, stockFixed, active: true },
-        }),
-        prisma.reservationProductComponent.deleteMany({ where: { productId: id } }),
-        ...(componentData.length > 0
-          ? [prisma.reservationProductComponent.createMany({ data: componentData.map((c) => ({ ...c, productId: id })) })]
-          : []),
-        // 픽업/이름 변경분을 미차감 예약 스냅샷에 전파(자동로드 필터 정합).
-        prisma.reservationOrderItem.updateMany({
-          where: { productId: id, stockDeductedAt: null },
-          data: { pickupDate, name },
-        }),
-      ]);
-    } else {
-      // 구성품 필드가 없는 폼(지난 예약마감 목록 수정 등) — 구성품을 건드리지 않는다.
-      //  세트면 가격·연동·재고고정은 '구성품 기준'이라 이 폼에서 덮어쓰지 않고, 보낸 필드만(이름·마감·픽업) 수정한다.
-      //  단일 상품이면 기존처럼 입력값(가격·연동·재고고정)을 반영.
-      await prisma.$transaction([
-        prisma.reservationProduct.update({
+        });
+        await tx.reservationProductComponent.deleteMany({ where: { productId: id } });
+        if (componentData.length > 0) {
+          await tx.reservationProductComponent.createMany({ data: componentData.map((c) => ({ ...c, productId: id })) });
+        }
+      } else {
+        // 구성품 필드가 없는 폼(지난 예약마감 목록 수정 등) — 구성품을 건드리지 않는다.
+        //  세트면 가격·연동·재고고정은 '구성품 기준'이라 이 폼에서 덮어쓰지 않고, 보낸 필드만(이름·마감·픽업) 수정한다.
+        //  단일 상품이면 기존처럼 입력값(가격·연동·재고고정)을 반영.
+        await tx.reservationProduct.update({
           where: { id },
           data: {
             name,
@@ -182,13 +231,16 @@ export async function saveFlatProductAction(
             active: true,
             ...(existingIsSet ? {} : { supplyPrice, inventoryItemId, stockFixed }),
           },
-        }),
-        prisma.reservationOrderItem.updateMany({
-          where: { productId: id, stockDeductedAt: null },
-          data: { pickupDate, name },
-        }),
-      ]);
-    }
+        });
+      }
+      // 픽업/이름 변경분을 미차감 예약 스냅샷에 전파(자동로드 필터 정합).
+      await tx.reservationOrderItem.updateMany({
+        where: { productId: id, stockDeductedAt: null },
+        data: { pickupDate, name },
+      });
+      return null;
+    });
+    if (out) return out;
   } else {
     const batchId = await getOrCreateFlatBatchId();
     const maxAgg = await prisma.reservationProduct.aggregate({
@@ -259,48 +311,57 @@ export async function confirmFlatProductAction(input: {
   // 연동 세트(연동 구성품 보유)도 재고연동 단일처럼 '담아둔 수량 확정'. 수기(단일·수기전용 세트)만 수량 직접 저장.
   const isLinked = !!product.inventoryItemId || product.components.length > 0;
 
-  const order = await prisma.reservationOrder.upsert({
-    where: { userId_batchId: { userId: user.id, batchId: product.batchId } },
-    create: { userId: user.id, batchId: product.batchId },
-    update: {},
-    select: { id: true },
-  });
+  // 쓰기는 한 트랜잭션에서 — 상품 행을 함께 잠그고 연동 여부를 다시 확인(관리자가 막 수기↔연동을 바꿨으면 거절).
+  const out = await prisma.$transaction(async (tx): Promise<{ ok: boolean; error?: string }> => {
+    const now = await lockProductLink(tx, productId);
+    const nowLinked = !!now?.inventoryItemId || (now?.components.length ?? 0) > 0;
+    if (!now || nowLinked !== isLinked || !sameSnapshot(product, now)) return { ok: false, error: PRODUCT_CHANGED };
 
-  if (isLinked) {
-    // 재고연동(단일/세트) — 수량은 담기(hold)가 관리. 담아둔 수량을 '발주 확정'만 한다.
-    const item = await prisma.reservationOrderItem.findUnique({
-      where: { orderId_productId: { orderId: order.id, productId } },
-      select: { qty: true },
+    const order = await tx.reservationOrder.upsert({
+      where: { userId_batchId: { userId: user.id, batchId: product.batchId } },
+      create: { userId: user.id, batchId: product.batchId },
+      update: {},
+      select: { id: true },
     });
-    if (!item || item.qty <= 0) return { ok: false, error: "수량을 먼저 담아 주세요." };
-    await prisma.reservationOrderItem.update({
-      where: { orderId_productId: { orderId: order.id, productId } },
-      data: { confirmedAt: new Date() },
-    });
-  } else if (qty <= 0) {
-    await prisma.reservationOrderItem.deleteMany({ where: { orderId: order.id, productId } });
-  } else {
-    await prisma.reservationOrderItem.upsert({
-      where: { orderId_productId: { orderId: order.id, productId } },
-      create: {
-        orderId: order.id,
-        productId,
-        name: product.name,
-        supplyPrice: product.supplyPrice,
-        pickupDate: product.pickupDate,
-        inventoryItemId: "",
-        qty,
-        confirmedAt: new Date(),
-      },
-      update: {
-        qty,
-        confirmedAt: new Date(),
-        name: product.name,
-        supplyPrice: product.supplyPrice,
-        pickupDate: product.pickupDate,
-      },
-    });
-  }
+
+    if (isLinked) {
+      // 재고연동(단일/세트) — 수량은 담기(hold)가 관리. 담아둔 수량을 '발주 확정'만 한다.
+      const item = await tx.reservationOrderItem.findUnique({
+        where: { orderId_productId: { orderId: order.id, productId } },
+        select: { qty: true },
+      });
+      if (!item || item.qty <= 0) return { ok: false, error: "수량을 먼저 담아 주세요." };
+      await tx.reservationOrderItem.update({
+        where: { orderId_productId: { orderId: order.id, productId } },
+        data: { confirmedAt: new Date() },
+      });
+    } else if (qty <= 0) {
+      await tx.reservationOrderItem.deleteMany({ where: { orderId: order.id, productId } });
+    } else {
+      await tx.reservationOrderItem.upsert({
+        where: { orderId_productId: { orderId: order.id, productId } },
+        create: {
+          orderId: order.id,
+          productId,
+          name: product.name,
+          supplyPrice: product.supplyPrice,
+          pickupDate: product.pickupDate,
+          inventoryItemId: "",
+          qty,
+          confirmedAt: new Date(),
+        },
+        update: {
+          qty,
+          confirmedAt: new Date(),
+          name: product.name,
+          supplyPrice: product.supplyPrice,
+          pickupDate: product.pickupDate,
+        },
+      });
+    }
+    return { ok: true };
+  });
+  if (!out.ok) return out;
   revalidatePath("/reservations");
   revalidatePath("/order");
   return { ok: true };
@@ -379,6 +440,11 @@ export async function holdFlatProductAction(input: {
 
   try {
     const res = await prisma.$transaction(async (tx) => {
+      // 잠금 순서: 상품 행(공유) → 재고 행. 관리자가 막 연동·종류를 바꿨으면 옛 연동으로 담지 않는다.
+      const now = await lockProductLink(tx, productId);
+      if (!now || now.inventoryItemId !== itemId || now._count.components > 0 || !sameSnapshot(product, now)) {
+        return { ok: false, error: PRODUCT_CHANGED };
+      }
       await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${itemId} FOR UPDATE`;
       const item = await tx.inventoryItem.findUnique({
         where: { id: itemId },
@@ -489,6 +555,19 @@ async function holdSetProduct(
   const itemIds = [...new Set(comps.map((c) => c.inventoryItemId))];
   try {
     const res = await prisma.$transaction(async (tx) => {
+      // 잠금 순서: 상품 행(공유) → 구성품 재고 행. 그 사이 구성품·종류가 바뀌었으면 옛 구성품으로 판정하지 않는다.
+      const now = await lockProductLink(tx, productId);
+      const sig = (cs: { inventoryItemId: string; qtyPerUnit: number }[]) =>
+        cs.map((c) => `${c.inventoryItemId}:${c.qtyPerUnit}`).sort().join(",");
+      if (
+        !now ||
+        now.inventoryItemId ||
+        now.components.length === 0 ||
+        sig(now.components) !== sig(comps) ||
+        !sameSnapshot(product, now)
+      ) {
+        return { ok: false, error: PRODUCT_CHANGED };
+      }
       for (const id of itemIds) {
         await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${id} FOR UPDATE`;
       }

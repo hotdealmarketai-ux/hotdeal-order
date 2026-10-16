@@ -70,6 +70,31 @@ export async function saveReservationBatchAction(
   const pickups = liveNamed.map((p) => String(p.pickupDate).trim());
   const batchPickup = pickups.length ? pickups.slice().sort()[0] : reserveDate;
 
+  // 이미 예약이 들어온 상품은 재고 연동을 바꾸지 않는다(flat 저장과 같은 규칙 — 예약 줄 연동 스냅샷이 옛 재고에 남음).
+  //  배치·상품을 쓰기 전에 확인해야 반쯤 저장되지 않는다.
+  const editIds = products.filter((p) => p.id && !p.deleted).map((p) => String(p.id));
+  if (batchId && editIds.length > 0) {
+    const cur = await prisma.reservationProduct.findMany({
+      where: { id: { in: editIds }, batchId },
+      select: { id: true, name: true, inventoryItemId: true },
+    });
+    const curById = new Map(cur.map((c) => [c.id, c]));
+    const changed = products.filter((p) => {
+      const c = p.id ? curById.get(String(p.id)) : undefined;
+      return c && !p.deleted && String(p.inventoryItemId ?? "").trim() !== c.inventoryItemId;
+    });
+    if (changed.length > 0) {
+      const booked = await prisma.reservationOrderItem.findFirst({
+        where: { productId: { in: changed.map((p) => String(p.id)) }, qty: { gt: 0 } },
+        select: { productId: true },
+      });
+      if (booked) {
+        const nm = curById.get(booked.productId)?.name ?? "";
+        return { error: `‘${nm}’은(는) 이미 예약이 들어와 재고 연동을 바꿀 수 없어요. 새 상품으로 등록해 주세요.` };
+      }
+    }
+  }
+
   let targetId = batchId;
   let created = false;
 
@@ -712,6 +737,7 @@ export async function adminSetReservationStoreQtyAction(input: {
       inventoryItemId: true,
       batchId: true,
       stockFixed: true,
+      _count: { select: { components: true } },
     },
   });
   if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
@@ -732,6 +758,34 @@ export async function adminSetReservationStoreQtyAction(input: {
   let outcome: { ok: boolean; error?: string; curQty?: number; noop?: boolean };
   try {
     outcome = await prisma.$transaction(async (tx) => {
+      // 잠금 순서: 상품 행(공유 — 관리자 상품 저장과 줄 세움) → 재고 행. 그 사이 연동·종류가 바뀌었으면
+      //  옛 연동으로 예약 줄을 쓰지 않는다(예약 줄은 연동을 스냅샷으로 들고 있음).
+      await tx.$executeRaw`SELECT id FROM "ReservationProduct" WHERE id = ${productId} FOR SHARE`;
+      const now = await tx.reservationProduct.findUnique({
+        where: { id: productId },
+        select: {
+          inventoryItemId: true,
+          name: true,
+          supplyPrice: true,
+          pickupDate: true,
+          stockFixed: true,
+          active: true,
+          _count: { select: { components: true } },
+        },
+      });
+      // 연동·종류뿐 아니라 예약 줄에 스냅샷으로 들어가는 이름·공급가·픽업일, 판정에 쓰는 재고 고정도 그대로여야 한다
+      if (
+        !now ||
+        !now.active ||
+        now.inventoryItemId !== iid ||
+        now._count.components !== product._count.components ||
+        now.name !== product.name ||
+        now.supplyPrice !== product.supplyPrice ||
+        now.pickupDate !== product.pickupDate ||
+        now.stockFixed !== product.stockFixed
+      ) {
+        return { ok: false, error: "상품 정보가 방금 바뀌었어요. 새로고침 후 다시 해 주세요." };
+      }
       if (iid) {
         await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${iid} FOR UPDATE`;
       }
