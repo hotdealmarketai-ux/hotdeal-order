@@ -52,7 +52,7 @@ export default async function OrderPage(props: {
   const restricted = vis.restricted;
   const planKey = windowKeyAt();
 
-  // 일반 발주 관리 — 발주 방식(칸/채팅) 잠금 + 과일/야채 품목 고정
+  // 발주 방식 설정 — 발주 방식(칸/채팅) 잠금 + 과일/야채 품목 고정
   const channelCfg = await orderChannelConfig();
   const { gridDisabled, chatDisabled } = effectiveChannels(channelCfg, restricted);
   const fixedItems =

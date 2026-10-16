@@ -159,7 +159,7 @@ function FreeOrderForm({
   initialFulfillment?: "" | Fulfillment;
   /** 공구 '재고에서 검색·담기' 팝업용 재고현황 품목(남은 재고 포함). 없으면 팝업 숨김. */
   invOptions?: StockPickItem[];
-  /** 일반 발주 관리 — 칸/채팅 발주 잠금(서버에서 유효값 계산해 전달). */
+  /** 발주 방식 설정 — 칸/채팅 발주 잠금(서버에서 유효값 계산해 전달). */
   gridDisabled?: boolean;
   chatDisabled?: boolean;
   /** 과일/야채 품목 고정 여부. */
@@ -173,7 +173,7 @@ function FreeOrderForm({
 }) {
   // 수정 모드 = editDate 존재. 저장은 updateDayOrderAction, 초안(localStorage)·채팅 진입 비활성.
   const editMode = !!editDate;
-  // 일반 발주 관리 — 과일/야채 '품목 고정' 여부와 고정 품목 목록.
+  // 발주 방식 설정 — 과일/야채 '품목 고정' 여부와 고정 품목 목록.
   const isFixedCat = (c: Category) =>
     (c === "FRUIT" && fixedFruit) || (c === "VEG" && fixedVeg);
   const fixedItemsFor = (c: Category): { id: string; name: string }[] =>

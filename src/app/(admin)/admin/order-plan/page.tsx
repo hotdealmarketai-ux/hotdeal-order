@@ -5,6 +5,8 @@ import { getRestrictConfig } from "@/lib/restrict-mode";
 import { nextWindowKey, windowKeyAt } from "@/lib/schedule";
 import { dowOf, labelDate, shipmentDayOf, shiftDate } from "@/lib/date";
 import { OrderPlanModeCard } from "@/components/OrderPlanModeCard";
+import { OrderChannelCard } from "@/components/OrderChannelCard";
+import { orderChannelConfig } from "@/lib/order-flags";
 import { modeCardInfo, upcomingKeys, windowStatuses } from "./_lib/plan-data";
 import { CAT_LABEL, CAT_SHORT, ITEM_CATS, type CatState } from "./_lib/types";
 import "./order-plan.css";
@@ -29,7 +31,8 @@ function catText(s: CatState): string {
   return s.state === "some" ? `${s.count}개` : s.state === "closed" ? "닫힘" : "비어 있음";
 }
 
-// 발주 품목 편성 — 월 달력(발주창 키 기준). 칸 = 월~토, 일요일은 '토요일 창'으로 흐리게.
+// 발주 시스템 관리 — 품목 제한 모드 스위치 + 발주 방식(칸·채팅) + 날짜별 품목 편성 월 달력(발주창 키 기준).
+// 칸 = 월~토, 일요일은 토요일 발주창(흐리게). 옛 '일반 발주 관리'를 합쳤다.
 export default async function OrderPlanCalendarPage({
   searchParams,
 }: {
@@ -50,27 +53,43 @@ export default async function OrderPlanCalendarPage({
 
   const checkKeys = upcomingKeys(7, cur);
   const monthKeys = cells.filter((c): c is string => !!c && dowOf(c) !== 0);
-  const [cfg, st] = await Promise.all([getRestrictConfig(), windowStatuses([...monthKeys, ...checkKeys])]);
+  const [cfg, st, channel] = await Promise.all([
+    getRestrictConfig(),
+    windowStatuses([...monthKeys, ...checkKeys]),
+    orderChannelConfig(),
+  ]);
   const info = modeCardInfo(cfg);
 
   const prevM = mo === 1 ? ym(y - 1, 12) : ym(y, mo - 1);
   const nextM = mo === 12 ? ym(y + 1, 1) : ym(y, mo + 1);
   const urgent = (k: string) => k === cur || k === tomorrow;
+  const isCurMonth = ym(y, mo) === cur.slice(0, 7);
 
   return (
     <>
-      <Topbar backHref="/admin" title="발주 품목 편성" />
+      <Topbar backHref="/admin" title="발주 시스템 관리" />
       <div className="page oplan">
         <OrderPlanModeCard info={info} />
+        <OrderChannelCard
+          config={channel}
+          restrict={{ on: cfg.on, allStores: cfg.pilot.length === 0, active: info.active }}
+        />
 
         <div className="card oplan-cal">
           <div className="oplan-cal__head">
             <Link href={`/admin/order-plan?m=${prevM}`} className="oplan-cal__nav" aria-label="이전 달">
               ‹
             </Link>
-            <b>
-              {y}년 {mo}월
-            </b>
+            <span className="oplan-cal__title">
+              <b>
+                {y}년 {mo}월
+              </b>
+              {!isCurMonth && (
+                <Link href="/admin/order-plan" className="tbtn">
+                  이번 달
+                </Link>
+              )}
+            </span>
             <Link href={`/admin/order-plan?m=${nextM}`} className="oplan-cal__nav" aria-label="다음 달">
               ›
             </Link>
@@ -134,14 +153,6 @@ export default async function OrderPlanCalendarPage({
               );
             })}
           </div>
-          <div className="oplan-cal__foot">
-            <Link href={`/admin/order-plan?m=${ym(Number(cur.slice(0, 4)), Number(cur.slice(5, 7)))}`} className="tbtn">
-              이번 달
-            </Link>
-            <Link href={`/admin/order-plan/${cur}`} className="tbtn">
-              오늘 편성 →
-            </Link>
-          </div>
         </div>
 
         <div className="section-label" style={{ marginTop: 18 }}>
@@ -184,9 +195,6 @@ export default async function OrderPlanCalendarPage({
             );
           })}
         </div>
-        <p className="oplan-hint">
-          비어 있는 종류는 그날 발주가 닫혀요.
-        </p>
       </div>
     </>
   );

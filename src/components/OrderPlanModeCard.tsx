@@ -16,9 +16,9 @@ import {
 
 type Pre = Extract<PreflightResult, { ok: true }>;
 
-// 품목 제한 모드 스위치 카드 — /admin/order-plan 맨 위와 일반 발주 관리 맨 위에 같은 카드.
+// 품목 제한 모드 스위치 카드 — 발주 시스템 관리(/admin/order-plan) 맨 위.
 // 켜기: 확인 시트(body 포탈)에서 준비 상태 점검 → [다음 발주창부터(기본) / 지금 바로] + 시험 지점. 끄기: 확인 한 번.
-export function OrderPlanModeCard({ info, showLink = false }: { info: ModeCardInfo; showLink?: boolean }) {
+export function OrderPlanModeCard({ info }: { info: ModeCardInfo }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [ask, setAsk] = useState(false);
@@ -87,11 +87,6 @@ export function OrderPlanModeCard({ info, showLink = false }: { info: ModeCardIn
             <span className={`oplan-mode__state ${info.on ? "is-on" : ""}`}>{status}</span>
           </div>
           {sub && <div className="oplan-mode__sub">{sub}</div>}
-          {showLink && (
-            <Link href="/admin/order-plan" className="oplan-mode__link">
-              발주 품목 편성 →
-            </Link>
-          )}
         </div>
         <button
           type="button"
@@ -113,7 +108,7 @@ export function OrderPlanModeCard({ info, showLink = false }: { info: ModeCardIn
 
       {askOff && (
         <ConfirmSheet
-          title="품목 제한 모드를 끌까요? 바로 자유 발주로 돌아가요."
+          title="품목 제한 모드를 끌까요?"
           confirmLabel="끄기"
           onConfirm={() => apply(false)}
           onClose={() => setAskOff(false)}
@@ -148,29 +143,27 @@ export function OrderPlanModeCard({ info, showLink = false }: { info: ModeCardIn
                             편성하기
                           </Link>
                         </div>
-                        {/* 편성한 종류만 칩으로 — 비어 있는 종류는 아래 빨간 한 줄로만 알린다 */}
-                        {(blank.length < ITEM_CATS.length || w.tofu.exists) && (
-                          <div className="oplan-pre__cats">
-                            {ITEM_CATS.filter((c) => w.cats[c].state !== "none").map((c) => {
-                              const s = w.cats[c];
-                              return (
-                                <span key={c} className={`oplan-chip oplan-chip--${s.state}`}>
-                                  {CAT_LABEL[c]} {s.state === "some" ? `${s.count}개` : "닫힘"}
-                                </span>
-                              );
-                            })}
-                            {w.tofu.exists && (
-                              <span className="oplan-chip oplan-chip--some">
-                                채움채 {w.tofu.visible}/{w.tofu.total}
+                        {/* 편성한 종류는 칩, 비어 있는 종류는 빨간 칩 하나로 묶는다(달력 '다음 7개 발주창'과 같은 모양) */}
+                        <div className="oplan-pre__cats">
+                          {ITEM_CATS.filter((c) => w.cats[c].state !== "none").map((c) => {
+                            const s = w.cats[c];
+                            return (
+                              <span key={c} className={`oplan-chip oplan-chip--${s.state}`}>
+                                {CAT_LABEL[c]} {s.state === "some" ? `${s.count}개` : "닫힘"}
                               </span>
-                            )}
-                          </div>
-                        )}
-                        {blank.length > 0 && (
-                          <div className="oplan-pre__warn">
-                            이대로면 {blank.map((c) => CAT_LABEL[c]).join("·")} 발주가 닫혀요.
-                          </div>
-                        )}
+                            );
+                          })}
+                          {w.tofu.exists && (
+                            <span className="oplan-chip oplan-chip--some">
+                              채움채 {w.tofu.visible}/{w.tofu.total}
+                            </span>
+                          )}
+                          {blank.length > 0 && (
+                            <span className="oplan-chip oplan-chip--alert">
+                              {blank.map((c) => CAT_LABEL[c]).join("·")} 비어 있음
+                            </span>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -179,7 +172,7 @@ export function OrderPlanModeCard({ info, showLink = false }: { info: ModeCardIn
                       지금 창 재고현황 담기 <b>{pre.cartHolds}건</b>({pre.cartStores}곳)
                     </li>
                     <li>
-                      진행 중 예약상품 <b>{pre.activeReservations}개</b> — 확정분은 그대로 공구로 가요.
+                      진행 중 예약상품 <b>{pre.activeReservations}개</b>
                     </li>
                     <li>
                       지금 창 발주 <b>{pre.windowOrders}건</b>
@@ -201,7 +194,6 @@ export function OrderPlanModeCard({ info, showLink = false }: { info: ModeCardIn
                       <input type="radio" name="when" checked={when === "now"} onChange={() => setWhen("now")} />
                       <span>
                         <b>지금 바로</b>
-                        <small>들어온 발주는 그대로, 새 발주부터 제한해요.</small>
                       </span>
                     </label>
                   </div>

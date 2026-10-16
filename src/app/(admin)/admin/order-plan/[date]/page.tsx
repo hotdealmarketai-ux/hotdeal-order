@@ -18,7 +18,7 @@ import "../order-plan.css";
 
 export const dynamic = "force-dynamic";
 
-// 발주 품목 편성 — 날짜(발주창) 하나 편집. 지난 창은 읽기 전용, 오늘·지난 창은 품목별 발주 현황.
+// 발주 시스템 관리 · 품목 편성 — 날짜(발주창) 하나 편집. 지난 창은 읽기 전용, 오늘·지난 창은 품목별 발주 현황.
 export default async function OrderPlanDatePage({
   params,
   searchParams,

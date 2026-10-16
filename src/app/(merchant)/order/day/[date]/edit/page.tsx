@@ -80,7 +80,7 @@ export default async function EditDayOrderPage(props: {
   const categories = allowedCategoriesFor(user.role);
   const restricted = await restrictModeFor(user);
 
-  // 일반 발주 관리 — 과일/야채 품목 고정(수정 시에도 고정 렌더 유지)
+  // 발주 방식 설정 — 과일/야채 품목 고정(수정 시에도 고정 렌더 유지)
   const channelCfg = await orderChannelConfig();
   const fixedItems =
     !restricted && (channelCfg.fixedFruit || channelCfg.fixedVeg)

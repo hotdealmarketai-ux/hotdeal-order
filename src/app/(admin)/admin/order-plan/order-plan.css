@@ -59,6 +59,7 @@
 .oplan-cal { padding: 12px 10px; }
 .oplan-cal__head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; }
 .oplan-cal__head b { font-size: 16px; color: var(--fg); }
+.oplan-cal__title { display: flex; align-items: baseline; gap: 8px; }
 .oplan-cal__nav { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--seg-bg); font-size: 20px; font-weight: 800; color: var(--green-700); }
 .oplan-cal__legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 11px; color: var(--muted); padding: 0 4px 8px; }
 .oplan-dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: -6px; vertical-align: -1px; }
@@ -70,7 +71,6 @@
 .oplan-cal__dow { text-align: center; font-size: 11.5px; font-weight: 800; color: var(--muted); padding: 2px 0 4px; }
 .oplan-cal__dow.is-sat { color: #2563eb; }
 .oplan-cal__dow.is-sun { color: var(--danger); }
-.oplan-cal__foot { display: flex; justify-content: space-between; padding: 10px 4px 0; }
 
 .oplan-day { display: flex; flex-direction: column; gap: 3px; min-height: 66px; min-width: 0; padding: 5px 4px; border-radius: 9px; border: 1px solid var(--line); background: #fff; color: var(--fg); overflow: hidden; }
 .oplan-day:active { background: var(--surface-2); }
@@ -103,15 +103,18 @@
 
 /* ── 날짜 편집 ── */
 .oplan--edit { padding-bottom: 96px; }
+/* '홈 화면에 추가' 띠만큼 저장 줄이 올라가니 맨 아래 줄이 가리지 않게 여백도 같이 */
+:root[data-installbar="1"] .oplan--edit { padding-bottom: 148px; }
 .oplan-ed { display: flex; flex-direction: column; gap: 10px; }
 .oplan-ed__nav { display: flex; align-items: center; gap: 8px; }
 .oplan-ed__arrow { flex: 0 0 auto; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--seg-bg); font-size: 22px; font-weight: 800; color: var(--green-700); }
 .oplan-ed__date { flex: 1; min-width: 0; text-align: center; display: flex; flex-direction: column; gap: 2px; }
 .oplan-ed__date b { font-size: 17px; color: var(--fg); display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
 .oplan-ed__date small { font-size: 12.5px; color: var(--muted); }
-.oplan-ed__links { display: flex; justify-content: space-between; }
+.oplan-ed__date:active { opacity: 0.6; }
 .oplan-ed__ro { margin: 0; }
-.oplan-ed__tabs { margin: 2px 0 0; }
+/* 종류 탭은 내려도 헤더 밑에 붙어 따라온다(높이는 헤더 실측값) */
+.oplan-ed__tabs { margin: 2px 0 0; position: sticky; top: var(--oplan-tabs-top, 72px); z-index: 20; box-shadow: 0 0 0 6px var(--bg); }
 .oplan-ed__tabs .cattab { position: relative; }
 .oplan-ed__dirty { position: absolute; top: 5px; right: 6px; width: 7px; height: 7px; border-radius: 999px; background: #e08a1e; }
 .oplan-ed__tools { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -119,7 +122,7 @@
 .oplan-ed__msg { margin: 0; display: flex; flex-direction: column; gap: 3px; line-height: 1.5; }
 .oplan-tag { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--green-700); color: #fff; }
 .oplan-tag--mute { background: var(--chip-mute-bg); color: var(--muted); }
-.oplan-empty { font-size: 13px; color: var(--fg-2); background: var(--surface-2); border: 1px dashed var(--line-strong); border-radius: 12px; padding: 12px 14px; line-height: 1.55; }
+.oplan-empty { text-align: center; font-size: 13px; color: var(--fg-2); background: var(--surface-2); border: 1px dashed var(--line-strong); border-radius: 12px; padding: 12px 14px; line-height: 1.55; }
 .oplan-warn { font-size: 12px; font-weight: 700; color: var(--danger-soft-fg); font-style: normal; }
 
 .oplan-rows { display: flex; flex-direction: column; gap: 8px; }
@@ -148,9 +151,11 @@
 .oplan-row__caret { margin-left: 4px; }
 .oplan-row__stores { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: 12.5px; color: var(--fg-2); padding: 6px 10px; background: var(--surface-2); border-radius: 10px; }
 .oplan-row__stores b { text-align: right; }
-.oplan-row__acts { display: flex; align-items: center; gap: 14px; }
-.oplan-row__note { font-size: 11.5px; color: var(--muted); }
-.oplan-row__del { width: 30px; height: 30px; border-radius: 999px; border: 0; background: var(--danger-bg); color: var(--danger); font-size: 18px; font-weight: 800; line-height: 1; cursor: pointer; font-family: inherit; }
+.oplan-row__acts { display: flex; align-items: center; gap: 10px; }
+/* 아래 줄: 왼쪽 삭제(글자) · 오른쪽 ▲▼(36px 동그라미) — 삭제가 ▼ 옆에 붙어 잘못 눌리지 않게 */
+.oplan-row__acts .oplan-row__del { padding: 8px 4px; font-size: 13px; font-weight: 800; }
+.oplan-row__acts .oplan-row__ord { width: 36px; height: 36px; border-radius: 999px; background: var(--seg-bg); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.oplan-row__acts .oplan-row__ord:disabled { opacity: 0.35; }
 .oplan-add { display: flex; gap: 8px; }
 .oplan-add .btn { flex: 1; }
 .oplan-picker { margin-bottom: 0; }
@@ -170,10 +175,11 @@
 :root[data-installbar="1"] .oplan-savebar {
   bottom: calc(var(--nav-h) + 52px + env(safe-area-inset-bottom));
 }
-.oplan-savebar__count { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; color: var(--fg); white-space: nowrap; }
-.oplan-savebar__count small { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 공용 .btn 은 폭 100% — 여기선 글자 칸이 0으로 눌려 한 글자씩 꺾이므로 버튼 폭을 고정 */
-.oplan-savebar .btn { flex: 0 0 auto; width: auto; min-width: 110px; }
+.oplan-savebar .btn { flex: 1 1 0; min-width: 0; width: auto; padding: 0 10px; font-size: 15px; white-space: nowrap; }
+/* 저장·적용 결과 알림 — 저장 띠 바로 위 */
+.oplan-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--nav-h) + 80px + env(safe-area-inset-bottom)); width: calc(100% - 30px); max-width: calc(var(--maxw) - 30px); z-index: 31; max-height: 40vh; overflow: auto; box-shadow: 0 6px 18px rgba(18, 60, 38, 0.16); cursor: pointer; }
+:root[data-installbar="1"] .oplan-toast { bottom: calc(var(--nav-h) + 132px + env(safe-area-inset-bottom)); }
 
 /* 여러 날에 적용 */
 .oplan-copy__cats { display: flex; flex-wrap: wrap; gap: 8px 14px; }

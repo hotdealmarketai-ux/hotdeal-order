@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
@@ -26,12 +25,6 @@ export default async function OrderPlanPreviewPage({ params }: { params: Promise
       <div className="page oplan">
         <div className="oplan-pv__head">
           <b>{labelDate(date)} 발주창</b>
-          <Link href={`/admin/order-plan/${date}`} className="tbtn">
-            편집
-          </Link>
-        </div>
-        <div className="notice notice--mute" style={{ marginBottom: 12 }}>
-          남은 수량은 지금 기준이에요.
         </div>
 
         {PLAN_CATS.map((c) => {

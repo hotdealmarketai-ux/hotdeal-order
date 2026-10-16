@@ -177,6 +177,8 @@ export function OrderPlanEditor(props: {
   const [pickFor, setPickFor] = useState<string>(""); // 재고 고르기 열린 줄 key("+new"=새 줄)
   const [pickQ, setPickQ] = useState("");
   const [focusKey, setFocusKey] = useState<string>("");
+  const [leave, setLeave] = useState<{ href: string; replace: boolean } | null>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
   const nameRefs = useRef(new Map<string, HTMLInputElement>());
 
   // 저장 뒤 서버 값이 바뀌면(새로고침) 초안을 새 값으로 맞춘다 — 탭·안내는 그대로.
@@ -242,7 +244,15 @@ export function OrderPlanEditor(props: {
     c === "TOFU" ? props.tofuCatalog.length - tofuHidden.length : rows[c].filter((r) => !r.hidden).length;
 
   // ── 줄 편집 ──
+  // 저장·적용 결과 알림 — 정상 알림은 잠깐 뒤 저절로 닫힌다(경고·오류는 누르거나 다시 고치면 닫힘)
+  useEffect(() => {
+    if (msg?.kind !== "ok") return;
+    const t = setTimeout(() => setMsg(null), 2500);
+    return () => clearTimeout(t);
+  }, [msg]);
+
   const setCatRows = (c: ItemCat, fn: (rs: Row[]) => Row[]) => {
+    setMsg(null);
     setRows((all) => ({ ...all, [c]: fn(all[c]) }));
     setTouched((t) => ({ ...t, [c]: true }));
     setErrAt(null);
@@ -295,6 +305,7 @@ export function OrderPlanEditor(props: {
       if (i >= 0) {
         setTab(c);
         setErrAt({ cat: c, index: i });
+        setFocusKey(rows[c][i].key);
         setMsg({ kind: "error", lines: [`${CAT_LABEL[c]} ${i + 1}번째 줄에 품목명을 넣어 주세요.`] });
         return;
       }
@@ -320,6 +331,7 @@ export function OrderPlanEditor(props: {
       if (!res.ok) {
         if (res.cat) setTab(res.cat);
         if (res.cat && res.index !== undefined) setErrAt({ cat: res.cat, index: res.index });
+        if (res.cat && res.cat !== "TOFU" && res.index !== undefined) setFocusKey(rows[res.cat][res.index]?.key ?? "");
         setMsg({ kind: "error", lines: [res.error] });
         return;
       }
@@ -361,7 +373,7 @@ export function OrderPlanEditor(props: {
       }
       setMsg({
         kind: r.notes.length ? "warn" : "ok",
-        lines: [`${props.prevSources[cat]?.label ?? r.sourceDate} 편성을 불러왔어요. 저장해야 반영돼요.`, ...r.notes],
+        lines: [`${props.prevSources[cat]?.label ?? r.sourceDate} 편성을 불러왔어요.`, ...r.notes],
       });
     });
   };
@@ -373,37 +385,52 @@ export function OrderPlanEditor(props: {
 
   const catRows = tab === "TOFU" ? [] : rows[tab];
   const exists = plan[tab].exists;
+  // 탭 바로 아래 '그 종류에서만 하는 일' — 불러오기(가져올 날짜를 이름에), 편성 전 빈 종류 닫기
+  const canClose = !readOnly && tab !== "TOFU" && !exists && !touched[tab] && catRows.length === 0;
+  // 저장 띠가 비었을 때(고친 게 없을 때) — 저장된 편성만 다루는 버튼
+  const canCopy = !readOnly && props.copyTargets.length > 0 && ALL_CATS.some((c) => plan[c].exists);
+  // 저장 안 한 변경이 있으면 날짜 이동·달력 가기 전에 한 번 묻는다(‹ › 는 기록을 쌓지 않음 — 위 뒤로 한 번이면 들어온 곳)
+  const guard = (href: string, replace: boolean) => (e: { preventDefault(): void }) => {
+    if (dirty && !readOnly) {
+      e.preventDefault();
+      setLeave({ href, replace });
+    }
+  };
 
   return (
     <div className={`oplan-ed ${readOnly ? "is-readonly" : ""}`}>
       {/* 날짜 이동 */}
       <div className="oplan-ed__nav">
-        <Link href={`/admin/order-plan/${props.prevKey}`} className="oplan-ed__arrow" aria-label="이전 발주창">
+        <Link
+          href={`/admin/order-plan/${props.prevKey}`}
+          replace
+          onNavigate={guard(`/admin/order-plan/${props.prevKey}`, true)}
+          className="oplan-ed__arrow"
+          aria-label="이전 발주창"
+        >
           ‹
         </Link>
-        <div className="oplan-ed__date">
+        <Link href={props.monthHref} onNavigate={guard(props.monthHref, false)} className="oplan-ed__date" aria-label="달력으로">
           <b>
             {props.label}
             {props.isToday && <span className="oplan-tag">지금 발주창</span>}
             {readOnly && <span className="oplan-tag oplan-tag--mute">지난 창</span>}
           </b>
           <small>{props.shipLabel}</small>
-        </div>
-        <Link href={`/admin/order-plan/${props.nextKey}`} className="oplan-ed__arrow" aria-label="다음 발주창">
+        </Link>
+        <Link
+          href={`/admin/order-plan/${props.nextKey}`}
+          replace
+          onNavigate={guard(`/admin/order-plan/${props.nextKey}`, true)}
+          className="oplan-ed__arrow"
+          aria-label="다음 발주창"
+        >
           ›
-        </Link>
-      </div>
-      <div className="oplan-ed__links">
-        <Link href={props.monthHref} className="tbtn">
-          달력
-        </Link>
-        <Link href={`/admin/order-plan/${date}/preview`} className="tbtn">
-          미리보기
         </Link>
       </div>
 
       {/* 종류 탭 */}
-      <div className="cattabs cattabs--seg oplan-ed__tabs">
+      <div className="cattabs cattabs--seg oplan-ed__tabs" ref={tabsRef}>
         {ALL_CATS.map((c) => (
           <button
             key={c}
@@ -412,6 +439,8 @@ export function OrderPlanEditor(props: {
             onClick={() => {
               setTab(c);
               setPickFor("");
+              // 내려간 채로(탭이 위에 붙은 상태) 바꾸면 맨 위부터 보이게
+              if (tabsRef.current && tabsRef.current.getBoundingClientRect().top <= 80) window.scrollTo({ top: 0 });
             }}
           >
             {CAT_LABEL[c]}
@@ -421,29 +450,18 @@ export function OrderPlanEditor(props: {
         ))}
       </div>
 
-      {!readOnly && (
+      {!readOnly && (src || canClose) && (
         <div className="oplan-ed__tools">
           {src && (
             <button type="button" className="btn btn--xs btn--soft" onClick={onLoadClick} disabled={pending}>
-              전날 불러오기
+              {src.label} 불러오기
             </button>
           )}
-          <button
-            type="button"
-            className="btn btn--xs btn--ghost"
-            onClick={() => setCopyOpen(true)}
-            disabled={pending || props.copyTargets.length === 0}
-          >
-            여러 날에 적용
-          </button>
-        </div>
-      )}
-
-      {msg && (
-        <div className={`notice ${msg.kind === "error" ? "notice--error" : msg.kind === "warn" ? "notice--edit" : "notice--ok"} oplan-ed__msg`}>
-          {msg.lines.map((l, i) => (
-            <div key={i}>{l}</div>
-          ))}
+          {canClose && (
+            <button type="button" className="btn btn--xs btn--ghost" onClick={() => setTouched((t) => ({ ...t, [tab]: true }))}>
+              발주 닫기
+            </button>
+          )}
         </div>
       )}
 
@@ -451,42 +469,19 @@ export function OrderPlanEditor(props: {
         <TofuPane
           catalog={props.tofuCatalog}
           hidden={tofuHidden}
-          exists={plan.TOFU.exists || touched.TOFU}
           readOnly={readOnly}
           boxes={showStats ? props.tofuBoxes : null}
           onToggle={(seq) => {
+            setMsg(null);
             setTofuHidden((h) => (h.includes(seq) ? h.filter((x) => x !== seq) : [...h, seq]));
             setTouched((t) => ({ ...t, TOFU: true }));
           }}
         />
       ) : (
         <>
-          {!exists && catRows.length === 0 && (
+          {catRows.length === 0 && (
             <div className="oplan-empty">
-              {touched[tab] ? (
-                <>
-                  <b>0개</b> — 이날 {CAT_LABEL[tab]} 발주는 닫혀요.
-                </>
-              ) : (
-                <>
-                  <b>편성 전</b> — 이날 {CAT_LABEL[tab]} 발주는 닫혀요.
-                  {!readOnly && (
-                    <button
-                      type="button"
-                      className="tbtn"
-                      onClick={() => setTouched((t) => ({ ...t, [tab]: true }))}
-                      style={{ marginLeft: 6 }}
-                    >
-                      발주 없음
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-          {exists && catRows.length === 0 && (
-            <div className="oplan-empty">
-              <b>0개</b> — 이날 {CAT_LABEL[tab]} 발주는 닫혀요.
+              <b>{exists || touched[tab] ? "닫힘" : "편성 전"}</b>
             </div>
           )}
 
@@ -573,30 +568,38 @@ export function OrderPlanEditor(props: {
         </>
       )}
 
-      {/* 고정 저장 줄 */}
-      {!readOnly && (
-        <div className="oplan-savebar">
-          <span className="oplan-savebar__count">
-            {dirty ? (
-              <>
-                <span>
-                  변경 <b>{totalChanges}</b>건
-                </span>
-                <small>
-                  {ALL_CATS.filter((c) => changes[c] > 0)
-                    .map((c) => `${CAT_LABEL[c]} ${changes[c]}`)
-                    .join(" · ")}
-                </small>
-              </>
-            ) : (
-              "변경 없음"
-            )}
-          </span>
-          <button type="button" className="btn btn--primary" onClick={save} disabled={pending || !dirty}>
-            {pending ? "저장 중…" : "저장"}
-          </button>
+      {/* 저장·불러오기·적용 결과 — 저장 띠 바로 위에 뜨는 알림(누르면 닫힘) */}
+      {msg && (
+        <div
+          role="status"
+          onClick={() => setMsg(null)}
+          className={`notice ${msg.kind === "error" ? "notice--error" : msg.kind === "warn" ? "notice--edit" : "notice--ok"} oplan-ed__msg oplan-toast`}
+        >
+          {msg.lines.map((l, i) => (
+            <div key={i}>{l}</div>
+          ))}
         </div>
       )}
+
+      {/* 고정 저장 띠 — 고친 게 있으면 저장, 없으면 저장된 편성으로 하는 일(여러 날에 적용·미리보기) */}
+      <div className="oplan-savebar">
+        {dirty && !readOnly ? (
+          <button type="button" className="btn btn--primary" onClick={save} disabled={pending}>
+            {pending ? "저장 중…" : `저장 (${totalChanges})`}
+          </button>
+        ) : (
+          <>
+            {canCopy && (
+              <button type="button" className="btn btn--ghost" onClick={() => setCopyOpen(true)} disabled={pending}>
+                여러 날에 적용
+              </button>
+            )}
+            <Link href={`/admin/order-plan/${date}/preview`} className="btn btn--soft">
+              미리보기
+            </Link>
+          </>
+        )}
+      </div>
 
       {askLoad && (
         <ConfirmSheet
@@ -607,12 +610,19 @@ export function OrderPlanEditor(props: {
         />
       )}
 
+      {leave && (
+        <ConfirmSheet
+          title="저장 안 한 변경을 버릴까요?"
+          confirmLabel="버리고 이동"
+          onConfirm={() => (leave.replace ? router.replace(leave.href) : router.push(leave.href))}
+          onClose={() => setLeave(null)}
+        />
+      )}
+
       {copyOpen && (
         <CopySheet
           date={date}
-          label={props.label}
           tab={tab}
-          dirty={dirty}
           plan={plan}
           targets={props.copyTargets}
           onClose={() => setCopyOpen(false)}
@@ -740,10 +750,10 @@ function ItemRow({ setNameEl, ...p }: ItemRowProps) {
             </div>
           ) : (
             <>
-              {r.brokenLink && <div className="oplan-warn">연동 끊김 — 수기 공구로 바뀌었어요.</div>}
+              {r.brokenLink && <div className="oplan-warn">연동 끊김</div>}
               {!readOnly && p.nameClash && (
                 <div className="oplan-warn">
-                  재고현황 &lsquo;{p.nameClash}&rsquo;과 이름이 겹쳐요.
+                  재고 이름과 겹침
                 </div>
               )}
               <div className="oplan-row__manual">
@@ -793,22 +803,30 @@ function ItemRow({ setNameEl, ...p }: ItemRowProps) {
 
       {!readOnly && (
         <div className="oplan-row__acts">
-          {used > 0 && <span className="oplan-row__note">발주 {used}개 들어옴 — 지우면 숨김</span>}
+          {/* 발주가 들어온 줄은 지워도 서버가 숨김으로 남겨 '숨김' 알약과 같은 일 — 삭제는 발주 없는 줄에만 */}
+          {!(used > 0) && (
+            <button type="button" className="tbtn tbtn--del oplan-row__del" onClick={p.onRemove}>
+              삭제
+            </button>
+          )}
           <span className="ocfg-item__sp" />
-          <button type="button" className="tbtn tbtn--ord" onClick={() => p.onMove(-1)} disabled={p.index === 0} aria-label="위로">
+          <button
+            type="button"
+            className="tbtn tbtn--ord oplan-row__ord"
+            onClick={() => p.onMove(-1)}
+            disabled={p.index === 0}
+            aria-label="위로"
+          >
             ▲
           </button>
           <button
             type="button"
-            className="tbtn tbtn--ord"
+            className="tbtn tbtn--ord oplan-row__ord"
             onClick={() => p.onMove(1)}
             disabled={p.index === p.count - 1}
             aria-label="아래로"
           >
             ▼
-          </button>
-          <button type="button" className="oplan-row__del" onClick={p.onRemove} aria-label="삭제">
-            −
           </button>
         </div>
       )}
@@ -871,25 +889,18 @@ function InvPicker({
 function TofuPane({
   catalog,
   hidden,
-  exists,
   readOnly,
   boxes,
   onToggle,
 }: {
   catalog: { seq: string; name: string }[];
   hidden: string[];
-  exists: boolean;
   readOnly: boolean;
   boxes: Record<string, number> | null;
   onToggle: (seq: string) => void;
 }) {
   return (
     <>
-      {!exists && (
-        <div className="oplan-empty">
-          <b>편성 전</b> — 모두 보여요.
-        </div>
-      )}
       <div className="oplan-rows">
         {catalog.map((p, i) => {
           const off = hidden.includes(p.seq);
@@ -912,7 +923,6 @@ function TofuPane({
           );
         })}
       </div>
-      <p className="oplan-hint">숨겨도 이미 들어온 발주는 저녁 8시 5분 자동발주에 들어가요.</p>
     </>
   );
 }
@@ -921,18 +931,14 @@ function TofuPane({
 
 function CopySheet({
   date,
-  label,
   tab,
-  dirty,
   plan,
   targets,
   onClose,
   onDone,
 }: {
   date: string;
-  label: string;
   tab: AnyCat;
-  dirty: boolean;
   plan: EditorPlan;
   targets: { key: string; label: string; planned: Record<AnyCat, boolean> }[];
   onClose: () => void;
@@ -975,9 +981,7 @@ function CopySheet({
             ✕
           </button>
         </div>
-        <div className="sheet__hint">{label} 편성을 적용해요(숨긴 품목 제외).</div>
         <div className="sheet__body">
-          {dirty && <div className="notice notice--edit">저장 안 한 변경은 적용되지 않아요.</div>}
           {result ? (
             <div className="notice notice--ok">
               {result.map((l, i) => (
@@ -1036,7 +1040,6 @@ function CopySheet({
                   <input type="radio" checked={mode === "replace"} onChange={() => setMode("replace")} />
                   <span>
                     <b>덮어쓰기</b>
-                    <small>발주가 없을 때만 덮어써요.</small>
                   </span>
                 </label>
               </div>

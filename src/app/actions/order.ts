@@ -229,7 +229,7 @@ export async function parseChatOrderAction(text: string): Promise<ChatParseState
     };
   }
 
-  // 일반 발주 관리 — 채팅 발주 잠금(관리자 설정 또는 품목 고정·품목 제한 모드 시 자동)
+  // 발주 방식 설정 — 채팅 발주 잠금(관리자 설정 또는 품목 고정·품목 제한 모드 시 자동)
   if (effectiveChannels(await orderChannelConfig(), await restrictModeFor(user)).chatDisabled) {
     return {
       ok: false,
@@ -286,7 +286,7 @@ export async function previewGridOrderAction(
     };
   }
 
-  // 일반 발주 관리 — 칸 발주 잠금(관리자 설정)
+  // 발주 방식 설정 — 칸 발주 잠금(관리자 설정)
   const channelCfg = await orderChannelConfig();
   const restricted = await restrictModeFor(user);
   if (effectiveChannels(channelCfg, restricted).gridDisabled) {
@@ -652,7 +652,7 @@ export async function createOrderAction(
   const stampErr = stampError(String(formData.get("restrictStamp") ?? ""), restricted, wk);
   if (stampErr) return { error: stampErr };
 
-  // 일반 발주 관리 — 발주 방식(칸/채팅) 잠금 서버 최종 검증(UI 우회 방지, fail-closed).
+  // 발주 방식 설정 — 발주 방식(칸/채팅) 잠금 서버 최종 검증(UI 우회 방지, fail-closed).
   // 잠긴 채널이 있으면 '허용된 채널의 source'가 명시된 요청만 통과(빈/미지 source 차단).
   // effectiveChannels가 칸·채팅 동시 잠금을 막으므로 정상 제출은 영향 없음. 제한 모드면 채팅 잠금.
   const channelCfg = await orderChannelConfig();
@@ -1649,7 +1649,7 @@ export async function updateDayOrderAction(
   if (stampErr) return { error: stampErr };
 
   const allowed = allowedCategoriesFor(user.role);
-  // 일반 발주 관리 — 과일/야채 품목 고정 설정(수정 경로도 지정 품목명 보존·검증)
+  // 발주 방식 설정 — 과일/야채 품목 고정 설정(수정 경로도 지정 품목명 보존·검증)
   const channelCfg = await orderChannelConfig();
 
   // payload: 멀티 카테고리(공구는 여기서 무시 — 꺼짐은 담기원장, 제한 모드는 planLines 로 재구성)

@@ -831,7 +831,6 @@ export async function setRestrictModeAction(input: {
   revalidatePath("/", "layout");
   revalidatePath("/admin");
   revalidatePath("/admin/order-plan");
-  revalidatePath("/admin/order-config");
   revalidatePath("/order");
   return { ok: true };
 }
