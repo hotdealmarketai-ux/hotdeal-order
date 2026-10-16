@@ -18,7 +18,7 @@ import {
   type Category,
   type Fulfillment,
 } from "@/lib/constants";
-import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
+import { CHAEUMCHAE_CATALOG, type ChaeumchaeProduct } from "@/lib/chaeumchae";
 
 type Phase = "compose" | "loading" | "preview";
 type EditItem = {
@@ -40,6 +40,7 @@ export function ChatOrder({
   reservedTool = [],
   reservedLabel = "",
   toolCart = [],
+  tofuCatalog = CHAEUMCHAE_CATALOG,
 }: {
   categories: Category[];
   needsPickup: boolean;
@@ -52,6 +53,8 @@ export function ChatOrder({
   reservedTool?: { name: string; qty: number }[];
   reservedLabel?: string;
   toolCart?: ToolHold[];
+  /** 채움채 선택지 — 기본은 전체 카탈로그. 품목 제한 모드에선 그날 보이는 목록만 넘길 수 있게(방어용). */
+  tofuCatalog?: ChaeumchaeProduct[];
 }) {
   // 채움채(TOFU)=체크리스트. 공구(TOOL)=자유입력 불가(담기/예약분만). 자유입력은 과일·야채만.
   const chatCats = categories.filter((c) => c !== "TOFU" && c !== "TOOL");
@@ -84,7 +87,7 @@ export function ChatOrder({
   const live = useLiveStock(); // 공구 남은수량 실시간
 
   const tofuChecked = () =>
-    tofuOpen && CHAEUMCHAE_CATALOG.some((p) => (tofuQty[p.seq] ?? "").trim());
+    tofuOpen && tofuCatalog.some((p) => (tofuQty[p.seq] ?? "").trim());
 
   async function handleParse() {
     setError("");
@@ -160,7 +163,7 @@ export function ChatOrder({
       byCat.set(it.category, list);
     }
     if (hasTofu && tofuOpen) {
-      const tofuItems = CHAEUMCHAE_CATALOG.filter(
+      const tofuItems = tofuCatalog.filter(
         (p) => (tofuQty[p.seq] ?? "").trim(),
       ).map((p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }));
       if (tofuItems.length) byCat.set("TOFU", tofuItems);
@@ -176,7 +179,7 @@ export function ChatOrder({
       category: c,
       items: byCat.get(c)!,
     }));
-  }, [items, tofuQty, hasTofu, tofuOpen, hasTool, cartItems]);
+  }, [items, tofuQty, hasTofu, tofuOpen, hasTool, cartItems, tofuCatalog]);
 
   const totalItems = payload.reduce((n, g) => n + g.items.length, 0);
 
@@ -189,7 +192,7 @@ export function ChatOrder({
     }
     return m;
   }, [items]);
-  const tofuCount = CHAEUMCHAE_CATALOG.filter(
+  const tofuCount = tofuCatalog.filter(
     (p) => (tofuQty[p.seq] ?? "").trim(),
   ).length;
 
@@ -225,7 +228,7 @@ export function ChatOrder({
 
       {tofuOpen && (
         <div className="tofulist" style={{ marginTop: 10 }}>
-          {CHAEUMCHAE_CATALOG.map((p) => {
+          {tofuCatalog.map((p) => {
             const q = tofuQty[p.seq] ?? "";
             return (
               <div className={`tofuitem ${q.trim() ? "is-on" : ""}`} key={p.seq}>

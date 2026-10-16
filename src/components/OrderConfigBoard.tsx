@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   setOrderModeFlagAction,
@@ -23,10 +24,14 @@ export function OrderConfigBoard({
   config,
   fruitItems,
   vegItems,
+  restrict = { on: false, allStores: true, active: false },
 }: {
   config: Cfg;
   fruitItems: FixedItem[];
   vegItems: FixedItem[];
+  // 품목 제한 모드(편성 달력) — 적용 중인 지점에는 '품목 고정'이 쓰이지 않고 채팅 발주는 자동 잠금.
+  // active = 시작 창에 이르러 지금 적용 중(시작 전 예약이면 false).
+  restrict?: { on: boolean; allStores: boolean; active: boolean };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -35,6 +40,13 @@ export function OrderConfigBoard({
   const [newName, setNewName] = useState("");
 
   const anyFixed = config.fixedFruit || config.fixedVeg;
+  // 제한 모드가 전 지점에 '지금' 적용 중이면 고정과 똑같이 칸 강제·채팅 잠금(effectiveChannels 와 같은 규칙).
+  // 시험 지점만이거나 시작 전이면 잠그지 않고 안내 한 줄만.
+  const planLock = restrict.on && restrict.allStores && restrict.active;
+  const planWhen = restrict.active ? "" : "시작되면 ";
+  const planWho = restrict.allStores ? "" : "시험 지점은 ";
+  const locked = anyFixed || planLock;
+  const lockWhy = planLock ? "품목 제한 모드" : "품목 고정";
   const items = tab === "FRUIT" ? fruitItems : vegItems;
   const catLabel = tab === "FRUIT" ? "과일" : "야채";
   const shownCount = items.filter((i) => i.active).length;
@@ -81,13 +93,13 @@ export function OrderConfigBoard({
         <div className="ocfg-row">
           <div className="ocfg-row__main">
             <div className="ocfg-row__lab">칸 발주</div>
-            {anyFixed && (
-              <div className="ocfg-row__sub">품목 고정 중 — 항상 켜짐</div>
+            {locked && (
+              <div className="ocfg-row__sub">{lockWhy} 중 — 항상 켜짐</div>
             )}
           </div>
           <Switch
-            on={!config.gridOff}
-            disabled={pending || anyFixed}
+            on={planLock ? true : !config.gridOff}
+            disabled={pending || locked}
             onToggle={() => toggleFlag("gridOff", config.gridOff ? false : true)}
             label="칸 발주"
           />
@@ -96,13 +108,19 @@ export function OrderConfigBoard({
         <div className="ocfg-row">
           <div className="ocfg-row__main">
             <div className="ocfg-row__lab">채팅 발주</div>
-            {anyFixed && (
+            {locked && (
               <div className="ocfg-row__sub ocfg-row__sub--warn">
-                품목 고정 중 — 자동 잠금
+                {lockWhy} 중 — 자동 잠금
+              </div>
+            )}
+            {!locked && restrict.on && (
+              <div className="ocfg-row__sub ocfg-row__sub--warn">
+                품목 제한 모드 {planWhen}
+                {planWho}자동 잠금
               </div>
             )}
           </div>
-          {anyFixed ? (
+          {locked ? (
             <span className="ocfg-lock">자동 잠금</span>
           ) : (
             <Switch
@@ -116,13 +134,25 @@ export function OrderConfigBoard({
       </div>
 
       {/* 품목 고정 */}
-      <div className="card ocfg-card">
+      <div className="card ocfg-card" style={planLock ? { opacity: 0.6 } : undefined}>
         <div className="ocfg-card__title">품목 고정</div>
+        {restrict.on && (
+          <div className="ocfg-row__sub ocfg-row__sub--warn" style={{ marginBottom: 4 }}>
+            {planLock
+              ? "편성 달력이 적용 중이에요 — 제한 모드 지점에는 이 설정이 쓰이지 않아요."
+              : restrict.active
+                ? "품목 제한 모드 시험 지점에는 이 설정이 쓰이지 않아요."
+                : "품목 제한 모드 시작 전이라 지금은 이 설정이 그대로 쓰여요."}{" "}
+            <Link href="/admin/order-plan" style={{ textDecoration: "underline" }}>
+              편성 달력 열기
+            </Link>
+          </div>
+        )}
         <div className="ocfg-row">
           <div className="ocfg-row__lab">과일 품목 고정</div>
           <Switch
             on={config.fixedFruit}
-            disabled={pending}
+            disabled={pending || planLock}
             onToggle={() => toggleFlag("fixedFruit", !config.fixedFruit)}
             label="과일 품목 고정"
           />
@@ -131,7 +161,7 @@ export function OrderConfigBoard({
           <div className="ocfg-row__lab">야채 품목 고정</div>
           <Switch
             on={config.fixedVeg}
-            disabled={pending}
+            disabled={pending || planLock}
             onToggle={() => toggleFlag("fixedVeg", !config.fixedVeg)}
             label="야채 품목 고정"
           />

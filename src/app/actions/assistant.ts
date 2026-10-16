@@ -8,6 +8,7 @@ import { windowKeyAt } from "@/lib/schedule";
 import { orderTimeOpenForUser } from "@/lib/receivable";
 import { hasOrderWindow, currentWindowFloorUtc } from "@/lib/deadline";
 import { askAssistant, type AssistantMsg } from "@/lib/assistant";
+import { restrictModeFor } from "@/lib/restrict-mode";
 import {
   rankStockMatches,
   hasStockIntent,
@@ -138,17 +139,22 @@ export async function askAssistantAction(
   let stock: StockMatch[] | undefined;
   let canAdd: boolean | undefined;
   let systemExtra = "";
-  try {
-    const found = await findStock(user.id, user.role, user.timeUnlock, user.timeUnlockAt, lastMsg);
-    if (found) {
-      stock = found.matches;
-      canAdd = found.canAdd;
-      systemExtra = stockContext(found.matches, found.canAdd);
+  // 품목 제한 모드면 재고현황을 쉬므로 재고 찾기·재고 카드·담기 버튼을 쓰지 않고,
+  // 안내문도 '오늘 발주 품목에 수량만 적어요'로 바꿔 넘긴다.
+  const restricted = await restrictModeFor(user);
+  if (!restricted) {
+    try {
+      const found = await findStock(user.id, user.role, user.timeUnlock, user.timeUnlockAt, lastMsg);
+      if (found) {
+        stock = found.matches;
+        canAdd = found.canAdd;
+        systemExtra = stockContext(found.matches, found.canAdd);
+      }
+    } catch {
+      /* 재고 조회 실패해도 일반 답변은 진행 */
     }
-  } catch {
-    /* 재고 조회 실패해도 일반 답변은 진행 */
   }
 
-  const text = await askAssistant(clean, systemExtra);
+  const text = await askAssistant(clean, systemExtra, { restricted });
   return { ok: true, text, stock, canAdd };
 }

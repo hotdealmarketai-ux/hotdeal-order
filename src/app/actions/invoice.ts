@@ -504,7 +504,7 @@ export async function saveInvoiceAction(
 }
 
 // 계산서 '불러오기' — 그 출고일(shipmentDate)에 청구할 해당 카테고리 품목을 한 번에 로드.
-//  ① 재고현황 '담기' 발주(category Order) — 출고일 기준 발주범위(orderRangeForShipment). 공급가는 재고현황 이름매칭.
+//  ① 재고현황 '담기' 발주(category Order) — 출고일 기준 발주범위(orderRangeForShipment). 공급가는 발주 줄의 연동 id → 편성 줄 → 재고현황 이름매칭 순.
 //  ② 예약(재고연동+수기) 확정분 — 픽업일 == 출고일(사용자 규칙). 공급가는 예약 스냅샷. ※예약은 공구 전용 개념이라 TOOL만.
 // 같은 품목명은 수량 합산. 공급가는 처음 잡힌 값(없으면 빈칸 → 관리자가 채움). 계산서 해당 칸에 그대로 채운다.
 export async function loadInvoiceToolItemsAction(
@@ -543,7 +543,7 @@ export async function loadInvoiceToolItemsAction(
       },
       select: {
         items: {
-          select: { name: true, rawName: true, qty: true, rawQty: true },
+          select: { name: true, rawName: true, qty: true, rawQty: true, inventoryItemId: true, planItemId: true },
           orderBy: { sortOrder: "asc" },
         },
       },
@@ -639,15 +639,16 @@ export async function loadInvoiceToolItemsAction(
     return Number.isFinite(n) ? n : 0;
   };
 
-  type Agg = { name: string; qty: number; unitPrice: number; priced: boolean; inventoryItemId: string };
+  // tax: 줄 출처가 직접 정한 과세/면세(편성 줄 등). 비면 아래 연동 id → 이름매칭으로 찾는다(기존 그대로).
+  type Agg = { name: string; qty: number; unitPrice: number; priced: boolean; inventoryItemId: string; tax: string };
   const orderKeys: string[] = [];
   const agg = new Map<string, Agg>();
-  const add = (name: string, qty: number, price: number | null, invId: string) => {
+  const add = (name: string, qty: number, price: number | null, invId: string, tax = "") => {
     const key = name.trim();
     if (!key || qty <= 0) return;
     let a = agg.get(key);
     if (!a) {
-      a = { name: key, qty: 0, unitPrice: 0, priced: false, inventoryItemId: "" };
+      a = { name: key, qty: 0, unitPrice: 0, priced: false, inventoryItemId: "", tax: "" };
       agg.set(key, a);
       orderKeys.push(key);
     }
@@ -657,13 +658,51 @@ export async function loadInvoiceToolItemsAction(
       a.priced = true;
     }
     if (!a.inventoryItemId && invId) a.inventoryItemId = invId;
+    if (!a.tax && tax) a.tax = tax;
   };
 
-  // ① 담기 발주(공구) — 공급가·연동 id는 재고현황 이름매칭
+  // ① 담기 발주(공구) — 발주 줄이 가리키는 id 를 먼저 쓰고, 없을 때만 재고현황 이름매칭(기존 그대로).
+  //   (가) inventoryItemId 가 살아 있는 재고이고 그 재고 이름이 발주 줄 이름과 같으면: 그 재고의 공급가·과세·id.
+  //        이름이 다르면(발주 뒤 재고명 변경) 예전처럼 이름매칭으로 넘긴다 — 발행 차감·이미 청구한 양이 모두
+  //        이름 기준이라, 옛 이름에 id·단가만 붙이면 차감이 조용히 빠진다(빈칸이면 관리자가 골라 바로잡음).
+  //   (나) planItemId(품목 제한 모드 편성 줄)이고 살아 있는 연동이 없으면: 편성 줄의 공급가·과세(비었으면 이름매칭으로 보충)
+  //   (다) 둘 다 없으면(지금까지의 모든 발주): 이름매칭 — 동작 변화 없음.
+  const liveInvById = new Map(invItems.map((it) => [it.id, it]));
+  const planIds = [
+    ...new Set(toolOrders.flatMap((o) => o.items.map((it) => it.planItemId)).filter((id): id is string => !!id)),
+  ];
+  const planById = new Map(
+    (planIds.length > 0
+      ? await prisma.orderPlanItem.findMany({
+          where: { id: { in: planIds } },
+          select: { id: true, supplyPrice: true, tax: true },
+        })
+      : []
+    ).map((p) => [p.id, p]),
+  );
   for (const o of toolOrders) {
     for (const it of o.items) {
       const nm = (it.name || it.rawName || "").trim();
-      add(nm, qtyToNum(it.qty || it.rawQty), priceByName.get(nm) ?? null, idByName.get(nm) ?? "");
+      const q = qtyToNum(it.qty || it.rawQty);
+      const inv = it.inventoryItemId ? liveInvById.get(it.inventoryItemId) : undefined;
+      if (inv && inv.name.trim() === nm) {
+        add(nm, q, inv.supplyPrice, inv.id, inv.tax);
+        continue;
+      }
+      const plan = it.planItemId ? planById.get(it.planItemId) : undefined;
+      if (plan) {
+        add(
+          nm,
+          q,
+          plan.supplyPrice > 0 ? plan.supplyPrice : priceByName.get(nm) ?? null,
+          // 수기 편성 공구는 재고 연동이 아니다 — 이름이 우연히 재고명과 같아도 id 를 붙이지 않는다.
+          //   단 연동이었는데 그 재고가 지워진 줄(inventoryItemId 있음)은 이름매칭 id 로 보충(기존 동작과 같음).
+          it.inventoryItemId ? idByName.get(nm) ?? "" : "",
+          plan.tax, // 비었으면 아래에서 연동 id → 이름매칭으로 보충(기존 규칙)
+        );
+        continue;
+      }
+      add(nm, q, priceByName.get(nm) ?? null, idByName.get(nm) ?? "");
     }
   }
   // ② 예약 확정분(픽업==출고일) — 공급가는 예약 스냅샷, 연동 id는 예약 스냅샷 우선(없으면 이름매칭).
@@ -737,9 +776,10 @@ export async function loadInvoiceToolItemsAction(
         ? String(a.unitPrice)
         : "",
       inventoryItemId: a.inventoryItemId,
-      // 과세/면세: 채움채 상품 설정 우선, 없으면 연동 재고(연동 id → 이름매칭).
+      // 과세/면세: 채움채 상품 설정 우선 → 줄 출처가 정한 값(연동 재고·편성 줄) → 연동 재고(연동 id → 이름매칭).
       tax:
         (cp && cp.tax) ||
+        a.tax ||
         (a.inventoryItemId && taxById.get(a.inventoryItemId)) ||
         taxByName.get(a.name) ||
         "",

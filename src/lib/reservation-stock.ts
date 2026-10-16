@@ -85,8 +85,12 @@ export async function isItemReservationLocked(
 
 // 세트 예약분을 '구성품(재고연동)'으로 전개해 품목별 수요(Σ 세트수량×세트당수량)를 돌려준다.
 // 세트 주문행은 inventoryItemId="" 라 위 단일-연동 집계에 안 잡히므로, 여기서 따로 더한다(이중집계 없음).
-async function setComponentDemand(confirmedOnly: boolean): Promise<Record<string, number>> {
-  const sets = await prisma.reservationProduct.findMany({
+// db: 트랜잭션 안에서 부르면 tx 를 넘긴다(연결을 하나 더 잡지 않게 — 풀 크기가 작으면 트랜잭션이 멈출 수 있음).
+async function setComponentDemand(
+  confirmedOnly: boolean,
+  db: Pick<typeof prisma, "reservationProduct" | "reservationOrderItem"> = prisma,
+): Promise<Record<string, number>> {
+  const sets = await db.reservationProduct.findMany({
     where: { active: true, components: { some: { inventoryItemId: { not: "" } } } },
     select: {
       id: true,
@@ -98,7 +102,7 @@ async function setComponentDemand(confirmedOnly: boolean): Promise<Record<string
   });
   if (sets.length === 0) return {};
   const compsByProduct = new Map(sets.map((s) => [s.id, s.components]));
-  const items = await prisma.reservationOrderItem.findMany({
+  const items = await db.reservationOrderItem.findMany({
     where: {
       productId: { in: sets.map((s) => s.id) },
       stockDeductedAt: null,
@@ -126,9 +130,11 @@ async function setComponentDemand(confirmedOnly: boolean): Promise<Record<string
 // ⚠ 예전엔 '픽업 10시 전'으로 릴리스했으나, 10시 자동차감을 없애고 '재고 정산(다음날) 차감' 방식으로 바꿈에 따라
 //   홀드도 그 시점(stockDeductedAt 설정)에 풀린다 → 판매가능이 base 차감과 어긋나지 않음.
 // groupBy 는 관계필터를 못 받아 findMany + JS 합산(예약 아이템 수는 소규모).
-export async function reservationHeldByItem(): Promise<Record<string, number>> {
+export async function reservationHeldByItem(
+  db: Pick<typeof prisma, "reservationProduct" | "reservationOrderItem"> = prisma,
+): Promise<Record<string, number>> {
   const [rows, setDemand] = await Promise.all([
-    prisma.reservationOrderItem.findMany({
+    db.reservationOrderItem.findMany({
       where: {
         inventoryItemId: { not: "" },
         stockDeductedAt: null,
@@ -139,7 +145,7 @@ export async function reservationHeldByItem(): Promise<Record<string, number>> {
       },
       select: { inventoryItemId: true, qty: true },
     }),
-    setComponentDemand(false),
+    setComponentDemand(false, db),
   ]);
   const m: Record<string, number> = { ...setDemand };
   for (const r of rows) m[r.inventoryItemId] = (m[r.inventoryItemId] ?? 0) + r.qty;

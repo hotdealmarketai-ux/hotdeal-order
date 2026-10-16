@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { prisma } from "@/lib/prisma";
 import { windowKeyAt } from "@/lib/schedule";
+import { merchantVisibility } from "@/lib/restrict-mode";
 
 // 재고 남은수량 실시간 폴링 소스 — 남은수량 뜨는 모든 화면이 짧은 주기로 이걸 읽어 갱신.
 // available = 기준재고 − 전체 담기(모든 가맹점). mine = 내 담기. 모두 '현재 발주창(오늘)' 기준.
@@ -12,6 +13,13 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user || user.role !== "MERCHANT_HOTDEAL") {
     return NextResponse.json({ available: {}, mine: {} });
+  }
+  // 품목 제한 모드면 재고현황을 쉬므로 전체 재고 수량을 내보내지 않는다(응답 모양은 그대로, 내용만 빔).
+  if (!(await merchantVisibility(user)).inventory) {
+    return NextResponse.json(
+      { available: {}, mine: {} },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   }
   const date = windowKeyAt();
   const [held, items, mine] = await Promise.all([

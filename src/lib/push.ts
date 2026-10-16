@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { VAPID_PUBLIC_KEY } from "@/lib/vapid";
 import { logError } from "@/lib/log";
 import type { Role } from "@/lib/constants";
+import { getRestrictConfig, restrictAppliesTo } from "@/lib/restrict-mode";
 
 const VAPID_SUBJECT = "mailto:hotdealmarketai@gmail.com";
 
@@ -130,29 +131,51 @@ function josaIGa(word: string): string {
   return "이";
 }
 
-// 예약발주에 상품이 새로 등록됨 → 핫딜마켓 점주 전체에게 알림.
+// 예약발주 알림을 받을 지점 = 예약발주가 보이는 지점(지점 '예약발주 노출' 켜짐 && 품목 제한 모드 아님).
+// 시험 지점 모드가 있어 지점마다 판정하되, 설정은 한 번만 읽어 재사용한다(restrictAppliesTo).
+// 숨긴 탭으로 가는 알림(누르면 발주 화면으로 튕김)을 보내지 않기 위함.
+export async function reservationAudienceIds(now: number = Date.now()): Promise<string[]> {
+  const [cfg, users] = await Promise.all([
+    getRestrictConfig(),
+    prisma.user.findMany({
+      where: { role: "MERCHANT_HOTDEAL", status: "APPROVED", reservationEnabled: true },
+      select: { id: true, role: true },
+    }),
+  ]);
+  return users.filter((u) => !restrictAppliesTo(cfg, u, now)).map((u) => u.id);
+}
+
+// 예약발주에 상품이 새로 등록됨 → 예약발주가 보이는 핫딜마켓 점주에게 알림.
 export async function notifyMerchantsReservationProductAdded(name: string) {
   try {
-    await sendPushToRole("MERCHANT_HOTDEAL", {
+    const ids = await reservationAudienceIds();
+    const payload: PushPayload = {
       title: `${name}${josaIGa(name)} 예약발주에 등록되었습니다.`,
       body: "",
       url: "/reservations",
       type: "system",
-    });
+    };
+    await Promise.all(ids.map((id) => sendPushToUser(id, payload)));
   } catch (err) {
     logError("push.notifyMerchantsReservationProductAdded", err, {});
   }
 }
 
-// 예약발주 상품 마감 1시간 전 → 핫딜마켓 점주 전체에게 알림(마감 임박 리마인더).
-export async function notifyMerchantsReservationClosingSoon(name: string) {
+// 예약발주 상품 마감 1시간 전 → 예약발주가 보이는 핫딜마켓 점주에게 알림(마감 임박 리마인더).
+// audience: 크론이 한 번 계산한 받는 사람 목록(상품마다 다시 읽지 않게). 없으면 여기서 계산.
+export async function notifyMerchantsReservationClosingSoon(
+  name: string,
+  audience?: string[],
+) {
   try {
-    await sendPushToRole("MERCHANT_HOTDEAL", {
+    const ids = audience ?? (await reservationAudienceIds());
+    const payload: PushPayload = {
       title: `${name} 예약발주 마감이 1시간 남았습니다.`,
       body: "",
       url: "/reservations",
       type: "system",
-    });
+    };
+    await Promise.all(ids.map((id) => sendPushToUser(id, payload)));
   } catch (err) {
     logError("push.notifyMerchantsReservationClosingSoon", err, {});
   }
@@ -166,10 +189,13 @@ export async function notifyMerchantReservationEdited(
   url?: string,
 ) {
   try {
+    // 예약발주가 안 보이는 지점(품목 제한 모드·지점 예약 노출 꺼짐)은 막다른 /reservations 대신 마이페이지 지난 발주로.
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, reservationEnabled: true } });
+    const visible = u ? u.reservationEnabled !== false && !restrictAppliesTo(await getRestrictConfig(), u) : false;
     await sendPushToUser(userId, {
       title: "본사가 예약을 수정했어요.",
-      body: "수정된 예약 내역을 확인해 주세요.",
-      url: url ?? `/reservations/${batchId}`,
+      body: visible ? "수정된 예약 내역을 확인해 주세요." : "마이페이지 지난 발주에서 확인해 주세요.",
+      url: visible ? url ?? `/reservations/${batchId}` : "/mypage",
     });
   } catch (err) {
     console.error("[push] notifyMerchantReservationEdited failed:", err);

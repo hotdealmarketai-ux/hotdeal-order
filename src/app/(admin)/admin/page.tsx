@@ -11,6 +11,8 @@ import { maintenanceOn } from "@/lib/maintenance";
 import { getAdminSeen } from "@/lib/admin-seen";
 import { getCronHealth } from "@/lib/cron-health";
 import { formatKDateTime } from "@/lib/format";
+import { getRestrictConfig } from "@/lib/restrict-mode";
+import { missingPlanCount } from "./order-plan/_lib/plan-data";
 
 export default async function AdminHome() {
   const user = await requireAdmin();
@@ -61,6 +63,9 @@ export default async function AdminHome() {
   const hotdealOrders = hotdealStores.length;
   const hotdealNewCount = hotdealNew.length;
   const maintOn = await maintenanceOn(); // 패치(유지보수) 모드 현재 상태 — 회원·시스템 그룹 '패치' 토글
+  // 품목 제한 모드가 켜져 있으면 이번·다음 발주창에 비어 있는 종류(과일·야채·공구) 수를 배지로.
+  const restrictCfg = await getRestrictConfig();
+  const planMissing = restrictCfg.on ? await missingPlanCount().catch(() => 0) : 0;
 
   // 관리자 홈 = 4개 그룹 섹션(발주·주문 / 정산·입금 / 재고·창고 / 회원·시스템).
   // 발주·주문 맨 위 두 항목(전체 발주 목록·핫딜마켓 발주)은 '오늘 건수'를 큰 숫자로 보여주는 KPI 타일.
@@ -88,6 +93,7 @@ export default async function AdminHome() {
       ],
       items: [
         { href: "/admin/order-config", title: "일반 발주 관리" },
+        { href: "/admin/order-plan", title: "발주 품목 편성", badge: planMissing > 0 ? planMissing : undefined },
         { href: "/admin/weekly", title: "주간발주", badge: weeklyCount > 0 ? weeklyCount : undefined },
         { href: "/admin/calendar", title: "예약 일정" },
         { href: "/admin/holds", title: "담기 현황" },

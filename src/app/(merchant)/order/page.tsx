@@ -16,12 +16,8 @@ import {
   needsFulfillment,
   needsPickupTime,
 } from "@/lib/constants";
-import {
-  hasOrderWindow,
-  currentWindowStartUtc,
-  ORDER_DEADLINE_LABEL,
-} from "@/lib/deadline";
-import { kstDateOf, kstToday, kstDayRange, shiftDate, labelDate } from "@/lib/date";
+import { hasOrderWindow, ORDER_DEADLINE_LABEL } from "@/lib/deadline";
+import { kstDateOf, kstToday, shiftDate, labelDate } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { orderTimeOpenForUser } from "@/lib/receivable";
 import {
@@ -35,22 +31,32 @@ import { windowKeyAt } from "@/lib/schedule";
 import { OrderForm } from "@/components/OrderForm";
 import { DeadlineCountdown } from "@/components/DeadlineCountdown";
 import { RequestCancelButton } from "@/components/RequestCancelButton";
+import { merchantVisibility, modeStamp } from "@/lib/restrict-mode";
+import { merchantPlanView, windowOrdersWhere } from "@/lib/order-plan";
+import { logError } from "@/lib/log";
+import { toPlanFormView, windowShipLabel } from "./plan-view";
+import "./order-plan-form.css";
 
 export default async function OrderPage(props: {
-  searchParams: Promise<{ cancelReq?: string; cancelErr?: string }>;
+  searchParams: Promise<{ cancelReq?: string; cancelErr?: string; n?: string }>;
 }) {
-  const { cancelReq, cancelErr } = await props.searchParams;
+  const { cancelReq, cancelErr, n: navNote } = await props.searchParams;
   const user = await requireMerchant();
   // 가맹 오픈 온보딩 중이면 발주 대신 '오픈 준비' 퀘스트로.
   if (needsOnboarding(user)) redirect("/onboarding");
   const windowed = hasOrderWindow(user.role);
   const open = await orderTimeOpenForUser(user); // 운영시간·강제오픈 또는 이 지점 '시간 1회 열기'
 
+  // 품목 제한 모드 — 켜져 있으면 오늘(발주창) 편성 품목만. 재고 담기·재고 검색·채팅은 쓰지 않는다.
+  const vis = await merchantVisibility(user);
+  const restricted = vis.restricted;
+  const planKey = windowKeyAt();
+
   // 일반 발주 관리 — 발주 방식(칸/채팅) 잠금 + 과일/야채 품목 고정
   const channelCfg = await orderChannelConfig();
-  const { gridDisabled, chatDisabled } = effectiveChannels(channelCfg);
+  const { gridDisabled, chatDisabled } = effectiveChannels(channelCfg, restricted);
   const fixedItems =
-    channelCfg.fixedFruit || channelCfg.fixedVeg
+    !restricted && (channelCfg.fixedFruit || channelCfg.fixedVeg)
       ? await fixedItemsByCat(true)
       : { FRUIT: [], VEG: [] };
 
@@ -64,17 +70,10 @@ export default async function OrderPage(props: {
   let existingOrderDate: string | null = null;
   let cancelPending = false;
   if (windowed && open) {
-    // 서버(createOrderAction)와 동일 기준 — 강제오픈으로 정오 이전에 넣은 발주도 잡아
-    // '수정 모드'로 전환되게 한다(둘이 어긋나면 화면은 새 발주, 서버는 거부로 혼란).
-    const since = new Date(
-      Math.min(currentWindowStartUtc(), kstDayRange(kstToday()).start.getTime()),
-    );
+    // 서버(createOrderAction·중복 종류 검사)와 동일 기준 = 발주창 키 묶음(windowOrdersWhere) —
+    // 주말 토·일, 강제오픈·시간 열기로 정오 전에 넣은 발주도 같은 창으로 잡아 '수정 모드'로 전환한다.
     const existing = await prisma.order.findMany({
-      where: {
-        userId: user.id,
-        createdAt: { gte: since },
-        status: { not: "CANCELLED" },
-      },
+      where: windowOrdersWhere(user.id, windowKeyAt()),
       orderBy: { createdAt: "desc" },
       select: { createdAt: true, cancelRequested: true },
     });
@@ -98,7 +97,7 @@ export default async function OrderPage(props: {
   // 공구 담기 = 서버 담기원장(오늘 발주창). 발주 화면에서 바로 +/- 하도록 남은수량·공급가까지 실어보낸다.
   // 남은수량(available) = 기준재고 − 전체 담기(내 것 포함). 실시간 공유 = 모든 가맹점이 같은 값을 본다.
   const toolCart =
-    user.role === "MERCHANT_HOTDEAL"
+    user.role === "MERCHANT_HOTDEAL" && !restricted
       ? await (async () => {
           const holdKey = windowKeyAt(); // 담기 창키(주말 연속창=토요일 하나). orderDay(캘린더)와 구분.
           const [mine, held, invItems] = await Promise.all([
@@ -135,6 +134,19 @@ export default async function OrderPage(props: {
         })()
       : [];
 
+  // 제한 모드 편성(점주 화면·실시간 조회가 같은 계산 merchantPlanView 를 쓴다)
+  // 편성을 못 읽으면(일시 DB 오류) 페이지를 깨지 않고 폼이 '불러오지 못했어요' 띠 + 확정 잠금으로 처리한다.
+  const rawPlan =
+    restricted && !receivableLock.locked && !lockedToEdit
+      ? await merchantPlanView(planKey, user.id).catch((err) => {
+          logError("order.planView", err, { userId: user.id, planKey });
+          return null;
+        })
+      : null;
+  const planView = rawPlan ? toPlanFormView(rawPlan) : undefined;
+  // 채움채 = 그날 보이는 품목만(편성이 없으면 4개 전부 — visibleTofuCatalog)
+  const tofuList = rawPlan ? rawPlan.tofu.visible.map((p) => ({ seq: p.seq, name: p.name })) : undefined;
+
   return (
     <>
       <Topbar
@@ -144,6 +156,17 @@ export default async function OrderPage(props: {
         {windowed && <DeadlineCountdown deadlineLabel={ORDER_DEADLINE_LABEL} />}
       </Topbar>
       <div className="page">
+        {restricted && (
+          <div className="plband" role="note">
+            <span>오늘 발주 품목만 보여요</span>
+            <span className="plband__sub">{windowShipLabel(planKey)}</span>
+          </div>
+        )}
+        {restricted && navNote === "restricted" && (
+          <div className="notice notice--mute" style={{ marginBottom: 14 }}>
+            재고현황·예약발주는 지금 쉬고 있어요. 오늘 발주 품목에 수량만 넣어 주세요.
+          </div>
+        )}
         {receivable.balance > 0 && (
           <Link
             href="/invoices"
@@ -229,6 +252,11 @@ export default async function OrderPage(props: {
             fixedFruit={channelCfg.fixedFruit}
             fixedVeg={channelCfg.fixedVeg}
             fixedItems={fixedItems}
+            restricted={restricted}
+            planView={planView}
+            restrictStamp={restricted ? modeStamp(true, planKey) : undefined}
+            tofuList={tofuList}
+            draftOwner={user.id}
           />
         )}
       </div>

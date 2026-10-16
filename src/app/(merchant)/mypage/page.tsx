@@ -12,6 +12,7 @@ import { formatKDate } from "@/lib/format";
 import { kstDateOf, kstToday, labelDate, shipmentDayOf } from "@/lib/date";
 import { receivableOf, receivableSadadreamOf } from "@/lib/receivable";
 import { LogoutButton } from "@/components/LogoutButton";
+import { merchantVisibility } from "@/lib/restrict-mode";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -22,7 +23,7 @@ export default async function MyPage(props: {
   const { saved } = await props.searchParams;
   const isHotdeal = user.role === "MERCHANT_HOTDEAL";
 
-  const [orders, weeklyOrders, reservationOrders, invoices, ar] =
+  const [orders, weeklyOrders, reservationOrders, invoices, ar, vis] =
     await Promise.all([
       prisma.order.findMany({
         where: { userId: user.id },
@@ -58,6 +59,8 @@ export default async function MyPage(props: {
         select: { date: true, status: true },
       }),
       receivableOf(user.id),
+      // 예약발주가 이 지점에 안 보이면(품목 제한 모드·지점 노출 off) 예약 행은 링크 없이 읽기만.
+      merchantVisibility(user),
     ]);
   // 날짜별 입금요청서 배지(ISSUED=입금요청, PAID=입금완료). 낱장 결제 여부는 매칭이 지점 단위라 알 수 없으므로
   // '지점 총미수'로만 판단(2026-08-05~): 미수가 남아 있으면 미입금 청구 날짜는 '입금 요청', 다 냈으면 '입금 완료'.
@@ -114,7 +117,7 @@ export default async function MyPage(props: {
   type Hist = {
     key: string;
     sortDate: string;
-    href: string;
+    href: string | null; // null = 링크 없는 읽기 행(예약발주가 안 보이는 지점의 예약 행)
     type: "일반" | "주간" | "예약";
     title: string;
     sub: string;
@@ -168,7 +171,7 @@ export default async function MyPage(props: {
       history.push({
         key: `r${r.id}`,
         sortDate: kstDateOf(r.createdAt),
-        href: `/reservations/${r.batchId}`,
+        href: vis.reservations ? `/reservations/${r.batchId}` : null,
         type: "예약",
         title: `픽업 ${labelDate(r.batch.pickupDate)}`,
         sub: `예약상품 ${r._count.items}건`,
@@ -263,18 +266,29 @@ export default async function MyPage(props: {
           </div>
         ) : isHotdeal ? (
           <div className="list">
-            {history.map((h) => (
-              <Link href={h.href} className="row" key={h.key}>
-                <div className="row__main">
-                  <div className="row__title">
-                    <span className={`histtype histtype--${h.type}`}>{h.type}</span>
-                    {h.title}
+            {history.map((h) => {
+              const body = (
+                <>
+                  <div className="row__main">
+                    <div className="row__title">
+                      <span className={`histtype histtype--${h.type}`}>{h.type}</span>
+                      {h.title}
+                    </div>
+                    <div className="row__sub">{h.sub}</div>
                   </div>
-                  <div className="row__sub">{h.sub}</div>
+                  {h.badge}
+                </>
+              );
+              return h.href ? (
+                <Link href={h.href} className="row" key={h.key}>
+                  {body}
+                </Link>
+              ) : (
+                <div className="row" key={h.key}>
+                  {body}
                 </div>
-                {h.badge}
-              </Link>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="list">

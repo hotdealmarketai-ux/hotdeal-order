@@ -1,4 +1,5 @@
-import { sendPushToRole } from "@/lib/push";
+import { sendPushToRole, sendPushToUser } from "@/lib/push";
+import { getRestrictConfig, restrictAppliesTo } from "@/lib/restrict-mode";
 import { prisma } from "@/lib/prisma";
 import { kstDateOf } from "@/lib/date";
 
@@ -20,6 +21,9 @@ const JOBS: Record<string, Job> = {
   deadline: { type: "deadline", title: "금일 발주가 마감되었습니다." },
   open: { type: "open", title: "지금부터 발주가 가능합니다." },
 };
+
+// 품목 제한 모드가 적용된 지점의 12시 발주 시작 알림 문구(그 외 알림·지점은 위 문구 그대로).
+const RESTRICTED_OPEN_TITLE = "오늘 발주 품목이 올라왔어요. 수량만 넣어 주세요.";
 
 // 시각 자동판별(수동 테스트용). 스케줄러는 ?type= 으로 명시 호출(지연돼도 정확).
 function pick(dow: number, h: number): Job | null {
@@ -59,11 +63,29 @@ export async function GET(request: Request) {
   }
 
   try {
-    await sendPushToRole("MERCHANT_HOTDEAL", {
-      title: job.title,
-      body: "",
-      url: "/order",
-    });
+    const cfg = job.type === "open" ? await getRestrictConfig() : null;
+    if (!cfg?.on) {
+      await sendPushToRole("MERCHANT_HOTDEAL", {
+        title: job.title,
+        body: "",
+        url: "/order",
+      });
+    } else {
+      // 제한 모드 켜짐 — 지점마다(시험 지점 모드) 문구만 나눠 보낸다. 받는 사람은 sendPushToRole 과 같다.
+      const users = await prisma.user.findMany({
+        where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
+        select: { id: true, role: true },
+      });
+      await Promise.all(
+        users.map((u) =>
+          sendPushToUser(u.id, {
+            title: restrictAppliesTo(cfg, u, atMs) ? RESTRICTED_OPEN_TITLE : job.title,
+            body: "",
+            url: "/order",
+          }),
+        ),
+      );
+    }
   } catch (err) {
     // 발송이 통째로 실패하면 선점을 되돌려 다음 실행에서 재시도(무음 유실 방지).
     await prisma.appMeta.deleteMany({ where: { key } }).catch(() => {});

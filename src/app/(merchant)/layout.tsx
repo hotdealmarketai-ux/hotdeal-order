@@ -4,6 +4,7 @@ import { weeklyReceivableOf } from "@/lib/weekly";
 import { canOrderWeekly } from "@/lib/constants";
 import { maintenanceOn } from "@/lib/maintenance";
 import { needsOnboarding } from "@/lib/onboarding";
+import { merchantVisibility } from "@/lib/restrict-mode";
 import { BottomNav } from "@/components/BottomNav";
 import { MaintenanceGate } from "@/components/MaintenanceGate";
 import { SessionHeartbeat } from "@/components/SessionHeartbeat";
@@ -36,11 +37,14 @@ export default async function MerchantLayout({
   // 탭 배지는 '지점 총미수(receivableOf)가 남아 있을 때만' 표시한다(2026-08-05~). 매칭·수동조정으로 다 갚으면
   // 배지가 사라진다. 계산서 status는 결제돼도 ISSUED로 남아(입금확인 폐지) count만으로는 완납 후에도 안 사라지므로,
   // 지점 미수 잔액으로 게이트한다(낱장 정산 추정은 이중납부 위험이라 하지 않음).
-  const [{ count, balance }, weekly] = await Promise.all([
+  // 품목 제한 모드가 이 지점에 적용 중이면 재고현황·예약발주 탭을 숨긴다(주간발주는 그대로).
+  // 예약발주 = 지점 '예약발주 노출' && 제한 아님. 판정은 restrict-mode.ts 하나만 쓴다.
+  const [{ count, balance }, weekly, vis] = await Promise.all([
     receivableOf(user.id),
     canOrderWeekly(user.role)
       ? weeklyReceivableOf(user.id)
       : Promise.resolve({ count: 0, balance: 0 }),
+    merchantVisibility(user),
   ]);
   // 배지는 '점(dot)'으로만 표시(BottomNav) — 계산서가 결제돼도 ISSUED로 남아 건수는 무의미하므로 숫자를 안 쓴다.
   // 값>0 이면 점이 켜진다: 마이=지점 미수 있음, 주간=지점 미수 있고 주간 계산서도 있을 때.
@@ -54,7 +58,8 @@ export default async function MerchantLayout({
         role={user.role}
         myBadge={owes ? 1 : 0}
         weeklyBadge={owes && weekly.count > 0 ? 1 : 0}
-        reservationEnabled={user.reservationEnabled}
+        reservationEnabled={vis.reservations}
+        inventoryEnabled={vis.inventory}
       />
     </div>
   );

@@ -11,11 +11,11 @@ import { ReceiptCard } from "@/components/ReceiptCard";
 
 export default async function AdminOrderDetail(props: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ edited?: string }>;
+  searchParams: Promise<{ edited?: string; warn?: string }>;
 }) {
   await requireAdmin();
   const { id } = await props.params;
-  const { edited } = await props.searchParams;
+  const { edited, warn } = await props.searchParams;
 
   const order = await prisma.order.findUnique({
     where: { id },
@@ -59,6 +59,12 @@ export default async function AdminOrderDetail(props: {
         {edited === "1" && (
           <div className="notice notice--ok" style={{ marginBottom: 14 }}>
             ✓ 발주가 수정되었어요. 점주와 받는 업체에 알림을 보냈어요.
+          </div>
+        )}
+        {edited === "1" && warn && (
+          // 관리자 대리 수정은 편성 상한(재고수량·지점당 최대·최소)을 넘어도 저장 — 무엇을 넘었는지 알려 준다(감사 기록에도 남음)
+          <div className="notice notice--error" style={{ marginBottom: 14 }}>
+            <b>편성 상한을 넘겨 저장했어요</b> · {String(warn).slice(0, 400)}
           </div>
         )}
         {order.status === "CANCELLED" && (

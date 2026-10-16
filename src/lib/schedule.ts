@@ -80,6 +80,54 @@ export function windowKeyAt(now: number = Date.now()): string {
   return `${p.y}-${mm}-${dd}`;
 }
 
+// ── 발주창 키 산술(품목 제한 모드 편성 달력·전날 불러오기용) ──────────────────
+// 키 = windowKeyAt 결과(KST YYYY-MM-DD). 일요일은 키가 되지 않는다(토요일이 토·일 한 창을 맡음).
+const KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function keyDow(key: string): number {
+  return new Date(`${key}T00:00:00Z`).getUTCDay(); // 0=일 ... 6=토
+}
+
+function shiftKey(key: string, days: number): string {
+  const t = Date.parse(`${key}T00:00:00Z`) + days * DAY_MS;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/** 유효한 발주창 키인가(형식이 맞고 실제 날짜이며 일요일이 아님). */
+export function isWindowKey(key: string): boolean {
+  if (!KEY_RE.test(key)) return false;
+  const t = Date.parse(`${key}T00:00:00Z`);
+  if (!Number.isFinite(t) || new Date(t).toISOString().slice(0, 10) !== key) return false;
+  return keyDow(key) !== 0;
+}
+
+/** 일요일이면 그 창의 키(토요일)로, 아니면 그대로. */
+export function normalizeWindowKey(key: string): string {
+  return KEY_RE.test(key) && keyDow(key) === 0 ? shiftKey(key, -1) : key;
+}
+
+/** 다음 발주창 키 — 토요일 다음은 월요일(일요일 건너뜀). */
+export function nextWindowKey(key: string): string {
+  const k = normalizeWindowKey(key);
+  return keyDow(k) === 6 ? shiftKey(k, 2) : shiftKey(k, 1);
+}
+
+/** 직전 발주창 키 — 월요일의 직전은 토요일(일요일 건너뜀). '전날 불러오기' 기준. */
+export function prevWindowKey(key: string): string {
+  const k = normalizeWindowKey(key);
+  return keyDow(k) === 1 ? shiftKey(k, -2) : shiftKey(k, -1);
+}
+
+/**
+ * 지금 기준 '다음에 시작하는' 발주창 키. 이번 창이 이미 시작했으면(정오 이후·주말 진행 중) 다음 창,
+ * 아직 정오 전이면 오늘 창. 품목 제한 모드 '다음 발주창부터 적용'의 기준.
+ */
+export function upcomingWindowKey(now: number = Date.now()): string {
+  const cur = windowKeyAt(now);
+  return now >= currentWindowStartUtc(now) ? nextWindowKey(cur) : cur;
+}
+
 /** 닫혀있을 때 다음 발주 시작(정오) instant */
 export function nextOpenUtc(now: number = Date.now()): number {
   for (let i = 0; i < 8; i++) {

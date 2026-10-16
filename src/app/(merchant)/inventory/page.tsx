@@ -9,11 +9,17 @@ import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
 import { lockedInventoryItemIds } from "@/lib/reservation-stock";
 import { MerchantInventoryList } from "@/components/MerchantInventoryList";
+import { needsOnboarding } from "@/lib/onboarding";
+import { requireInventoryVisible } from "@/lib/merchant-gate";
 
 // 재고현황 — 앱 기준(단방향 시트 미러, R3). '담기'로 오늘 발주(공구)에 자동 임시저장(#6).
 export default async function InventoryPage() {
   const user = await requireMerchant();
   if (!canViewInventory(user.role)) redirect("/order");
+  // 튜토리얼(오픈 준비) 중이면 다른 발주 페이지처럼 온보딩으로(기존 구멍 막기 — 주소로 들어와 담기 가능했음).
+  if (needsOnboarding(user)) redirect("/onboarding");
+  // 품목 제한 모드면 재고현황을 쉬고 발주 화면으로(안내 띠 n=restricted).
+  await requireInventoryVisible(user);
 
   const items = await prisma.inventoryItem.findMany({
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],

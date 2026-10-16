@@ -176,11 +176,16 @@ model Order {
   // 취소 복구도 이 값이 있을 때만(=이미 차감된 발주만) base를 되돌린다.
   stockDeductedAt DateTime?
 
+  // 발주창 키(schedule.windowKeyAt, 생성 시점 값). null=레거시(이 칸 생기기 전 발주).
+  // 품목 제한 모드의 편성 날짜·주말 토·일 한 창 묶음·담기원장(PLAN) 동기화 기준.
+  windowKey   String?
+
   items       OrderItem[]
   createdAt   DateTime    @default(now())
 
   @@index([vendorRole, createdAt])
   @@index([userId, createdAt])
+  @@index([windowKey, category])
 }
 
 model OrderItem {
@@ -198,6 +203,14 @@ model OrderItem {
   name String @default("") // 정리된 품목
   qty  String @default("") // 정리된 수량
   note String @default("") // 정리된 부연설명
+
+  // 품목 제한 모드 — 편성 품목 줄(OrderPlanItem.id, 느슨 참조). ""=일반 발주 줄.
+  // 전 지점 합계·지점당 상한을 이름 대신 이 번호로 센다(이름 변경·AI 개명에 안전).
+  planItemId      String @default("")
+  // 공구 재고연동 재고 id(InventoryItem.id, 느슨 참조). ""=없음. 계산서 불러오기가 이름보다 먼저 찾는다.
+  inventoryItemId String @default("")
+
+  @@index([planItemId])
 }
 
 // 주간발주 — 매주 토요일 12~20시 1회, 항시품목(과자류/유제품/건어물/계란) 카탈로그 체크리스트.
@@ -394,6 +407,8 @@ model StockHold {
   name       String // 스냅샷
   qty        Int      @default(0)
   windowDate String // 발주창 날짜 KST YYYY-MM-DD
+  // CART=재고현황 담기 · PLAN=품목 제한 모드 연동 공구 발주분(발주 저장 때 서버가 다시 맞춤, 손으로 조정 금지)
+  source     String   @default("CART")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -422,6 +437,49 @@ model FixedOrderItem {
   updatedAt DateTime @updatedAt
 
   @@index([category, sortOrder])
+}
+
+// 품목 제한 모드 — 날짜(발주창 키)×종류 편성 머리 행.
+//  · 행 있음 = 그날 그 종류 편성 완료(품목 0개면 '오늘 이 종류 발주 없음'으로 닫힘)
+//  · 행 없음 = 미편성 → 과일·야채·공구는 닫힘, 채움채는 4개 전부 노출
+//  · date = windowKeyAt(평일=그날, 토·일 한 창=토요일). 일요일 키는 쓰지 않는다.
+model OrderPlan {
+  id         String          @id @default(cuid())
+  date       String
+  category   String // FRUIT | VEG | TOOL | TOFU
+  hiddenSeqs String[]        @default([]) // 채움채 전용 — 그날 점주에게 숨긴 카탈로그 seq
+  updatedBy  String          @default("") // 마지막 저장 관리자 id
+  items      OrderPlanItem[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([date, category])
+  @@index([date])
+}
+
+// 품목 제한 모드 — 편성 품목 줄. 발주가 들어간 줄은 지우지 않고 숨긴다(발주 참조 보존).
+model OrderPlanItem {
+  id              String    @id @default(cuid())
+  planId          String
+  plan            OrderPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  date            String // 조회용 비정규화(plan.date)
+  category        String // 조회용 비정규화(plan.category)
+  name            String
+  description     String    @default("") // 점주 화면에만 보이는 설명(발주서엔 안 찍음)
+  stockQty        Int? // 전 지점 합계 상한. null=무제한, 0=품절. 연동 공구는 실재고와 작은 쪽
+  maxPerStore     Int? // 지점당 최대. null=무제한
+  minPerStore     Int? // 지점당 최소(MOQ, 공구만). null=없음
+  inventoryItemId String    @default("") // 공구 재고연동(""=수기). 연동이면 name=재고명으로 고정
+  supplyPrice     Int       @default(0) // 수기 공구의 계산서 공급가(연동은 재고 공급가 사용)
+  tax             String    @default("") // 수기 공구 과세/면세(TAXABLE | EXEMPT | "")
+  sortOrder       Int       @default(0)
+  hidden          Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([planId, sortOrder])
+  @@index([date, category])
+  @@index([inventoryItemId])
 }
 
 // 재고현황 — 새롭(본사)이 작성/구글시트 동기화, 핫딜마켓 가맹점만 열람

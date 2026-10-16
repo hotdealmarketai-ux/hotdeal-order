@@ -17,6 +17,7 @@ import {
 import { kstDateOf } from "@/lib/date";
 import { heldByItem, myHolds } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
+import { restrictModeFor } from "@/lib/restrict-mode";
 import { EditOrderForm } from "@/components/EditOrderForm";
 import type { ToolHold } from "@/components/OrderForm";
 import type { StockPickItem } from "@/components/StockPickerSheet";
@@ -32,6 +33,12 @@ export default async function EditOrderPage(props: {
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
   if (!order || order.userId !== user.id) notFound();
+
+  // 품목 제한 모드 — 핫딜 가맹점의 낱건 수정은 쓰지 않고, 그 발주창의 하루 수정 화면(편성 줄)으로 보낸다.
+  if (hasOrderWindow(user.role) && (await restrictModeFor(user))) {
+    const k = order.windowKey ?? windowKeyAt(order.createdAt.getTime());
+    redirect(`/order/day/${k}/edit`);
+  }
 
   const orderDate = kstDateOf(order.createdAt);
   const backHref = hasOrderWindow(user.role)

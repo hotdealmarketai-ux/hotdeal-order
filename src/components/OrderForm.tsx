@@ -32,6 +32,7 @@ import { FulfillmentPicker } from "./FulfillmentPicker";
 import { InlineStockStepper } from "./InlineStockStepper";
 import { StockPickerSheet, type StockPickItem } from "./StockPickerSheet";
 import { useLiveStock, refreshLiveStock } from "@/lib/useLiveStock";
+import { useLivePlan, refreshLivePlan, type LivePlanItem } from "@/lib/useLivePlan";
 import { expiryInfo } from "@/lib/date";
 import {
   CATEGORIES,
@@ -60,7 +61,57 @@ function isFilled(r: Row) {
   return !!(r.name.trim() || r.qty.trim() || r.note.trim());
 }
 
-export function OrderForm({
+// ── 품목 제한 모드(편성) 화면 데이터 ─────────────────────────
+// 서버(order/plan-view.ts)가 merchantPlanView 결과를 이 모양으로 추려 넘긴다.
+type PlanCatKey = "FRUIT" | "VEG" | "TOOL";
+const PLAN_CAT_KEYS: PlanCatKey[] = ["FRUIT", "VEG", "TOOL"];
+export type PlanFormItem = {
+  id: string;
+  category: PlanCatKey;
+  name: string;
+  description: string;
+  maxPerStore: number | null;
+  minPerStore: number | null;
+  linked: boolean;
+  hidden: boolean;
+  mine: number; // 이 지점이 이번 창에 이미 넣은 수량
+  remaining: number | null; // 전 지점 기준 남은 수량(null=무제한)
+  maxForMe: number | null; // 이 지점 최대(내 수량 포함, null=무제한)
+};
+export type PlanFormView = {
+  windowKey: string;
+  cats: Record<PlanCatKey, { exists: boolean; items: PlanFormItem[] }>;
+};
+/** 채움채 선택지 — 그날 보이는 품목(+수정 화면은 이미 발주한 숨김 품목, hiddenOrdered=true). */
+export type TofuChoice = { seq: string; name: string; hiddenOrdered?: boolean };
+
+type RestrictProps = {
+  /** 품목 제한 모드 적용 중 — 참일 때만 편성 화면으로 그린다(거짓이면 기존 화면 그대로). */
+  restricted?: boolean;
+  planView?: PlanFormView;
+  /** modeStamp(true, 발주창 키) — 서버가 다시 계산해 비교 */
+  restrictStamp?: string;
+  tofuList?: TofuChoice[];
+  /** 수정 화면 시드 — 편성 품목 번호 → 이미 넣은 수량 */
+  initialPlanQty?: Record<string, number>;
+  /** 수정 화면 — 편성 번호 없는 옛 줄(읽기 전용 '이전 방식 발주 · 그대로 유지') */
+  legacyRowsByCat?: Partial<Record<PlanCatKey, { name: string; qty: string }[]>>;
+  /** 임시 저장 주인(지점 user.id) — 한 기기에서 다른 지점으로 바꿔 들어가면 앞 지점 수량을 되살리지 않는다. */
+  draftOwner?: string;
+};
+
+type FreeOrderFormProps = Parameters<typeof FreeOrderForm>[0];
+
+/**
+ * 발주 폼. restricted(품목 제한 모드)면 편성 화면, 아니면 지금까지의 자유 입력 화면(그대로).
+ * 두 화면은 상태를 따로 가진 별개 컴포넌트 — 꺼짐 경로는 한 줄도 달라지지 않는다.
+ */
+export function OrderForm(props: FreeOrderFormProps & RestrictProps) {
+  if (props.restricted) return <RestrictedOrderForm {...props} />;
+  return <FreeOrderForm {...props} />;
+}
+
+function FreeOrderForm({
   categories,
   needsPickup,
   needsFulfillment = false,
@@ -1021,6 +1072,740 @@ export function OrderForm({
                   );
                 })()}
               </div>
+
+              <div className="sheet__foot">
+                <div className="sheet__count">총 {totalItems}건</div>
+                <SubmitButton pendingText={editMode ? "수정 중…" : "발주 넣는 중…"}>
+                  {editMode ? "네, 수정할게요" : "네, 발주할게요"}
+                </SubmitButton>
+              </div>
+            </div>
+          </div>
+        )}
+      </fieldset>
+    </form>
+  );
+}
+
+// ============================================================
+//  품목 제한 모드 — 편성 발주 화면(restricted 일 때만)
+//  · 과일·야채·공구 = 관리자가 그날 편성한 품목 줄에 수량만(− [숫자] +, 정수). 비고 입력 없음(사장님 결정).
+//  · 채움채 = 그날 보이는 품목만(수정 화면은 이미 발주한 숨김 품목 포함). 입력·payload 형식은 기존 그대로.
+//  · 서버로는 hidden restrictStamp + planLines([{p,q}] q>0). payload 의 FRUIT/VEG/TOOL 은 비워 보낸다.
+//  · 남은 수량·최대는 useLivePlan(4초)으로 실시간 갱신. AI 정리 없음(품목명은 편성 그대로).
+// ============================================================
+
+type LineErr = { message: string; maxAllowed?: number | null };
+// 서버(order.ts)가 OrderFormState 에 lineErrors 를 더하기 전에도 받을 수 있게 로컬 확장.
+type RestrictState = OrderFormState & { lineErrors?: Record<string, LineErr> };
+
+const PLAN_DRAFT_KEY = "orderDraft_plan_v1";
+const EMPTY_PLAN_VIEW: PlanFormView = {
+  windowKey: "",
+  cats: {
+    FRUIT: { exists: false, items: [] },
+    VEG: { exists: false, items: [] },
+    TOOL: { exists: false, items: [] },
+  },
+};
+
+/** 숫자만 남겨 정수로(빈칸·0·이상값 = 0). */
+function toInt(s: string | undefined | null): number {
+  const n = parseInt(String(s ?? "").replace(/\D/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function qtyText(q: string): string {
+  const t = (q || "").trim();
+  return /^\d+$/.test(t) ? `${t}개` : t;
+}
+
+type LineView = {
+  remaining: number | null; // 전 지점 기준 남은(null=무제한)
+  mine: number; // 서버에 이미 들어간 내 수량
+  cap: number | null; // 이 줄에 둘 수 있는 최대(null=무제한)
+  ended: boolean; // 판매 종료(숨김·편성에서 빠짐) — 줄이기만
+  soldOut: boolean; // 마감(남은 0 + 내 것 0)
+};
+
+function lineView(it: PlanFormItem, l: LivePlanItem | null | undefined): LineView {
+  // l: undefined = 실시간 값 아직 없음(화면 값), null = 서버 목록에서 빠짐(판매 종료)
+  const base = l ? l : { remaining: it.remaining, maxForMe: it.maxForMe, mine: it.mine };
+  const gone = l === null;
+  const ended = it.hidden || gone;
+  const mine = gone ? 0 : base.mine;
+  const cap = ended ? mine : base.maxForMe;
+  const soldOut = !ended && base.remaining === 0 && mine === 0;
+  return { remaining: base.remaining, mine, cap, ended, soldOut };
+}
+
+function RestrictedOrderForm({
+  categories,
+  needsPickup,
+  needsFulfillment = false,
+  address = "",
+  locked = false,
+  role,
+  reservedTool = [],
+  reservedLabel = "",
+  editDate = "",
+  initialTofuQty,
+  initialPickup = "",
+  initialFulfillment = "",
+  planView,
+  restrictStamp = "",
+  tofuList = [],
+  initialPlanQty,
+  legacyRowsByCat,
+  draftOwner = "",
+}: FreeOrderFormProps & RestrictProps) {
+  const editMode = !!editDate;
+  const view = planView ?? EMPTY_PLAN_VIEW;
+  const windowKey = view.windowKey;
+  const hasTofu = categories.includes("TOFU");
+
+  const [active, setActive] = useState<Category>(categories[0]);
+  const [planQty, setPlanQty] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const [id, q] of Object.entries(initialPlanQty ?? {})) if (q > 0) out[id] = String(q);
+    return out;
+  });
+  const [tofuQty, setTofuQty] = useState<Record<string, string>>(() => initialTofuQty ?? {});
+  const [pickup, setPickup] = useState(initialPickup);
+  const [fulfillment, setFulfillment] = useState<"" | Fulfillment>(initialFulfillment);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmTab, setConfirmTab] = useState<Category>(categories[0]);
+  const [localError, setLocalError] = useState("");
+  // 줄별 즉시 안내(최대에 맞췄어요 등) / 서버 오류 뒤 손댄 줄(그 줄 오류는 숨김)
+  const [notice, setNotice] = useState<Record<string, string>>({});
+  const [touched, setTouched] = useState<Record<string, true>>({});
+  const [state, formAction] = useActionState<OrderFormState, FormData>(
+    editMode ? updateDayOrderAction : createOrderAction,
+    {},
+  );
+  const lineErrors: Record<string, LineErr> = (state as RestrictState)?.lineErrors ?? {};
+  const live = useLivePlan(true);
+  const planMissing = !planView; // 편성을 못 읽음(서버 오류) — 자유 입력으로 떨어지지 않게 안내만
+
+  const allItems = useMemo(
+    () => PLAN_CAT_KEYS.filter((c) => categories.includes(c)).flatMap((c) => view.cats[c].items),
+    [view, categories],
+  );
+  const itemById = useMemo(() => new Map(allItems.map((i) => [i.id, i])), [allItems]);
+  const knownIds = useMemo(() => new Set(allItems.map((i) => i.id)), [allItems]);
+  const lv = (it: PlanFormItem) => lineView(it, live.itemOf(it.id));
+  const qtyOf = (id: string) => toInt(planQty[id]);
+  const minOf = (it: PlanFormItem) => (it.minPerStore && it.minPerStore > 1 ? it.minPerStore : 0);
+
+  // 서버 응답이 오면(렌더 중 비교): 줄별 오류가 있으면 시트를 닫고 첫 오류 줄의 종류 탭으로.
+  const [seenState, setSeenState] = useState(state);
+  if (state !== seenState) {
+    setSeenState(state);
+    setTouched({});
+    const ids = Object.keys((state as RestrictState)?.lineErrors ?? {});
+    if (ids.length > 0) {
+      setConfirming(false);
+      const first = itemById.get(ids[0]);
+      if (first) setActive(first.category);
+    }
+  }
+  // 줄별 오류가 오면 남은 수량을 바로 다시 읽는다(다른 지점이 먼저 넣은 경우).
+  useEffect(() => {
+    if (Object.keys((state as RestrictState)?.lineErrors ?? {}).length > 0) refreshLivePlan();
+  }, [state]);
+
+  // ── 임시 저장(초안) — 같은 지점·같은 발주창·같은 모드 표식일 때만 복원, 다르면 버림. 수정 화면은 쓰지 않음. ──
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    if (editMode || !windowKey) return;
+    try {
+      const raw = localStorage.getItem(PLAN_DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (!d || d.windowKey !== windowKey || d.stamp !== restrictStamp || (d.owner ?? "") !== draftOwner) {
+        localStorage.removeItem(PLAN_DRAFT_KEY);
+        return;
+      }
+      if (d.planQty && typeof d.planQty === "object") {
+        const next: Record<string, string> = {};
+        for (const [id, v] of Object.entries(d.planQty as Record<string, unknown>)) {
+          const q = toInt(String(v ?? ""));
+          if (q > 0 && knownIds.has(id)) next[id] = String(q); // 편성에서 빠진 품목은 버림
+        }
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 초안 복원(기존 화면과 같은 방식)
+        setPlanQty(next);
+      }
+      if (d.tofuQty && typeof d.tofuQty === "object") {
+        const seqs = new Set(tofuList.map((p) => p.seq));
+        const next: Record<string, string> = {};
+        for (const [seq, v] of Object.entries(d.tofuQty as Record<string, unknown>)) {
+          if (seqs.has(seq) && typeof v === "string") next[seq] = v; // 숨긴 채움채는 되살리지 않음
+        }
+        setTofuQty(next);
+      }
+      if (typeof d.pickup === "string") setPickup(d.pickup);
+      if (typeof d.fulfillment === "string") setFulfillment(d.fulfillment as Fulfillment);
+    } catch {
+      /* noop */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!restored.current || editMode || !windowKey) return;
+    try {
+      const hasAny =
+        Object.values(planQty).some((v) => toInt(v) > 0) ||
+        Object.values(tofuQty).some((v) => v && v.trim()) ||
+        !!pickup ||
+        !!fulfillment;
+      if (hasAny) {
+        localStorage.setItem(
+          PLAN_DRAFT_KEY,
+          JSON.stringify({ windowKey, stamp: restrictStamp, owner: draftOwner, planQty, tofuQty, pickup, fulfillment }),
+        );
+      } else {
+        localStorage.removeItem(PLAN_DRAFT_KEY);
+      }
+    } catch {
+      /* noop */
+    }
+  }, [planQty, tofuQty, pickup, fulfillment, windowKey, restrictStamp, draftOwner, editMode]);
+
+  // ── 수량 바꾸기 ─────────────────────────────────────────────
+  function setLine(it: PlanFormItem, raw: number, kind: "plus" | "minus" | "type" | "set") {
+    const v = lv(it);
+    const min = minOf(it);
+    const cur = qtyOf(it.id);
+    let n = Math.max(0, Math.floor(raw));
+    if (kind === "plus" && cur === 0 && min > 0) n = min; // 최소 수량 품목은 0에서 + 누르면 바로 최소로
+    if (kind === "minus" && min > 0 && cur <= min) n = 0; // 최소에서 − 누르면 0으로
+    let msg = "";
+    if (v.cap !== null && n > v.cap && kind !== "minus") {
+      if (min > 0 && v.cap < min && v.cap > 0) {
+        msg = `남은 수량(${v.cap}개)이 최소 ${min}개보다 적어 지금은 넣을 수 없어요.`;
+        n = Math.min(cur, v.cap);
+      } else {
+        n = v.cap;
+        msg =
+          v.cap > 0
+            ? `최대 ${v.cap}개까지예요.`
+            : v.ended
+              ? "판매가 끝난 품목이라 더 넣을 수 없어요."
+              : "남은 수량이 없어요.";
+      }
+    }
+    setPlanQty((p) => ({ ...p, [it.id]: n > 0 ? String(n) : "" }));
+    setNotice((p) => ({ ...p, [it.id]: msg }));
+    setTouched((p) => ({ ...p, [it.id]: true }));
+    setConfirming(false);
+    setLocalError("");
+  }
+
+  // ── 서버로 보낼 것 ──────────────────────────────────────────
+  const planLines = useMemo(
+    () =>
+      allItems
+        .map((it) => ({ p: it.id, q: toInt(planQty[it.id]) }))
+        .filter((l) => l.q > 0),
+    [allItems, planQty],
+  );
+  const tofuItems = useMemo(
+    () =>
+      hasTofu
+        ? tofuList
+            .filter((p) => (tofuQty[p.seq] ?? "").trim())
+            .map((p) => ({ name: p.name, qty: (tofuQty[p.seq] ?? "").trim(), note: "" }))
+        : [],
+    [hasTofu, tofuList, tofuQty],
+  );
+  // 기존 payload 형식 — 채움채만. 과일·야채·공구는 planLines 로만(서버가 payload 의 세 종류는 무시).
+  const payload = useMemo(
+    () => (tofuItems.length > 0 ? [{ category: "TOFU", items: tofuItems }] : []),
+    [tofuItems],
+  );
+
+  const legacyOf = (c: Category): { name: string; qty: string }[] =>
+    c === "FRUIT" || c === "VEG" || c === "TOOL" ? legacyRowsByCat?.[c] ?? [] : [];
+  const legacyCount = PLAN_CAT_KEYS.reduce((n, c) => n + legacyOf(c).length, 0);
+
+  const countByCat = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const l of planLines) {
+      const c = itemById.get(l.p)?.category;
+      if (c) m[c] = (m[c] ?? 0) + 1;
+    }
+    if (tofuItems.length > 0) m.TOFU = tofuItems.length;
+    return m;
+  }, [planLines, tofuItems, itemById]);
+  // 화면 표시용 — 공구는 예약분(읽기 전용), 각 종류는 이전 방식 줄까지 합쳐 건수 표시.
+  const shownCount = (c: Category) =>
+    (countByCat[c] ?? 0) + legacyOf(c).length + (c === "TOOL" ? reservedTool.length : 0);
+  const totalItems = planLines.length + tofuItems.length + legacyCount;
+
+  const multi = categories.length > 1;
+  const sheetCats = categories.filter((c) => shownCount(c) > 0);
+  const activeConfirm = sheetCats.includes(confirmTab) ? confirmTab : sheetCats[0] ?? categories[0];
+  // 수정 화면 — 원래 넣었다가 전부 비운 종류(저장하면 그 종류 발주가 지워진다)
+  const removedCats = editMode
+    ? categories.filter((c) => {
+        if (shownCount(c) > 0) return false;
+        if (c === "TOFU") return Object.values(initialTofuQty ?? {}).some((v) => v && v.trim());
+        return Object.entries(initialPlanQty ?? {}).some(([id, q]) => q > 0 && itemById.get(id)?.category === c);
+      })
+    : [];
+
+  // 실시간 조회로 알게 된 '화면이 낡음' — 새로고침 안내
+  let staleMsg = "";
+  if (live.ready) {
+    if (!live.restricted) staleMsg = "발주 방식이 바뀌었어요. 새로고침해 주세요.";
+    else if (live.windowKey && windowKey && live.windowKey !== windowKey)
+      staleMsg = "발주 날짜가 바뀌었어요. 새로고침해 주세요.";
+    else if (live.unknownCount(knownIds) > 0) staleMsg = "새 발주 품목이 추가됐어요. 새로고침하면 보여요.";
+  }
+
+  function handleConfirmClick() {
+    if (planLines.length + tofuItems.length + legacyCount === 0) {
+      setLocalError("발주할 품목의 수량을 한 개 이상 넣어 주세요.");
+      return;
+    }
+    for (const l of planLines) {
+      const it = itemById.get(l.p);
+      if (!it) continue;
+      const min = minOf(it);
+      if (min > 0 && l.q < min) {
+        setActive(it.category);
+        setLocalError(`‘${it.name}’은(는) ${min}개부터 발주할 수 있어요. ${min}개 이상으로 넣거나 0으로 빼 주세요.`);
+        return;
+      }
+    }
+    if (needsFulfillment && !fulfillment) {
+      setLocalError("직접 픽업 또는 배송을 선택해 주세요.");
+      return;
+    }
+    setLocalError("");
+    setConfirming(true);
+  }
+
+  // ── 그리기 ─────────────────────────────────────────────────
+  function renderLine(it: PlanFormItem) {
+    const v = lv(it);
+    const q = qtyOf(it.id);
+    const min = minOf(it);
+    const serverErr = !touched[it.id] ? lineErrors[it.id] : undefined;
+    const over = v.cap !== null && q > v.cap;
+    const closedLook = v.soldOut && q === 0;
+    const addLocked = locked || v.soldOut || (v.cap !== null && q >= v.cap);
+    const fixLabel = (n: number) => (n > 0 ? "최대로 맞추기" : "빼기");
+    return (
+      <div
+        className={`plline${q > 0 ? " is-on" : ""}${closedLook ? " is-closed" : ""}${serverErr ? " has-error" : ""}`}
+        key={it.id}
+      >
+        <div className="plline__top">
+          <div className="plline__info">
+            <div className="plline__name">
+              {it.name}
+              {v.soldOut && <span className="pltag pltag--closed">마감</span>}
+              {v.ended && <span className="pltag pltag--end">판매 종료 · 줄이기만</span>}
+            </div>
+            {it.description && <div className="plline__desc">{it.description}</div>}
+            {((v.remaining !== null && !v.ended) || it.maxPerStore !== null || min > 0) && (
+              <div className="plline__meta">
+                {v.remaining !== null && !v.ended && (
+                  <span className={`plmeta plmeta--left${v.remaining === 0 ? " plmeta--low" : ""}`}>
+                    남은 {v.remaining}개
+                  </span>
+                )}
+                {it.maxPerStore !== null && <span className="plmeta">지점당 최대 {it.maxPerStore}개</span>}
+                {min > 0 && <span className="plmeta">{min}개부터</span>}
+              </div>
+            )}
+          </div>
+          <div className="plstep" role="group" aria-label={`${it.name} 수량`}>
+            <button
+              type="button"
+              className="plstep__btn"
+              aria-label="빼기"
+              disabled={locked || q <= 0}
+              onClick={() => setLine(it, q - 1, "minus")}
+            >
+              −
+            </button>
+            <input
+              className="plstep__val"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label={`${it.name} 수량`}
+              value={planQty[it.id] ?? ""}
+              placeholder="0"
+              disabled={locked || closedLook}
+              onFocus={(e) => e.currentTarget.select()}
+              onChange={(e) => {
+                const s = e.target.value.replace(/\D/g, "");
+                if (!s) {
+                  setLine(it, 0, "set");
+                  return;
+                }
+                setLine(it, toInt(s), "type");
+              }}
+            />
+            <button
+              type="button"
+              className="plstep__btn"
+              aria-label="더하기"
+              disabled={addLocked}
+              onClick={() => setLine(it, q + 1, "plus")}
+            >
+              +
+            </button>
+          </div>
+        </div>
+        {notice[it.id] && <div className="plmsg plmsg--warn">{notice[it.id]}</div>}
+        {min > 0 && q > 0 && q < min && (
+          <div className="plmsg plmsg--warn">{min}개부터예요. {min}개 이상으로 넣거나 0으로 빼 주세요.</div>
+        )}
+        {over && !serverErr && v.cap !== null && (
+          <div className="plmsg plmsg--warn">
+            <span>
+              {v.cap > 0
+                ? `지금은 최대 ${v.cap}개까지 넣을 수 있어요.`
+                : v.ended
+                  ? "판매가 끝난 품목이에요. 빼 주세요."
+                  : "다른 지점 발주로 남은 수량이 없어요. 빼 주세요."}
+            </span>
+            <button type="button" className="plmsg__btn" onClick={() => setLine(it, v.cap ?? 0, "set")}>
+              {fixLabel(v.cap)}
+            </button>
+          </div>
+        )}
+        {serverErr && (
+          <div className="plmsg plmsg--err">
+            <span>{serverErr.message}</span>
+            {serverErr.maxAllowed !== undefined && serverErr.maxAllowed !== null && (
+              <button
+                type="button"
+                className="plmsg__btn"
+                onClick={() => setLine(it, serverErr.maxAllowed ?? 0, "set")}
+              >
+                {fixLabel(serverErr.maxAllowed)}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderPlanCat(c: PlanCatKey) {
+    const cat = view.cats[c];
+    const legacy = legacyOf(c);
+    return (
+      <div className="toolro">
+        {c === "TOOL" && reservedTool.length > 0 && (
+          <div className="toolro__group">
+            <div className="toolro__head">
+              <span className="chip chip--reserve">예약분</span>
+              <span className="toolro__hint">{reservedLabel ? `${reservedLabel} · ` : ""}수정 불가</span>
+            </div>
+            {reservedTool.map((it, i) => (
+              <div className="toolro__item" key={`rv${i}`}>
+                <span className="toolro__name">{it.name}</span>
+                <span className="toolro__qty">{it.qty}개</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {legacy.length > 0 && (
+          <div className="toolro__group">
+            <div className="toolro__head">
+              <span className="chip">이전 방식 발주</span>
+              <span className="toolro__hint">그대로 유지 · 여기서는 고칠 수 없어요</span>
+            </div>
+            {legacy.map((r, i) => (
+              <div className="toolro__item" key={`lg${i}`}>
+                <span className="toolro__name">{r.name}</span>
+                <span className="plro__qty">{qtyText(r.qty)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {!cat.exists || cat.items.length === 0 ? (
+          <div className="plempty">오늘은 {CATEGORIES[c].label} 발주 품목이 없어요</div>
+        ) : (
+          <div className="pllist">{cat.items.map(renderLine)}</div>
+        )}
+      </div>
+    );
+  }
+
+  function renderTofu() {
+    if (tofuList.length === 0) {
+      return <div className="plempty">오늘은 {CATEGORIES.TOFU.label} 발주 품목이 없어요</div>;
+    }
+    return (
+      <div className="tofulist">
+        {tofuList.map((p) => {
+          const q = tofuQty[p.seq] ?? "";
+          // 숨긴 품목은 이미 넣은 수량까지만(줄이기만) — 서버도 같은 규칙으로 거절한다.
+          const hiddenCap = p.hiddenOrdered ? toInt(initialTofuQty?.[p.seq]) : null;
+          return (
+            <div className={`tofuitem ${q.trim() ? "is-on" : ""}`} key={p.seq}>
+              <span className="tofuitem__name">
+                {p.name}
+                {p.hiddenOrdered && <span className="tofuitem__tag">숨김 · 줄이기만</span>}
+              </span>
+              <input
+                className="input tofuitem__qty"
+                inputMode="numeric"
+                aria-label={`${p.name} 수량`}
+                value={q}
+                onChange={(e) => {
+                  setConfirming(false);
+                  let v = e.target.value;
+                  if (hiddenCap !== null && toInt(v) > hiddenCap) v = String(hiddenCap);
+                  setTofuQty((prev) => ({ ...prev, [p.seq]: v }));
+                }}
+                placeholder="수량"
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderConfirmCat(c: Category) {
+    if (c === "TOFU") {
+      if (tofuItems.length === 0) return null;
+      return (
+        <div className="confsec">
+          <div className="confsec__head">
+            <span className="chip">{CATEGORIES[c].label}</span>
+            <span className="confsec__dest">
+              {receiverLabel(c, role)} · {tofuItems.length}건
+            </span>
+          </div>
+          {tofuItems.map((t) => (
+            <div className="plconf" key={t.name}>
+              <span className="plconf__name">{t.name}</span>
+              <span className="plconf__qty">{qtyText(t.qty)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    if (c !== "FRUIT" && c !== "VEG" && c !== "TOOL") return null;
+    const lines = planLines
+      .map((l) => ({ l, it: itemById.get(l.p) }))
+      .filter((x): x is { l: { p: string; q: number }; it: PlanFormItem } => !!x.it && x.it.category === c);
+    const legacy = legacyOf(c);
+    const reserved = c === "TOOL" ? reservedTool : [];
+    if (lines.length + legacy.length + reserved.length === 0) return null;
+    return (
+      <div className="confsec">
+        <div className="confsec__head">
+          <span className="chip">{CATEGORIES[c].label}</span>
+          <span className="confsec__dest">
+            {receiverLabel(c, role)} · {lines.length + legacy.length + reserved.length}건
+          </span>
+        </div>
+        {lines.map(({ l, it }) => {
+          const v = lv(it);
+          return (
+            <div className="plconf" key={it.id}>
+              <span className="plconf__name">
+                {it.name}
+                {v.remaining !== null && !v.ended && <span className="plconf__left">남은 {v.remaining}개</span>}
+              </span>
+              <span className="plconf__qty">{l.q}개</span>
+            </div>
+          );
+        })}
+        {legacy.map((r, i) => (
+          <div className="plconf" key={`lg${i}`}>
+            <span className="plconf__name">
+              {r.name}
+              <span className="plconf__left">이전 방식 발주 · 그대로 유지</span>
+            </span>
+            <span className="plconf__qty">{qtyText(r.qty)}</span>
+          </div>
+        ))}
+        {reserved.map((r, i) => (
+          <div className="plconf" key={`rv${i}`}>
+            <span className="plconf__name">
+              {r.name}
+              <span className="plconf__left">예약분 · 수정 불가</span>
+            </span>
+            <span className="plconf__qty">{r.qty}개</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <form action={formAction}>
+      <input type="hidden" name="payload" value={JSON.stringify(payload)} />
+      <input type="hidden" name="preNormalized" value="1" />
+      <input type="hidden" name="source" value="grid" />
+      <input type="hidden" name="restrictStamp" value={restrictStamp} />
+      <input type="hidden" name="planLines" value={JSON.stringify(planLines)} />
+      {needsPickup && <input type="hidden" name="pickupTime" value={pickup} />}
+      {editMode && <input type="hidden" name="date" value={editDate} />}
+
+      {locked && (
+        <div className="notice notice--mute" style={{ marginBottom: 14 }}>
+          지금은 발주 가능 시간이 아니에요. 발주 시작 시간에 다시 입력해 주세요.
+        </div>
+      )}
+
+      {planMissing && (
+        <div className="plstale" role="status">
+          <span>발주 품목을 불러오지 못했어요. 잠시 후 새로고침해 주세요.</span>
+          <button type="button" className="plstale__btn" onClick={() => window.location.reload()}>
+            새로고침
+          </button>
+        </div>
+      )}
+
+      {staleMsg && (
+        <div className="plstale" role="status">
+          <span>{staleMsg}</span>
+          <button type="button" className="plstale__btn" onClick={() => window.location.reload()}>
+            새로고침
+          </button>
+        </div>
+      )}
+
+      {(state?.error || localError) && (
+        <div className="notice notice--error" style={{ marginBottom: 12 }}>
+          {state?.error || localError}
+        </div>
+      )}
+
+      <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        {needsFulfillment && (
+          <FulfillmentPicker value={fulfillment} onChange={setFulfillment} address={address} />
+        )}
+
+        {multi && (
+          <div className="cattabs cattabs--seg">
+            {categories.map((c) => {
+              const n = shownCount(c);
+              return (
+                <button
+                  type="button"
+                  key={c}
+                  className={`cattab ${active === c ? "is-active" : ""}`}
+                  onClick={() => setActive(c)}
+                >
+                  {CATEGORIES[c].label}
+                  {n > 0 && <span className="cattab__count">{n}</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {needsPickup && (
+          <div className="field">
+            <label className="label" htmlFor="pickup">
+              픽업 시간
+            </label>
+            <input
+              id="pickup"
+              className="input"
+              value={pickup}
+              onChange={(e) => setPickup(e.target.value)}
+              placeholder="오전 7시 30분"
+            />
+          </div>
+        )}
+
+        <div className="itemshead">
+          <span className="itemshead__label">{multi ? "발주 품목" : receiverLabel(active, role)}</span>
+          {shownCount(active) > 0 && <span className="itemshead__count">{shownCount(active)}건</span>}
+        </div>
+
+        {active === "TOFU"
+          ? renderTofu()
+          : active === "FRUIT" || active === "VEG" || active === "TOOL"
+            ? renderPlanCat(active)
+            : null}
+
+        <div className="ctabar">
+          <button
+            type="button"
+            className="btn btn--primary btn--block"
+            disabled={locked || planMissing}
+            onClick={handleConfirmClick}
+          >
+            {`${editMode ? "수정 확정" : "발주 확정"}${totalItems > 0 ? ` · ${totalItems}건` : ""}`}
+          </button>
+        </div>
+
+        {confirming && (
+          <div
+            className="sheet"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setConfirming(false);
+            }}
+          >
+            <div className="sheet__panel">
+              <div className="sheet__head">
+                <div className="sheet__title">{editMode ? "이대로 수정할까요?" : "이대로 발주할까요?"}</div>
+                <button
+                  type="button"
+                  className="sheet__close"
+                  aria-label="닫기"
+                  onClick={() => setConfirming(false)}
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="sheet__hint">품목과 수량을 확인해 주세요. 고칠 게 있으면 닫고 고친 뒤 다시 눌러 주세요.</p>
+
+              {needsFulfillment && fulfillment && (
+                <div className="sheet__fulfill">
+                  <span className="sheet__fulfillk">{FULFILLMENT_LABEL[fulfillment]}</span>
+                  {fulfillment === "DELIVERY" && address && <span className="sheet__fulfillv">{address}</span>}
+                </div>
+              )}
+
+              {(state?.error || localError) && (
+                <div className="notice notice--error" style={{ marginBottom: 10 }}>
+                  {state?.error || localError}
+                </div>
+              )}
+
+              {removedCats.length > 0 && (
+                <div className="notice notice--mute" style={{ marginBottom: 10 }}>
+                  {removedCats.map((c) => CATEGORIES[c].label).join(" · ")} 발주는 모두 빠져요. 저장하면 그 발주가 지워져요.
+                </div>
+              )}
+
+              {sheetCats.length > 1 && (
+                <div className="cattabs cattabs--seg" style={{ marginBottom: 4 }}>
+                  {sheetCats.map((c) => (
+                    <button
+                      type="button"
+                      key={c}
+                      className={`cattab ${activeConfirm === c ? "is-active" : ""}`}
+                      onClick={() => setConfirmTab(c)}
+                    >
+                      {CATEGORIES[c].label}
+                      <span className="cattab__count">{shownCount(c)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="sheet__body">{renderConfirmCat(activeConfirm)}</div>
 
               <div className="sheet__foot">
                 <div className="sheet__count">총 {totalItems}건</div>

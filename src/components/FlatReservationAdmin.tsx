@@ -177,19 +177,18 @@ export function FlatReservationAdmin({
       fd.set("supplyPrice", f.price || "0"); // 세트면 서버가 구성품 합으로 덮어씀
       fd.set("inventoryItemId", isSet ? "" : f.invId);
       fd.set("stockFixed", anyLinked && f.fixed ? "true" : "false");
-      if (isSet) {
-        fd.set(
-          "components",
-          JSON.stringify(
-            comps.map((c) => ({
-              name: c.name.trim(),
-              inventoryItemId: c.invId,
-              qtyPerUnit: parseInt(c.qtyPerUnit || "1", 10) || 1,
-              supplyPrice: parseInt(c.price || "0", 10) || 0,
-            })),
-          ),
-        );
-      }
+      // 이 폼은 구성품을 '관리'하므로 항상 보낸다(비어있으면 "[]" = 단일 상품으로 명시 → 세트↔단일 전환도 반영).
+      fd.set(
+        "components",
+        JSON.stringify(
+          comps.map((c) => ({
+            name: c.name.trim(),
+            inventoryItemId: c.invId,
+            qtyPerUnit: parseInt(c.qtyPerUnit || "1", 10) || 1,
+            supplyPrice: parseInt(c.price || "0", 10) || 0,
+          })),
+        ),
+      );
       const res = await saveFlatProductAction({}, fd);
       if (res?.error) return setErr(res.error);
       reset();

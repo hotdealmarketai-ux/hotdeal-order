@@ -53,6 +53,9 @@ export default async function AdminEditOrderPage(props: {
     name: it.rawName,
     qty: it.rawQty,
     note: it.rawNote,
+    // 편성 품목·재고 번호 — 폼이 들고 다니다 저장 때 그대로 돌려보낸다
+    planItemId: it.planItemId,
+    inventoryItemId: it.inventoryItemId,
   }));
 
   // 공구(TOOL) 수정 — 재고 검색 팝업용 재고현황 품목(남은 재고 = base − Σ담기홀드).

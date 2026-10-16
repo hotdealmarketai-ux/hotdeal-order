@@ -7,31 +7,30 @@ import { requireAdmin } from "@/lib/session";
 import { windowKeyAt } from "@/lib/schedule";
 import { writeAudit } from "@/lib/audit";
 import { logError } from "@/lib/log";
+import { PLAN_HOLD_LOCKED, reservationHoldRows } from "@/lib/holds";
 
 export type AdminHoldResult = { ok: boolean; error?: string; qty?: number };
 
-// 이 품목의 '이 홀드를 뺀 나머지 담기(일일+예약)' 합 — base에서 빼면 이 홀드가 올릴 수 있는 최대.
-// 초과판매 방지: 두 소스(StockHold·연동 예약)가 같은 기준재고를 소비하므로 함께 센다.
+// 이 품목의 '이 홀드를 뺀 나머지 담기(일일+발주분+예약)' 합 — base에서 빼면 이 홀드가 올릴 수 있는 최대.
+// 초과판매 방지: 세 소스(StockHold CART·PLAN, 연동 예약)가 같은 기준재고를 소비하므로 함께 센다.
+// 예약은 담기 현황·점주 화면과 같은 규칙(reservationHeldByItem: 픽업 10시 전 + 세트 구성품 전개)으로 센다.
 async function othersHeldForItem(
   tx: Prisma.TransactionClient,
   itemId: string,
   exclude: { dailyUserId?: string; resvItemId?: string },
 ): Promise<number> {
   const windowDate = windowKeyAt();
-  const [dayAgg, resvAgg] = await Promise.all([
+  const [dayAgg, resvRows] = await Promise.all([
     tx.stockHold.aggregate({ where: { itemId, windowDate }, _sum: { qty: true } }),
-    tx.reservationOrderItem.aggregate({
-      where: {
-        inventoryItemId: itemId,
-        qty: { gt: 0 },
-        stockDeductedAt: null,
-        order: { batch: { active: true } },
-      },
-      _sum: { qty: true },
-    }),
+    reservationHoldRows(tx, itemId),
   ]);
   let daily = dayAgg._sum.qty ?? 0;
-  let resv = resvAgg._sum.qty ?? 0;
+  let resv = 0;
+  for (const r of resvRows) {
+    // 조정 대상 예약 줄(단일 연동)은 빼고 센다. 세트 전개 줄은 조정 대상이 아니다.
+    if (exclude.resvItemId && !r.setName && r.resvItemId === exclude.resvItemId) continue;
+    resv += r.qty;
+  }
   if (exclude.dailyUserId) {
     const mine = await tx.stockHold.findUnique({
       where: {
@@ -44,13 +43,6 @@ async function othersHeldForItem(
       select: { qty: true },
     });
     daily -= mine?.qty ?? 0;
-  }
-  if (exclude.resvItemId) {
-    const row = await tx.reservationOrderItem.findUnique({
-      where: { id: exclude.resvItemId },
-      select: { qty: true },
-    });
-    resv -= row?.qty ?? 0;
   }
   return daily + resv;
 }
@@ -78,11 +70,17 @@ export async function adminSetDailyHoldAction(input: {
           select: { name: true, qty: true, deletedAt: true },
         });
         if (!item || item.deletedAt) return { ok: false, error: "품목을 찾을 수 없어요." };
+        // 품목 제한 모드 공구 발주분(source=PLAN)은 발주와 한 몸 — 여기서 바꾸면 발주와 어긋난다.
+        const cur = await tx.stockHold.findUnique({
+          where: { userId_itemId_windowDate: { userId, itemId, windowDate } },
+          select: { source: true },
+        });
+        if (cur?.source === "PLAN") return { ok: false, error: PLAN_HOLD_LOCKED };
         const others = await othersHeldForItem(tx, itemId, { dailyUserId: userId });
         const maxForThis = item.qty - others;
 
         if (qty <= 0) {
-          await tx.stockHold.deleteMany({ where: { userId, itemId, windowDate } });
+          await tx.stockHold.deleteMany({ where: { userId, itemId, windowDate, source: { not: "PLAN" } } });
           return { ok: true, qty: 0, name: item.name };
         }
         if (qty > maxForThis) {

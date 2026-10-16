@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireMerchant, requireAdmin } from "@/lib/session";
-import { currentWindowFloorUtc, currentDeadlineUtc } from "@/lib/schedule";
+import { windowKeyAt } from "@/lib/schedule";
 import { kstDateOf, shipmentDayOf } from "@/lib/date";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -12,6 +12,7 @@ import {
   notifyMerchantCancelRejected,
 } from "@/lib/push";
 import { restoreStockForOrder } from "@/lib/stock-hold";
+import { lockStore, syncPlanHolds, windowOrdersWhere } from "@/lib/order-plan";
 
 // 발행된 계산서(미수)가 있으면 취소 불가 — 해당 '출고일'(들)의 DAILY ISSUED/PAID 존재 여부.
 // (계산서가 발행되면 이미 청구/출고 기준이 잡힌 것 → 관리자가 먼저 계산서를 VOID해야 취소 가능)
@@ -35,17 +36,11 @@ export async function requestCancelOrderAction(formData: FormData) {
   const user = await requireMerchant();
   if (String(formData.get("confirm") ?? "") !== "REQUEST-CANCEL") redirect("/order");
 
-  // 창 시작(정오)만 쓰면 강제오픈·지점별 '발주 시간 열기'로 정오 이전에 넣은 발주를 못 찾아
-  // 취소 요청이 통째로 먹통이 된다(orders.length===0 → 조용히 redirect). createOrderAction과
-  // 동일하게 '창 시작'과 '오늘 0시' 중 이른 쪽을 하한으로 잡아 같은 발주창 소속을 모두 포함.
-  const start = new Date(currentWindowFloorUtc());
-  const end = new Date(currentDeadlineUtc());
+  // 발주 화면('발주 수정하러 가기'·이 버튼이 뜨는 기준)과 createOrderAction 중복 검사와 같은 기준 =
+  // 발주창 키 묶음(windowOrdersWhere). 주말 토·일, 강제오픈·지점 '발주 시간 열기'로 정오 전에 넣은
+  // 발주도 같은 창으로 잡는다(기준이 다르면 버튼은 떴는데 0건이라 조용히 돌아가 먹통이 된다).
   const orders = await prisma.order.findMany({
-    where: {
-      userId: user.id,
-      createdAt: { gte: start, lt: end },
-      status: { not: "CANCELLED" },
-    },
+    where: windowOrdersWhere(user.id, windowKeyAt()),
     select: { id: true, createdAt: true },
   });
   if (orders.length === 0) redirect("/order");
@@ -82,9 +77,15 @@ export async function approveCancelRequestAction(formData: FormData) {
   }
   // #2 하드삭제 — 취소 승인 시 CANCELLED로 남기지 않고 완전 삭제(모든 목록·내역에서 사라짐).
   // 삭제 요약은 감사로그 snapshot에 남겨 사후 확인 가능.
-  await prisma.order.deleteMany({
-    where: { id: { in: orders.map((o) => o.id) } },
-  });
+  // 같은 트랜잭션에서 이 지점의 이번 창 '연동 공구 발주분' 담기원장(PLAN)도 다시 맞춘다
+  // (안 하면 지운 발주의 홀드가 20시까지 남아 다른 지점 남은 수량을 깎는다).
+  await prisma.$transaction(async (tx) => {
+    await lockStore(tx, userId);
+    await tx.order.deleteMany({
+      where: { id: { in: orders.map((o) => o.id) } },
+    });
+    await syncPlanHolds(tx, userId, windowKeyAt());
+  }, { timeout: 10_000 });
   const store = await prisma.user.findUnique({
     where: { id: userId },
     select: { storeName: true },

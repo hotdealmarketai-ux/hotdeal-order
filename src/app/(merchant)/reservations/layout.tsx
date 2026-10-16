@@ -1,15 +1,17 @@
-import { redirect } from "next/navigation";
 import { requireMerchant } from "@/lib/session";
+import { requireReservationsVisible } from "@/lib/merchant-gate";
 
-// 지점별 '예약발주 노출'(user.reservationEnabled)이 off 이면 예약발주 전 구간(목록·상세·지난·마감)을 숨긴다.
-// 하단 네비 탭은 BottomNav 에서 이미 숨겨지지만, URL 직접 접근이나 잔존 링크도 여기서 /order 로 돌려보낸다.
-// 기본값 true 이므로 기존 지점은 영향 없음. 관리자 회원관리에서 지점마다 켜고 끈다.
+// 예약발주 전 구간(목록·상세·지난·마감)을 숨기는 관문.
+// · 지점별 '예약발주 노출'(user.reservationEnabled)이 off 이면 /order 로.
+// · 품목 제한 모드가 이 지점에 적용 중이면 /order?n=restricted 로(안내 띠).
+// 하단 네비 탭은 BottomNav 에서 이미 숨겨지지만, URL 직접 접근이나 잔존 링크도 여기서 돌려보낸다.
+// Next 16 레이아웃은 화면 이동 때 다시 그리지 않으므로 각 page.tsx 에서도 같은 검사를 한다.
 export default async function ReservationsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const user = await requireMerchant();
-  if (!user.reservationEnabled) redirect("/order");
+  await requireReservationsVisible(user);
   return <>{children}</>;
 }

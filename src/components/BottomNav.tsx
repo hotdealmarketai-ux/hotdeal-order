@@ -54,11 +54,14 @@ export function BottomNav({
   myBadge = 0,
   weeklyBadge = 0,
   reservationEnabled = true,
+  inventoryEnabled = true,
 }: {
   role: Role;
   myBadge?: number;
   weeklyBadge?: number;
   reservationEnabled?: boolean;
+  /** 품목 제한 모드면 false — 재고현황 탭 숨김(레이아웃이 merchantVisibility 로 넘김) */
+  inventoryEnabled?: boolean;
 }) {
   const path = usePathname();
   const items = [
@@ -66,11 +69,12 @@ export function BottomNav({
     ...(canOrderWeekly(role)
       ? [{ href: "/weekly", label: "주간발주", icon: ICONS.weekly, badge: weeklyBadge }]
       : []),
-    // 예약발주 — 핫딜마켓 가맹점 중 '예약발주 노출'이 켜진 지점만(관리자 회원관리 토글)
+    // 예약발주 — 핫딜마켓 가맹점 중 '예약발주 노출'이 켜진 지점만(관리자 회원관리 토글).
+    // 품목 제한 모드면 레이아웃이 false 를 넘긴다(merchantVisibility.reservations).
     ...(role === "MERCHANT_HOTDEAL" && reservationEnabled
       ? [{ href: "/reservations", label: "예약발주", icon: ICONS.reserve, badge: 0 }]
       : []),
-    ...(canViewInventory(role)
+    ...(canViewInventory(role) && inventoryEnabled
       ? [{ href: "/inventory", label: "재고현황", icon: ICONS.inventory, badge: 0 }]
       : []),
     { href: "/mypage", label: "마이", icon: ICONS.my, badge: myBadge },

@@ -24,7 +24,9 @@ import {
 import {
   currentWindowFloorUtc,
   currentDeadlineUtc,
+  windowKeyAt,
 } from "@/lib/schedule";
+import { lockStore, syncPlanHolds } from "@/lib/order-plan";
 import { hasOrderWindow } from "@/lib/deadline";
 import { restoreStockForOrder } from "@/lib/stock-hold";
 import { recordInventoryChanges, type InvChange } from "@/lib/inventory-log";
@@ -1012,7 +1014,12 @@ export async function pushInventoryToSheetAction(
 export async function resetAllOrdersAction(formData: FormData) {
   const admin = await requireAdmin();
   if (String(formData.get("confirm") ?? "") !== "RESET-ALL-ORDERS") return;
-  const res = await prisma.order.deleteMany({});
+  // 발주가 전부 사라지므로 품목 제한 모드 '연동 공구 발주분' 담기원장(PLAN)도 함께 비운다(같은 트랜잭션).
+  const res = await prisma.$transaction(async (tx) => {
+    const r = await tx.order.deleteMany({});
+    await tx.stockHold.deleteMany({ where: { source: "PLAN" } });
+    return r;
+  });
   await writeAudit({
     action: "orders.resetAll",
     actorId: admin.id,
@@ -1091,9 +1098,15 @@ export async function cancelStoreOrdersAction(
     await restoreStockForOrder(o.id).catch(() => {});
   }
   // #2 하드삭제 — 취소한 발주는 완전 삭제(취소 완료로 남기지 않고 모든 목록·내역에서 제거).
-  const res = await prisma.order.deleteMany({
-    where: { id: { in: targets.map((o) => o.id) } },
-  });
+  // 같은 트랜잭션에서 이 지점의 이번 창 '연동 공구 발주분' 담기원장(PLAN)도 다시 맞춘다.
+  const res = await prisma.$transaction(async (tx) => {
+    await lockStore(tx, userId);
+    const r = await tx.order.deleteMany({
+      where: { id: { in: targets.map((o) => o.id) } },
+    });
+    await syncPlanHolds(tx, userId, windowKeyAt());
+    return r;
+  }, { timeout: 10_000 });
   if (res.count > 0) {
     await writeAudit({
       action: "orders.cancelStore",

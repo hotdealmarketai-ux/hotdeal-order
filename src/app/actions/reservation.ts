@@ -17,6 +17,7 @@ import { kstTodayStr } from "@/lib/reservation-flat";
 import { notifyMerchantReservationEdited } from "@/lib/push";
 import { windowKeyAt } from "@/lib/schedule";
 import { logError } from "@/lib/log";
+import { reservationWriteBlock, RESTRICTED_BOUNCE } from "@/lib/merchant-gate";
 
 export type ReservationBatchState = { ok?: boolean; error?: string };
 
@@ -269,7 +270,13 @@ export async function purgeHiddenReservationsAction(): Promise<{
 export async function confirmReservationAction(formData: FormData) {
   const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
-  if (!user.reservationEnabled) redirect("/order"); // 지점 예약발주 노출 off — 직접 호출 방어
+  // 지점 예약발주 노출 off / 품목 제한 모드 — 직접 호출 방어(저장 판정, 설정 못 읽으면 막음)
+  {
+    const block = await reservationWriteBlock(user);
+    if (block?.kind === "hidden") redirect("/order");
+    if (block?.kind === "restricted") redirect(RESTRICTED_BOUNCE);
+    if (block) throw new Error(block.message);
+  }
   if (needsOnboarding(user)) redirect("/onboarding");
   const batchId = String(formData.get("batchId") ?? "");
   let raw: { productId?: string; qty?: number | string }[] = [];
@@ -346,7 +353,13 @@ export async function confirmReservationAction(formData: FormData) {
 export async function unlockReservationAction(formData: FormData) {
   const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
-  if (!user.reservationEnabled) redirect("/order"); // 지점 예약발주 노출 off — 직접 호출 방어
+  // 지점 예약발주 노출 off / 품목 제한 모드 — 직접 호출 방어(저장 판정, 설정 못 읽으면 막음)
+  {
+    const block = await reservationWriteBlock(user);
+    if (block?.kind === "hidden") redirect("/order");
+    if (block?.kind === "restricted") redirect(RESTRICTED_BOUNCE);
+    if (block) throw new Error(block.message);
+  }
   const batchId = String(formData.get("batchId") ?? "");
   const batch = await prisma.reservationBatch.findFirst({
     where: { id: batchId, active: true },
@@ -389,8 +402,13 @@ export async function holdReservationAction(input: {
   qty: number;
 }): Promise<ResvHoldResult> {
   const user = await getCurrentUser();
-  if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL" || !user.reservationEnabled) {
+  if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
     return { ok: false, error: "권한이 없어요." };
+  }
+  // 지점 예약발주 노출 off('권한이 없어요.') / 품목 제한 모드 — 직접 호출 방어
+  {
+    const block = await reservationWriteBlock(user);
+    if (block) return { ok: false, error: block.message };
   }
   const batchId = String(input.batchId ?? "");
   const productId = String(input.productId ?? "");

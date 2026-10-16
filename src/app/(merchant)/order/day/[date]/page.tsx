@@ -11,19 +11,18 @@ import {
   SAEROP_ACCOUNT_HOLDER,
   type Category,
 } from "@/lib/constants";
-import {
-  hasOrderWindow,
-  isOrderOpen,
-  currentWindowFloorUtc,
-} from "@/lib/deadline";
+import { hasOrderWindow, isOrderOpen } from "@/lib/deadline";
 import { formatKDateTime } from "@/lib/format";
 import {
-  kstDayRange,
-  kstToday,
+  dowOf,
   labelDate,
   normalizeDateStr,
+  shiftDate,
   shipmentDayOf,
 } from "@/lib/date";
+import { normalizeWindowKey, windowKeyAt } from "@/lib/schedule";
+import { windowCreatedRange } from "@/lib/order-plan";
+import { orderTimeOpenForUser } from "@/lib/receivable";
 import { ReceiptCard } from "@/components/ReceiptCard";
 import { SplitPaymentButton } from "@/components/SplitPaymentButton";
 import { PrintButton } from "@/components/PrintButton";
@@ -38,13 +37,29 @@ export default async function DayReceiptPage(props: {
   if (needsOnboarding(user)) redirect("/onboarding");
   const { date: rawDate } = await props.params;
   const { new: isNew, edited, view } = await props.searchParams;
-  const date = normalizeDateStr(rawDate);
-  const { start, end } = kstDayRange(date);
-  const isPastDay = date < kstToday();
+  const day = normalizeDateStr(rawDate);
+  // 발주창 키 K 기준으로 묶는다 — 주말 토·일은 한 창(토요일). 일요일 주소는 토요일 주소로.
+  // (하루 수정 화면·하루 수정 저장과 같은 묶음: windowKey=K 또는 레거시 null+createdAt 범위. 취소분도 보여 줌)
+  const date = normalizeWindowKey(day);
+  if (date !== day) {
+    const q = new URLSearchParams();
+    if (isNew) q.set("new", isNew);
+    if (edited) q.set("edited", edited);
+    if (view) q.set("view", view);
+    const qs = q.toString();
+    redirect(`/order/day/${date}${qs ? `?${qs}` : ""}`);
+  }
+  const { start, end } = windowCreatedRange(date);
+  const currentKey = windowKeyAt();
+  const isPastDay = date < currentKey;
+  const isWeekendWindow = dowOf(date) === 6;
 
   const [orders, invoice] = await Promise.all([
     prisma.order.findMany({
-      where: { userId: user.id, createdAt: { gte: start, lt: end } },
+      where: {
+        userId: user.id,
+        OR: [{ windowKey: date }, { windowKey: null, createdAt: { gte: start, lt: end } }],
+      },
       include: { items: { orderBy: { sortOrder: "asc" } } },
       orderBy: { createdAt: "asc" },
     }),
@@ -63,17 +78,15 @@ export default async function DayReceiptPage(props: {
       CATEGORY_ORDER.indexOf(a.category as Category) -
       CATEGORY_ORDER.indexOf(b.category as Category),
   );
-  const windowStart = currentWindowFloorUtc();
-  const canEditOrder = (createdAt: Date) =>
-    !hasOrderWindow(user.role) ||
-    (isOrderOpen() && createdAt.getTime() >= windowStart);
-  // 통합 '발주 수정' 진입 가능 여부 — 이번 창의 발주가 하나라도 수정 가능하면(핫딜마켓만).
+  // 통합 '발주 수정' 진입 가능 여부 — 이 화면이 이번 발주창이고 지금 발주 시간이면(핫딜마켓만).
+  // 시간 판정은 하루 수정 화면과 같은 기준(운영시간·강제오픈·지점 '시간 1회 열기').
   const canEditDay =
     hasOrderWindow(user.role) &&
     !allCancelled &&
-    orders.some(
-      (o) => o.status !== "CANCELLED" && canEditOrder(o.createdAt),
-    );
+    date === currentKey &&
+    orders.some((o) => o.status !== "CANCELLED") &&
+    isOrderOpen() && // 수정은 정규 발주 시간에만(저장 쪽과 같은 기준)
+    (await orderTimeOpenForUser(user));
 
   // 계산서(입금요청서) 조회는 통합 페이지(/invoices)로 일원화 — 이 화면엔 발주 목록만.
   const showInvoiceTab = false;
@@ -205,7 +218,9 @@ export default async function DayReceiptPage(props: {
                 </div>
               )}
               <div className="row__sub" style={{ marginTop: 4 }}>
-                발주 {labelDate(date)} · 출고 {labelDate(shipmentDayOf(date))}
+                발주 {labelDate(date)}
+                {isWeekendWindow ? ` ~ ${labelDate(shiftDate(date, 1))}` : ""} · 출고{" "}
+                {labelDate(shipmentDayOf(date))}
               </div>
             </div>
             {canEditDay && (

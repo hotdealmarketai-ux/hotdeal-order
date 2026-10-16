@@ -69,11 +69,15 @@ export async function orderChannelConfig(): Promise<OrderChannelConfig> {
  *  - 품목 고정이 켜지면 칸 발주는 반드시 열려 있어야 한다(고정 품목을 칸으로 입력).
  *  - 칸/채팅이 동시에 잠기는 모순 상태는 칸을 열어 방지(가맹점이 발주 불가가 되면 안 됨).
  */
-export function effectiveChannels(cfg: OrderChannelConfig): {
+export function effectiveChannels(
+  cfg: OrderChannelConfig,
+  // 품목 제한 모드(restrict-mode.ts)가 이 지점에 적용 중이면 네 칸 모두 '고정'과 같다 → 채팅 잠금·칸 강제.
+  restricted: boolean = false,
+): {
   gridDisabled: boolean;
   chatDisabled: boolean;
 } {
-  const anyFixed = cfg.fixedFruit || cfg.fixedVeg;
+  const anyFixed = cfg.fixedFruit || cfg.fixedVeg || restricted;
   let gridDisabled = cfg.gridOff;
   let chatDisabled = cfg.chatOff || anyFixed;
   if (anyFixed) gridDisabled = false; // 고정 품목 입력 경로 보장

@@ -1,0 +1,309 @@
+/* ============================================================
+   품목 제한 모드 — 점주 발주 화면(편성 품목 줄)
+   · 점주 대부분이 어르신 → 큰 글씨·넉넉한 터치 영역(최소 48px)·숫자 고정폭
+   · 기존 발주 화면 클래스(.oitems, .tofulist, .toolro, .confsec …)는 그대로 쓰고
+     편성 줄 전용만 pl- 접두사로 추가(globals.css 는 건드리지 않음)
+   ============================================================ */
+
+/* 위쪽 안내 띠 — '오늘 발주 품목만 보여요 · 10월 15일(수) 발주 → 16일(목) 출고' */
+.plband {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--green-100);
+  border: 1px solid var(--green-150);
+  color: var(--green-700);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+.plband__sub {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 새로고침 안내 띠(발주 날짜 바뀜·품목 추가 등) */
+.plstale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: var(--warn-bg);
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 700;
+  word-break: keep-all;
+}
+.plstale__btn {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* 편성 품목 목록 */
+.pllist {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line-strong);
+}
+.plline.is-on {
+  border-left-color: var(--green-700);
+  background: var(--green-100);
+}
+.plline.is-closed {
+  background: var(--chip-mute-bg);
+  border-left-color: var(--muted-2);
+}
+.plline.is-closed .plline__name,
+.plline.is-closed .plline__desc {
+  color: var(--muted);
+}
+.plline.has-error {
+  border-left-color: var(--danger);
+}
+.plline__top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.plline__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.plline__name {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--fg);
+  line-height: 1.35;
+  word-break: keep-all;
+}
+.plline__desc {
+  font-size: 13.5px;
+  color: var(--fg-2);
+  line-height: 1.4;
+  word-break: keep-all;
+}
+.plline__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+.plmeta {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--chip-mute-bg);
+  color: var(--fg-2);
+  font-size: 13.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.plmeta--left {
+  background: var(--surface);
+  border: 1px solid var(--green-150);
+  color: var(--green-700);
+  font-weight: 800;
+}
+.plmeta--low {
+  border-color: var(--danger-soft-line);
+  color: var(--danger);
+}
+.pltag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 800;
+  vertical-align: 2px;
+}
+.pltag--closed {
+  background: var(--muted-2);
+  color: #fff;
+}
+.pltag--end {
+  background: var(--warn-bg);
+  color: var(--fg);
+}
+
+/* − [숫자] + */
+.plstep {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--bg);
+  overflow: hidden;
+}
+.plstep__btn {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  background: transparent;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--fg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  touch-action: manipulation;
+}
+.plstep__btn:disabled {
+  color: var(--muted-2);
+  cursor: default;
+}
+.plstep__btn:active:not(:disabled) {
+  background: var(--chip-mute-bg);
+}
+.plstep__val {
+  width: 56px;
+  height: 48px;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  padding: 0;
+  outline: none;
+}
+.plstep__val:disabled {
+  color: var(--muted);
+}
+.plstep__val::placeholder {
+  color: var(--muted-2);
+  font-weight: 700;
+}
+
+/* 줄 아래 안내·오류 */
+.plmsg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+.plmsg--warn {
+  color: #9a5b00;
+}
+.plmsg--err {
+  color: var(--danger);
+}
+.plmsg__btn {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 9px;
+  border: 1.5px solid currentColor;
+  background: var(--surface);
+  color: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* 비어 있는 날 */
+.plempty {
+  padding: 28px 16px;
+  border-radius: 14px;
+  background: var(--chip-mute-bg);
+  color: var(--muted);
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* 이전 방식(편성 번호 없는) 발주 줄 — 읽기 전용 */
+.plgroup {
+  margin-bottom: 10px;
+}
+.plro__qty {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 채움채 '숨김 · 이미 발주' 표시 */
+.tofuitem__tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+/* 확인 시트 — 편성 줄(이름·수량·남은) */
+.plconf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 2px;
+  border-top: 1px solid var(--line);
+}
+.plconf:first-of-type {
+  border-top: 0;
+}
+.plconf__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fg);
+  word-break: keep-all;
+}
+.plconf__left {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.plconf__qty {
+  flex-shrink: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--green-700);
+  font-variant-numeric: tabular-nums;
+}

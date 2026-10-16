@@ -66,6 +66,7 @@ export function HoldsBoard({ initial }: { initial: HoldsOverview }) {
   }
 
   function bump(row: HoldRow, delta: number) {
+    if (row.lockedReason) return; // 발주분·세트 예약은 여기서 못 바꿈(안내만)
     const key = row.key;
     const cur = key in editsRef.current ? editsRef.current[key] : row.qty;
     const next = Math.max(0, cur + delta);
@@ -184,11 +185,23 @@ function HoldItemCard({
           <div className="holdrow" key={r.key}>
             <div className="holdrow__who">
               <span className="holdrow__store">{r.storeName}</span>
-              <span
-                className={`holdrow__tag ${r.type === "RESV" ? "is-resv" : "is-daily"}`}
-              >
-                {r.type === "RESV" ? "예약연동" : "담기"}
-              </span>
+              {r.type === "PLAN" ? (
+                <span
+                  className="holdrow__tag"
+                  style={{ background: "#fff4e5", color: "#b45309" }}
+                >
+                  발주분(품목 제한)
+                </span>
+              ) : (
+                <span
+                  className={`holdrow__tag ${r.type === "RESV" ? "is-resv" : "is-daily"}`}
+                >
+                  {r.type === "RESV" ? (r.setName ? "예약연동·세트" : "예약연동") : "담기"}
+                </span>
+              )}
+              {r.type === "RESV" && r.setName && (
+                <span className="holdrow__pick">{r.setName}</span>
+              )}
               {r.type === "RESV" && r.pickupDate && (
                 <span className="holdrow__pick">픽업 {labelDate(r.pickupDate)}</span>
               )}
@@ -196,6 +209,12 @@ function HoldItemCard({
                 <span className="holdrow__err">{errors[r.key]}</span>
               )}
             </div>
+            {r.lockedReason ? (
+              <div className="holdrow__locked" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="holdrow__pick">{r.lockedReason}</span>
+                <span className="stepper__val">{qtyOf(r)}</span>
+              </div>
+            ) : (
             <div className="stepper stepper--inline">
               <button
                 type="button"
@@ -216,6 +235,7 @@ function HoldItemCard({
                 +
               </button>
             </div>
+            )}
           </div>
         ))}
       </div>

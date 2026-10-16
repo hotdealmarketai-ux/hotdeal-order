@@ -9,20 +9,21 @@ import { minLockedPickupDate } from "@/lib/reservation-stock";
 import { windowKeyAt } from "@/lib/schedule";
 import { logError } from "@/lib/log";
 import { notifyMerchantsReservationProductAdded } from "@/lib/push";
+import { reservationWriteBlock } from "@/lib/merchant-gate";
 
 type ResvHoldResult = { ok: boolean; error?: string; available?: number };
 
 async function requireHotdealMerchant() {
   const user = await getCurrentUser();
   if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
-    return null;
+    return { user: null, error: "권한이 없어요." } as const;
   }
   // 지점별 예약발주 노출 off면 현행(flat) 예약 액션(확정·해제·담기)도 전부 차단 — UI는 라우트 게이트로
   // 가려지지만 서버액션은 POST 엔드포인트라 직접 호출 방어가 필요하다(회원관리 토글).
-  if (!user.reservationEnabled) {
-    return null;
-  }
-  return user;
+  // 품목 제한 모드가 이 지점에 적용 중이어도 차단(저장 판정 — 설정을 못 읽으면 '잠시 후 다시').
+  const block = await reservationWriteBlock(user);
+  if (block) return { user: null, error: block.message } as const;
+  return { user, error: null } as const;
 }
 
 const toInt = (v: unknown, min = 0) => {
@@ -95,6 +96,9 @@ export async function saveFlatProductAction(
     /* 잘못된 JSON은 단일 상품으로 취급 */
   }
   const isSet = components.length > 0;
+  // 폼이 구성품을 '관리'하는가 — `components` 필드가 아예 없으면(지난 예약마감 목록 수정 등) 기존 구성품을 건드리지 않는다.
+  //  (필드가 "[]"로 오면 '구성품 없음(단일)'으로 명시한 것 → 전량 삭제가 맞다.)
+  const componentsProvided = formData.get("components") !== null;
 
   // 단일 상품 입력값(세트면 무시 — 연동은 구성품이 각자, 가격은 구성품 합).
   const singlePrice = toInt(formData.get("supplyPrice"), 0);
@@ -126,25 +130,49 @@ export async function saveFlatProductAction(
   if (id) {
     const existing = await prisma.reservationProduct.findFirst({
       where: { id, closeAt: { not: null } },
-      select: { id: true },
+      select: { id: true, _count: { select: { components: true } } },
     });
     if (!existing) return { error: "상품을 찾을 수 없어요." };
-    await prisma.$transaction([
-      prisma.reservationProduct.update({
-        where: { id },
-        data: { name, closeAt, pickupDate, supplyPrice, inventoryItemId, stockFixed, active: true },
-      }),
-      // 세트 구성품은 전량 교체(삭제 후 재생성) — 수정 시 최신 구성으로 덮어씀.
-      prisma.reservationProductComponent.deleteMany({ where: { productId: id } }),
-      ...(componentData.length > 0
-        ? [prisma.reservationProductComponent.createMany({ data: componentData.map((c) => ({ ...c, productId: id })) })]
-        : []),
-      // 픽업/이름 변경분을 미차감 예약 스냅샷에 전파(자동로드 필터 정합) — 레거시 저장 액션과 동일 규칙.
-      prisma.reservationOrderItem.updateMany({
-        where: { productId: id, stockDeductedAt: null },
-        data: { pickupDate, name },
-      }),
-    ]);
+    const existingIsSet = existing._count.components > 0;
+
+    if (componentsProvided) {
+      // 구성품을 관리하는 폼(관리자 세트 폼) — 구성품 전량 교체(삭제 후 재생성), 세트가/연동도 구성품 기준.
+      await prisma.$transaction([
+        prisma.reservationProduct.update({
+          where: { id },
+          data: { name, closeAt, pickupDate, supplyPrice, inventoryItemId, stockFixed, active: true },
+        }),
+        prisma.reservationProductComponent.deleteMany({ where: { productId: id } }),
+        ...(componentData.length > 0
+          ? [prisma.reservationProductComponent.createMany({ data: componentData.map((c) => ({ ...c, productId: id })) })]
+          : []),
+        // 픽업/이름 변경분을 미차감 예약 스냅샷에 전파(자동로드 필터 정합).
+        prisma.reservationOrderItem.updateMany({
+          where: { productId: id, stockDeductedAt: null },
+          data: { pickupDate, name },
+        }),
+      ]);
+    } else {
+      // 구성품 필드가 없는 폼(지난 예약마감 목록 수정 등) — 구성품을 건드리지 않는다.
+      //  세트면 가격·연동·재고고정은 '구성품 기준'이라 이 폼에서 덮어쓰지 않고, 보낸 필드만(이름·마감·픽업) 수정한다.
+      //  단일 상품이면 기존처럼 입력값(가격·연동·재고고정)을 반영.
+      await prisma.$transaction([
+        prisma.reservationProduct.update({
+          where: { id },
+          data: {
+            name,
+            closeAt,
+            pickupDate,
+            active: true,
+            ...(existingIsSet ? {} : { supplyPrice, inventoryItemId, stockFixed }),
+          },
+        }),
+        prisma.reservationOrderItem.updateMany({
+          where: { productId: id, stockDeductedAt: null },
+          data: { pickupDate, name },
+        }),
+      ]);
+    }
   } else {
     const batchId = await getOrCreateFlatBatchId();
     const maxAgg = await prisma.reservationProduct.aggregate({
@@ -191,8 +219,8 @@ export async function confirmFlatProductAction(input: {
   productId: string;
   qty: number;
 }): Promise<{ ok: boolean; error?: string }> {
-  const user = await requireHotdealMerchant();
-  if (!user) return { ok: false, error: "권한이 없어요." };
+  const { user, error: gateError } = await requireHotdealMerchant();
+  if (!user) return { ok: false, error: gateError };
   const productId = String(input?.productId ?? "");
   const qty = Math.min(99999, Math.max(0, Math.floor(Number(input?.qty) || 0))); // 상한(오타·폭주 방지)
 
@@ -266,8 +294,8 @@ export async function confirmFlatProductAction(input: {
 export async function unlockFlatProductAction(input: {
   productId: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  const user = await requireHotdealMerchant();
-  if (!user) return { ok: false, error: "권한이 없어요." };
+  const { user, error: gateError } = await requireHotdealMerchant();
+  if (!user) return { ok: false, error: gateError };
   const productId = String(input?.productId ?? "");
   const product = await prisma.reservationProduct.findFirst({
     // 수기·연동 공통. 연동도 발주 확정(confirmedAt)을 쓰므로 잠금해제 가능(수량 홀드는 유지).
@@ -293,8 +321,8 @@ export async function holdFlatProductAction(input: {
   productId: string;
   qty: number;
 }): Promise<ResvHoldResult> {
-  const user = await requireHotdealMerchant();
-  if (!user) return { ok: false, error: "권한이 없어요." };
+  const { user, error: gateError } = await requireHotdealMerchant();
+  if (!user) return { ok: false, error: gateError };
   const productId = String(input?.productId ?? "");
   const qty = Math.min(99999, Math.max(0, Math.floor(Number(input?.qty) || 0))); // 상한(오타·폭주 방지)
 

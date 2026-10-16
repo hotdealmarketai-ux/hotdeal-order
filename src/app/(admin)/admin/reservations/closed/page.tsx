@@ -27,6 +27,7 @@ export default async function ClosedReservationsPage() {
     stockFixed: p.stockFixed,
     totalQty: p.totalQty,
     storeCount: p.storeCount,
+    components: p.components,
   }));
 
   return (

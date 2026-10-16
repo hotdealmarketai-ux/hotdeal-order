@@ -20,12 +20,14 @@ export async function heldByItem(
 }
 
 // 내(점주)의 현재 발주창 담기 목록 (공구 발주에 넣을 항목 = 이 홀드)
+// 재고현황 담기(CART)만 — 제한 모드 편성 공구 원장(PLAN)은 발주 줄이 소스라 담기 화면에서 고칠 수 없다
+// (발주 저장의 cartHolds 와 같은 기준. 남은 수량 합계 heldByItem 에는 PLAN 도 그대로 들어간다).
 export async function myHolds(
   userId: string,
   windowDate: string = windowKeyAt(),
 ): Promise<{ itemId: string; name: string; qty: number }[]> {
   return prisma.stockHold.findMany({
-    where: { userId, windowDate },
+    where: { userId, windowDate, source: { not: "PLAN" } },
     orderBy: { createdAt: "asc" },
     select: { itemId: true, name: true, qty: true },
   });
@@ -143,13 +145,15 @@ export async function releaseStaleHolds(): Promise<number> {
   const keepIds = unlocked
     .filter((u) => isUnlockActiveThisWindow(true, u.timeUnlockAt, now))
     .map((u) => u.id);
+  // 품목 제한 모드 편성 공구 원장(PLAN)은 발주 줄 그대로의 거울이라 마감 때 지우지 않는다 — 계산서 발행(invoice-stock)이
+  // 그 점포 몫을 비운다. 여기서 지우면 마감 뒤 강제 오픈·시간 열기 발주가 이미 나간 양을 못 보고 실재고를 넘긴다.
   const res = await prisma.stockHold.deleteMany({
     where: {
       OR: [
         { windowDate: { lt: key } },
         keepIds.length > 0
-          ? { windowDate: key, userId: { notIn: keepIds } }
-          : { windowDate: key },
+          ? { windowDate: key, source: { not: "PLAN" }, userId: { notIn: keepIds } }
+          : { windowDate: key, source: { not: "PLAN" } },
       ],
     },
   });

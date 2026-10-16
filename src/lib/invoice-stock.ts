@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { setInventoryPushPending } from "@/lib/inventory-sheet";
 import { Prisma } from "@prisma/client";
+import { prevWindowKey } from "@/lib/schedule";
+import { shipmentDayOf } from "@/lib/date";
 
 // 그 계산서의 공구(TOOL) 품목을 품목명별 수량으로 합산(정수 반올림 — 기준재고가 Int).
 export async function invoiceToolByName(invoiceId: string): Promise<Map<string, number>> {
@@ -113,6 +115,12 @@ export async function deductInvoiceStock(
       },
       data: { stockDeductedAt: at },
     });
+    // 품목 제한 모드 편성 공구 원장(StockHold PLAN) — 이 출고일 창의 이 점포 몫은 방금 기준재고에서 빠졌으니
+    //   원장도 비운다(예약 '차감됨' 표시와 같은 이유: 이중집계 방지). 재고현황 담기(CART)는 기존대로 크론이 정리.
+    const wk = prevWindowKey(inv.date);
+    if (shipmentDayOf(wk) === inv.date) {
+      await tx.stockHold.deleteMany({ where: { userId: inv.userId, windowDate: wk, source: "PLAN" } });
+    }
   });
   if (claimed) await setInventoryPushPending().catch(() => {});
   return claimed;

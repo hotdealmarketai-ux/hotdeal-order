@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Topbar } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
+import { requireReservationsVisible } from "@/lib/merchant-gate";
 import { listFlatProductsMerchant } from "@/lib/reservation-flat";
 import { FlatReservationMerchant } from "@/components/FlatReservationMerchant";
 
@@ -10,6 +11,8 @@ export const dynamic = "force-dynamic";
 export default async function MerchantClosedReservationsPage() {
   const user = await requireMerchant();
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
+  // 예약발주 노출 관문 — 레이아웃은 화면 이동 때 다시 검사하지 않으므로 페이지마다 확인.
+  await requireReservationsVisible(user);
   const products = await listFlatProductsMerchant(user.id, "closed");
 
   return (

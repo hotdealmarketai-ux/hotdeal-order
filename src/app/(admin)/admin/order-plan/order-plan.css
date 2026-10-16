@@ -1,0 +1,204 @@
+/* ============================================================
+   품목 제한 모드 — 관리자 편성 화면(달력·편집·미리보기·스위치 카드)
+   globals.css 는 건드리지 않고 이 파일만 페이지에서 불러온다. 이름은 모두 .oplan 으로 시작.
+   관리자 앱 폭 540px 기준(모바일 우선), 넓은 화면에서도 그대로.
+   ============================================================ */
+
+.oplan { display: flex; flex-direction: column; gap: 12px; }
+.oplan > .card { margin-bottom: 0; }
+.oplan-hint { font-size: 12px; color: var(--muted); line-height: 1.55; margin: 4px 2px 0; }
+
+/* ── 스위치 카드 ── */
+.oplan-mode { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+.oplan-mode.is-on { border-color: var(--green-150); background: var(--green-100); }
+.oplan-mode__main { flex: 1; min-width: 0; }
+.oplan-mode__title { display: flex; align-items: center; gap: 8px; font-size: 15.5px; font-weight: 800; color: var(--fg); }
+.oplan-mode__state { font-size: 11.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; background: var(--chip-mute-bg); color: var(--muted); }
+.oplan-mode__state.is-on { background: var(--green-700); color: #fff; }
+.oplan-mode__sub { font-size: 12.5px; color: var(--fg-2); margin-top: 4px; line-height: 1.45; }
+.oplan-mode__link { display: inline-block; margin-top: 6px; font-size: 12.5px; font-weight: 800; color: var(--green-700); }
+
+/* 켜기 확인 시트 */
+.oplan-pre { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+.oplan-pre__loading { font-size: 13px; color: var(--muted); padding: 14px 0; text-align: center; }
+.oplan-pre__lead { font-size: 13px; color: var(--fg-2); line-height: 1.55; margin: 0; }
+.oplan-pre__win { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.oplan-pre__wh { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.oplan-pre__wh b { font-size: 14px; color: var(--fg); }
+.oplan-pre__wh span { flex: 1; font-size: 12px; color: var(--muted); }
+.oplan-pre__cats { display: flex; flex-wrap: wrap; gap: 6px; }
+.oplan-pre__warn { font-size: 12px; color: var(--danger-soft-fg); margin-top: 8px; line-height: 1.45; }
+.oplan-pre__facts { margin: 0; padding: 0 0 0 18px; font-size: 13px; color: var(--fg-2); line-height: 1.7; }
+
+.oplan-radio { display: flex; flex-direction: column; gap: 8px; }
+.oplan-radio label { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; cursor: pointer; }
+.oplan-radio label.is-on { border-color: var(--green-700); background: var(--green-100); }
+.oplan-radio input { margin-top: 3px; accent-color: var(--green-700); }
+.oplan-radio span { display: flex; flex-direction: column; gap: 2px; font-size: 14px; color: var(--fg); }
+.oplan-radio small { font-size: 12px; color: var(--muted); font-weight: 500; }
+
+.oplan-check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; color: var(--fg); cursor: pointer; }
+.oplan-check input { width: 18px; height: 18px; accent-color: var(--green-700); }
+.oplan-check.is-off { color: var(--muted-2); cursor: default; }
+
+.oplan-pilot { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.oplan-pilot__opt { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; cursor: pointer; min-width: 0; }
+.oplan-pilot__opt span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oplan-pilot__opt.is-on { border-color: var(--green-700); background: var(--green-100); color: var(--green-700); font-weight: 700; }
+.oplan-pilot__opt input { accent-color: var(--green-700); flex: 0 0 auto; }
+.oplan-pilot .oplan-pre__warn { grid-column: 1 / -1; }
+
+/* 상태 칩(점검 줄·시트) */
+.oplan-chip { font-size: 12px; font-weight: 800; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+.oplan-chip--some { background: var(--green-100); color: var(--green-700); }
+.oplan-chip--closed { background: var(--chip-mute-bg); color: var(--muted); }
+.oplan-chip--none { background: #fff; color: var(--muted-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.oplan-chip--alert { background: var(--danger-bg); color: var(--danger); }
+
+/* ── 월 달력 ── */
+.oplan-cal { padding: 12px 10px; }
+.oplan-cal__head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; }
+.oplan-cal__head b { font-size: 16px; color: var(--fg); }
+.oplan-cal__nav { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--seg-bg); font-size: 20px; font-weight: 800; color: var(--green-700); }
+.oplan-cal__legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 11px; color: var(--muted); padding: 0 4px 8px; }
+.oplan-dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: -6px; vertical-align: -1px; }
+.oplan-dot--some { background: var(--green-700); }
+.oplan-dot--closed { background: var(--muted-2); }
+.oplan-dot--none { background: #fff; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.oplan-dot--alert { background: var(--danger); }
+.oplan-cal__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.oplan-cal__dow { text-align: center; font-size: 11.5px; font-weight: 800; color: var(--muted); padding: 2px 0 4px; }
+.oplan-cal__dow.is-sat { color: #2563eb; }
+.oplan-cal__dow.is-sun { color: var(--danger); }
+.oplan-cal__foot { display: flex; justify-content: space-between; padding: 10px 4px 0; }
+
+.oplan-day { display: flex; flex-direction: column; gap: 3px; min-height: 86px; min-width: 0; padding: 5px 4px; border-radius: 9px; border: 1px solid var(--line); background: #fff; color: var(--fg); overflow: hidden; }
+.oplan-day:active { background: var(--surface-2); }
+.oplan-day--empty { border: 0; background: transparent; }
+.oplan-day--sun { background: var(--surface-2); border-style: dashed; opacity: 0.6; }
+.oplan-day.is-past { opacity: 0.5; }
+.oplan-day.is-today { border: 2px solid var(--green-700); padding: 4px 3px; }
+.oplan-day__num { font-size: 13px; font-weight: 800; line-height: 1; }
+.oplan-day.is-sat .oplan-day__num { color: #2563eb; }
+.oplan-day--sun .oplan-day__num { color: var(--danger); }
+.oplan-day__cats { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.oplan-day__sub { margin-top: auto; font-size: 9.5px; line-height: 1.25; color: var(--muted); letter-spacing: -0.02em; word-break: keep-all; }
+.oplan-mini { font-size: 10px; font-weight: 800; line-height: 1; padding: 3px 1px; border-radius: 4px; text-align: center; white-space: nowrap; overflow: hidden; letter-spacing: -0.03em; }
+.oplan-mini--some { background: var(--green-100); color: var(--green-700); }
+.oplan-mini--closed { background: var(--chip-mute-bg); color: var(--muted); }
+.oplan-mini--none { background: #fff; color: var(--muted-3); box-shadow: inset 0 0 0 1px var(--line); }
+.oplan-mini--alert { background: var(--danger); color: #fff; }
+
+/* 다음 7개 발주창 점검 */
+.oplan-check7 { display: flex; flex-direction: column; gap: 6px; }
+.oplan-check7__row { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.oplan-check7__row.is-warn { border-color: var(--danger-line); }
+.oplan-check7__date { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.oplan-check7__date b { font-size: 14px; color: var(--fg); }
+.oplan-check7__date small { font-size: 12px; color: var(--muted); }
+.oplan-check7__cats { display: flex; flex-wrap: wrap; gap: 5px; }
+
+/* ── 날짜 편집 ── */
+.oplan--edit { padding-bottom: 96px; }
+.oplan-ed { display: flex; flex-direction: column; gap: 10px; }
+.oplan-ed__nav { display: flex; align-items: center; gap: 8px; }
+.oplan-ed__arrow { flex: 0 0 auto; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--seg-bg); font-size: 22px; font-weight: 800; color: var(--green-700); }
+.oplan-ed__date { flex: 1; min-width: 0; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.oplan-ed__date b { font-size: 17px; color: var(--fg); display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.oplan-ed__date small { font-size: 12.5px; color: var(--muted); }
+.oplan-ed__links { display: flex; justify-content: space-between; }
+.oplan-ed__ro { margin: 0; }
+.oplan-ed__tabs { margin: 2px 0 0; }
+.oplan-ed__tabs .cattab { position: relative; }
+.oplan-ed__dirty { position: absolute; top: 5px; right: 6px; width: 7px; height: 7px; border-radius: 999px; background: #e08a1e; }
+.oplan-ed__tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.oplan-ed__tools .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.oplan-ed__msg { margin: 0; display: flex; flex-direction: column; gap: 3px; line-height: 1.5; }
+.oplan-tag { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; background: var(--green-700); color: #fff; }
+.oplan-tag--mute { background: var(--chip-mute-bg); color: var(--muted); }
+.oplan-empty { font-size: 13px; color: var(--fg-2); background: var(--surface-2); border: 1px dashed var(--line-strong); border-radius: 12px; padding: 12px 14px; line-height: 1.55; }
+.oplan-warn { font-size: 12px; font-weight: 700; color: var(--danger-soft-fg); font-style: normal; }
+
+.oplan-rows { display: flex; flex-direction: column; gap: 8px; }
+.oplan-row { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; background: #fff; display: flex; flex-direction: column; gap: 8px; }
+.oplan-row.is-hidden { background: var(--surface-2); }
+.oplan-row.is-hidden .oplan-row__name,
+.oplan-row.is-hidden .oplan-row__tname { color: var(--muted); text-decoration: line-through; }
+.oplan-row.is-error { border-color: var(--danger); box-shadow: 0 0 0 2px var(--danger-bg); }
+.oplan-row__top { display: flex; align-items: center; gap: 8px; }
+.oplan-row__no { flex: 0 0 auto; min-width: 22px; height: 22px; border-radius: 999px; background: var(--chip-mute-bg); color: var(--muted); font-size: 11.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.oplan-row__name { flex: 1; min-width: 0; font-weight: 700; }
+.oplan-row__tname { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--fg); }
+.oplan-row__boxes { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--green-700); }
+.oplan-row__nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; }
+.oplan-num { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.oplan-num span { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.oplan-num .input { width: 100%; min-width: 0; text-align: right; }
+.oplan-row__desc { font-size: 13.5px; }
+.oplan-row__tool { display: flex; flex-direction: column; gap: 6px; }
+.oplan-row__linked { margin-bottom: 0; }
+.oplan-row__manual { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) auto; gap: 6px; align-items: center; }
+.oplan-row__manual .input { width: 100%; min-width: 0; }
+.oplan-row__stat { display: flex; flex-direction: column; gap: 6px; }
+.oplan-row__statbtn { align-self: flex-start; border: 0; background: var(--green-100); color: var(--green-700); font: inherit; font-size: 12.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; cursor: pointer; }
+.oplan-row__statbtn:disabled { cursor: default; background: var(--chip-mute-bg); color: var(--muted); }
+.oplan-row__caret { margin-left: 4px; }
+.oplan-row__stores { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: 12.5px; color: var(--fg-2); padding: 6px 10px; background: var(--surface-2); border-radius: 10px; }
+.oplan-row__stores b { text-align: right; }
+.oplan-row__acts { display: flex; align-items: center; gap: 14px; }
+.oplan-row__note { font-size: 11.5px; color: var(--muted); }
+.oplan-row__del { width: 30px; height: 30px; border-radius: 999px; border: 0; background: var(--danger-bg); color: var(--danger); font-size: 18px; font-weight: 800; line-height: 1; cursor: pointer; font-family: inherit; }
+.oplan-add { display: flex; gap: 8px; }
+.oplan-add .btn { flex: 1; }
+.oplan-picker { margin-bottom: 0; }
+.flatinv__opt.is-off { opacity: 0.5; cursor: default; }
+
+/* 고정 저장 줄 — 하단 네비 위 */
+.oplan-savebar {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+  width: 100%; max-width: var(--maxw); z-index: 30;
+  display: flex; align-items: center; gap: 12px;
+  /* 오른쪽은 1:1 문의 채팅 버튼(56px, 오른쪽 16px) 자리를 비워 저장 버튼이 가리지 않게 */
+  padding: 10px 84px 10px 15px; background: rgba(255, 255, 255, 0.97);
+  border-top: 1px solid var(--line-strong);
+}
+/* '홈 화면에 추가' 띠가 떠 있으면 그 위로(채팅 버튼과 같은 규칙) */
+:root[data-installbar="1"] .oplan-savebar {
+  bottom: calc(var(--nav-h) + 52px + env(safe-area-inset-bottom));
+}
+.oplan-savebar__count { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: 14px; color: var(--fg); white-space: nowrap; }
+.oplan-savebar__count small { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 공용 .btn 은 폭 100% — 여기선 글자 칸이 0으로 눌려 한 글자씩 꺾이므로 버튼 폭을 고정 */
+.oplan-savebar .btn { flex: 0 0 auto; width: auto; min-width: 110px; }
+
+/* 여러 날에 적용 */
+.oplan-copy__cats { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.oplan-copy__dates { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.oplan-copy__date { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; cursor: pointer; }
+.oplan-copy__date.is-on { border-color: var(--green-700); background: var(--green-100); }
+.oplan-copy__date input { accent-color: var(--green-700); }
+.oplan-copy__date small { flex-basis: 100%; font-size: 11px; color: var(--muted); }
+
+/* ── 점주 화면 미리보기 ── */
+.oplan-pv__head { display: flex; align-items: center; justify-content: space-between; }
+.oplan-pv__head b { font-size: 16px; color: var(--fg); }
+.oplan-pv { padding: 12px 14px; }
+.oplan-pv__title { display: flex; align-items: baseline; justify-content: space-between; font-size: 15px; font-weight: 800; color: var(--fg); margin-bottom: 8px; }
+.oplan-pv__title span { font-size: 12px; color: var(--muted); }
+.oplan-pv__closed { font-size: 13.5px; color: var(--muted); padding: 10px 0; text-align: center; }
+.oplan-pv__list { list-style: none; margin: 0; padding: 0; }
+.oplan-pv__list li { padding: 9px 0; border-top: 1px solid var(--line-soft); }
+.oplan-pv__list li:first-child { border-top: 0; padding-top: 2px; }
+.oplan-pv__list li.is-soldout { opacity: 0.55; }
+.oplan-pv__name { display: flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 700; color: var(--fg); }
+.oplan-pv__desc { font-size: 12.5px; color: var(--fg-2); margin-top: 2px; }
+.oplan-pv__meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--green-700); font-weight: 700; margin-top: 4px; }
+
+@media (max-width: 380px) {
+  .oplan-day { min-height: 80px; padding: 4px 2px; }
+  .oplan-mini { font-size: 9px; }
+  .oplan-row__manual { grid-template-columns: 1fr 1fr; }
+  .oplan-row__manual .btn { grid-column: 1 / -1; }
+  .oplan-pilot, .oplan-copy__dates { grid-template-columns: 1fr; }
+}

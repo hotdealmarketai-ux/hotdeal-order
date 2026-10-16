@@ -23,6 +23,7 @@ import { CancelRequestActions } from "@/components/CancelRequestActions";
 import { dailyForceOpen } from "@/lib/order-open";
 import { isOrderOpen } from "@/lib/deadline";
 import { setDailyForceOpenAction } from "@/app/actions/dev";
+import { PlanStatusCard } from "./PlanStatusCard";
 
 // 핫딜마켓 가맹점 발주를 '카테고리(보내는 곳)'별로.
 const HOTDEAL = { user: { role: "MERCHANT_HOTDEAL" } } as const;
@@ -237,6 +238,9 @@ export default async function AdminHotdeal(props: {
           labelPrefix="출고 "
           max={shipmentDayOf(kstToday())}
         />
+
+        {/* 품목 제한 모드 — 이 출고일 발주창에 편성이 있을 때만 보인다(없으면 아무것도 안 그림). */}
+        <PlanStatusCard shipmentDate={date} />
 
         <Link
           href={`/admin/summary?ctx=hotdeal&scope=${scope}&date=${date}`}

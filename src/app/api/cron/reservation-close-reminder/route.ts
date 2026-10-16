@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { logError } from "@/lib/log";
-import { notifyMerchantsReservationClosingSoon } from "@/lib/push";
+import { notifyMerchantsReservationClosingSoon, reservationAudienceIds } from "@/lib/push";
 
 // 예약발주 상품 '마감 1시간 전' 리마인더. tick 디스패처가 매 분 호출 → 마지막 1시간 창에
 // 진입한 상품을 그 즉시 1회만 발송. 멱등키에 closeAt(ms)을 포함해, 관리자가 마감을 미루면
@@ -27,6 +27,9 @@ export async function GET(request: Request) {
     select: { id: true, name: true, closeAt: true },
   });
 
+  // 받는 사람 = 예약발주가 보이는 지점(지점 노출 켜짐 && 품목 제한 모드 아님). 상품이 있을 때 한 번만 계산.
+  const audience = products.length > 0 ? await reservationAudienceIds(now) : [];
+
   const sent: string[] = [];
   for (const p of products) {
     const closeMs = (p.closeAt as Date).getTime();
@@ -38,7 +41,7 @@ export async function GET(request: Request) {
       continue;
     }
     try {
-      await notifyMerchantsReservationClosingSoon(p.name);
+      await notifyMerchantsReservationClosingSoon(p.name, audience);
       sent.push(p.id);
     } catch (err) {
       logError("cron.reservationCloseReminder", err, { productId: p.id });

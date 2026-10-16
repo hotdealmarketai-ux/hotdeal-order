@@ -17,7 +17,17 @@ import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 import type { ToolHold } from "./OrderForm";
 import type { Category, Fulfillment } from "@/lib/constants";
 
-type Row = { id: number; name: string; qty: string; note: string };
+// planItemId·inventoryItemId: 줄의 편성 품목·재고 번호(관리자 수정이 저장 때 그대로 돌려보냄).
+// origName: 처음 이름 — 이름을 고치면 편성 번호는 떼고 보낸다(서버가 이름으로 다시 찾음).
+type Row = {
+  id: number;
+  name: string;
+  qty: string;
+  note: string;
+  planItemId?: string;
+  inventoryItemId?: string;
+  origName?: string;
+};
 
 function isFilled(r: Row) {
   return !!(r.name.trim() || r.qty.trim() || r.note.trim());
@@ -40,7 +50,13 @@ export function EditOrderForm({
   orderId: string;
   category: Category;
   receiver: string;
-  initialItems: { name: string; qty: string; note: string }[];
+  initialItems: {
+    name: string;
+    qty: string;
+    note: string;
+    planItemId?: string;
+    inventoryItemId?: string;
+  }[];
   needsPickup: boolean;
   initialPickup?: string;
   needsFulfillment?: boolean;
@@ -72,6 +88,9 @@ export function EditOrderForm({
       name: it.name,
       qty: it.qty,
       note: it.note,
+      planItemId: it.planItemId ?? "",
+      inventoryItemId: it.inventoryItemId ?? "",
+      origName: it.name,
     }));
     return [...seed, newRow()];
   });
@@ -124,7 +143,11 @@ export function EditOrderForm({
     setRows((prev) => {
       if (prev.some((r) => r.name.trim() === item.name.trim())) return prev;
       const filled = prev.filter(isFilled);
-      return [...filled, { id: ++uid.current, name: item.name, qty: "1", note: "" }, newRow()];
+      return [
+        ...filled,
+        { id: ++uid.current, name: item.name, qty: "1", note: "", inventoryItemId: item.id, origName: item.name },
+        newRow(),
+      ];
     });
   }
 
@@ -158,9 +181,17 @@ export function EditOrderForm({
     if (isToolHold) {
       return toolCart.map((t) => ({ name: t.name, qty: t.qty, note: "" }));
     }
-    return rows
-      .filter(isFilled)
-      .map((r) => ({ name: r.name, qty: r.qty, note: r.note }));
+    return rows.filter(isFilled).map((r) => {
+      // 이름을 그대로 두면 편성·재고 번호 유지, 고치면 뗀다(다른 품목으로 잘못 세지 않게)
+      const sameName = r.name.trim() === (r.origName ?? "").trim();
+      return {
+        name: r.name,
+        qty: r.qty,
+        note: r.note,
+        planItemId: sameName ? (r.planItemId ?? "") : "",
+        inventoryItemId: sameName ? (r.inventoryItemId ?? "") : "",
+      };
+    });
   }, [isTofu, isToolHold, toolCart, rows, tofuQty]);
 
   return (

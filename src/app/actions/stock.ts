@@ -7,6 +7,7 @@ import { orderTimeOpenForUser } from "@/lib/receivable";
 import { windowKeyAt } from "@/lib/schedule";
 import { isItemReservationLocked } from "@/lib/reservation-stock";
 import { logError } from "@/lib/log";
+import { restrictModeForStrict } from "@/lib/restrict-mode";
 
 export type HoldResult = { ok: boolean; error?: string; available?: number };
 
@@ -19,6 +20,19 @@ export async function holdStockAction(input: {
   const user = await getCurrentUser();
   if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
     return { ok: false, error: "권한이 없어요." };
+  }
+  // 품목 제한 모드면 재고현황 담기를 쓰지 않는다(공구는 발주 화면의 오늘 편성 품목으로만).
+  // 저장 판정이라 설정을 못 읽으면 막는 쪽(잠시 후 다시).
+  try {
+    if (await restrictModeForStrict(user)) {
+      return {
+        ok: false,
+        error: "지금은 재고현황 담기를 쓰지 않아요. 발주 화면에서 오늘 품목에 수량을 넣어 주세요.",
+      };
+    }
+  } catch (err) {
+    logError("stock.hold.restrict", err, { userId: user.id });
+    return { ok: false, error: "잠시 후 다시 시도해 주세요." };
   }
   if (!(await orderTimeOpenForUser(user))) {
     return { ok: false, error: "지금은 담기 시간이 아니에요." };
@@ -48,13 +62,22 @@ export async function holdStockAction(input: {
       });
       const mine = await tx.stockHold.findUnique({
         where: { userId_itemId_windowDate: { userId: user.id, itemId, windowDate } },
-        select: { qty: true },
+        select: { qty: true, source: true },
       });
+      // PLAN 행 = 제한 모드 공구 발주분(발주 저장이 관리). 담기로 덮어쓰거나 지우지 않는다.
+      if (mine && mine.source === "PLAN") {
+        return {
+          ok: false,
+          error: "이 품목은 편성 발주로 이미 들어가 있어 여기서 바꿀 수 없어요. 본사에 문의해 주세요.",
+        };
+      }
       const othersHeld = (agg._sum.qty ?? 0) - (mine?.qty ?? 0);
       const availableForMe = item.qty - othersHeld; // 내가 담을 수 있는 최대
 
       if (qty <= 0) {
-        await tx.stockHold.deleteMany({ where: { userId: user.id, itemId, windowDate } });
+        await tx.stockHold.deleteMany({
+          where: { userId: user.id, itemId, windowDate, source: "CART" },
+        });
         return { ok: true, available: Math.max(0, availableForMe) };
       }
       if (qty > availableForMe) {
@@ -80,11 +103,18 @@ export async function holdStockAction(input: {
   }
 }
 
+// 빼기 — 정리용이라 제한 모드에서도 허용. 단 재고현황 담기(CART) 행만 지운다.
+// PLAN 행(제한 모드 연동 공구 발주분)은 발주 저장(syncPlanHolds)이 관리하므로 절대 지우지 않는다.
 export async function releaseHoldAction(itemId: string): Promise<HoldResult> {
   const user = await getCurrentUser();
   if (!user || user.role !== "MERCHANT_HOTDEAL") return { ok: false };
   await prisma.stockHold.deleteMany({
-    where: { userId: user.id, itemId: String(itemId), windowDate: windowKeyAt() },
+    where: {
+      userId: user.id,
+      itemId: String(itemId),
+      windowDate: windowKeyAt(),
+      source: "CART",
+    },
   });
   revalidatePath("/inventory");
   revalidatePath("/order");
