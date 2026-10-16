@@ -1285,6 +1285,7 @@ export async function adminUpdateOrderAction(
       status: true,
       windowKey: true,
       user: { select: { role: true, storeName: true } },
+      items: { select: { name: true, qty: true, rawName: true, rawQty: true, planItemId: true, inventoryItemId: true } },
     },
   });
   if (!order) return { error: "발주를 찾을 수 없어요." };
@@ -1340,9 +1341,48 @@ export async function adminUpdateOrderAction(
     const byId = new Map(planItems.map((p) => [p.id, p]));
     const byName = new Map(planItems.map((p) => [p.name.trim(), p]));
     const byInv = new Map(planItems.filter((p) => p.inventoryItemId).map((p) => [p.inventoryItemId, p]));
+    // 새로 붙이지 않는 옛 줄(점주 하루 수정의 '이전 방식 발주 · 그대로 유지'와 같은 규칙):
+    //  · 이 발주에 원래 있던 편성 번호 없는 줄을 그대로 둔 것(이름·수량 같음) — 붙이면 반박스·1박스반 같은 수량이
+    //    정수로 바뀌거나 정수 검사에 걸린다. 새로 넣거나 바꾼 줄만 붙인다(정수 아니면 아래 검사로 안내).
+    //    폼은 원문(rawName·rawQty)을 보내므로 원문·정리본 둘 다로 맞춰 보고, 원래 줄 수만큼만 인정한다.
+    //  · 모드 전 재고현황 담기(CART)로 넣은 공구 — 그 담기가 이 발주의 원장이라 편성 줄로 바꾸면 '늘리기'로 거절된다.
+    //    대신 담기·원래 수량 중 큰 값보다 늘리면 원장이 모자라 실재고를 넘기므로 거절(줄이기·그대로는 허용, 소수 포함)
+    const carts = ownerRestricted && category === "TOOL"
+      ? await prisma.stockHold.findMany({
+          where: { userId: order.userId, windowDate: W, source: { not: "PLAN" } },
+          select: { itemId: true, name: true, qty: true },
+        })
+      : [];
+    const cartById = new Map(carts.map((c) => [c.itemId, c.qty]));
+    const cartByName = new Map(carts.map((c) => [c.name.trim(), c.qty]));
+    const legacyKey = (name: string, qty: string) => `${name.trim()}\u0001${String(qty).trim()}`;
+    const origCount = new Map<string, number>();
+    const origQtyById = new Map<string, number>();
+    const origQtyByName = new Map<string, number>();
+    for (const i of order.items) {
+      if (i.planItemId) continue;
+      for (const k of new Set([legacyKey(i.name, i.qty), legacyKey(i.rawName, displayQty(i.rawQty))])) {
+        origCount.set(k, (origCount.get(k) ?? 0) + 1);
+      }
+      if (i.inventoryItemId) origQtyById.set(i.inventoryItemId, (origQtyById.get(i.inventoryItemId) ?? 0) + qtyNum(i.qty));
+      origQtyByName.set(i.name.trim(), (origQtyByName.get(i.name.trim()) ?? 0) + qtyNum(i.qty));
+    }
     for (const r of items) {
       let p = r.planItemId ? byId.get(r.planItemId) : undefined;
-      if (ownerRestricted) {
+      const dq = displayQty(r.qty);
+      const cartQty = (r.inventoryItemId ? cartById.get(r.inventoryItemId) : undefined) ?? cartByName.get(r.name.trim());
+      if (!p && ownerRestricted && cartQty !== undefined) {
+        const orig = (r.inventoryItemId ? origQtyById.get(r.inventoryItemId) : undefined) ?? origQtyByName.get(r.name.trim()) ?? 0;
+        const limit = Math.max(cartQty, orig);
+        if (qtyNum(dq) > limit) {
+          return { error: `‘${r.name}’은(는) 모드 전에 재고현황으로 담은 품목이라 ${limit}개보다 늘릴 수 없어요.` };
+        }
+      }
+      const k = legacyKey(r.name, dq);
+      const isOrig = !p && (origCount.get(k) ?? 0) > 0;
+      if (isOrig) origCount.set(k, (origCount.get(k) ?? 0) - 1);
+      const attachable = cartQty === undefined && !isOrig;
+      if (ownerRestricted && attachable) {
         if (!p && category === "TOOL" && r.inventoryItemId) p = byInv.get(r.inventoryItemId);
         if (!p && r.name) p = byName.get(r.name.trim());
       }
@@ -1975,17 +2015,35 @@ async function applyDayPrepared(
     if (!cur) existingByCat.set(o.category, { id: o.id, items: o.items, extraIds: [] });
     else cur.extraIds.push(o.id); // 같은 종류 중복 → 정리 대상
   }
-  const sameItems = (a: DayExisting["items"], b: DayExisting["items"]) =>
+  // 편성 번호 없는 줄은 순서대로(기존 그대로), 편성 줄은 순서와 상관없이 비교 — 관리자가 편성 순서만 바꿔도
+  // 손대지 않은 종류가 '수정됨'이 되어 업체 확인이 풀리고 수정 알림이 가던 것을 막는다.
+  const freeSame = (a: DayExisting["items"], b: DayExisting["items"]) =>
     a.length === b.length &&
     a.every(
       (x, i) =>
         x.name === b[i].name &&
         String(x.qty) === String(b[i].qty) &&
         (x.note ?? "") === (b[i].note ?? "") &&
-        (x.planItemId ?? "") === (b[i].planItemId ?? "") &&
         // 기존 줄에 재고 번호가 없던 레거시 공구 줄은 번호만 다르다고 '수정'으로 보지 않는다(불필요한 확정 해제·알림 방지)
         (!b[i].inventoryItemId || (x.inventoryItemId ?? "") === b[i].inventoryItemId),
     );
+  const planKeys = (list: DayExisting["items"]) =>
+    list
+      .filter((x) => x.planItemId)
+      .map((x) => JSON.stringify([x.planItemId, x.name, String(x.qty), x.note ?? "", x.inventoryItemId ?? ""]))
+      .sort();
+  const sameItems = (a: DayExisting["items"], b: DayExisting["items"]) => {
+    const pa = planKeys(a);
+    const pb = planKeys(b);
+    return (
+      pa.length === pb.length &&
+      pa.every((k, i) => k === pb[i]) &&
+      freeSame(
+        a.filter((x) => !x.planItemId),
+        b.filter((x) => !x.planItemId),
+      )
+    );
+  };
 
   const createdCats: Category[] = [];
   const editedCats: Category[] = [];

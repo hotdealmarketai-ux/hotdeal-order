@@ -135,6 +135,22 @@ export async function saveFlatProductAction(
     if (!existing) return { error: "상품을 찾을 수 없어요." };
     const existingIsSet = existing._count.components > 0;
 
+    // 이미 예약이 들어온 상품은 세트↔단일을 바꾸지 않는다 — 예약 줄의 재고연동 스냅샷(inventoryItemId)이
+    //  옛 종류 그대로 남아 홀드가 두 번 잡히거나(단일→세트) 빠진다(세트→단일). 새 상품으로 등록하게 안내.
+    //  계산서 발행으로 '차감됨'이 된 줄도 센다 — 계산서를 취소하면 그 줄이 다시 홀드로 살아나기 때문.
+    if (componentsProvided && existingIsSet !== isSet) {
+      const booked = await prisma.reservationOrderItem.count({
+        where: { productId: id, qty: { gt: 0 } },
+      });
+      if (booked > 0) {
+        return {
+          error: existingIsSet
+            ? "이미 예약이 들어온 세트라 구성품을 모두 뺄(단일로 바꿀) 수 없어요. 새 상품으로 등록해 주세요."
+            : "이미 예약이 들어온 상품이라 세트로 바꿀 수 없어요. 새 세트 상품으로 등록해 주세요.",
+        };
+      }
+    }
+
     if (componentsProvided) {
       // 구성품을 관리하는 폼(관리자 세트 폼) — 구성품 전량 교체(삭제 후 재생성), 세트가/연동도 구성품 기준.
       await prisma.$transaction([

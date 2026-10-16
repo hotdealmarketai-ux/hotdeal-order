@@ -615,14 +615,47 @@ export async function copyPlanAction(input: CopyPlanInput): Promise<CopyPlanResu
       const r = await relinkDrafts(list);
       notes.push(...r.notes);
       const locked = await lockedInventoryItemIds();
+      // 저장(saveDayPlanAction)과 같은 공구 검사 — 원본 저장 뒤 재고가 새로 등록·개명됐을 수 있다.
+      //  수기 줄 이름이 재고 이름과 같으면 담기원장 없이 계산서가 이름으로 재고를 깎으므로 빼고 안내.
+      const manual = r.items.some((d) => !d.inventoryItemId);
+      const liveNames = manual
+        ? new Set(
+            (await prisma.inventoryItem.findMany({ where: { deletedAt: null }, select: { name: true } })).map((x) =>
+              normPlanName(x.name),
+            ),
+          )
+        : new Set<string>();
+      const linkSeen = new Set<string>();
       list = r.items.filter((d) => {
         if (d.inventoryItemId && locked.has(d.inventoryItemId)) {
           notes.push(`'${d.name}'은(는) 지금 예약발주 진행 중인 재고라 복사하지 않았어요.`);
           return false;
         }
+        if (!d.inventoryItemId && liveNames.has(normPlanName(d.name))) {
+          notes.push(`'${d.name}'은(는) 재고현황 이름과 같은 수기 공구라 복사하지 않았어요. 재고 연동으로 넣어 주세요.`);
+          return false;
+        }
+        if (d.inventoryItemId) {
+          if (linkSeen.has(d.inventoryItemId)) {
+            notes.push(`'${d.name}'은(는) 같은 재고에 연동된 줄이 이미 있어 하나만 복사했어요.`);
+            return false;
+          }
+          linkSeen.add(d.inventoryItemId);
+        }
         return true;
       });
     }
+    // 같은 이름 두 줄은 하나만(저장 검사와 같은 규칙 — 다음 저장이 이름 중복으로 막히지 않게)
+    const nameSeen = new Set<string>();
+    list = list.filter((d) => {
+      const k = normPlanName(d.name);
+      if (nameSeen.has(k)) {
+        notes.push(`'${d.name}'은(는) 같은 이름 줄이 이미 있어 하나만 복사했어요.`);
+        return false;
+      }
+      nameSeen.add(k);
+      return true;
+    });
     srcItems[c] = list;
   }
   const doTofu = cats.includes("TOFU");
@@ -775,7 +808,8 @@ export async function setRestrictModeAction(input: {
         pilot = ok.map((u) => u.id);
         if (pilot.length === 0) return { error: "고른 시험 지점을 찾을 수 없어요. 새로고침 후 다시 골라 주세요." };
       }
-      const from = input?.when === "now" ? "" : await nextStartKey(Date.now());
+      // '지금 바로' = 지금 발주창부터(빈 값으로 두면 켜기 전 지난 창 발주까지 제한 대상으로 잡혀 관리자 수정이 꼬인다)
+      const from = input?.when === "now" ? windowKeyAt(Date.now()) : await nextStartKey(Date.now());
       await setRestrictConfig({ on: true, from, pilot });
     }
   } catch (e) {
