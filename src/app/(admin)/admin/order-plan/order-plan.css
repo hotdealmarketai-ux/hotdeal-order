@@ -72,7 +72,7 @@
 .oplan-cal__dow.is-sun { color: var(--danger); }
 .oplan-cal__foot { display: flex; justify-content: space-between; padding: 10px 4px 0; }
 
-.oplan-day { display: flex; flex-direction: column; gap: 3px; min-height: 86px; min-width: 0; padding: 5px 4px; border-radius: 9px; border: 1px solid var(--line); background: #fff; color: var(--fg); overflow: hidden; }
+.oplan-day { display: flex; flex-direction: column; gap: 3px; min-height: 66px; min-width: 0; padding: 5px 4px; border-radius: 9px; border: 1px solid var(--line); background: #fff; color: var(--fg); overflow: hidden; }
 .oplan-day:active { background: var(--surface-2); }
 .oplan-day--empty { border: 0; background: transparent; }
 .oplan-day--sun { background: var(--surface-2); border-style: dashed; opacity: 0.6; }
@@ -83,6 +83,9 @@
 .oplan-day--sun .oplan-day__num { color: var(--danger); }
 .oplan-day__cats { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
 .oplan-day__sub { margin-top: auto; font-size: 9.5px; line-height: 1.25; color: var(--muted); letter-spacing: -0.02em; word-break: keep-all; }
+/* 오늘·내일 발주창에 비어 있는 종류 — 칸 아래 한 줄 + 테두리 */
+.oplan-day.is-alert { border-color: var(--danger); }
+.oplan-day__alert { margin-top: auto; font-size: 10px; font-weight: 800; line-height: 1.2; color: var(--danger); white-space: nowrap; }
 .oplan-mini { font-size: 10px; font-weight: 800; line-height: 1; padding: 3px 1px; border-radius: 4px; text-align: center; white-space: nowrap; overflow: hidden; letter-spacing: -0.03em; }
 .oplan-mini--some { background: var(--green-100); color: var(--green-700); }
 .oplan-mini--closed { background: var(--chip-mute-bg); color: var(--muted); }
@@ -196,7 +199,7 @@
 .oplan-pv__meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; color: var(--green-700); font-weight: 700; margin-top: 4px; }
 
 @media (max-width: 380px) {
-  .oplan-day { min-height: 80px; padding: 4px 2px; }
+  .oplan-day { min-height: 62px; padding: 4px 2px; }
   .oplan-mini { font-size: 9px; }
   .oplan-row__manual { grid-template-columns: 1fr 1fr; }
   .oplan-row__manual .btn { grid-column: 1 / -1; }

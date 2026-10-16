@@ -71,7 +71,7 @@ export async function relinkDrafts(drafts: LoadedDraft[]): Promise<{ items: Load
       notes.push(`'${d.name}' 재고가 바뀌어 같은 이름 재고로 다시 연동했어요.`);
       return { ...d, inventoryItemId: same.id, name: same.name, supplyPrice: same.supplyPrice, tax: same.tax };
     }
-    notes.push(`'${d.name}' 재고를 찾을 수 없어 수기 공구로 바꿨어요(연동 끊김). 공급가·과세를 확인해 주세요.`);
+    notes.push(`'${d.name}' 재고를 못 찾아 수기 공구로 바꿨어요. 공급가·과세를 확인해 주세요.`);
     return { ...d, inventoryItemId: "", brokenLink: true };
   });
   return { items, notes };

@@ -27,11 +27,11 @@ export default async function OrderPlanPreviewPage({ params }: { params: Promise
         <div className="oplan-pv__head">
           <b>{labelDate(date)} 발주창</b>
           <Link href={`/admin/order-plan/${date}`} className="tbtn">
-            편집으로 →
+            편집
           </Link>
         </div>
         <div className="notice notice--mute" style={{ marginBottom: 12 }}>
-          점주가 이 창에 보게 될 품목이에요(읽기 전용). 남은 수량은 지금 기준이에요.
+          남은 수량은 지금 기준이에요.
         </div>
 
         {PLAN_CATS.map((c) => {

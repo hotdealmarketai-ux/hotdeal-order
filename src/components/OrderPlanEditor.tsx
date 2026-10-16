@@ -295,7 +295,7 @@ export function OrderPlanEditor(props: {
       if (i >= 0) {
         setTab(c);
         setErrAt({ cat: c, index: i });
-        setMsg({ kind: "error", lines: [`${CAT_LABEL[c]} ${i + 1}번째 줄에 품목명을 넣어 주세요. 필요 없으면 − 로 지워 주세요.`] });
+        setMsg({ kind: "error", lines: [`${CAT_LABEL[c]} ${i + 1}번째 줄에 품목명을 넣어 주세요.`] });
         return;
       }
     }
@@ -361,7 +361,7 @@ export function OrderPlanEditor(props: {
       }
       setMsg({
         kind: r.notes.length ? "warn" : "ok",
-        lines: [`${props.prevSources[cat]?.label ?? r.sourceDate} 편성을 불러왔어요. 숫자를 고친 뒤 저장해 주세요.`, ...r.notes],
+        lines: [`${props.prevSources[cat]?.label ?? r.sourceDate} 편성을 불러왔어요. 저장해야 반영돼요.`, ...r.notes],
       });
     });
   };
@@ -395,14 +395,12 @@ export function OrderPlanEditor(props: {
       </div>
       <div className="oplan-ed__links">
         <Link href={props.monthHref} className="tbtn">
-          달력으로
+          달력
         </Link>
         <Link href={`/admin/order-plan/${date}/preview`} className="tbtn">
-          점주 화면 미리보기 →
+          미리보기
         </Link>
       </div>
-
-      {readOnly && <div className="notice notice--mute oplan-ed__ro">지난 발주창이라 읽기 전용이에요.</div>}
 
       {/* 종류 탭 */}
       <div className="cattabs cattabs--seg oplan-ed__tabs">
@@ -425,9 +423,11 @@ export function OrderPlanEditor(props: {
 
       {!readOnly && (
         <div className="oplan-ed__tools">
-          <button type="button" className="btn btn--xs btn--soft" onClick={onLoadClick} disabled={pending || !src}>
-            {src ? `전날 불러오기 · ${src.label} ${src.count}개` : "불러올 지난 편성 없음"}
-          </button>
+          {src && (
+            <button type="button" className="btn btn--xs btn--soft" onClick={onLoadClick} disabled={pending}>
+              전날 불러오기
+            </button>
+          )}
           <button
             type="button"
             className="btn btn--xs btn--ghost"
@@ -465,11 +465,11 @@ export function OrderPlanEditor(props: {
             <div className="oplan-empty">
               {touched[tab] ? (
                 <>
-                  <b>0개로 저장해요.</b> 이날 점주 화면에서 {CAT_LABEL[tab]} 발주가 닫혀요.
+                  <b>0개</b> — 이날 {CAT_LABEL[tab]} 발주는 닫혀요.
                 </>
               ) : (
                 <>
-                  <b>아직 편성 전이에요.</b> 이대로 두면 이날 점주 화면에서 {CAT_LABEL[tab]} 발주가 닫혀요.
+                  <b>편성 전</b> — 이날 {CAT_LABEL[tab]} 발주는 닫혀요.
                   {!readOnly && (
                     <button
                       type="button"
@@ -477,7 +477,7 @@ export function OrderPlanEditor(props: {
                       onClick={() => setTouched((t) => ({ ...t, [tab]: true }))}
                       style={{ marginLeft: 6 }}
                     >
-                      &lsquo;발주 없음&rsquo;으로 정하기
+                      발주 없음
                     </button>
                   )}
                 </>
@@ -556,7 +556,7 @@ export function OrderPlanEditor(props: {
                   }}
                   disabled={pending}
                 >
-                  + 재고에서 고르기
+                  + 재고에서 추가
                 </button>
               )}
             </div>
@@ -569,12 +569,6 @@ export function OrderPlanEditor(props: {
               usedIds={new Set([...orderedLinks, ...rows.TOOL.map((x) => x.inventoryItemId).filter(Boolean)])}
               onPick={(it) => pickInv("+new", it)}
             />
-          )}
-          {!readOnly && (
-            <p className="oplan-hint">
-              재고수량·최대를 비우면 제한 없음이에요. 0 은 품절. 발주가 들어간 품목은 지우면 숨김으로 바뀌어요.
-              {tab === "TOOL" && " 재고 연동 공구는 실재고를 넘어서 받지 않아요."}
-            </p>
           )}
         </>
       )}
@@ -595,7 +589,7 @@ export function OrderPlanEditor(props: {
                 </small>
               </>
             ) : (
-              "바뀐 것 없음"
+              "변경 없음"
             )}
           </span>
           <button type="button" className="btn btn--primary" onClick={save} disabled={pending || !dirty}>
@@ -606,7 +600,7 @@ export function OrderPlanEditor(props: {
 
       {askLoad && (
         <ConfirmSheet
-          title={`지금 ${CAT_LABEL[tab]} 목록을 ${src?.label ?? "지난"} 편성으로 바꿀까요? 저장하기 전에는 실제로 바뀌지 않아요.`}
+          title={`${CAT_LABEL[tab]} 목록을 ${src?.label ?? "지난"} 편성으로 바꿀까요?`}
           confirmLabel="불러오기"
           onConfirm={doLoad}
           onClose={() => setAskLoad(false)}
@@ -688,7 +682,7 @@ function ItemRow({ setNameEl, ...p }: ItemRowProps) {
           ref={setNameEl}
           className="input oplan-row__name"
           value={r.name}
-          placeholder={cat === "TOOL" ? "공구 품목명" : `${CAT_LABEL[cat]} 품목명 (예: 양파(소))`}
+          placeholder="품목명"
           maxLength={60}
           disabled={readOnly || linked}
           onChange={(e) => p.onPatch({ name: e.target.value })}
@@ -705,7 +699,7 @@ function ItemRow({ setNameEl, ...p }: ItemRowProps) {
           onClick={() => p.onPatch({ hidden: !r.hidden })}
           disabled={readOnly}
         >
-          {r.hidden ? "숨김" : "보이기"}
+          {r.hidden ? "숨김" : "보임"}
         </button>
       </div>
 
@@ -718,7 +712,7 @@ function ItemRow({ setNameEl, ...p }: ItemRowProps) {
       <input
         className="input oplan-row__desc"
         value={r.description}
-        placeholder="설명 (점주 화면에만 보여요)"
+        placeholder="점주에게 보이는 설명"
         maxLength={200}
         disabled={readOnly}
         onChange={(e) => p.onPatch({ description: e.target.value })}
@@ -746,10 +740,10 @@ function ItemRow({ setNameEl, ...p }: ItemRowProps) {
             </div>
           ) : (
             <>
-              {r.brokenLink && <div className="oplan-warn">연동 끊김 — 재고를 찾지 못해 수기 공구로 바꿨어요.</div>}
+              {r.brokenLink && <div className="oplan-warn">연동 끊김 — 수기 공구로 바뀌었어요.</div>}
               {!readOnly && p.nameClash && (
                 <div className="oplan-warn">
-                  재고현황의 &lsquo;{p.nameClash}&rsquo;과 이름이 같아요. 재고 연동으로 넣거나 이름을 바꿔 주세요.
+                  재고현황 &lsquo;{p.nameClash}&rsquo;과 이름이 겹쳐요.
                 </div>
               )}
               <div className="oplan-row__manual">
@@ -767,7 +761,7 @@ function ItemRow({ setNameEl, ...p }: ItemRowProps) {
                 </select>
                 {!readOnly && !(used > 0) && (
                   <button type="button" className="btn btn--xs btn--soft" onClick={p.onPickOpen}>
-                    {p.picking ? "닫기" : "재고에서 고르기"}
+                    {p.picking ? "닫기" : "재고 연동"}
                   </button>
                 )}
               </div>
@@ -891,7 +885,11 @@ function TofuPane({
 }) {
   return (
     <>
-      {!exists && <div className="oplan-empty">편성 전이면 점주 화면에 4개 모두 보여요.</div>}
+      {!exists && (
+        <div className="oplan-empty">
+          <b>편성 전</b> — 모두 보여요.
+        </div>
+      )}
       <div className="oplan-rows">
         {catalog.map((p, i) => {
           const off = hidden.includes(p.seq);
@@ -907,14 +905,14 @@ function TofuPane({
                   onClick={() => onToggle(p.seq)}
                   disabled={readOnly}
                 >
-                  {off ? "숨김" : "보이기"}
+                  {off ? "숨김" : "보임"}
                 </button>
               </div>
             </div>
           );
         })}
       </div>
-      <p className="oplan-hint">숨겨도 이미 들어온 채움채 발주는 저녁 8시 5분 자동발주에 그대로 들어가요.</p>
+      <p className="oplan-hint">숨겨도 이미 들어온 발주는 저녁 8시 5분 자동발주에 들어가요.</p>
     </>
   );
 }
@@ -977,9 +975,9 @@ function CopySheet({
             ✕
           </button>
         </div>
-        <div className="sheet__hint">{label} 저장된 편성을 고른 날에 그대로 넣어요(숨긴 품목 빼고).</div>
+        <div className="sheet__hint">{label} 편성을 적용해요(숨긴 품목 제외).</div>
         <div className="sheet__body">
-          {dirty && <div className="notice notice--edit">저장하지 않은 변경이 있어요. 먼저 저장해야 그 내용이 적용돼요.</div>}
+          {dirty && <div className="notice notice--edit">저장 안 한 변경은 적용되지 않아요.</div>}
           {result ? (
             <div className="notice notice--ok">
               {result.map((l, i) => (
@@ -1006,7 +1004,7 @@ function CopySheet({
                 ))}
               </div>
               <div className="section-label" style={{ marginTop: 12 }}>
-                적용할 발주창
+                적용할 날
               </div>
               <div className="oplan-copy__dates">
                 {targets.map((t) => {
@@ -1031,14 +1029,14 @@ function CopySheet({
                 <label className={mode === "skip" ? "is-on" : ""}>
                   <input type="radio" checked={mode === "skip"} onChange={() => setMode("skip")} />
                   <span>
-                    <b>건너뛰기</b> (추천)
+                    <b>건너뛰기</b>
                   </span>
                 </label>
                 <label className={mode === "replace" ? "is-on" : ""}>
                   <input type="radio" checked={mode === "replace"} onChange={() => setMode("replace")} />
                   <span>
                     <b>덮어쓰기</b>
-                    <small>그날 그 종류에 발주가 하나도 없을 때만 덮어써요.</small>
+                    <small>발주가 없을 때만 덮어써요.</small>
                   </span>
                 </label>
               </div>
@@ -1061,7 +1059,7 @@ function CopySheet({
               onClick={run}
               disabled={pending || cats.length === 0 || picked.length === 0}
             >
-              {pending ? "적용 중…" : `${picked.length}개 창에 적용`}
+              {pending ? "적용 중…" : picked.length > 0 ? `적용 (${picked.length})` : "적용"}
             </button>
           )}
         </div>

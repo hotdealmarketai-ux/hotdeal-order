@@ -75,12 +75,6 @@ export default async function OrderPlanCalendarPage({
               ›
             </Link>
           </div>
-          <div className="oplan-cal__legend">
-            <span className="oplan-dot oplan-dot--some" /> 품목 수
-            <span className="oplan-dot oplan-dot--closed" /> 0개=닫힘
-            <span className="oplan-dot oplan-dot--none" /> 비어 있음
-            <span className="oplan-dot oplan-dot--alert" /> 오늘·내일 빔
-          </div>
           <div className="oplan-cal__grid">
             {WEEK.map((w, i) => (
               <div key={w} className={`oplan-cal__dow ${i === 5 ? "is-sat" : i === 6 ? "is-sun" : ""}`}>
@@ -94,67 +88,64 @@ export default async function OrderPlanCalendarPage({
               if (dow === 0) {
                 const sat = shiftDate(c, -1);
                 return (
-                  <Link key={c} href={`/admin/order-plan/${sat}`} className="oplan-day oplan-day--sun">
+                  <Link key={c} href={`/admin/order-plan/${sat}`} className="oplan-day oplan-day--sun" aria-label={`${d}일 — 토요일 발주창`}>
                     <span className="oplan-day__num">{d}</span>
-                    <span className="oplan-day__sub">토요일 창</span>
                   </Link>
                 );
               }
               const s = st[c];
               const past = c < cur;
-              const ship = shipmentDayOf(c);
+              // 칸에는 편성한 종류만(품목 수, 0개=닫힘은 회색) — 비어 있는 종류는 표시하지 않고,
+              // 오늘·내일 발주창에 비어 있는 종류가 있으면 '비어 있음' 한 줄로만 알린다.
+              const planned = ITEM_CATS.filter((k) => s.cats[k].state !== "none");
+              const alert = urgent(c) && planned.length < ITEM_CATS.length;
               return (
                 <Link
                   key={c}
                   href={`/admin/order-plan/${c}`}
-                  className={`oplan-day ${past ? "is-past" : ""} ${c === cur ? "is-today" : ""} ${dow === 6 ? "is-sat" : ""}`}
+                  className={`oplan-day ${past ? "is-past" : ""} ${c === cur ? "is-today" : ""} ${dow === 6 ? "is-sat" : ""} ${alert ? "is-alert" : ""}`}
                 >
                   <span className="oplan-day__num">{d}</span>
-                  <span className="oplan-day__cats">
-                    {ITEM_CATS.map((k) => {
-                      const cs = s.cats[k];
-                      const tone = cs.state === "none" ? (urgent(c) ? "alert" : "none") : cs.state;
-                      return (
-                        <span key={k} className={`oplan-mini oplan-mini--${tone}`} title={`${CAT_LABEL[k]} ${catText(cs)}`}>
-                          {CAT_SHORT[k]}
-                          {cs.state === "some" ? cs.count : cs.state === "closed" ? "0" : "·"}
+                  {(planned.length > 0 || s.tofu.exists) && (
+                    <span className="oplan-day__cats">
+                      {planned.map((k) => {
+                        const cs = s.cats[k];
+                        return (
+                          <span key={k} className={`oplan-mini oplan-mini--${cs.state}`} title={`${CAT_LABEL[k]} ${catText(cs)}`}>
+                            {CAT_SHORT[k]}
+                            {cs.state === "some" ? cs.count : 0}
+                          </span>
+                        );
+                      })}
+                      {s.tofu.exists && (
+                        <span className="oplan-mini oplan-mini--some" title={`채움채 ${s.tofu.visible}/${s.tofu.total}`}>
+                          {CAT_SHORT.TOFU}
+                          {s.tofu.visible}
                         </span>
-                      );
-                    })}
-                    <span
-                      className={`oplan-mini oplan-mini--${s.tofu.exists ? "some" : "none"}`}
-                      title={`채움채 ${s.tofu.visible}/${s.tofu.total}`}
-                    >
-                      {CAT_SHORT.TOFU}
-                      {s.tofu.visible}
+                      )}
                     </span>
-                  </span>
-                  <span className="oplan-day__sub">
-                    {dow === 6 ? (
-                      <>
-                        토·일 발주
-                        <br />→ 월 출고
-                      </>
-                    ) : (
-                      <>→ {Number(ship.slice(8, 10))}일 출고</>
-                    )}
-                  </span>
+                  )}
+                  {alert ? (
+                    <span className="oplan-day__alert">비어 있음</span>
+                  ) : (
+                    dow === 6 && <span className="oplan-day__sub">→ 월 출고</span>
+                  )}
                 </Link>
               );
             })}
           </div>
           <div className="oplan-cal__foot">
             <Link href={`/admin/order-plan?m=${ym(Number(cur.slice(0, 4)), Number(cur.slice(5, 7)))}`} className="tbtn">
-              이번 달로
+              이번 달
             </Link>
             <Link href={`/admin/order-plan/${cur}`} className="tbtn">
-              오늘 발주창 편성 →
+              오늘 편성 →
             </Link>
           </div>
         </div>
 
         <div className="section-label" style={{ marginTop: 18 }}>
-          다음 7개 발주창 편성 점검
+          다음 7개 발주창
         </div>
         <div className="oplan-check7">
           {checkKeys.map((k) => {
@@ -165,29 +156,36 @@ export default async function OrderPlanCalendarPage({
                 <span className="oplan-check7__date">
                   <b>{labelDate(k)}</b>
                   <small>
-                    {k === cur ? "지금 발주창 · " : ""}
+                    {k === cur ? "지금 · " : ""}
                     {dowOf(k) === 6 ? "토·일 발주 → 월 출고" : `→ ${labelDate(shipmentDayOf(k))} 출고`}
                   </small>
                 </span>
                 <span className="oplan-check7__cats">
-                  {ITEM_CATS.map((c) => (
-                    <span
-                      key={c}
-                      className={`oplan-chip oplan-chip--${s.cats[c].state === "none" ? (urgent(k) ? "alert" : "none") : s.cats[c].state}`}
-                    >
+                  {/* 편성한 종류만 칩으로, 비어 있는 종류는 한 칩으로 묶는다(오늘·내일이면 빨강) */}
+                  {ITEM_CATS.filter((c) => s.cats[c].state !== "none").map((c) => (
+                    <span key={c} className={`oplan-chip oplan-chip--${s.cats[c].state}`}>
                       {CAT_LABEL[c]} {catText(s.cats[c])}
                     </span>
                   ))}
-                  <span className={`oplan-chip oplan-chip--${s.tofu.exists ? "some" : "none"}`}>
-                    채움채 {s.tofu.visible}/{s.tofu.total}
-                  </span>
+                  {s.tofu.exists && (
+                    <span className="oplan-chip oplan-chip--some">
+                      채움채 {s.tofu.visible}/{s.tofu.total}
+                    </span>
+                  )}
+                  {blank.length > 0 && (
+                    <span className={`oplan-chip oplan-chip--${urgent(k) ? "alert" : "none"}`}>
+                      {blank.length === ITEM_CATS.length && !s.tofu.exists
+                        ? "편성 전"
+                        : `${blank.map((c) => CAT_LABEL[c]).join("·")} 비어 있음`}
+                    </span>
+                  )}
                 </span>
               </Link>
             );
           })}
         </div>
         <p className="oplan-hint">
-          비어 있는 종류는 그날 점주 화면에서 닫혀요(채움채만 비어 있으면 4개 모두 보여요). 일요일은 토요일 발주창과 같은 창이에요.
+          비어 있는 종류는 그날 발주가 닫혀요.
         </p>
       </div>
     </>
