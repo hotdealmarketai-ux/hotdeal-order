@@ -8,7 +8,7 @@ import { FlatReservationMerchant } from "@/components/FlatReservationMerchant";
 
 export const dynamic = "force-dynamic";
 
-// 점주 마감된 공산품 — 마감 지난 상품(최근 마감순 묶음). 수량은 못 고치고 '내 발주 N개'(확정분)만 보인다.
+// 점주 마감된 예약 — 마감 지난 상품(최근 마감순 묶음). 수량은 못 고치고 '내 발주 N개'(확정분)만 보인다.
 // 맨 아래 작은 링크 '이전 기록 ›' = 옛 날짜형 예약발주 기록(/reservations/past).
 export default async function MerchantClosedReservationsPage() {
   const user = await requireMerchant();
@@ -19,7 +19,7 @@ export default async function MerchantClosedReservationsPage() {
 
   return (
     <>
-      <Topbar backHref="/reservations" title="마감된 공산품" />
+      <Topbar backHref="/reservations" title="마감된 예약" />
       <div className="page">
         <FlatReservationMerchant products={products} closedList />
         <div style={{ display: "flex", justifyContent: "center", marginTop: 20 }}>

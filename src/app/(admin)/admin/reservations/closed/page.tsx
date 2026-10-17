@@ -8,7 +8,7 @@ import { FlatClosedList } from "@/components/FlatClosedList";
 
 export const dynamic = "force-dynamic";
 
-// 마감된 공산품 — 발주 마감은 지났지만 출고일은 아직 안 지난 상품(점포별 수량 대신 고치기 가능).
+// 마감된 예약 — 발주 마감은 지났지만 출고일은 아직 안 지난 상품(점포별 수량 대신 고치기 가능).
 // 출고일까지 지난 상품은 '출고 지난 공산품'으로 옮겨진다.
 export default async function ClosedReservationsPage() {
   await requireAdmin();
@@ -26,7 +26,6 @@ export default async function ClosedReservationsPage() {
     closeAtLocal: new Date(p.closeAt.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 16),
     stockFixed: p.stockFixed,
     minPerStore: p.minPerStore,
-    qtyStep: p.qtyStep,
     description: p.description,
     totalQty: p.totalQty,
     storeCount: p.storeCount,
@@ -35,7 +34,7 @@ export default async function ClosedReservationsPage() {
 
   return (
     <>
-      <Topbar backHref="/admin/reservations" title="마감된 공산품" />
+      <Topbar backHref="/admin/reservations" title="마감된 예약" />
       <div className="page">
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
           <Link
@@ -54,10 +53,10 @@ export default async function ClosedReservationsPage() {
           전체 집계
         </Link>
         <div className="itemshead">
-          <span className="itemshead__label">마감된 공산품</span>
+          <span className="itemshead__label">마감된 예약</span>
           <span className="itemshead__count">{rows.length}개</span>
         </div>
-        <FlatClosedList rows={rows} inventoryItems={inventoryItems} emptyText="마감된 공산품이 없어요." />
+        <FlatClosedList rows={rows} inventoryItems={inventoryItems} emptyText="마감된 예약이 없어요." />
       </div>
     </>
   );

@@ -25,7 +25,6 @@ export default async function AdminReservationsPage() {
     closeAtLocal: new Date(p.closeAtMs + 9 * 3600 * 1000).toISOString().slice(0, 16),
     stockFixed: p.stockFixed,
     minPerStore: p.minPerStore,
-    qtyStep: p.qtyStep,
     description: p.description,
     totalQty: p.totalQty,
     storeCount: p.storeCount,
@@ -44,7 +43,7 @@ export default async function AdminReservationsPage() {
             className="linkbtn"
             style={{ color: "var(--muted)", textDecoration: "none" }}
           >
-            마감된 공산품 ›
+            마감된 예약 ›
           </Link>
           <Link
             href="/admin/reservations/past"

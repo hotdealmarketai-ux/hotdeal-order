@@ -9,7 +9,7 @@ const won = (n: number) => n.toLocaleString("ko-KR");
 
 const SCOPE_TITLE: Record<FlatScope, string> = {
   open: "진행 중 공산품 집계",
-  closed: "마감된 공산품 집계",
+  closed: "마감된 예약 집계",
   pickupClosed: "출고 지난 공산품 집계",
 };
 const BACK: Record<FlatScope, string> = {

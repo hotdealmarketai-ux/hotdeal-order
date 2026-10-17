@@ -28,9 +28,9 @@ function useNow(): number {
 // 저절로 버려진다 → 저장 직후 새로고침이 올 때까지는 고른 숫자를 그대로 보여 깜빡이지 않는다.
 type Draft = { qty: number; base: number };
 
-// 점주 공산품 목록 — 마감 시각 묶음 → 그 안 출고일 → 1열 카드. 검색·'발주한 것만'은 화면 안에서 거른다.
+// 점주 공산품 목록 — 마감 시각 묶음 → 그 안 출고일 → 1열 카드. 검색·'내 발주'는 화면 안에서 거른다.
 // −/+·직접 입력은 숫자만 바꾸고, 서버는 [발주하기]/[변경 저장]/[발주 취소] 때 한 번 부른다.
-// closedList = 마감된 공산품(최근 마감순, 수량 칸 없이 '내 발주 N개'만).
+// closedList = 마감된 예약(최근 마감순, 수량 칸 없이 '내 발주 N개'만).
 export function FlatReservationMerchant({
   products,
   myOrders,
@@ -102,7 +102,7 @@ export function FlatReservationMerchant({
           aria-pressed={mineOnly}
           onClick={() => setMineOnly((v) => !v)}
         >
-          발주한 것만
+          내 발주
         </button>
       </div>
 
@@ -116,14 +116,14 @@ export function FlatReservationMerchant({
               : mineOnly
                 ? "발주한 공산품이 없어요."
                 : closedList
-                  ? "마감된 공산품이 없어요."
+                  ? "마감된 예약이 없어요."
                   : "지금 발주할 수 있는 공산품이 없어요."}
           </p>
         </div>
       ) : (
         groups.map((g) => {
           const remain = closeRemain(g.closeAtMs, now);
-          // 묶음 머리 = 규칙(5개부터·5개씩)·안내만. 규칙 없는 건 기본이라 따로 적지 않는다.
+          // 묶음 머리 = 최소 수량(5개부터)·안내만. 최소 없는 건 기본이라 따로 적지 않는다.
           const common = [...(g.commonRule ? qtyRuleBadges(g.commonRule) : []), g.commonDesc ?? ""].filter(Boolean);
           return (
             <section className="gsp-group" key={g.closeAtMs}>
@@ -139,8 +139,10 @@ export function FlatReservationMerchant({
                 {common.length > 0 && <div className="gsp-ghead__common">{common.join(" · ")}</div>}
               </div>
               {g.ships.map((s) => (
-                <div key={s.pickupDate}>
-                  <div className="gsp-ship">{labelShipment(s.pickupDate)}</div>
+                <div className="gsp-shipgrp" key={s.pickupDate}>
+                  <div className="gsp-ship">
+                    <span className="gsp-ship__tag">{labelShipment(s.pickupDate)}</span>
+                  </div>
                   <div className="gsp-cards">
                     {s.items.map((p) => (
                       <FlatCard
@@ -239,7 +241,7 @@ function FlatCard({
   const [typing, setTyping] = useState<string | null>(null); // 입력칸 타이핑 중 글자(빈칸 허용)
   const [compOpen, setCompOpen] = useState(false);
 
-  const rule: FlatQtyRule = { minPerStore: p.minPerStore, qtyStep: p.qtyStep };
+  const rule: FlatQtyRule = { minPerStore: p.minPerStore };
   const unit = p.isSet ? "세트" : "개";
   const closed = now >= p.closeAtMs;
   // 재고 고정(연동)이면 남은 수량(내 수량 포함)까지만 — 이미 그보다 많이 넣어 둔 수량은 줄이기만.
@@ -299,20 +301,19 @@ function FlatCard({
     });
   };
 
-  // 왼쪽 띠 색 — 규칙 어김(빨강) · 고른 숫자가 아직 저장 안 됨(주황) · 발주됨(초록)
-  const tone = closed
-    ? "is-closed"
-    : problem
-      ? "is-bad"
-      : draft !== p.myQty
-        ? "is-dirty"
-        : chip?.tone === "ok"
-          ? "is-on"
-          : "";
-  const cls = tone ? `gsp-card ${tone}` : "gsp-card";
+  // 카드 색 — 1개라도 담으면(고른 숫자 > 0) 초록 바탕, 마감 뒤엔 내 발주가 있으면 초록.
+  // 왼쪽 띠: 규칙 어김(빨강) · 고른 숫자가 아직 저장 안 됨(주황)
+  const picked = closed ? p.myConfirmedQty > 0 : draft > 0;
+  const cls = [
+    "gsp-card",
+    picked ? "is-on" : closed ? "is-closed" : "",
+    !closed && problem ? "is-bad" : !closed && draft !== p.myQty ? "is-dirty" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  // 두 줄 목록 — 1줄: 이름 + 수량 칸 / 2줄: 가격 · 규칙 · 남은 수량 · 내 상태. 버튼 줄은 숫자를 바꿨을 때만.
-  const done = chip?.tone === "ok" && !action; // 발주됨(그대로) · 마감 뒤 내 발주 → 2줄에 초록 글자로
+  // 일반발주 편성 줄과 같은 모양 — 이름 + 정보 알약(공급가 · 최소 수량 · 재고 · 내 상태) / 오른쪽 수량 칸. 버튼 줄은 숫자를 바꿨을 때만.
+  const done = chip?.tone === "ok" && !action; // 발주됨(그대로) · 마감 뒤 내 발주 → 초록 알약
   return (
     <div className={cls}>
       <div className="gsp-card__row">
@@ -322,24 +323,24 @@ function FlatCard({
             {p.isSet && <span className="gsp-card__tag">세트</span>}
           </div>
           <div className="gsp-card__meta">
-            <b>{won(p.supplyPrice)}원</b>
+            <span className="gsp-badge">{won(p.supplyPrice)}원</span>
             {badges.map((b) => (
-              <span className="gsp-card__rule" key={b}>
+              <span className="gsp-badge gsp-badge--rule" key={b}>
                 {b}
               </span>
             ))}
             {p.hasLinked &&
               !closed &&
               (stockLeft > 0 ? (
-                <span>
+                <span className="gsp-badge gsp-badge--left">
                   재고 {stockLeft}
                   {unit}
                 </span>
               ) : (
-                <span className="gsp-card__out">{p.stockFixed ? "재고 소진" : "재고 소진 · 발주 가능"}</span>
+                <span className="gsp-badge gsp-badge--out">{p.stockFixed ? "재고 소진" : "재고 소진 · 발주 가능"}</span>
               ))}
-            {done && chip && <span className="gsp-card__done">{chip.text}</span>}
-            {chip?.tone === "bad" && <span className="gsp-card__out">{chip.text}</span>}
+            {done && chip && <span className="gsp-badge gsp-badge--left">{chip.text}</span>}
+            {chip?.tone === "bad" && <span className="gsp-badge gsp-badge--out">{chip.text}</span>}
           </div>
           {showDesc && p.description && <div className="gsp-card__desc">{p.description}</div>}
           {p.isSet && p.components.length > 0 && (

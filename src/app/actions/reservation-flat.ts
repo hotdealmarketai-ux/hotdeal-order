@@ -10,15 +10,12 @@ import { minLockedPickupDate } from "@/lib/reservation-stock";
 import { windowKeyAt } from "@/lib/schedule";
 import { dowOf, normalizeDateStr } from "@/lib/date";
 import { logError } from "@/lib/log";
-import { notifyMerchantsReservationProductAdded } from "@/lib/push";
 import { notifyFlatShipmentMoved } from "@/lib/push-flat";
 import { reservationWriteBlock } from "@/lib/merchant-gate";
 import {
   FLAT_DESC_MAX,
   flatQtyProblem,
   parseMinInput,
-  parseStepInput,
-  ruleProblem,
   type FlatQtyRule,
 } from "@/lib/flat-qty-rule";
 
@@ -129,7 +126,6 @@ async function lockProductLink(tx: Prisma.TransactionClient, productId: string) 
       closeAt: true,
       stockFixed: true,
       minPerStore: true,
-      qtyStep: true,
       description: true,
       active: true,
       components: { where: { inventoryItemId: { not: "" } }, select: { inventoryItemId: true, qtyPerUnit: true } },
@@ -155,7 +151,6 @@ type SnapshotA = {
   closeAt?: Date | null;
   stockFixed?: boolean;
   minPerStore?: number | null;
-  qtyStep?: number;
   description?: string;
 };
 type SnapshotB = {
@@ -165,7 +160,6 @@ type SnapshotB = {
   closeAt: Date | null;
   stockFixed: boolean;
   minPerStore: number | null;
-  qtyStep: number;
   description: string;
   active: boolean;
 };
@@ -183,7 +177,6 @@ function sameSnapshot(a: SnapshotA, b: SnapshotB): boolean {
     (a.closeAt === undefined || (a.closeAt?.getTime() ?? null) === (b.closeAt?.getTime() ?? null)) &&
     (a.stockFixed === undefined || a.stockFixed === b.stockFixed) &&
     (a.minPerStore === undefined || a.minPerStore === b.minPerStore) &&
-    (a.qtyStep === undefined || a.qtyStep === b.qtyStep) &&
     (a.description === undefined || a.description === b.description)
   );
 }
@@ -238,9 +231,10 @@ async function deleteFlatProduct(admin: { id: string; storeName: string }, id: s
 
 // 관리자: 공산품 등록/수정/삭제. 상품별 마감(closeAt, 시분) + 출고일(pickupDate = 계산서 날짜) + 수량 규칙·안내.
 //  FormData: id(수정), deleted("true"=삭제), name, closeAt("YYYY-MM-DDTHH:MM", KST), pickupDate, supplyPrice,
-//   inventoryItemId, stockFixed("true"), components(JSON, 보내면 구성품 전량 교체), minPerStore(빈칸·0·1=없음),
-//   qtyStep(빈칸·0=1), description(한 줄 FLAT_DESC_MAX자), notify("0"이면 등록 알림 안 보냄, 기본 보냄).
-//  수정 때 minPerStore·qtyStep·description 칸을 아예 안 보내면 그 값은 그대로 둔다(옛 폼 호환).
+//   inventoryItemId, stockFixed("true" — 재고 연동 상품만, 아니면 늘 false), components(JSON, 보내면 구성품 전량 교체),
+//   minPerStore(최소 수량 MOQ, 빈칸·0·1=없음), description(한 줄 FLAT_DESC_MAX자).
+//  수정 때 minPerStore·description 칸을 아예 안 보내면 그 값은 그대로 둔다(옛 폼 호환).
+//  (2026-10-17 발주 단위(qtyStep)·등록 알림(notify)은 없앴다 — 상품 등록은 점주에게 알림을 보내지 않는다.)
 export async function saveFlatProductAction(
   _prev: FlatProductState,
   formData: FormData,
@@ -309,25 +303,17 @@ export async function saveFlatProductAction(
     ? components.reduce((s, c) => s + c.supplyPrice * c.qtyPerUnit, 0)
     : singlePrice;
   const inventoryItemId = isSet ? "" : singleInv;
-  // 재고 고정(초과발주 금지). 세트는 연동 구성품이 하나라도 있으면 의미 있음.
-  const hasLinked = isSet ? components.some((c) => c.inventoryItemId) : !!inventoryItemId;
-  const stockFixed = hasLinked ? formData.get("stockFixed") === "true" : false;
+  // 재고 고정(초과발주 금지) — 재고 연동 단일 상품만. 세트·수기 상품은 늘 꺼짐(2026-10-17).
+  const stockFixed = !isSet && !!inventoryItemId ? formData.get("stockFixed") === "true" : false;
 
   // 수량 규칙·안내 — 칸을 보냈을 때만 해석(undefined = 안 보냄 → 수정이면 그대로 둠, 새로 만들면 기본값).
   const minRaw = formData.get("minPerStore");
-  const stepRaw = formData.get("qtyStep");
   const descRaw = formData.get("description");
   let minPerStore: number | null | undefined;
   if (minRaw !== null) {
     const r = parseMinInput(String(minRaw));
     if ("error" in r) return { error: r.error };
     minPerStore = r.value;
-  }
-  let qtyStep: number | undefined;
-  if (stepRaw !== null) {
-    const r = parseStepInput(String(stepRaw));
-    if ("error" in r) return { error: r.error };
-    qtyStep = r.value;
   }
   let description: string | undefined;
   if (descRaw !== null) {
@@ -336,7 +322,6 @@ export async function saveFlatProductAction(
       return { error: `안내 문구는 ${FLAT_DESC_MAX}자까지 넣을 수 있어요.` };
     }
   }
-  const notify = formData.get("notify") !== "0";
 
   if (!name) return { error: isSet ? "세트 이름을 넣어 주세요." : "상품명을 넣어 주세요." };
   if (!closeAt) return { error: "발주 마감 날짜와 시각을 넣어 주세요." };
@@ -347,11 +332,9 @@ export async function saveFlatProductAction(
     return { error: "출고일은 발주 마감 날짜보다 앞설 수 없어요." };
   }
   if (!id) {
-    // 새로 등록할 때만 — 지난 상품 수정(마감된 공산품 목록)은 지난 마감 시각 그대로 저장할 수 있어야 한다.
+    // 새로 등록할 때만 — 지난 상품 수정(마감된 예약 목록)은 지난 마감 시각 그대로 저장할 수 있어야 한다.
     if (closeAt.getTime() <= Date.now()) return { error: "발주 마감 시각이 지났어요. 다시 골라 주세요." };
     if (dowOf(pickupDate) === 0) return { error: SUNDAY_MSG };
-    const rp = ruleProblem({ minPerStore: minPerStore ?? null, qtyStep: qtyStep ?? 1 });
-    if (rp) return { error: rp };
   }
 
   const componentData = components.map((c, i) => ({
@@ -364,7 +347,6 @@ export async function saveFlatProductAction(
   // 이번 저장이 쓰는 규칙·안내 칸(보낸 것만)
   const ruleData = {
     ...(minPerStore !== undefined ? { minPerStore } : {}),
-    ...(qtyStep !== undefined ? { qtyStep } : {}),
     ...(description !== undefined ? { description } : {}),
   };
 
@@ -401,7 +383,6 @@ export async function saveFlatProductAction(
           inventoryItemId: true,
           pickupDate: true,
           minPerStore: true,
-          qtyStep: true,
           components: { select: { name: true } },
         },
       });
@@ -435,14 +416,11 @@ export async function saveFlatProductAction(
         }
       }
 
-      // 수량 규칙 — 보낸 칸은 새 값, 안 보낸 칸은 지금 값으로 합쳐 검사.
+      // 최소 수량 — 보낸 칸은 새 값, 안 보낸 칸은 지금 값.
       const rule: FlatQtyRule = {
         minPerStore: minPerStore !== undefined ? minPerStore : existing.minPerStore,
-        qtyStep: qtyStep !== undefined ? qtyStep : existing.qtyStep,
       };
-      const rp = ruleProblem(rule);
-      if (rp) return fail(rp);
-      const ruleChanged = rule.minPerStore !== existing.minPerStore || rule.qtyStep !== existing.qtyStep;
+      const ruleChanged = rule.minPerStore !== existing.minPerStore;
 
       const dateChanged = pickupDate !== existing.pickupDate;
       if (dateChanged && dowOf(pickupDate) === 0) return fail(SUNDAY_MSG);
@@ -553,7 +531,7 @@ export async function saveFlatProductAction(
         data: { pickupDate, name },
       });
 
-      // 규칙을 바꿨으면 — 이미 들어온 확정 줄은 그대로 두되(편성과 같은 규칙), 새 규칙과 다른 지점 수만 알려 준다.
+      // 최소 수량을 바꿨으면 — 이미 들어온 확정 줄은 그대로 두되(편성과 같은 규칙), 새 최소보다 적은 지점 수만 알려 준다.
       if (ruleChanged) {
         const rows = await tx.reservationOrderItem.findMany({
           where: { productId: id, qty: { gt: 0 }, ...CONFIRMED_ROW },
@@ -594,11 +572,9 @@ export async function saveFlatProductAction(
       select: { id: true },
     });
     createdId = created.id;
-    // 신규 등록만 점주 전체에 푸시(수정은 제외). 연속 등록 땐 관리자가 꺼 둘 수 있다(notify="0").
-    if (notify) await notifyMerchantsReservationProductAdded(name);
   }
 
-  // 출고일이 바뀌어 줄이 따라갔으면 — 그 상품을 발주한 지점에만 알림(등록 알림 끄기와 상관없이 보낸다).
+  // 출고일이 바뀌어 줄이 따라갔으면 — 그 상품을 발주한 지점에만 알림.
   if (moved) await notifyFlatShipmentMoved(moved.userIds, name, pickupDate);
 
   await writeAudit({
@@ -632,7 +608,7 @@ export async function saveFlatProductAction(
 // ── 점주(핫딜마켓) 공산품 발주 — 품목별 발주(저장+확정 한 번) + 재고연동 실시간 담기 ───────────
 
 // 수기 상품 발주 = 수량 저장 + 품목별 확정(confirmedAt) 한 번에. qty<=0 이면 발주 취소(행 삭제). 마감 전에만.
-// 수량이 바뀌면 상품 수량 규칙(최소·몇 개씩) 검사 — '지금 저장된 내 수량'은 확정분(미확정 줄이면 0).
+// 수량이 바뀌면 최소 수량 검사 — '지금 저장된 내 수량'은 확정분(미확정 줄이면 0).
 export async function confirmFlatProductAction(input: {
   productId: string;
   qty: number;
@@ -652,7 +628,6 @@ export async function confirmFlatProductAction(input: {
       batchId: true,
       inventoryItemId: true,
       minPerStore: true,
-      qtyStep: true,
       description: true,
       components: { where: { inventoryItemId: { not: "" } }, select: { id: true } },
     },
@@ -669,7 +644,7 @@ export async function confirmFlatProductAction(input: {
     const now = await lockProductLink(tx, productId);
     const nowLinked = !!now?.inventoryItemId || (now?.components.length ?? 0) > 0;
     if (!now || nowLinked !== isLinked || !sameSnapshot(product, now)) return { ok: false, error: PRODUCT_CHANGED };
-    const rule: FlatQtyRule = { minPerStore: now.minPerStore, qtyStep: now.qtyStep };
+    const rule: FlatQtyRule = { minPerStore: now.minPerStore };
 
     const found = await tx.reservationOrder.findUnique({
       where: { userId_batchId: { userId: user.id, batchId: product.batchId } },
@@ -794,7 +769,6 @@ export async function holdFlatProductAction(input: {
       batchId: true,
       stockFixed: true,
       minPerStore: true,
-      qtyStep: true,
       description: true,
       components: {
         where: { inventoryItemId: { not: "" } },
@@ -823,7 +797,7 @@ export async function holdFlatProductAction(input: {
       if (!now || now.inventoryItemId !== itemId || now._count.components > 0 || !sameSnapshot(product, now)) {
         return { ok: false, error: PRODUCT_CHANGED };
       }
-      const rule: FlatQtyRule = { minPerStore: now.minPerStore, qtyStep: now.qtyStep };
+      const rule: FlatQtyRule = { minPerStore: now.minPerStore };
       await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${itemId} FOR UPDATE`;
       const item = await tx.inventoryItem.findUnique({
         where: { id: itemId },
@@ -944,7 +918,6 @@ async function holdSetProduct(
     batchId: string;
     stockFixed: boolean;
     minPerStore: number | null;
-    qtyStep: number;
     description: string;
     components: { inventoryItemId: string; qtyPerUnit: number }[];
   },
@@ -967,7 +940,7 @@ async function holdSetProduct(
       ) {
         return { ok: false, error: PRODUCT_CHANGED };
       }
-      const rule: FlatQtyRule = { minPerStore: now.minPerStore, qtyStep: now.qtyStep };
+      const rule: FlatQtyRule = { minPerStore: now.minPerStore };
       for (const id of itemIds) {
         await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${id} FOR UPDATE`;
       }

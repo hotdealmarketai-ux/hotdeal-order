@@ -59,7 +59,6 @@ export type FlatProductRow = {
   closeAtMs: number; // closeAt.getTime() — 마감 묶음(groupFlatByClose)용
   stockFixed: boolean; // 재고 고정(초과발주 금지)
   minPerStore: number | null; // 지점당 최소(null = 없음)
-  qtyStep: number; // 몇 개씩(1 = 낱개)
   description: string; // 점주 안내 한 줄("" = 없음)
   totalQty: number; // 취합 수량(전 점포 합)
   storeCount: number; // 발주 점포 수
@@ -83,7 +82,6 @@ export async function listFlatProductsAdmin(
       closeAt: true,
       stockFixed: true,
       minPerStore: true,
-      qtyStep: true,
       description: true,
       components: {
         orderBy: { sortOrder: "asc" },
@@ -125,7 +123,6 @@ export async function listFlatProductsAdmin(
       closeAtMs: (p.closeAt as Date).getTime(),
       stockFixed: p.stockFixed,
       minPerStore: p.minPerStore,
-      qtyStep: p.qtyStep,
       description: p.description,
       totalQty: a?.qty ?? 0,
       storeCount: a?.stores.size ?? 0,
@@ -150,7 +147,6 @@ export type FlatMerchantRow = {
   inventoryItemId: string;
   closeAtMs: number;
   minPerStore: number | null; // 지점당 최소(null = 없음)
-  qtyStep: number; // 몇 개씩(1 = 낱개)
   description: string; // 점주 안내 한 줄("" = 없음)
   myQty: number; // 내 줄에 저장된 수량(확정·미확정 모두, 세트면 세트 수)
   myConfirmed: boolean; // 내 줄이 확정됐는가(품목 confirmedAt 또는 옛 주문 confirmed — 출고·계산서와 같은 조건)
@@ -184,7 +180,6 @@ export async function listFlatProductsMerchant(
       closeAt: true,
       stockFixed: true,
       minPerStore: true,
-      qtyStep: true,
       description: true,
       components: {
         orderBy: { sortOrder: "asc" },
@@ -224,7 +219,6 @@ export async function listFlatProductsMerchant(
       inventoryItemId: p.inventoryItemId,
       closeAtMs: (p.closeAt as Date).getTime(),
       minPerStore: p.minPerStore,
-      qtyStep: p.qtyStep,
       description: p.description,
       myQty,
       myConfirmed,
@@ -372,7 +366,7 @@ export type FlatStoreRow = {
   stockDeducted: boolean;
   heldUnconfirmed: boolean; // 점주가 고르는 중(확정 전) — 마감 전엔 본사가 덮어쓰지 않고, 마감 뒤엔 덮어쓸 수 있다
   heldQty: number; // 미확정 줄의 수량(heldUnconfirmed 일 때만 > 0) — 출고·계산서로는 안 나감
-  belowRule: boolean; // 확정 수량이 지금 상품 규칙(최소·몇 개씩)과 다름 → '미달' 표시(막지는 않음)
+  belowRule: boolean; // 확정 수량이 지금 최소 수량보다 적음 → '미달' 표시(막지는 않음)
   statusLabel: string; // 승인 안 된 지점(정지 등)이면 상태 이름 — 줄이 남아 있어 보이지만 0으로만 고칠 수 있다. 정상이면 ""
 };
 export async function flatProductStores(
@@ -390,7 +384,6 @@ export async function flatProductStores(
     pickupPassed: boolean; // 출고일까지 지남(=지난 출고 마감) → 편집 불가
     stockFixed: boolean; // 재고 고정(초과발주 금지)
     minPerStore: number | null;
-    qtyStep: number;
     description: string;
   } | null;
   stores: FlatStoreRow[];
@@ -406,12 +399,11 @@ export async function flatProductStores(
       closeAt: true,
       stockFixed: true,
       minPerStore: true,
-      qtyStep: true,
       description: true,
     },
   });
   if (!product) return { product: null, stores: [] };
-  const rule = { minPerStore: product.minPerStore, qtyStep: product.qtyStep };
+  const rule = { minPerStore: product.minPerStore };
 
   // 발주를 안 넣은 지점도 관리자가 수량을 추가할 수 있게 — 전 가맹점(핫딜마켓·승인)을 모두 노출.
   // 발주 없는 지점은 qty 0으로 뜨고, 여기서 수량을 넣으면 그 점주에게도 예약이 생긴다.
@@ -468,7 +460,6 @@ export async function flatProductStores(
       pickupPassed: product.pickupDate < kstTodayStr(now),
       stockFixed: product.stockFixed,
       minPerStore: product.minPerStore,
-      qtyStep: product.qtyStep,
       description: product.description,
     },
     stores,

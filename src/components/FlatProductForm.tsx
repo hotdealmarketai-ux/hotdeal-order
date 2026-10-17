@@ -4,11 +4,11 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MoneyInput } from "./MoneyInput";
 import { saveFlatProductAction } from "@/app/actions/reservation-flat";
-import { FLAT_DESC_MAX, parseMinInput, parseStepInput, ruleProblem } from "@/lib/flat-qty-rule";
+import { FLAT_DESC_MAX, parseMinInput } from "@/lib/flat-qty-rule";
 import { dowOf, labelDate } from "@/lib/date";
 
 // 공산품 등록·수정 폼 하나 — 진행 중 목록(FlatReservationAdmin)과 마감된 목록(FlatClosedList)이 같이 쓴다.
-//  · 새로 등록: 저장에 성공하면 상품명·공급가·연동·구성품만 비우고 마감·출고일·최소·몇 개씩·안내·알림은 남긴다(연속 등록).
+//  · 새로 등록: 저장에 성공하면 상품명·공급가·연동·구성품만 비우고 마감·출고일·최소 수량·안내는 남긴다(연속 등록).
 //    [초기화]를 누르면 전부 비운다.
 //  · 수정·복사: 부모가 initial 로 상품 값을 넣어 다시 띄운다(key 를 바꿔 새로 그림). 복사는 id 없이 = 새 상품.
 //  · 서버(saveFlatProductAction)가 돌려주는 error 는 저장 안 됨, warning 은 저장은 됐지만 알릴 말.
@@ -16,7 +16,7 @@ import { dowOf, labelDate } from "@/lib/date";
 export type FlatInv = { id: string; name: string; supplyPrice: number };
 
 // 폼에 채울 상품 값 — 관리자 목록 행이 모두 이 모양을 품는다.
-// minPerStore·qtyStep·description 이 없는 행(옛 매핑)을 수정할 때는 세 칸을 보내지 않아 서버 값을 그대로 둔다.
+// minPerStore·description 이 없는 행(옛 매핑)을 수정할 때는 두 칸을 보내지 않아 서버 값을 그대로 둔다.
 export type FlatFormRow = {
   id: string;
   name: string;
@@ -24,9 +24,8 @@ export type FlatFormRow = {
   supplyPrice: number;
   inventoryItemId: string;
   closeAtLocal: string; // "YYYY-MM-DDTHH:MM" (KST)
-  stockFixed: boolean; // 재고 고정(초과발주 금지)
-  minPerStore?: number | null; // 지점당 최소(null = 없음)
-  qtyStep?: number; // 몇 개씩(1 = 낱개)
+  stockFixed: boolean; // 재고 고정(초과발주 금지) — 재고 연동 단일 상품만
+  minPerStore?: number | null; // 지점당 최소 수량 MOQ(null = 없음)
   description?: string; // 점주 안내 한 줄
   components: { name: string; inventoryItemId: string; qtyPerUnit: number; supplyPrice: number }[];
 };
@@ -42,10 +41,8 @@ type Form = {
   invId: string;
   fixed: boolean; // 재고 고정
   min: string; // 최소 수량("" = 없음)
-  step: string; // 몇 개씩
   desc: string; // 안내 한 줄
-  notify: boolean; // 저장하면 점주에게 알림(새로 등록할 때만)
-  keepRule: boolean; // 규칙 값을 모르는 행을 수정 중 — 세 칸을 안 보내 서버 값 유지(칸을 고치면 false)
+  keepRule: boolean; // 규칙 값을 모르는 행을 수정 중 — 두 칸을 안 보내 서버 값 유지(칸을 고치면 false)
 };
 
 const won = (n: number) => n.toLocaleString("ko-KR");
@@ -61,14 +58,12 @@ const BLANK: Form = {
   invId: "",
   fixed: false,
   min: "",
-  step: "1",
   desc: "",
-  notify: true,
   keepRule: false,
 };
 
 function formOf(row: FlatFormRow, copy: boolean): Form {
-  const ruleKnown = row.qtyStep !== undefined;
+  const ruleKnown = row.minPerStore !== undefined;
   return {
     id: copy ? "" : row.id,
     name: row.name,
@@ -79,9 +74,7 @@ function formOf(row: FlatFormRow, copy: boolean): Form {
     invId: row.inventoryItemId,
     fixed: row.stockFixed,
     min: row.minPerStore && row.minPerStore > 1 ? String(row.minPerStore) : "",
-    step: String(row.qtyStep && row.qtyStep > 1 ? row.qtyStep : 1),
     desc: row.description ?? "",
-    notify: true,
     keepRule: !copy && !ruleKnown,
   };
 }
@@ -118,7 +111,7 @@ export function FlatProductForm({
     setDone(null);
     setF((s) => ({ ...s, ...patch }));
   };
-  const setRule = (patch: Partial<Pick<Form, "min" | "step" | "desc">>) => set({ ...patch, keepRule: false });
+  const setRule = (patch: Partial<Pick<Form, "min" | "desc">>) => set({ ...patch, keepRule: false });
 
   const addComp = () => setComps((cs) => [...cs, { name: "", invId: "", qtyPerUnit: "1", price: "" }]);
   const removeComp = (i: number) => setComps((cs) => cs.filter((_, k) => k !== i));
@@ -167,11 +160,8 @@ export function FlatProductForm({
     if (isSet && comps.some((c) => !c.name.trim())) return setErr("구성품 품목명을 모두 넣어 주세요.");
     const min = parseMinInput(f.min);
     if ("error" in min) return setErr(min.error);
-    const step = parseStepInput(f.step);
-    if ("error" in step) return setErr(step.error);
-    const rp = f.keepRule ? null : ruleProblem({ minPerStore: min.value, qtyStep: step.value });
-    if (rp) return setErr(rp);
-    const anyLinked = isSet ? comps.some((c) => c.invId) : !!f.invId;
+    // 재고 고정은 재고 연동 단일 상품만(세트·수기 상품은 늘 꺼짐 — 서버도 같은 규칙)
+    const canFix = !isSet && !!f.invId;
     const wasEditing = editing;
     start(async () => {
       const fd = new FormData();
@@ -181,7 +171,7 @@ export function FlatProductForm({
       fd.set("pickupDate", f.pickup);
       fd.set("supplyPrice", f.price || "0"); // 세트면 서버가 구성품 합으로 덮어씀
       fd.set("inventoryItemId", isSet ? "" : f.invId);
-      fd.set("stockFixed", anyLinked && f.fixed ? "true" : "false");
+      fd.set("stockFixed", canFix && f.fixed ? "true" : "false");
       // 이 폼은 구성품을 '관리'하므로 항상 보낸다(비어있으면 "[]" = 단일 상품으로 명시 → 세트↔단일 전환도 반영).
       fd.set(
         "components",
@@ -196,10 +186,8 @@ export function FlatProductForm({
       );
       if (!f.keepRule) {
         fd.set("minPerStore", f.min);
-        fd.set("qtyStep", f.step);
         fd.set("description", f.desc);
       }
-      if (!f.id && !f.notify) fd.set("notify", "0");
       const res = await saveFlatProductAction({}, fd);
       if (res?.error) return setErr(res.error);
       router.refresh();
@@ -207,7 +195,7 @@ export function FlatProductForm({
         onClose?.({ ok: "저장했어요.", warning: res.warning });
         return;
       }
-      // 연속 등록 — 상품마다 다른 칸만 비운다(마감·출고일·최소·몇 개씩·안내·알림은 그대로).
+      // 연속 등록 — 상품마다 다른 칸만 비운다(마감·출고일·최소 수량·안내는 그대로).
       setF((s) => ({ ...s, name: "", price: "", invId: "", fixed: false }));
       setComps([]);
       setCompSearch({});
@@ -326,31 +314,16 @@ export function FlatProductForm({
         <MoneyInput value={f.price} onChange={(v) => set({ price: v })} placeholder="공급가" />
       )}
 
-      {/* 수량 규칙 — 최소(빈칸 = 없음) · 몇 개씩(1 = 낱개). 최소는 몇 개씩의 배수. */}
-      <div className="gspf__row" style={{ marginTop: 8 }}>
-        <div>
-          <label className="resvflat__flabel">최소 수량</label>
-          <input
-            className="input"
-            inputMode="numeric"
-            value={f.min}
-            onChange={(e) => setRule({ min: e.target.value.replace(/\D/g, "").slice(0, 5) })}
-            placeholder="없음"
-          />
-        </div>
-        <div>
-          <label className="resvflat__flabel">발주 단위</label>
-          <div className="gspf__unit">
-            <input
-              className="input"
-              inputMode="numeric"
-              value={f.step}
-              onChange={(e) => setRule({ step: e.target.value.replace(/\D/g, "").slice(0, 4) })}
-              placeholder="1"
-            />
-            <span>개씩</span>
-          </div>
-        </div>
+      {/* 최소 수량(MOQ) — 빈칸 = 없음. 최소 이상이면 몇 개를 넣든 상관없다. */}
+      <div style={{ marginTop: 8 }}>
+        <label className="resvflat__flabel">최소 수량</label>
+        <input
+          className="input"
+          inputMode="numeric"
+          value={f.min}
+          onChange={(e) => setRule({ min: e.target.value.replace(/\D/g, "").slice(0, 5) })}
+          placeholder="없음"
+        />
       </div>
       <div style={{ marginTop: 8 }}>
         <label className="resvflat__flabel">안내 문구</label>
@@ -447,8 +420,8 @@ export function FlatProductForm({
         </button>
       </div>
 
-      {/* 재고 고정 — 연동(단일/세트 구성품) 있을 때만. 켜면 재고까지만, 끄면(기본) 초과발주 허용. */}
-      {(f.invId || (isSet && comps.some((c) => c.invId))) && (
+      {/* 재고 고정 — 재고 연동 단일 상품만. 켜면 재고까지만, 끄면(기본) 초과발주 허용. */}
+      {!isSet && f.invId && (
         <label className="flatfix">
           <input type="checkbox" checked={f.fixed} onChange={(e) => set({ fixed: e.target.checked })} />
           <span>
@@ -457,14 +430,6 @@ export function FlatProductForm({
           </span>
         </label>
       )}
-      {/* 등록 알림 — 여러 개를 이어서 올릴 땐 끄고 마지막에만 켜면 알림이 한 번만 간다. */}
-      {!editing && (
-        <label className="flatfix">
-          <input type="checkbox" checked={f.notify} onChange={(e) => set({ notify: e.target.checked })} />
-          <span>점주에게 알림</span>
-        </label>
-      )}
-
       {err && (
         <div className="notice notice--error" style={{ marginTop: 8 }}>
           {err}

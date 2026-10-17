@@ -15,20 +15,20 @@ export type FlatStoreEdit = {
   stockDeducted: boolean;
   heldUnconfirmed: boolean; // 점주가 아직 확정 안 한 줄 — 마감 전엔 본사가 못 고치고, 마감 뒤엔 덮어쓴다
   heldQty?: number; // 그 미확정 줄 수량(나가지 않음)
-  belowRule?: boolean; // 확정 수량이 지금 규칙(최소·몇 개씩)과 다름 → 빨간 점(막지는 않음)
+  belowRule?: boolean; // 확정 수량이 최소 수량보다 적음 → 빨간 점(막지는 않음)
   statusLabel?: string; // 승인 안 된 지점(정지 등) — 남은 줄을 지우기만 할 수 있다(서버도 0만 받음)
 };
 
 // 관리자 공산품 상세 — 전 가맹점 점포별 수량 대신 고치기(추가/감소/삭제).
 // 발주를 안 넣은 지점도 qty 0으로 뜨고, 여기서 수량을 넣으면 그 점주에게도 발주가 생긴다(확정 반영).
 // productId 로 저장 — itemId 없이도 신규 생성/삭제 처리. editable=false 면 읽기전용(출고 지난 공산품).
-// 규칙(최소·몇 개씩)에 안 맞아도 저장하고, 서버가 돌려준 경고를 주황 한 줄로 보여 준다(오류·경고는 고친 줄 바로 밑).
+// 최소 수량에 못 미쳐도 저장하고, 서버가 돌려준 경고를 주황 한 줄로 보여 준다(오류·경고는 고친 줄 바로 밑).
 export function FlatProductStoreEditor({
   productId,
   stores,
   editable = true,
   closed = false,
-  rule = { minPerStore: null, qtyStep: 1 },
+  rule = { minPerStore: null },
 }: {
   productId: string;
   stores: FlatStoreEdit[];

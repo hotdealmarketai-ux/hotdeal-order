@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 // 점주 공산품(옛 예약발주, 주소 /reservations 그대로) — 마감 시각 묶음 → 출고일 → 1열 카드.
 // 숫자 고르고 [발주하기] 한 번(바꾸면 [변경 저장], 0이면 [발주 취소]). 맨 위 '내 발주 N건 · 금액'.
-// 옛 날짜형 예약발주 기록은 마감된 공산품 화면 맨 아래 '이전 기록 ›' 으로 들어간다.
+// 옛 날짜형 예약발주 기록은 마감된 예약 화면 맨 아래 '이전 기록 ›' 으로 들어간다.
 export default async function ReservationsPage() {
   const user = await requireMerchant();
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
@@ -33,7 +33,7 @@ export default async function ReservationsPage() {
             className="linkbtn"
             style={{ color: "var(--muted)", textDecoration: "none" }}
           >
-            마감된 공산품 ›
+            마감된 예약 ›
           </Link>
         </div>
 

@@ -6,7 +6,7 @@ import { requireReservationsVisible } from "@/lib/merchant-gate";
 import { getMerchantPastReservationBatches } from "@/lib/reservation-data";
 import { ReservationDates } from "@/components/ReservationDates";
 
-// 점주 이전 기록 — 옛 날짜형 예약발주에서 내가 발주했고 출고가 모두 지난 배치 모음. 마감된 공산품 맨 아래 '이전 기록 ›' 으로 진입.
+// 점주 이전 기록 — 옛 날짜형 예약발주에서 내가 발주했고 출고가 모두 지난 배치 모음. 마감된 예약 맨 아래 '이전 기록 ›' 으로 진입.
 export default async function MerchantPastReservationsPage() {
   const user = await requireMerchant();
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");

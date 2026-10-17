@@ -3,8 +3,8 @@
 //  · 점주가 지켜야 하는 건 '언제까지'라 마감 시각(분 단위로 같으면 한 묶음)으로 먼저 묶고, 그 안을 출고일로 나눈다.
 //    (출고일로 먼저 묶으면 같은 금요일 출고 안에 월 마감·수 마감이 섞여 월 마감을 놓치기 쉽다.)
 //  · 정렬 = 마감 임박순 → 출고일순 → ㄱㄴㄷ (마감된 목록은 최근 마감순)
-//  · 묶음 머리: 묶음 안 상품의 최소·몇 개씩·안내가 모두 같으면 머리에 한 번만 보이게 그 값을 실어 준다.
-//  검색·'발주한 것만'으로 거른 뒤에 묶으므로 빈 묶음은 생기지 않는다.
+//  · 묶음 머리: 묶음 안 상품의 최소 수량·안내가 모두 같으면 머리에 한 번만 보이게 그 값을 실어 준다.
+//  검색·'내 발주'로 거른 뒤에 묶으므로 빈 묶음은 생기지 않는다.
 // ============================================================
 import type { FlatQtyRule } from "@/lib/flat-qty-rule";
 
@@ -12,17 +12,16 @@ export type FlatShipGroup<T> = { pickupDate: string; items: T[] };
 export type FlatCloseGroup<T> = {
   closeAtMs: number; // 묶음 마감 시각(분 단위로 같은 상품끼리)
   ships: FlatShipGroup<T>[]; // 출고일 오름차순, 그 안은 ㄱㄴㄷ
-  commonRule: FlatQtyRule | null; // 묶음 안 최소·몇 개씩이 모두 같으면 그 값(다르면 null → 카드마다 표시)
+  commonRule: FlatQtyRule | null; // 묶음 안 최소 수량이 모두 같으면 그 값(다르면 null → 카드마다 표시)
   commonDesc: string | null; // 묶음 안 안내가 모두 같고 비어 있지 않으면 그 값(다르면 null)
 };
 
-// 규칙·안내 칸이 빠진 행(옛 매핑)은 '없음'(null·1·"")으로 본다.
+// 규칙·안내 칸이 빠진 행(옛 매핑)은 '없음'(null·"")으로 본다.
 export type FlatGroupable = {
   closeAtMs: number;
   pickupDate: string; // 출고일(= 계산서 날짜)
   name: string;
   minPerStore?: number | null;
-  qtyStep?: number;
   description?: string;
 };
 
@@ -54,15 +53,14 @@ export function groupFlatByClose<T extends FlatGroupable>(
         items: items.slice().sort((a, b) => a.name.localeCompare(b.name, "ko")),
       }));
     const min = (r: T) => r.minPerStore ?? null;
-    const step = (r: T) => r.qtyStep ?? 1;
     const desc = (r: T) => r.description ?? "";
     const first = list[0];
-    const sameRule = list.every((r) => min(r) === min(first) && step(r) === step(first));
+    const sameRule = list.every((r) => min(r) === min(first));
     const sameDesc = list.every((r) => desc(r) === desc(first));
     return {
       closeAtMs: Math.min(...list.map((r) => r.closeAtMs)),
       ships,
-      commonRule: sameRule ? { minPerStore: min(first), qtyStep: step(first) } : null,
+      commonRule: sameRule ? { minPerStore: min(first) } : null,
       commonDesc: sameDesc && desc(first) ? desc(first) : null,
     };
   });

@@ -265,7 +265,6 @@ async function ReservationTab() {
     closeAtLocal: new Date(p.closeAtMs + 9 * 3600 * 1000).toISOString().slice(0, 16),
     stockFixed: p.stockFixed,
     minPerStore: p.minPerStore,
-    qtyStep: p.qtyStep,
     description: p.description,
     totalQty: p.totalQty,
     storeCount: p.storeCount,
@@ -288,7 +287,7 @@ async function ReservationTab() {
           <div className="erpcard__t">이전 기록</div>
         </Link>
         <Link href="/admin/reservations/closed" className="erpcard">
-          <div className="erpcard__t">마감된 공산품</div>
+          <div className="erpcard__t">마감된 예약</div>
         </Link>
       </div>
 

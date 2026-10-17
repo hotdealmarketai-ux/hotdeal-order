@@ -294,7 +294,7 @@ export async function purgeHiddenReservationsAction(): Promise<{
 
 // ⚠ 옛 날짜형 예약 액션 3개(확정·수정·담기)는 공산품(상시 묶음 FLAT_RESERVE_KEY · 상품별 closeAt) 상품을 거절한다.
 //  옛 액션은 예약일 20시 마감만 보는데 상시 묶음의 예약일 '__flat__'은 날짜가 아니라 마감되지 않고,
-//  상품별 마감·수량 규칙(최소·몇 개씩)도 보지 않아 /reservations/<상시묶음 id> 로 들어오면 그대로 우회된다.
+//  상품별 마감·최소 수량도 보지 않아 /reservations/<상시묶음 id> 로 들어오면 그대로 우회된다.
 //  게다가 옛 확정은 그 지점 수기·세트 줄을 지우고 다시 만들며 order.confirmed=true 로 바꿔
 //  미확정 담기 줄까지 출고·계산서로 내보낸다. 공산품은 actions/reservation-flat.ts 만 쓴다.
 
@@ -732,7 +732,7 @@ export async function adminEditReservationItemsAction(input: {
 //  · qty>기존: 연동 상품이면 재고 가용으로 캡(초과판매 방지). 신규면 주문+아이템을 확정 생성.
 //  · qty=0    : 그 줄 삭제(주문이 비면 confirmed 해제).
 //  · 출고일 지남·이미 출고(stockDeductedAt)면 수정 불가.
-//  · 수량 규칙(최소·몇 개씩)은 막지 않고 warning 으로 알려 준다(편성 대리 수정과 같은 규칙, 수량이 바뀔 때만).
+//  · 최소 수량은 막지 않고 warning 으로 알려 준다(편성 대리 수정과 같은 규칙, 수량이 바뀔 때만).
 //  · 점주가 아직 확정하지 않은 줄: 마감 전엔 점주가 고르는 중이라 막고, 마감 뒤엔 관리자가 덮어쓴다
 //    (점주가 '수정'만 눌러 확정이 풀린 채 마감되면 점주도 관리자도 못 고치던 막힘을 푼다).
 // 저장 후 점주 푸시 + ReservationChangeLog 기록. ⚠ 관리자 전용(requireAdmin).
@@ -759,7 +759,6 @@ export async function adminSetReservationStoreQtyAction(input: {
       stockFixed: true,
       closeAt: true,
       minPerStore: true,
-      qtyStep: true,
       _count: { select: { components: true } },
     },
   });
@@ -798,8 +797,7 @@ export async function adminSetReservationStoreQtyAction(input: {
           stockFixed: true,
           closeAt: true,
           minPerStore: true,
-          qtyStep: true,
-          active: true,
+              active: true,
           _count: { select: { components: true } },
         },
       });
@@ -815,8 +813,7 @@ export async function adminSetReservationStoreQtyAction(input: {
         now.pickupDate !== product.pickupDate ||
         now.stockFixed !== product.stockFixed ||
         (now.closeAt?.getTime() ?? null) !== (product.closeAt?.getTime() ?? null) ||
-        now.minPerStore !== product.minPerStore ||
-        now.qtyStep !== product.qtyStep
+        now.minPerStore !== product.minPerStore
       ) {
         return { ok: false, error: "상품 정보가 바뀌었어요. 새로고침해 주세요." };
       }
@@ -848,15 +845,10 @@ export async function adminSetReservationStoreQtyAction(input: {
         return { ok: false, error: "발주 전인 지점은 마감 전에 수정할 수 없어요." };
       }
       if (qty === shownQty && !unconfirmed) return { ok: true, noop: true, curQty };
-      // 수량 규칙 — 막지 않고 경고만(수량이 그대로면 검사 안 함). 기준은 화면에 보이던 확정 수량.
-      const rule = { minPerStore: product.minPerStore, qtyStep: product.qtyStep };
+      // 최소 수량 — 막지 않고 경고만(수량이 그대로면 검사 안 함). 기준은 화면에 보이던 확정 수량.
+      const rule = { minPerStore: product.minPerStore };
       const problem = flatQtyProblem(qty, shownQty, rule);
-      // 경고 문구만 관리자 말로 — 직접 정한 최소에 못 미치면 최소 수량, 그 밖은 발주 단위
-      const warning = !problem
-        ? undefined
-        : (product.minPerStore ?? 0) > 1 && qty < effectiveMin(rule)
-          ? `저장했어요 · 최소 수량(${effectiveMin(rule)}개)보다 적어요.`
-          : `저장했어요 · 발주 단위(${Math.max(1, product.qtyStep)}개씩)와 달라요.`;
+      const warning = problem ? `저장했어요 · 최소 수량(${effectiveMin(rule)}개)보다 적어요.` : undefined;
 
       // 연동 '증가'는 재고 가용으로 캡 — 단 '재고 고정' 상품만. 기본(초과발주 허용)은 넘어도 저장.
       if (iid && product.stockFixed && qty > curQty) {

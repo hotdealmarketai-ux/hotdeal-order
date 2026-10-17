@@ -122,14 +122,6 @@ export async function notifyMerchantOrderEdited(userId: string) {
   }
 }
 
-// 주격조사 이/가 — 이름 끝 글자에 받침 있으면 '이', 없으면 '가'(한글 아니면 '이'로 안전).
-function josaIGa(word: string): string {
-  const ch = word.trim().slice(-1);
-  const code = ch.charCodeAt(0);
-  if (code >= 0xac00 && code <= 0xd7a3) return (code - 0xac00) % 28 === 0 ? "가" : "이";
-  return "이";
-}
-
 // 공산품(옛 예약발주) 알림을 받을 지점 = 공산품이 보이는 지점(핫딜마켓 가맹점 · 지점 '공산품 노출' 켜짐).
 // 품목 제한 모드와는 상관없다(2026-10-17~ 공구는 공산품으로만 받아서, 제한 모드 지점도 공산품 탭이 보인다).
 // 숨긴 탭으로 가는 알림(누르면 발주 화면으로 튕김)을 보내지 않기 위함. 판정은 merchantVisibility.reservations 와 같다.
@@ -139,22 +131,6 @@ export async function reservationAudienceIds(): Promise<string[]> {
     select: { id: true },
   });
   return users.map((u) => u.id);
-}
-
-// 공산품에 상품이 새로 올라옴 → 공산품이 보이는 핫딜마켓 점주에게 알림.
-export async function notifyMerchantsReservationProductAdded(name: string) {
-  try {
-    const ids = await reservationAudienceIds();
-    const payload: PushPayload = {
-      title: `${name}${josaIGa(name)} 공산품에 올라왔어요.`,
-      body: "",
-      url: "/reservations",
-      type: "system",
-    };
-    await Promise.all(ids.map((id) => sendPushToUser(id, payload)));
-  } catch (err) {
-    logError("push.notifyMerchantsReservationProductAdded", err, {});
-  }
 }
 
 // 마감 시각 이름표(KST) — "오전 10시" · "오후 2시 30분".

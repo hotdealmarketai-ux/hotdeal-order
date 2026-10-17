@@ -26,7 +26,6 @@ export default async function PickupClosedReservationsPage() {
     closeAtLocal: new Date(p.closeAt.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 16),
     stockFixed: p.stockFixed,
     minPerStore: p.minPerStore,
-    qtyStep: p.qtyStep,
     description: p.description,
     totalQty: p.totalQty,
     storeCount: p.storeCount,

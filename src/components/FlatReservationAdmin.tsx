@@ -180,7 +180,7 @@ export function FlatAdminLine({
   onCopy: () => void;
   onDelete: () => void;
 }) {
-  const badges = qtyRuleBadges({ minPerStore: p.minPerStore ?? null, qtyStep: p.qtyStep ?? 1 });
+  const badges = qtyRuleBadges({ minPerStore: p.minPerStore ?? null });
   return (
     <div className="resvflat">
       <Link href={`/admin/reservations/product/${p.id}`} className="resvflat__main">

@@ -24,7 +24,7 @@ export default async function FlatProductDetailPage(props: {
   const total = stores.reduce((s, r) => s + r.qty, 0);
   const orderedStores = stores.filter((r) => r.qty > 0);
   const orderedCount = orderedStores.length;
-  const rule = { minPerStore: product.minPerStore, qtyStep: product.qtyStep };
+  const rule = { minPerStore: product.minPerStore };
   const ruleBadges = qtyRuleBadges(rule);
   const belowCount = stores.filter((r) => r.belowRule).length;
 

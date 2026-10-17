@@ -14,7 +14,7 @@ export type FlatClosedRow = FlatFormRow & {
   storeCount: number;
 };
 
-// 마감된 공산품 / 출고 지난 공산품 공용 목록 — 상단 검색 + 마감 지난 상품(최근 마감순).
+// 마감된 예약 / 출고 지난 공산품 공용 목록 — 상단 검색 + 마감 지난 상품(최근 마감순).
 // 지난 상품도 '수정/삭제' 가능(서버 액션은 지난 상품 허용 — closeAt만 있으면 됨). [복사]는 그 값으로 새 상품 등록.
 // 폼은 진행 중 목록과 같은 부품(FlatProductForm) — 수정·복사를 눌렀을 때만 열린다.
 export function FlatClosedList({
