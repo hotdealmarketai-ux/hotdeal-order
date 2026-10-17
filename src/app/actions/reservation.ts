@@ -848,7 +848,7 @@ export async function adminSetReservationStoreQtyAction(input: {
       // 최소 수량 — 막지 않고 경고만(수량이 그대로면 검사 안 함). 기준은 화면에 보이던 확정 수량.
       const rule = { minPerStore: product.minPerStore };
       const problem = flatQtyProblem(qty, shownQty, rule);
-      const warning = problem ? `저장했어요 · 최소 수량(${effectiveMin(rule)}개)보다 적어요.` : undefined;
+      const warning = problem ? `저장했어요 · 최소 주문수량(${effectiveMin(rule)}개)보다 적어요.` : undefined;
 
       // 연동 '증가'는 재고 가용으로 캡 — 단 '재고 고정' 상품만. 기본(초과발주 허용)은 넘어도 저장.
       if (iid && product.stockFixed && qty > curQty) {

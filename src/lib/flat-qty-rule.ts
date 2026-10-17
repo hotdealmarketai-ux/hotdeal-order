@@ -30,7 +30,7 @@ export function flatQtyProblem(qty: number, prev: number, rule: FlatQtyRule): st
   if (!Number.isInteger(qty) || qty < 0) return "수량은 숫자로 넣어 주세요.";
   if (qty === 0 || qty === prev) return null;
   const min = effectiveMin(rule);
-  if (qty < min) return `${min}개부터 발주할 수 있어요.`;
+  if (qty < min) return `최소 주문수량은 ${min}개예요.`;
   return null;
 }
 
@@ -47,17 +47,17 @@ export function stepDown(qty: number, rule: FlatQtyRule): number {
   return next >= effectiveMin(rule) ? next : 0;
 }
 
-/** 배지 문구 — ['5개부터'] (최소 수량이 없으면 빈 배열) */
+/** 배지 문구 — ['최소 주문수량 5개'] (최소 수량이 없으면 빈 배열) */
 export function qtyRuleBadges(rule: FlatQtyRule): string[] {
-  return hasQtyRule(rule) ? [`${rule.minPerStore}개부터`] : [];
+  return hasQtyRule(rule) ? [`최소 주문수량 ${rule.minPerStore}개`] : [];
 }
 
 /** 관리자 입력 해석 — 최소: 빈칸·0·1 = 없음(null). 잘못된 값은 오류 문구 */
 export function parseMinInput(raw: string): { value: number | null } | { error: string } {
   const t = raw.trim();
   if (t === "") return { value: null };
-  if (!/^\d+$/.test(t)) return { error: "최소 수량은 숫자로 넣어 주세요." };
+  if (!/^\d+$/.test(t)) return { error: "최소 주문수량은 숫자로 넣어 주세요." };
   const n = Number(t);
-  if (n > 99999) return { error: "최소 수량이 너무 커요." };
+  if (n > 99999) return { error: "최소 주문수량이 너무 커요." };
   return { value: n <= 1 ? null : n };
 }

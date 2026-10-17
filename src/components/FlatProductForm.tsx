@@ -316,7 +316,7 @@ export function FlatProductForm({
 
       {/* 최소 수량(MOQ) — 빈칸 = 없음. 최소 이상이면 몇 개를 넣든 상관없다. */}
       <div style={{ marginTop: 8 }}>
-        <label className="resvflat__flabel">최소 수량</label>
+        <label className="resvflat__flabel">최소 주문수량</label>
         <input
           className="input"
           inputMode="numeric"

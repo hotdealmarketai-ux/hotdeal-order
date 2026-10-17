@@ -123,7 +123,7 @@ export function FlatReservationMerchant({
       ) : (
         groups.map((g) => {
           const remain = closeRemain(g.closeAtMs, now);
-          // 묶음 머리 = 최소 수량(5개부터)·안내만. 최소 없는 건 기본이라 따로 적지 않는다.
+          // 묶음 머리 = 최소 주문수량·안내만. 최소 없는 건 기본이라 따로 적지 않는다.
           const common = [...(g.commonRule ? qtyRuleBadges(g.commonRule) : []), g.commonDesc ?? ""].filter(Boolean);
           return (
             <section className="gsp-group" key={g.closeAtMs}>
