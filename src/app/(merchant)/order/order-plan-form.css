@@ -5,29 +5,6 @@
      편성 줄 전용만 pl- 접두사로 추가(globals.css 는 건드리지 않음)
    ============================================================ */
 
-/* 위쪽 안내 띠 — '오늘 발주 품목만 보여요 · 10월 15일(수) 발주 → 16일(목) 출고' */
-.plband {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 12px 14px;
-  margin-bottom: 14px;
-  border-radius: 12px;
-  background: var(--green-100);
-  border: 1px solid var(--green-150);
-  color: var(--green-700);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.4;
-  word-break: keep-all;
-}
-.plband__sub {
-  font-size: 14px;
-  font-weight: 600;
-  opacity: 0.9;
-  font-variant-numeric: tabular-nums;
-}
-
 /* 새로고침 안내 띠(발주 날짜 바뀜·품목 추가 등) */
 .plstale {
   display: flex;

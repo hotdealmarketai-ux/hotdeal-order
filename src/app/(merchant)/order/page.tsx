@@ -34,7 +34,7 @@ import { RequestCancelButton } from "@/components/RequestCancelButton";
 import { merchantVisibility, modeStamp } from "@/lib/restrict-mode";
 import { merchantPlanView, windowOrdersWhere } from "@/lib/order-plan";
 import { logError } from "@/lib/log";
-import { toPlanFormView, windowShipLabel } from "./plan-view";
+import { toPlanFormView } from "./plan-view";
 import "./order-plan-form.css";
 
 export default async function OrderPage(props: {
@@ -156,12 +156,6 @@ export default async function OrderPage(props: {
         {windowed && <DeadlineCountdown deadlineLabel={ORDER_DEADLINE_LABEL} />}
       </Topbar>
       <div className="page">
-        {restricted && (
-          <div className="plband" role="note">
-            <span>오늘 발주 품목만 보여요</span>
-            <span className="plband__sub">{windowShipLabel(planKey)}</span>
-          </div>
-        )}
         {restricted && navNote === "restricted" && (
           <div className="notice notice--mute" style={{ marginBottom: 14 }}>
             재고현황·예약발주는 지금 쉬고 있어요. 오늘 발주 품목에 수량만 넣어 주세요.
