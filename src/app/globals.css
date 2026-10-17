@@ -5287,23 +5287,36 @@ a.resv-card:active { transform: scale(0.995); }
 .gsp-ghead__left.is-closed { color: var(--muted); }
 .gsp-ghead__common { margin-top: 4px; font-size: 14.5px; font-weight: 700; color: var(--fg-2); line-height: 1.4; word-break: keep-all; }
 .gsp-ship {
-  display: flex; align-items: center; gap: 8px; margin: 14px 0 8px;
-  font-size: 15px; font-weight: 800; color: var(--green-700);
+  display: flex; align-items: center; gap: 8px; margin: 12px 0 6px;
+  font-size: 14.5px; font-weight: 800; color: var(--green-700);
 }
 .gsp-ship::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-.gsp-cards { display: flex; flex-direction: column; gap: 10px; }
+.gsp-cards { display: flex; flex-direction: column; gap: 8px; }
 
 /* 상품 카드(1열) */
 .gsp-card {
-  display: flex; flex-direction: column; gap: 6px; padding: 14px;
-  border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 14px;
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px;
+  border: 1px solid var(--line); border-left: 4px solid var(--line-strong); border-radius: 12px;
   background: var(--surface);
 }
+/* 두 줄 목록 — 왼쪽 이름·정보, 오른쪽 수량 칸 */
+.gsp-card__row { display: flex; align-items: center; gap: 10px; }
+.gsp-card__info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gsp-card__meta {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+  font-size: 13.5px; color: var(--fg-2); font-variant-numeric: tabular-nums; line-height: 1.35;
+}
+.gsp-card__meta b { font-weight: 800; color: var(--fg); }
+.gsp-card__rule { font-weight: 800; color: var(--green-700); }
+.gsp-card__out { font-weight: 700; color: var(--danger); }
+.gsp-card__done { font-weight: 800; color: var(--green-700); }
+.gsp-card .gsp-step__btn { width: 40px; height: 40px; font-size: 22px; }
+.gsp-card .gsp-step__val { width: 44px; height: 40px; font-size: 18px; }
 .gsp-card.is-on { border-left-color: var(--green-700); background: var(--green-100); }
 .gsp-card.is-dirty { border-left-color: var(--warn); }
 .gsp-card.is-bad { border-left-color: var(--danger); }
 .gsp-card.is-closed { background: var(--surface-2); }
-.gsp-card__name { font-size: 17px; font-weight: 800; color: var(--fg); line-height: 1.35; word-break: keep-all; }
+.gsp-card__name { font-size: 16px; font-weight: 800; color: var(--fg); line-height: 1.3; word-break: keep-all; }
 .gsp-card__tag {
   display: inline-block; margin-left: 6px; padding: 2px 8px; border-radius: 6px; vertical-align: 2px;
   font-size: 12.5px; font-weight: 800; color: var(--green-700); background: var(--green-100);
@@ -5320,12 +5333,12 @@ a.resv-card:active { transform: scale(0.995); }
 .gsp-badge--rule { background: var(--green-700); color: #fff; font-weight: 800; }
 .gsp-badge--left { background: var(--surface); border: 1px solid var(--green-150); color: var(--green-700); font-weight: 800; }
 .gsp-badge--out { background: var(--surface); border: 1px solid var(--danger-soft-line); color: var(--danger); }
-.gsp-card__desc { font-size: 14px; color: var(--fg-2); line-height: 1.45; word-break: keep-all; }
+.gsp-card__desc { font-size: 13px; color: var(--fg-2); line-height: 1.4; word-break: keep-all; }
 .gsp-card__compbtn {
-  align-self: flex-start; min-height: 36px; padding: 0; border: 0; background: transparent;
-  font: inherit; font-size: 14px; font-weight: 800; color: var(--green-700); cursor: pointer;
+  align-self: flex-start; min-height: 28px; padding: 0; border: 0; background: transparent;
+  font: inherit; font-size: 13px; font-weight: 800; color: var(--green-700); cursor: pointer;
 }
-.gsp-card__comp { font-size: 14px; color: var(--fg-2); line-height: 1.5; word-break: keep-all; }
+.gsp-card__comp { font-size: 13px; color: var(--fg-2); line-height: 1.45; word-break: keep-all; }
 .gsp-card__qty { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
 .gsp-card__sum { font-size: 16px; font-weight: 800; color: var(--fg); font-variant-numeric: tabular-nums; }
 .gsp-card__msg {
@@ -5338,14 +5351,15 @@ a.resv-card:active { transform: scale(0.995); }
   border: 1.5px solid currentColor; background: var(--surface); color: inherit;
   font: inherit; font-size: 15px; font-weight: 800; cursor: pointer; font-variant-numeric: tabular-nums;
 }
-.gsp-card__foot { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
-.gsp-card__foot .btn { flex: 0 0 auto; min-width: 128px; min-height: 48px; }
+.gsp-card__foot { display: flex; align-items: center; gap: 10px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.gsp-card__foot .btn { flex: 0 0 auto; min-width: 112px; min-height: 40px; }
 .gsp-card__foot .btn:only-child { flex: 1 1 auto; }
 .gsp-card__err { font-size: 14px; font-weight: 700; color: var(--danger); word-break: keep-all; }
 .gsp-state { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 800; line-height: 1.35; word-break: keep-all; }
 .gsp-state--ok { color: var(--green-700); }
 .gsp-state--warn { color: var(--warn); }
 .gsp-state--bad { color: var(--danger); }
+.gsp-state--sum { color: var(--fg); font-variant-numeric: tabular-nums; }
 
 /* − [숫자] + (48px — 일반발주 편성 줄과 같은 크기) */
 .gsp-step {

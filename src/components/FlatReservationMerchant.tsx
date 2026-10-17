@@ -242,7 +242,6 @@ function FlatCard({
   const rule: FlatQtyRule = { minPerStore: p.minPerStore, qtyStep: p.qtyStep };
   const unit = p.isSet ? "세트" : "개";
   const closed = now >= p.closeAtMs;
-  const step = p.qtyStep > 1 ? p.qtyStep : 1;
   // 재고 고정(연동)이면 남은 수량(내 수량 포함)까지만 — 이미 그보다 많이 넣어 둔 수량은 줄이기만.
   const max = p.hasLinked && p.stockFixed ? Math.max(p.available, p.myQty) : 99999;
   const badges = showRule ? qtyRuleBadges(rule) : [];
@@ -312,63 +311,57 @@ function FlatCard({
           : "";
   const cls = tone ? `gsp-card ${tone}` : "gsp-card";
 
+  // 두 줄 목록 — 1줄: 이름 + 수량 칸 / 2줄: 가격 · 규칙 · 남은 수량 · 내 상태. 버튼 줄은 숫자를 바꿨을 때만.
+  const done = chip?.tone === "ok" && !action; // 발주됨(그대로) · 마감 뒤 내 발주 → 2줄에 초록 글자로
   return (
     <div className={cls}>
-      <div className="gsp-card__name">
-        {p.name}
-        {p.isSet && <span className="gsp-card__tag">세트</span>}
-      </div>
-      <div className="gsp-card__price">
-        <b>{won(p.supplyPrice)}원</b>
-        {step > 1 && (
-          <>
-            {" "}· {step}
-            {unit} {won(p.supplyPrice * step)}원
-          </>
-        )}
-      </div>
-      {(badges.length > 0 || (p.hasLinked && !closed)) && (
-        <div className="gsp-card__badges">
-          {badges.map((b) => (
-            <span className="gsp-badge gsp-badge--rule" key={b}>
-              {b}
-            </span>
-          ))}
-          {p.hasLinked &&
-            !closed &&
-            (stockLeft > 0 ? (
-              <span className="gsp-badge gsp-badge--left">
-                남은 {stockLeft}
-                {unit}
-              </span>
-            ) : (
-              <span className="gsp-badge gsp-badge--out">
-                {p.stockFixed ? "재고 소진" : "재고 소진 · 발주 가능"}
+      <div className="gsp-card__row">
+        <div className="gsp-card__info">
+          <div className="gsp-card__name">
+            {p.name}
+            {p.isSet && <span className="gsp-card__tag">세트</span>}
+          </div>
+          <div className="gsp-card__meta">
+            <b>{won(p.supplyPrice)}원</b>
+            {badges.map((b) => (
+              <span className="gsp-card__rule" key={b}>
+                {b}
               </span>
             ))}
-        </div>
-      )}
-      {showDesc && p.description && <div className="gsp-card__desc">{p.description}</div>}
-      {p.isSet && p.components.length > 0 && (
-        <>
-          <button
-            type="button"
-            className="gsp-card__compbtn"
-            aria-expanded={compOpen}
-            onClick={() => setCompOpen((v) => !v)}
-          >
-            구성품 {p.components.length}개 {compOpen ? "▲" : "▼"}
-          </button>
-          {compOpen && (
-            <div className="gsp-card__comp">
-              {p.components.map((c) => `${c.name} ×${c.qtyPerUnit}`).join(" · ")}
-            </div>
+            {p.hasLinked &&
+              !closed &&
+              (stockLeft > 0 ? (
+                <span>
+                  남은 {stockLeft}
+                  {unit}
+                </span>
+              ) : (
+                <span className="gsp-card__out">{p.stockFixed ? "재고 소진" : "재고 소진 · 발주 가능"}</span>
+              ))}
+            {done && chip && <span className="gsp-card__done">{chip.text}</span>}
+            {chip?.tone === "bad" && <span className="gsp-card__out">{chip.text}</span>}
+          </div>
+          {showDesc && p.description && <div className="gsp-card__desc">{p.description}</div>}
+          {p.isSet && p.components.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="gsp-card__compbtn"
+                aria-expanded={compOpen}
+                onClick={() => setCompOpen((v) => !v)}
+              >
+                구성품 {p.components.length}개 {compOpen ? "▲" : "▼"}
+              </button>
+              {compOpen && (
+                <div className="gsp-card__comp">
+                  {p.components.map((c) => `${c.name} ×${c.qtyPerUnit}`).join(" · ")}
+                </div>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
 
       {!closed && (
-        <div className="gsp-card__qty">
           <div className={`gsp-step${problem ? " is-bad" : ""}`} role="group" aria-label={`${p.name} 수량`}>
             <button
               type="button"
@@ -414,9 +407,8 @@ function FlatCard({
               +
             </button>
           </div>
-          {draft > 0 && <span className="gsp-card__sum">= {won(draft * p.supplyPrice)}원</span>}
-        </div>
-      )}
+        )}
+      </div>
 
       {!closed && problem && (
         <div className="gsp-card__msg">
@@ -434,10 +426,12 @@ function FlatCard({
         </div>
       )}
 
-      {(chip || action) && (
+      {action && !(action === "order" && draft === 0) && (
         <div className="gsp-card__foot">
-          {chip && <span className={`gsp-state gsp-state--${chip.tone}`}>{chip.text}</span>}
-          {action && (
+          <span className={`gsp-state gsp-state--${chip?.tone === "warn" ? "warn" : "sum"}`}>
+            {chip?.tone === "warn" ? chip.text : draft > 0 ? `${draft}${unit} · ${won(draft * p.supplyPrice)}원` : ""}
+          </span>
+          {(
             <button
               type="button"
               className={`btn btn--sm ${action === "cancel" ? "btn--danger" : "btn--primary"}`}
