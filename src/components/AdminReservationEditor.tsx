@@ -25,7 +25,7 @@ export function AdminReservationEditor({
   const [err, setErr] = useState<{ userId: string; msg: string } | null>(null);
 
   if (stores.length === 0) {
-    return <div className="empty">아직 예약한 점주가 없어요.</div>;
+    return <div className="empty">발주한 지점이 없어요.</div>;
   }
 
   const qtyOf = (itemId: string, original: number) =>
@@ -57,7 +57,7 @@ export function AdminReservationEditor({
       });
       setSavingUser(null);
       if (!res.ok) {
-        setErr({ userId: s.userId, msg: res.error ?? "저장에 실패했어요." });
+        setErr({ userId: s.userId, msg: res.error ?? "저장에 실패했어요. 다시 시도해 주세요." });
         return;
       }
       // 저장한 품목의 pending 정리 후 새로고침(서버 최신값 반영)
@@ -110,9 +110,7 @@ export function AdminReservationEditor({
               <span className="resv-conf__name">
                 {s.storeName}
                 {!s.confirmed && (
-                  <span className="resvedit__unconfirmed" title="점주가 아직 확정하지 않음 — 수정해도 확정 전엔 공구·계산서에 반영되지 않아요">
-                    미확정
-                  </span>
+                  <span className="resvedit__unconfirmed">발주 전</span>
                 )}
                 {changed && <span className="resvedit__dot" aria-label="변경됨" />}
               </span>
@@ -143,7 +141,7 @@ export function AdminReservationEditor({
                             className="resvedit__step"
                             onClick={() => setQty(it.itemId, q - 1)}
                             disabled={q <= 0}
-                            aria-label="감소"
+                            aria-label="수량 줄이기"
                           >
                             −
                           </button>
@@ -163,7 +161,7 @@ export function AdminReservationEditor({
                             type="button"
                             className="resvedit__step"
                             onClick={() => setQty(it.itemId, q + 1)}
-                            aria-label="증가"
+                            aria-label="수량 늘리기"
                           >
                             +
                           </button>
@@ -198,7 +196,7 @@ export function AdminReservationEditor({
                   >
                     {saving && savingUser === s.userId
                       ? "저장 중…"
-                      : "이 점포 예약 저장"}
+                      : "변경 저장"}
                   </button>
                 )}
               </div>
@@ -227,7 +225,7 @@ export function AdminReservationEditor({
           <div className="confmerch__items">
             {totals.length === 0 ? (
               <div className="confmerch__item">
-                <span className="muted">예약 상품이 없어요.</span>
+                <span className="muted">발주한 상품이 없어요.</span>
               </div>
             ) : (
               totals.map((t, i) => (

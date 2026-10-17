@@ -1,15 +1,16 @@
 import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { flatScopeAggregate, type FlatScope } from "@/lib/reservation-flat";
+import { labelShipment } from "@/lib/date";
 
 export const dynamic = "force-dynamic";
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
-const SCOPE_LABEL: Record<FlatScope, string> = {
-  open: "현 예약발주",
-  closed: "지난 예약 마감",
-  pickupClosed: "지난 픽업 마감",
+const SCOPE_TITLE: Record<FlatScope, string> = {
+  open: "진행 중 공산품 집계",
+  closed: "마감된 공산품 집계",
+  pickupClosed: "출고 지난 공산품 집계",
 };
 const BACK: Record<FlatScope, string> = {
   open: "/admin/reservations",
@@ -17,8 +18,8 @@ const BACK: Record<FlatScope, string> = {
   pickupClosed: "/admin/reservations/pickup-closed",
 };
 
-// 예약발주 전체 집계 — scope(현 예약발주/지난 예약 마감/지난 픽업 마감)의 모든 상품을
-// '들어온 지점만' 묶어 한 화면에. 발주서(본사출고) 전체 집계와 같은 정리 양식.
+// 공산품 전체 집계 — scope(진행 중/마감된/출고 지난 공산품)의 모든 상품을
+// '들어온 지점만'(확정분) 묶어 한 화면에. 발주서(본사출고) 전체 집계와 같은 정리 양식.
 export default async function ReservationSummaryPage(props: {
   searchParams: Promise<{ scope?: string }>;
 }) {
@@ -30,10 +31,10 @@ export default async function ReservationSummaryPage(props: {
 
   return (
     <>
-      <Topbar backHref={BACK[scope]} title={`${SCOPE_LABEL[scope]} 집계`} />
+      <Topbar backHref={BACK[scope]} title={SCOPE_TITLE[scope]} />
       <div className="page">
         <div className="notice notice--ai" style={{ marginBottom: 14 }}>
-          상품 {products.length}종 · 전 지점 합계 <b>{grandTotal}개</b> · 발주 지점 {storeCount}곳
+          공산품 {products.length}개 · 합계 <b>{grandTotal}개</b> · 발주 지점 {storeCount}곳
         </div>
 
         {products.length === 0 ? (
@@ -51,7 +52,7 @@ export default async function ReservationSummaryPage(props: {
                   <span className="badge badge--ai">총 {p.total}개</span>
                 </div>
                 <div className="row__sub" style={{ marginBottom: 6 }}>
-                  픽업 {p.pickupDate} · 공급가 {won(p.supplyPrice)}원 · {p.stores.length}점포
+                  {labelShipment(p.pickupDate)} · 공급가 {won(p.supplyPrice)}원 · 지점 {p.stores.length}곳
                 </div>
                 <div className="divider" style={{ margin: "2px 0 8px" }} />
                 {p.stores.map((s, i) => (

@@ -36,6 +36,7 @@ export function ReservationBatchEditor({
 }) {
   const uid = useRef(0);
   const [reserveDate, setReserveDate] = useState(batch?.reserveDate ?? "");
+  // eslint-disable-next-line react-hooks/refs -- 줄 key 번호만 매김(처음 한 번, 화면 값에는 안 씀, 예전 그대로)
   const [rows, setRows] = useState<Row[]>(() =>
     (batch?.products ?? []).map((p) => ({
       key: `k${uid.current++}`,
@@ -137,7 +138,7 @@ export function ReservationBatchEditor({
 
       <div className="card" style={{ marginBottom: 14 }}>
         <label className="resv-dates__field">
-          <span>예약일자 (마감 기준)</span>
+          <span>발주 날짜</span>
           <input
             className="input"
             type="date"
@@ -149,18 +150,18 @@ export function ReservationBatchEditor({
         </label>
         {reserveValid && (
           <div className="resv-note">
-            예약 마감 <b>{reservationDeadlineLabel(reserveDate)}</b>
+            발주 마감 <b>{reservationDeadlineLabel(reserveDate)}</b>
           </div>
         )}
         {anyBadPickup && (
           <div className="resv-note resv-note--warn">
-            픽업일이 비었거나 예약일보다 뒤가 아닌 상품이 있어요. 확인해 주세요.
+            출고일을 확인해 주세요.
           </div>
         )}
       </div>
 
       <div className="itemshead">
-        <span className="itemshead__label">상품 (이름 · 픽업일 · 점주공급가)</span>
+        <span className="itemshead__label">상품</span>
         <span className="itemshead__count">{shown.length}개</span>
       </div>
 
@@ -171,7 +172,7 @@ export function ReservationBatchEditor({
             {linked ? (
               <div className="wprow__name wprow__name--linked">
                 <span className="wprow__linkedname">{r.name}</span>
-                <span className="badge badge--ai wprow__linktag">재고연동</span>
+                <span className="badge badge--ai wprow__linktag">재고 연동</span>
               </div>
             ) : (
               <input
@@ -183,7 +184,7 @@ export function ReservationBatchEditor({
             )}
             <div className="wprow__nums">
               <span className="wprow__field">
-                픽업{" "}
+                출고{" "}
                 <input
                   className="input"
                   type="date"
@@ -219,7 +220,7 @@ export function ReservationBatchEditor({
           onClick={addRow}
           style={{ flex: 1 }}
         >
-          + 상품 추가
+          + 상품
         </button>
         <button
           type="button"
@@ -288,7 +289,7 @@ export function ReservationBatchEditor({
                 className="btn btn--primary btn--block"
                 onClick={() => setPickerOpen(false)}
               >
-                완료 ({addedIds.size}개 연동)
+                완료 ({addedIds.size}개)
               </button>
             </div>
           </div>
@@ -304,7 +305,7 @@ export function ReservationBatchDeleteButton({ batchId }: { batchId: string }) {
     <form action={deleteReservationBatchAction} style={{ marginTop: 24, textAlign: "center" }}>
       <input type="hidden" name="batchId" value={batchId} />
       <SubmitButton className="linkbtn linkbtn--danger" pendingText="삭제 중…">
-        이 예약일자 삭제
+        발주 날짜 삭제
       </SubmitButton>
     </form>
   );

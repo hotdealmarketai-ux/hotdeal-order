@@ -44,7 +44,10 @@ export function windowOrdersWhere(userId: string, windowKey: string): Prisma.Ord
 }
 
 export type PlanCat = "FRUIT" | "VEG" | "TOOL";
-export const PLAN_CATS: PlanCat[] = ["FRUIT", "VEG", "TOOL"];
+// 지금 편성·발주하는 종류(2026-10-17~ 공구는 공산품으로만 받는다 — 제한 모드 일반발주에 공구 없음).
+// 점주 화면·실시간 조회·새 발주·하루 수정 반복·관리자 현황이 모두 이 목록 하나를 따른다(서버·화면이 같이 바뀜).
+// 타입·isPlanCat 은 TOOL 을 그대로 둔다 — 이미 만든 공구 편성·발주(관리자 대리 수정·계산서·원장 정리)를 알아보는 용도.
+export const PLAN_CATS: PlanCat[] = ["FRUIT", "VEG"];
 export type PlanCategory = PlanCat | "TOFU";
 export const PLAN_CATEGORIES: PlanCategory[] = ["FRUIT", "VEG", "TOOL", "TOFU"];
 
@@ -244,7 +247,9 @@ export async function merchantPlanView(windowKey: string, userId: string): Promi
     planUsage(all.map((i) => i.id)),
     linkedStock(prisma, all.map((i) => i.inventoryItemId), windowKey),
   ]);
-  const cats = {} as MerchantPlanView["cats"];
+  // 편성 종류에서 빠진 종류(공구)는 빈 칸 — 화면이 그 칸을 읽어도 깨지지 않게(방어)
+  const none = () => ({ exists: false, items: [] as MerchantPlanItem[] });
+  const cats: MerchantPlanView["cats"] = { FRUIT: none(), VEG: none(), TOOL: none() };
   for (const c of PLAN_CATS) {
     const items: MerchantPlanItem[] = [];
     for (const it of plan.cats[c].items) {
@@ -362,7 +367,10 @@ export async function lockAndCheckPlanLines(
       else mineOut += q;
     }
 
-    if (!it || it.date !== windowKey || !isPlanCat(it.category)) {
+    // 점주는 지금 편성 종류(PLAN_CATS)만 — 옛 화면이 보낸 공구 줄이 말없이 빠지지 않게 같은 문구로 거절한다.
+    // 관리자 대리 수정은 이미 들어온 옛 공구 발주를 고칠 수 있게 그대로 통과.
+    const closedCat = !!it && !asAdmin && !(PLAN_CATS as string[]).includes(it.category);
+    if (!it || it.date !== windowKey || !isPlanCat(it.category) || closedCat) {
       // 편성에서 사라졌거나 다른 날 품목. 수량 그대로/줄이기는 이름 보존 차원에서 허용하지 않는다(새로고침 안내).
       if (newQty > 0) issues.push({ planItemId: id, name: it?.name ?? "", message: "편성이 바뀌었어요. 새로고침 후 다시 넣어 주세요." });
       continue;

@@ -28,13 +28,13 @@ export default async function EditReservationBatchPage(props: {
 
   return (
     <>
-      <Topbar backHref="/admin/reservations" title={`예약 ${labelDate(batch.reserveDate)}`} />
+      <Topbar backHref="/admin/reservations" title={`${labelDate(batch.reserveDate)} 발주`} />
       <div className="page">
         <ReservationBatchEditor batch={batch} inventoryItems={inventoryItems} />
 
         {/* 예약한 점주 — 점주를 누르면 상품별 예약 수량을 +/−·삭제하고 저장(점주에게 알림) */}
         <div className="itemshead" style={{ marginTop: 26 }}>
-          <span className="itemshead__label">예약한 점주</span>
+          <span className="itemshead__label">발주한 지점</span>
           <span className="itemshead__count">{confirmations.length}곳</span>
         </div>
         <AdminReservationEditor batchId={batch.id} stores={confirmations} />

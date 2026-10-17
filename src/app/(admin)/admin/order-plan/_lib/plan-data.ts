@@ -138,7 +138,7 @@ export function upcomingKeys(n: number, from: string = windowKeyAt()): string[] 
   return out;
 }
 
-/** 관리자 홈 배지 — 이번·다음 창에 편성이 비어 있는(행 없음) 과일·야채·공구 수. */
+/** 관리자 홈 배지 — 이번·다음 창에 편성이 비어 있는(행 없음) 편성 종류(ITEM_CATS = 과일·야채) 수. */
 export async function missingPlanCount(): Promise<number> {
   const cur = windowKeyAt();
   const keys = [cur, nextWindowKey(cur)];

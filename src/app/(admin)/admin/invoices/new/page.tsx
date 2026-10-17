@@ -108,7 +108,7 @@ export default async function NewInvoicePage(props: {
         </p>
         {initialItems.length > 0 && (
           <div className="notice notice--ai" style={{ marginBottom: 14 }}>
-            공구에 <b>예약분 {initialItems.length}건</b>을 자동으로 채웠어요. (확인 후 발행)
+            공구에 <b>공산품 {initialItems.length}건</b>을 채웠어요.
           </div>
         )}
 

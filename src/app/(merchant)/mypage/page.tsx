@@ -9,10 +9,11 @@ import {
   type Category,
 } from "@/lib/constants";
 import { formatKDate } from "@/lib/format";
-import { kstDateOf, kstToday, labelDate, shipmentDayOf } from "@/lib/date";
+import { kstDateOf, kstToday, labelDate, labelShipment, shipmentDayOf } from "@/lib/date";
 import { receivableOf, receivableSadadreamOf } from "@/lib/receivable";
 import { LogoutButton } from "@/components/LogoutButton";
 import { merchantVisibility } from "@/lib/restrict-mode";
+import { FLAT_RESERVE_KEY } from "@/lib/reservation-flat";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -30,7 +31,7 @@ export default async function MyPage(props: {
         include: { _count: { select: { items: true } } },
         orderBy: { createdAt: "desc" },
       }),
-      // 주간·예약은 핫딜마켓 가맹점만 — 다른 role은 항상 빈 배열
+      // 주간·공산품(옛 예약발주)은 핫딜마켓 가맹점만 — 다른 role은 항상 빈 배열
       isHotdeal
         ? prisma.weeklyOrder.findMany({
             where: { userId: user.id },
@@ -40,11 +41,13 @@ export default async function MyPage(props: {
         : Promise.resolve([]),
       isHotdeal
         ? prisma.reservationOrder.findMany({
-            // 실제로 예약한 것만(확정 + 품목 1개↑). 미확정·0건 행은 '지난 발주'에 안 뜨게.
+            // 실제로 발주한 것만(확정 + 품목 1개↑). 미확정·0건 행은 '지난 발주'에 안 뜨게.
+            // 상시 묶음(__flat__)은 빼고 옛 날짜형 묶음만 — 상시 묶음은 픽업일이 센티널이라 날짜로 못 그린다.
             where: {
               userId: user.id,
               confirmed: true,
               items: { some: { qty: { gt: 0 } } },
+              batch: { reserveDate: { not: FLAT_RESERVE_KEY } },
             },
             include: {
               _count: { select: { items: true } },
@@ -59,7 +62,7 @@ export default async function MyPage(props: {
         select: { date: true, status: true },
       }),
       receivableOf(user.id),
-      // 예약발주가 이 지점에 안 보이면(품목 제한 모드·지점 노출 off) 예약 행은 링크 없이 읽기만.
+      // 공산품이 이 지점에 안 보이면(지점 '공산품 노출' off) 공산품 행은 링크 없이 읽기만. 제한 모드와는 상관없음.
       merchantVisibility(user),
     ]);
   // 날짜별 입금요청서 배지(ISSUED=입금요청, PAID=입금완료). 낱장 결제 여부는 매칭이 지점 단위라 알 수 없으므로
@@ -113,12 +116,13 @@ export default async function MyPage(props: {
     return base;
   }
 
-  // 지난 발주 통합(핫딜마켓): 일반 + 주간 + 예약을 한 목록으로, 최신순.
+  // 지난 발주 통합(핫딜마켓): 일반 + 주간 + 공산품을 한 목록으로, 최신순.
   type Hist = {
     key: string;
     sortDate: string;
-    href: string | null; // null = 링크 없는 읽기 행(예약발주가 안 보이는 지점의 예약 행)
-    type: "일반" | "주간" | "예약";
+    href: string | null; // null = 링크 없는 읽기 행(공산품이 안 보이는 지점의 공산품 행)
+    // 칩 색 클래스가 이 글자로 만들어진다(histtype--공산품, globals.css)
+    type: "일반" | "주간" | "공산품";
     title: string;
     sub: string;
     badge: React.ReactNode;
@@ -172,11 +176,11 @@ export default async function MyPage(props: {
         key: `r${r.id}`,
         sortDate: kstDateOf(r.createdAt),
         href: vis.reservations ? `/reservations/${r.batchId}` : null,
-        type: "예약",
-        title: `픽업 ${labelDate(r.batch.pickupDate)}`,
-        sub: `예약상품 ${r._count.items}건`,
+        type: "공산품",
+        title: labelShipment(r.batch.pickupDate),
+        sub: `공산품 ${r._count.items}건`,
         badge: r.confirmed ? (
-          <span className="badge badge--mute">예약 확정</span>
+          <span className="badge badge--mute">확정</span>
         ) : (
           <span className="row__chev">›</span>
         ),

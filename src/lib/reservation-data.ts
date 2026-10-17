@@ -208,12 +208,14 @@ export type MerchantReservationDetail = {
   qtyByProduct: Record<string, number>;
 };
 
+// 옛 날짜형 묶음 상세 전용 — 공산품 상시 묶음(flat)은 걸러 낸다(null → 목록으로).
+// 옛 화면의 묶음 단위 확정·담기가 상품별 마감·수량 규칙을 건너뛰지 않게.
 export async function getMerchantReservation(
   batchId: string,
   userId: string,
 ): Promise<MerchantReservationDetail | null> {
   const b = await prisma.reservationBatch.findFirst({
-    where: { id: batchId, active: true },
+    where: { id: batchId, active: true, reserveDate: { not: FLAT_RESERVE_KEY } },
     select: {
       id: true,
       reserveDate: true,
@@ -390,19 +392,19 @@ export async function getReservationInvoiceItems(
   return [...merged.values()];
 }
 
-// 픽업 전날(=오늘 발주창) 공구에 읽기전용으로 로드할 '확정 예약' 항목. 단일출처(주문 복제 X).
-// 상품별 픽업이므로 아이템 픽업일(스냅샷)이 발주일+1인 것만. 다른 배치·다른 예약일자여도 합쳐진다.
+// '함께 오는 공산품' — 이 지점의 그 출고일(=공산품 출고일 스냅샷) 확정 공산품(읽기전용). 단일출처(주문 복제 X).
+// 확정 조건은 출고·계산서와 같다. 다른 상품이라도 이름이 같으면 수량을 합친다(계산서와 같은 규칙).
+// 일반발주 화면은 그 발주창의 출고일(shipmentDayOf(발주창 키) — 토·일 발주는 월요일 출고분)을 넘긴다.
 export type ReservationLoadItem = { name: string; qty: number };
-export async function getReservationLoadForOrder(
+export async function getReservationLoadForShipment(
   userId: string,
-  orderDayKst: string,
+  shipDateKst: string,
 ): Promise<ReservationLoadItem[]> {
-  const pickupDate = shiftDate(orderDayKst, 1); // 로드일 == 픽업 전날 ⇒ 픽업 == 발주일+1
   const items = await prisma.reservationOrderItem.findMany({
     where: {
-      pickupDate,
+      pickupDate: shipDateKst, // 공산품 출고일 == 계산서 날짜
       qty: { gt: 0 },
-      // 확정한 예약분만 공구에 자동 로드 — 연동·수기 모두 동일 게이트(예약 확정 시 로드·잠금).
+      // 확정한 공산품만 — 연동·수기 모두 동일 게이트(출고·계산서와 같은 조건).
       order: { userId, batch: { active: true } }, OR: [{ order: { confirmed: true } }, { confirmedAt: { not: null } }],
     },
     select: { name: true, qty: true },
@@ -411,6 +413,15 @@ export async function getReservationLoadForOrder(
   const merged = new Map<string, number>();
   for (const it of items) merged.set(it.name, (merged.get(it.name) ?? 0) + it.qty);
   return [...merged.entries()].map(([name, qty]) => ({ name, qty }));
+}
+
+// (옛 기준) 달력 발주일+1 을 출고일로 보고 찾는다 — 토요일 발주는 일요일을 찾아 월요일 출고분이 빠진다.
+// 화면은 모두 getReservationLoadForShipment 로 옮겼고, 이 함수는 같은 계산의 옛 입구로만 남긴다.
+export async function getReservationLoadForOrder(
+  userId: string,
+  orderDayKst: string,
+): Promise<ReservationLoadItem[]> {
+  return getReservationLoadForShipment(userId, shiftDate(orderDayKst, 1));
 }
 
 // 공구 벤더(=새롭 본사)의 '공동구매 발주'(/vendor) 집계용 — 픽업일(=출고일)의 확정 예약분을

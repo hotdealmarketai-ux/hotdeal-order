@@ -3,8 +3,11 @@
 export type ItemCat = "FRUIT" | "VEG" | "TOOL";
 export type AnyCat = ItemCat | "TOFU";
 
-export const ITEM_CATS: ItemCat[] = ["FRUIT", "VEG", "TOOL"];
-export const ALL_CATS: AnyCat[] = ["FRUIT", "VEG", "TOOL", "TOFU"];
+// 관리자가 지금 편성하는 종류 — 공구는 2026-10-17~ 공산품으로만 받아 뺐다(점주 쪽 PLAN_CATS 와 같은 기준).
+// 편집 탭·달력 칩·빨간 테두리·다음 7개 발주창·관리자 홈 배지·켜기 점검·저장·복사가 이 목록을 따른다.
+// 타입(ItemCat·AnyCat)은 TOOL 을 그대로 둔다 — 이미 만든 공구 편성 데이터를 알아보는 용도(지우지 않고 읽지 않음).
+export const ITEM_CATS: ItemCat[] = ["FRUIT", "VEG"];
+export const ALL_CATS: AnyCat[] = ["FRUIT", "VEG", "TOFU"];
 
 export const CAT_LABEL: Record<AnyCat, string> = {
   FRUIT: "과일",
@@ -100,7 +103,6 @@ export type PreflightResult =
       windows: PreflightWindow[]; // nowKey, nextKey(같으면 하나)
       cartHolds: number;
       cartStores: number;
-      activeReservations: number;
       windowOrders: number;
       merchants: { id: string; storeName: string }[];
       config: { on: boolean; from: string; pilot: string[] };
@@ -115,7 +117,7 @@ export type InvPick = {
   tax: string;
   base: number;
   real: number;
-  locked: boolean; // 예약발주 진행 중 — 연동 금지
+  locked: boolean; // 공산품 발주 중 — 연동 금지
 };
 
 /** 편집 화면 품목별 현황(오늘·지난 창). */

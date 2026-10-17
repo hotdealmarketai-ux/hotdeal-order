@@ -37,11 +37,11 @@ export default async function AdminCalendarPage() {
 
   return (
     <>
-      <Topbar backHref="/admin" title="예약 픽업 일정" />
+      <Topbar backHref="/admin" title="공산품 출고 일정" />
       <div className="page">
         {days.length === 0 ? (
           <div className="empty">
-            <p>예정된 예약 픽업이 없어요.</p>
+            <p>예정된 공산품 출고가 없어요.</p>
           </div>
         ) : (
           <div className="stack" style={{ gap: 10 }}>

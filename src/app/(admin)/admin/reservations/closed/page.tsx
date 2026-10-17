@@ -3,13 +3,13 @@ import { Topbar } from "@/components/Topbar";
 import { requireAdmin } from "@/lib/session";
 import { listFlatProductsAdmin } from "@/lib/reservation-flat";
 import { getInventoryPickList } from "@/lib/reservation-data";
-import { formatKDateTime } from "@/lib/format";
+import { closeAtLabel } from "@/lib/flat-group";
 import { FlatClosedList } from "@/components/FlatClosedList";
 
 export const dynamic = "force-dynamic";
 
-// 지난 예약 마감 — 예약 마감은 지났지만 픽업일은 아직 안 지난 상품(점포별 수량 수정 가능).
-// 픽업일까지 지난 상품은 '지난 픽업 마감'으로 이동한다.
+// 마감된 공산품 — 발주 마감은 지났지만 출고일은 아직 안 지난 상품(점포별 수량 대신 고치기 가능).
+// 출고일까지 지난 상품은 '출고 지난 공산품'으로 옮겨진다.
 export default async function ClosedReservationsPage() {
   await requireAdmin();
   const [products, inventoryItems] = await Promise.all([
@@ -22,9 +22,12 @@ export default async function ClosedReservationsPage() {
     pickupDate: p.pickupDate,
     supplyPrice: p.supplyPrice,
     inventoryItemId: p.inventoryItemId,
-    closeAtLabel: formatKDateTime(p.closeAt),
+    closeAtLabel: closeAtLabel(p.closeAtMs), // 점주·진행 중 목록과 같은 꼴 "10월 19일 (월) 오전 10시"
     closeAtLocal: new Date(p.closeAt.getTime() + 9 * 3600 * 1000).toISOString().slice(0, 16),
     stockFixed: p.stockFixed,
+    minPerStore: p.minPerStore,
+    qtyStep: p.qtyStep,
+    description: p.description,
     totalQty: p.totalQty,
     storeCount: p.storeCount,
     components: p.components,
@@ -32,7 +35,7 @@ export default async function ClosedReservationsPage() {
 
   return (
     <>
-      <Topbar backHref="/admin/reservations" title="지난 예약 마감" />
+      <Topbar backHref="/admin/reservations" title="마감된 공산품" />
       <div className="page">
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
           <Link
@@ -40,7 +43,7 @@ export default async function ClosedReservationsPage() {
             className="linkbtn"
             style={{ color: "var(--muted)", textDecoration: "none" }}
           >
-            지난 픽업 마감 ›
+            출고 지난 공산품 ›
           </Link>
         </div>
         <Link
@@ -48,13 +51,13 @@ export default async function ClosedReservationsPage() {
           className="btn btn--primary btn--block"
           style={{ marginBottom: 14 }}
         >
-          전체 집계 보기
+          전체 집계
         </Link>
         <div className="itemshead">
-          <span className="itemshead__label">마감된 예약상품</span>
+          <span className="itemshead__label">마감된 공산품</span>
           <span className="itemshead__count">{rows.length}개</span>
         </div>
-        <FlatClosedList rows={rows} inventoryItems={inventoryItems} emptyText="마감된 예약상품이 없어요." />
+        <FlatClosedList rows={rows} inventoryItems={inventoryItems} emptyText="마감된 공산품이 없어요." />
       </div>
     </>
   );

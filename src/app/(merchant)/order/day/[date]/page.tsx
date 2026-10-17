@@ -23,9 +23,13 @@ import {
 import { normalizeWindowKey, windowKeyAt } from "@/lib/schedule";
 import { windowCreatedRange } from "@/lib/order-plan";
 import { orderTimeOpenForUser } from "@/lib/receivable";
+import { getReservationLoadForShipment } from "@/lib/reservation-data";
+import { merchantVisibility } from "@/lib/restrict-mode";
 import { ReceiptCard } from "@/components/ReceiptCard";
 import { SplitPaymentButton } from "@/components/SplitPaymentButton";
 import { PrintButton } from "@/components/PrintButton";
+import { ShipGoodsCard } from "../../ShipGoodsCard";
+import "../../order-plan-form.css";
 
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
@@ -53,6 +57,7 @@ export default async function DayReceiptPage(props: {
   const currentKey = windowKeyAt();
   const isPastDay = date < currentKey;
   const isWeekendWindow = dowOf(date) === 6;
+  const shipDay = shipmentDayOf(date);
 
   const [orders, invoice] = await Promise.all([
     prisma.order.findMany({
@@ -70,6 +75,13 @@ export default async function DayReceiptPage(props: {
     }),
   ]);
   if (orders.length === 0) notFound();
+
+  // 함께 오는 공산품 — 이 발주창 출고일의 확정 공산품(읽기 전용). 지금·앞으로 나갈 발주창만(지난 창은 발주서만).
+  const showGoods = user.role === "MERCHANT_HOTDEAL" && !isPastDay;
+  const [shipGoods, vis] = await Promise.all([
+    showGoods ? getReservationLoadForShipment(user.id, shipDay) : Promise.resolve([]),
+    showGoods ? merchantVisibility(user) : Promise.resolve(null),
+  ]);
 
   const allCancelled = orders.every((o) => o.status === "CANCELLED");
 
@@ -220,7 +232,7 @@ export default async function DayReceiptPage(props: {
               <div className="row__sub" style={{ marginTop: 4 }}>
                 발주 {labelDate(date)}
                 {isWeekendWindow ? ` ~ ${labelDate(shiftDate(date, 1))}` : ""} · 출고{" "}
-                {labelDate(shipmentDayOf(date))}
+                {labelDate(shipDay)}
               </div>
             </div>
             {canEditDay && (
@@ -233,6 +245,11 @@ export default async function DayReceiptPage(props: {
                 </Link>
               </div>
             )}
+            <ShipGoodsCard
+              shipLabel={labelDate(shipDay)}
+              lines={shipGoods}
+              href={vis?.reservations ? "/reservations" : ""}
+            />
             {sorted.map((order) => {
             const cat = CATEGORIES[order.category as Category];
             return (

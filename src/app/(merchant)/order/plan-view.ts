@@ -6,11 +6,22 @@
 // ============================================================
 
 import type { MerchantPlanView } from "@/lib/order-plan";
-import { PLAN_CATS } from "@/lib/order-plan";
+import { isPlanCat, PLAN_CATS } from "@/lib/order-plan";
+import type { Category } from "@/lib/constants";
 import type { PlanFormView } from "@/components/OrderForm";
 
+/**
+ * 제한 모드 점주 발주 화면에 넘길 종류 — 편성 종류 중 지금 받는 것(PLAN_CATS)만 남긴다(공구 탭 없음).
+ * 채움채처럼 편성 줄이 아닌 종류는 그대로. 새 발주·하루 수정이 같은 목록을 써야 탭·확인 창·건수가 맞는다.
+ */
+export function restrictedCategories(cats: Category[]): Category[] {
+  return cats.filter((c) => !isPlanCat(c) || PLAN_CATS.includes(c));
+}
+
 export function toPlanFormView(v: MerchantPlanView): PlanFormView {
-  const cats = {} as PlanFormView["cats"];
+  // 편성 종류에서 빠진 종류(공구)는 빈 칸으로 채운다(타입은 그대로 — 화면이 그 칸을 읽어도 깨지지 않게)
+  const none = () => ({ exists: false, items: [] as PlanFormView["cats"]["FRUIT"]["items"] });
+  const cats: PlanFormView["cats"] = { FRUIT: none(), VEG: none(), TOOL: none() };
   for (const c of PLAN_CATS) {
     cats[c] = {
       exists: v.cats[c].exists,

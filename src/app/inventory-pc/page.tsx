@@ -46,7 +46,7 @@ const TABS: { key: TabKey; label: string; hint: string }[] = [
   { key: "chaeumchae", label: "채움채 상품", hint: "박스입수·낱개단가" },
   { key: "weekly", label: "주간 상품", hint: "가격·과세" },
   { key: "closing", label: "재고 마감", hint: "발주↔출고 대조" },
-  { key: "reservation", label: "예약 상품", hint: "예약일자별 등록" },
+  { key: "reservation", label: "공산품", hint: "등록·집계" },
 ];
 
 export default async function InventoryPcPage(props: {
@@ -74,7 +74,7 @@ export default async function InventoryPcPage(props: {
             통합 관리 <span>· PC</span>
           </div>
           <div className="invpc__sub">
-            재고·입고·마감·주간·예약·채움채를 한곳에서. 입력하면 저장됩니다.
+            재고·입고·마감·주간·공산품·채움채를 한곳에서. 입력하면 저장됩니다.
           </div>
         </div>
         <div className="invpc__topbtns">
@@ -261,11 +261,12 @@ async function ReservationTab() {
     pickupDate: p.pickupDate,
     supplyPrice: p.supplyPrice,
     inventoryItemId: p.inventoryItemId,
-    closeAtMs: p.closeAt.getTime(),
-    closeAtLocal: new Date(p.closeAt.getTime() + 9 * 3600 * 1000)
-      .toISOString()
-      .slice(0, 16),
+    closeAtMs: p.closeAtMs,
+    closeAtLocal: new Date(p.closeAtMs + 9 * 3600 * 1000).toISOString().slice(0, 16),
     stockFixed: p.stockFixed,
+    minPerStore: p.minPerStore,
+    qtyStep: p.qtyStep,
+    description: p.description,
     totalQty: p.totalQty,
     storeCount: p.storeCount,
     components: p.components,
@@ -274,25 +275,20 @@ async function ReservationTab() {
   return (
     <>
       <div className="erphead">
-        <div className="erphead__title">예약발주 상품</div>
-        <div className="erphead__meta">
-          진행 중 {rows.length}종 · 상품별 마감(시분초) 등록, 마감 임박순
-        </div>
+        <div className="erphead__title">공산품</div>
+        <div className="erphead__meta">진행 중 {rows.length}개</div>
       </div>
 
       {/* 다른 예약 뷰로 이동(집계·지난 발주·지난 마감) */}
       <div className="erpcards" style={{ marginBottom: 14 }}>
         <Link href="/admin/reservations/summary?scope=open" className="erpcard">
-          <div className="erpcard__t">전체 집계 보기</div>
-          <div className="erpcard__d">진행 중 예약 상품·지점 수량 집계.</div>
+          <div className="erpcard__t">전체 집계</div>
         </Link>
         <Link href="/admin/reservations/past" className="erpcard">
-          <div className="erpcard__t">지난 예약발주</div>
-          <div className="erpcard__d">픽업 지난 예약발주 열람.</div>
+          <div className="erpcard__t">이전 기록</div>
         </Link>
         <Link href="/admin/reservations/closed" className="erpcard">
-          <div className="erpcard__t">지난 예약 마감</div>
-          <div className="erpcard__d">마감된 예약 상품 열람.</div>
+          <div className="erpcard__t">마감된 공산품</div>
         </Link>
       </div>
 

@@ -43,7 +43,7 @@ export async function holdStockAction(input: {
   if (!itemId) return { ok: false, error: "품목을 찾을 수 없어요." };
   // 예약발주에 잡힌 품목은 재고현황에서 담을 수 없음(오직 예약발주에서만).
   if (await isItemReservationLocked(itemId)) {
-    return { ok: false, error: "예약발주 진행 중인 품목이에요. 예약발주에서 담아 주세요." };
+    return { ok: false, error: "공산품으로 받는 품목이에요. 공산품에서 발주해 주세요." };
   }
 
   try {

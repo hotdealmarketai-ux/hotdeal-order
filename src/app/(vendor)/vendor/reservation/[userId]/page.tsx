@@ -26,7 +26,7 @@ export default async function VendorReservationReceipt(props: {
 
   return (
     <>
-      <Topbar backHref={`/vendor?date=${date}`} title="예약 발주서" />
+      <Topbar backHref={`/vendor?date=${date}`} title="공산품 발주서" />
       <div className="page">
         <div className="card card--flat" style={{ marginBottom: 14 }}>
           <div className="kv">
@@ -51,16 +51,16 @@ export default async function VendorReservationReceipt(props: {
               style={{ marginTop: 10, display: "flex", gap: 6, flexWrap: "wrap" }}
             >
               <span className="badge badge--mute">출고 {labelDate(date)}</span>
-              <span className="badge badge--ai">예약분</span>
+              <span className="badge badge--ai">공산품</span>
             </div>
           </div>
           <div className="receipt__section">
             <div className="section-label" style={{ margin: "0 0 8px" }}>
-              공구 · 예약분
+              공구 · 공산품
             </div>
             {items.length === 0 ? (
               <div className="receipt-item">
-                <div className="receipt-item__name muted">예약 품목이 없어요.</div>
+                <div className="receipt-item__name muted">공산품이 없어요.</div>
               </div>
             ) : (
               items.map((it, i) => (

@@ -173,7 +173,7 @@ export async function setMemberReservationEnabledAction(formData: FormData) {
     actorName: admin.storeName,
     targetType: "user",
     targetId: userId,
-    summary: `예약발주 노출 ${enabled ? "켜짐" : "꺼짐"}: ${before.storeName}(${before.username})`,
+    summary: `공산품 노출 ${enabled ? "켜짐" : "꺼짐"}: ${before.storeName}(${before.username})`,
   });
   revalidatePath("/admin/members");
   revalidatePath(`/admin/members/${userId}`);
@@ -223,7 +223,7 @@ export async function deleteMemberAction(formData: FormData) {
     actorName: admin.storeName,
     targetType: "user",
     targetId: userId,
-    summary: `회원 삭제: ${victim.storeName}(${victim.username}) · 발주 ${victim._count.orders} · 계산서 ${victim._count.invoices} · 주간 ${victim._count.weeklyOrders} · 예약 ${victim._count.reservationOrders}건 함께 삭제`,
+    summary: `회원 삭제: ${victim.storeName}(${victim.username}) · 발주 ${victim._count.orders} · 계산서 ${victim._count.invoices} · 주간 ${victim._count.weeklyOrders} · 공산품 ${victim._count.reservationOrders}건 함께 삭제`,
     snapshot: victim,
   });
   revalidatePath("/admin/members");
@@ -996,10 +996,8 @@ export async function restoreInventoryBackupAction(key: string): Promise<{
 
 // #22 관리자 수동 '지금 시트로 내보내기' — DB 전체를 시트에 다시 쓴다(정합 복구용). 성공/실패 반환.
 export type PushInvState = { ok?: boolean; error?: string; at?: number };
-export async function pushInventoryToSheetAction(
-  _prev: PushInvState,
-  _formData: FormData,
-): Promise<PushInvState> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- useActionState 모양(prev, formData)만 맞춤
+export async function pushInventoryToSheetAction(_prev: PushInvState, _formData: FormData): Promise<PushInvState> {
   await requireAdmin();
   const r = await safePushInventory();
   revalidatePath("/admin/inventory");

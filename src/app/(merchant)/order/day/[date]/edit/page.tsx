@@ -1,8 +1,10 @@
-// 통합 '발주 수정' — 그 날짜의 전 카테고리(과일·야채·공구·채움채)를 한 폼에서 수정/추가.
+// 통합 '발주 수정' — 그 날짜의 전 카테고리(과일·야채·공구·채움채)를 한 폼에서 수정/추가(제한 모드는 공구 탭 없음).
 // 안 넣었던 종류도 여기서 추가할 수 있어 별도 '발주 추가' 화면을 대체한다.
 // 핫딜마켓(발주창 보유) 전용. 저장은 OrderForm의 수정 모드 → updateDayOrderAction.
 // 날짜 = 발주창 키 K(normalizeWindowKey) — 주말 토·일은 한 창(토요일)으로 묶어 찾는다(windowOrdersWhere).
 // 품목 제한 모드면 그 창 편성 줄(merchantPlanView)로 그리고, 편성 번호 없는 옛 줄은 읽기 전용으로 보여 준다.
+// 공구는 공산품으로만 받으므로(2026-10-17~) 제한 모드 공구 발주 줄은 '함께 오는 공산품' 카드에 읽기 전용으로 둔다
+// (저장은 공구 발주를 건드리지 않는다 — 하루 수정 반복이 PLAN_CATS(과일·야채)만 돈다).
 import { redirect } from "next/navigation";
 import { Topbar, TopbarChip } from "@/components/Topbar";
 import { requireMerchant } from "@/lib/session";
@@ -15,15 +17,9 @@ import {
   type Fulfillment,
 } from "@/lib/constants";
 import { hasOrderWindow, isOrderOpen } from "@/lib/deadline";
-import {
-  kstToday,
-  normalizeDateStr,
-  shipmentDayOf,
-  shiftDate,
-  labelDate,
-} from "@/lib/date";
+import { normalizeDateStr, shipmentDayOf, labelDate, labelShipment } from "@/lib/date";
 import { orderLockOf, orderTimeOpenForUser } from "@/lib/receivable";
-import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { getReservationLoadForShipment } from "@/lib/reservation-data";
 import { myHolds, heldByItem } from "@/lib/stock-hold";
 import { windowKeyAt, normalizeWindowKey } from "@/lib/schedule";
 import { orderChannelConfig, fixedItemsByCat } from "@/lib/order-flags";
@@ -31,10 +27,10 @@ import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
 import { qtyNum } from "@/lib/qty";
 import { OrderForm, type ToolHold, type TofuChoice } from "@/components/OrderForm";
 import { type StockPickItem } from "@/components/StockPickerSheet";
-import { restrictModeFor, modeStamp } from "@/lib/restrict-mode";
+import { merchantVisibility, modeStamp } from "@/lib/restrict-mode";
 import { merchantPlanView, windowOrdersWhere, parsePlanQty } from "@/lib/order-plan";
 import { logError } from "@/lib/log";
-import { toPlanFormView } from "../../../plan-view";
+import { restrictedCategories, toPlanFormView } from "../../../plan-view";
 import "../../../order-plan-form.css";
 
 export default async function EditDayOrderPage(props: {
@@ -77,8 +73,12 @@ export default async function EditDayOrderPage(props: {
   const lock = await orderLockOf(user.id, user.orderUnlock, user.orderUnlockAt);
   if (lock.locked) redirect("/order");
 
-  const categories = allowedCategoriesFor(user.role);
-  const restricted = await restrictModeFor(user);
+  const vis = await merchantVisibility(user);
+  const restricted = vis.restricted;
+  // 제한 모드는 지금 받는 편성 종류만(공구 탭 없음) — 새 발주 화면과 같은 목록
+  const categories = restricted
+    ? restrictedCategories(allowedCategoriesFor(user.role))
+    : allowedCategoriesFor(user.role);
 
   // 발주 방식 설정 — 과일/야채 품목 고정(수정 시에도 고정 렌더 유지)
   const channelCfg = await orderChannelConfig();
@@ -140,13 +140,10 @@ export default async function EditDayOrderPage(props: {
     }
   }
 
-  // 공구 담기(toolCart) + 예약분(reservedTool) — order/page.tsx와 동일.
-  const orderDay = kstToday();
-  const reservedTool = await getReservationLoadForOrder(user.id, orderDay);
-  const reservedLabel =
-    reservedTool.length > 0
-      ? `픽업 ${labelDate(shiftDate(orderDay, 1))} 예약분`
-      : "";
+  // 함께 오는 공산품(reservedTool) — 이 발주창의 출고일 기준. order/page.tsx와 동일.
+  const shipDay = shipmentDayOf(date);
+  const reservedTool = await getReservationLoadForShipment(user.id, shipDay);
+  const reservedLabel = reservedTool.length > 0 ? labelShipment(shipDay) : "";
 
   // 공구 담기(toolCart)·재고 검색(invOptions) — 제한 모드에선 쓰지 않는다(공구도 편성 줄).
   let invOptions: StockPickItem[] = [];
@@ -197,6 +194,7 @@ export default async function EditDayOrderPage(props: {
   // ── 품목 제한 모드 — 그 창 편성 줄 + 이미 넣은 수량 시드 ──
   //  · 편성 번호(planItemId) 있는 줄 → 그 품목 수량으로 미리 채움
   //  · 편성 번호 없는 옛 줄(모드 켜기 전 자유 입력·담기) → '이전 방식 발주 · 그대로 유지' 읽기 전용
+  //  · 탭이 없는 종류(공구)는 편성 줄까지 전부 읽기 전용 '이전 방식'(폼이 '함께 오는 공산품' 카드에 보여 줌)
   //  · 채움채 → 그날 보이는 품목 + 이미 발주한 숨김 품목('숨김 · 이미 발주')
   const rawPlan = restricted
     ? await merchantPlanView(date, user.id).catch((err) => {
@@ -212,8 +210,9 @@ export default async function EditDayOrderPage(props: {
     for (const o of orders) {
       if (o.category !== "FRUIT" && o.category !== "VEG" && o.category !== "TOOL") continue;
       const cat = o.category;
+      const open = categories.includes(cat);
       for (const it of o.items) {
-        if (it.planItemId) {
+        if (it.planItemId && open) {
           initialPlanQty[it.planItemId] = (initialPlanQty[it.planItemId] ?? 0) + parsePlanQty(it.qty);
         } else {
           (legacyRowsByCat[cat] ??= []).push({ name: it.name, qty: it.qty });
@@ -257,6 +256,8 @@ export default async function EditDayOrderPage(props: {
           tofuList={tofuList}
           initialPlanQty={initialPlanQty}
           legacyRowsByCat={legacyRowsByCat}
+          shipLabel={labelDate(shipDay)}
+          goodsHref={vis.reservations ? "/reservations" : ""}
         />
       </div>
     </>

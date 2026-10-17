@@ -4,8 +4,8 @@ import { requireVendor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { CATEGORIES, type Category } from "@/lib/constants";
 import { formatKDateTime } from "@/lib/format";
-import { kstDateOf } from "@/lib/date";
-import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { kstDateOf, shipmentDayOf } from "@/lib/date";
+import { getReservationLoadForShipment } from "@/lib/reservation-data";
 import { ReceiptCard } from "@/components/ReceiptCard";
 import { confirmOrderAction } from "@/app/actions/vendor";
 
@@ -28,15 +28,13 @@ export default async function VendorOrderDetail(props: {
 
   const cat = CATEGORIES[order.category as Category];
 
-  // 공구(TOOL) 발주서엔 그 지점의 확정 예약분(픽업=이 발주 출고일)도 함께 — 창고 준비 누락 방지.
+  // 공구(TOOL) 발주서엔 그 지점의 확정 공산품(출고일 = 이 발주의 출고일, 토·일 발주 → 월요일)도 함께
+  // — 창고 준비 누락 방지. 옛 기준(발주일+1)은 토요일 발주의 월요일 출고분을 못 찾았다.
   const reservedItems =
     order.category === "TOOL"
-      ? (
-          await getReservationLoadForOrder(
-            order.userId,
-            kstDateOf(order.createdAt),
-          )
-        ).map((r) => ({ name: r.name, qty: String(r.qty) }))
+      ? (await getReservationLoadForShipment(order.userId, shipmentDayOf(kstDateOf(order.createdAt)))).map(
+          (r) => ({ name: r.name, qty: String(r.qty) }),
+        )
       : [];
 
   return (

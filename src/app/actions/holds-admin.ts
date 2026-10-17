@@ -138,7 +138,7 @@ export async function adminSetReservationHoldAction(input: {
     },
   });
   if (!row || !row.inventoryItemId) {
-    return { ok: false, error: "예약 담기를 찾을 수 없어요." };
+    return { ok: false, error: "공산품 담기를 찾을 수 없어요." };
   }
   const itemId = row.inventoryItemId;
 
@@ -179,7 +179,7 @@ export async function adminSetReservationHoldAction(input: {
     actorName: admin.storeName,
     targetType: "reservationOrderItem",
     targetId: resvItemId,
-    summary: `담기 조정(예약연동) · ${row.order.user.storeName} · ${row.name} → ${outQty}개`,
+    summary: `담기 조정(공산품 연동) · ${row.order.user.storeName} · ${row.name} → ${outQty}개`,
   });
   revalidatePath("/admin/holds");
   revalidatePath("/inventory");

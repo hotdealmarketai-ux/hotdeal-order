@@ -1,47 +1,20 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  confirmFlatProductAction,
-  unlockFlatProductAction,
-  holdFlatProductAction,
-} from "@/app/actions/reservation-flat";
+import { confirmFlatProductAction, holdFlatProductAction } from "@/app/actions/reservation-flat";
+import type { FlatMerchantRow, FlatMyOrderRow } from "@/lib/reservation-flat";
+import { flatQtyProblem, qtyRuleBadges, stepDown, stepUp, type FlatQtyRule } from "@/lib/flat-qty-rule";
+import { closeAtLabel, closeRemain, groupFlatByClose } from "@/lib/flat-group";
+import { labelShipment } from "@/lib/date";
+import { ConfirmSheet } from "./ConfirmSheet";
 
-export type FlatMerchantCard = {
-  id: string;
-  name: string;
-  pickupDate: string;
-  supplyPrice: number;
-  inventoryItemId: string;
-  closeAtMs: number;
-  myQty: number;
-  myConfirmed: boolean;
-  available: number;
-  stockFixed: boolean; // 재고 고정(초과발주 금지). false면 재고 넘어 담기 가능.
-  components: { name: string; qtyPerUnit: number }[]; // 세트 구성품(비어있으면 단일 상품)
-  isSet: boolean;
-  hasLinked: boolean; // 재고연동(단일/세트 구성품) → 스테퍼(담기), 아니면 수량입력(수기)
-};
+// 점주 공산품 카드 데이터 = 서버 목록 행 그대로(listFlatProductsMerchant). 타입만 가져온다(서버 전용 파일).
+export type FlatMerchantCard = FlatMerchantRow;
 
 const won = (n: number) => n.toLocaleString("ko-KR");
 
-// 세트 구성품 요약 "사과 2 + 배 3" (세트 카드에만). unit 라벨도 세트/개로 구분.
-function CompLine({ p }: { p: FlatMerchantCard }) {
-  if (!p.isSet || p.components.length === 0) return null;
-  return (
-    <div className="rcard__comp" style={{ fontSize: 12, color: "var(--text-muted, var(--muted))", marginTop: 2 }}>
-      구성: {p.components.map((c) => `${c.name} ${c.qtyPerUnit}`).join(" + ")}
-    </div>
-  );
-}
-
-// ms → KST 달력 날짜(YYYY-MM-DD). '오늘 마감' 섹터 분리에 사용.
-function kstDateStr(ms: number): string {
-  return new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 10);
-}
-
-// 1초마다 갱신되는 현재시각 — 마감 경계에서 버튼이 실시간으로 잠기도록.
+// 1초마다 갱신되는 현재시각 — 마감 경계에서 버튼이 바로 잠기고 남은 시간이 흐르도록.
 function useNow(): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -51,323 +24,441 @@ function useNow(): number {
   return now;
 }
 
-function remain(ms: number, now: number): string {
-  let s = Math.floor((ms - now) / 1000);
-  if (s <= 0) return "마감";
-  const d = Math.floor(s / 86400);
-  s -= d * 86400;
-  const h = Math.floor(s / 3600);
-  s -= h * 3600;
-  const m = Math.floor(s / 60);
-  s -= m * 60;
-  if (d > 0) return `${d}일 ${h}시간 ${m}분 남음`;
-  return `${h}시간 ${m}분 ${s}초 남음`;
-}
+// 숫자 고르는 중(draft) — base = 고르기 시작할 때의 저장 수량. 서버 값이 바뀌면(저장·본사 수정) base 가 달라져
+// 저절로 버려진다 → 저장 직후 새로고침이 올 때까지는 고른 숫자를 그대로 보여 깜빡이지 않는다.
+type Draft = { qty: number; base: number };
 
-function Countdown({ ms }: { ms: number }) {
-  const now = useNow();
-  const closed = now >= ms;
-  return (
-    <span className={closed ? "rcard__cd rcard__cd--closed" : "rcard__cd"}>
-      {remain(ms, now)}
-    </span>
-  );
-}
-
-// 수기 상품 카드 — 수량 입력 + 발주 확정 / 수정(잠금해제) / 마감
-function ManualCard({ p }: { p: FlatMerchantCard }) {
-  const router = useRouter();
-  const [qty, setQty] = useState(String(p.myQty || ""));
-  const [err, setErr] = useState("");
-  const [pending, start] = useTransition();
-  const closed = useNow() >= p.closeAtMs;
-  const unit = p.isSet ? "세트" : "개";
-
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
-    setErr("");
-    start(async () => {
-      const r = await fn();
-      if (!r.ok) {
-        setErr(r.error ?? "실패했어요.");
-        return;
-      }
-      router.refresh();
-    });
-  };
-  const n = Math.max(0, parseInt(qty.replace(/[^\d]/g, "") || "0", 10) || 0);
-
-  return (
-    <div className="rcard">
-      <div className="rcard__name">
-        {p.name}
-        {p.isSet && <span className="rcard__tag">세트</span>}
-      </div>
-      <CompLine p={p} />
-      <Countdown ms={p.closeAtMs} />
-      <div className="rcard__info">
-        <div>
-          픽업 <b>{p.pickupDate}</b>
-        </div>
-        <div>
-          공급가 <b>{won(p.supplyPrice)}원</b>
-        </div>
-        {p.myQty > 0 && (!p.myConfirmed || closed) && (
-          <div className="rcard__mine">
-            {closed ? "내 발주" : "내 예약"} <b>{p.myQty}</b>{unit}
-          </div>
-        )}
-      </div>
-
-      <div className="rcard__act">
-        {closed ? (
-          <button className="btn btn--sm btn--ghost" disabled>
-            마감
-          </button>
-        ) : p.myConfirmed ? (
-          <>
-            <span className="rcard__done">예약 {p.myQty}{unit} · 확정됨</span>
-            <button
-              className="btn btn--sm btn--soft"
-              disabled={pending}
-              onClick={() => run(() => unlockFlatProductAction({ productId: p.id }))}
-            >
-              수정
-            </button>
-          </>
-        ) : (
-          <>
-            <input
-              className="input input--compact rcard__qty"
-              inputMode="numeric"
-              value={qty}
-              onChange={(e) => setQty(e.target.value.replace(/[^\d]/g, "").slice(0, 5))}
-              placeholder="수량"
-              aria-label={`${p.name} 수량`}
-            />
-            <button
-              className="btn btn--sm btn--primary"
-              disabled={pending || (n === 0 && p.myQty === 0)}
-              onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty: n }))}
-            >
-              {n === 0 && p.myQty > 0 ? "예약 취소" : `발주 확정${n > 0 ? ` (${n}${unit})` : ""}`}
-            </button>
-          </>
-        )}
-      </div>
-      {err && <div className="rcard__err">{err}</div>}
-    </div>
-  );
-}
-
-// 재고연동 상품 카드 — 실시간 −/+ 담기(재고 홀드)로 수량 조절 후 '발주 확정'. 수기와 동일한 확정/수정 흐름.
-function LinkedCard({ p }: { p: FlatMerchantCard }) {
-  const router = useRouter();
-  const [qty, setQty] = useState(p.myQty);
-  const [draft, setDraft] = useState<string | null>(null); // 입력칸 타이핑 중 임시값(포커스 아웃 시 커밋)
-  const [err, setErr] = useState("");
-  const [pending, start] = useTransition();
-  const closed = useNow() >= p.closeAtMs;
-  // 재고 고정이면 재고(전체가용+내수량)까지만. 기본(초과발주 허용)이면 상한 없음(큰 값).
-  const max = p.stockFixed ? p.available : 99999;
-  const stockLeft = Math.max(0, p.available - qty); // 재고 기준 남은수량(0에서 바닥)
-  const unit = p.isSet ? "세트" : "개";
-
-  // 담기 = 재고 홀드(qty)만. 확정은 별도 버튼.
-  const hold = (next: number) => {
-    const v = Math.max(0, Math.min(max, next));
-    if (v === qty) return;
-    setQty(v);
-    setErr("");
-    start(async () => {
-      const r = await holdFlatProductAction({ productId: p.id, qty: v });
-      if (!r.ok) {
-        setErr(r.error ?? "실패했어요.");
-        setQty(p.myQty); // 롤백
-        return;
-      }
-      router.refresh();
-    });
-  };
-
-  const run = (fn: () => Promise<{ ok: boolean; error?: string }>) => {
-    setErr("");
-    start(async () => {
-      const r = await fn();
-      if (!r.ok) {
-        setErr(r.error ?? "실패했어요.");
-        return;
-      }
-      router.refresh();
-    });
-  };
-
-  return (
-    <div className="rcard">
-      <div className="rcard__name">
-        {p.name}
-        <span className="rcard__tag">{p.isSet ? "세트" : "재고연동"}</span>
-      </div>
-      <CompLine p={p} />
-      <Countdown ms={p.closeAtMs} />
-      <div className="rcard__info">
-        <div>
-          픽업 <b>{p.pickupDate}</b>
-        </div>
-        <div>
-          공급가 <b>{won(p.supplyPrice)}원</b>
-          {!closed &&
-            (stockLeft > 0 ? (
-              <>
-                {" "}· 남은 <b>{stockLeft}{unit}</b>
-              </>
-            ) : p.stockFixed ? (
-              <>
-                {" "}· <b>재고 소진</b>
-              </>
-            ) : (
-              <>
-                {" "}· 재고 소진(추가 주문 가능)
-              </>
-            ))}
-        </div>
-        {/* 확정분만 '내 발주'로 표시 — 미확정 담기는 마감 후 자동 해제되므로 발주로 오인시키지 않는다. */}
-        {closed && p.myConfirmed && p.myQty > 0 && (
-          <div className="rcard__mine">내 발주 {p.myQty}{unit}</div>
-        )}
-      </div>
-
-      <div className="rcard__act">
-        {closed ? (
-          <button className="btn btn--sm btn--ghost" disabled>
-            마감
-          </button>
-        ) : p.myConfirmed ? (
-          <>
-            <span className="rcard__done">예약 {p.myQty}{unit} · 확정됨</span>
-            <button
-              className="btn btn--sm btn--soft"
-              disabled={pending}
-              onClick={() => run(() => unlockFlatProductAction({ productId: p.id }))}
-            >
-              수정
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="rstep">
-              <button
-                className="rstep__btn"
-                disabled={pending || qty <= 0}
-                onClick={() => hold(qty - 1)}
-                aria-label="빼기"
-              >
-                −
-              </button>
-              <input
-                className="rstep__input"
-                inputMode="numeric"
-                value={draft ?? String(qty)}
-                onChange={(e) =>
-                  setDraft(e.target.value.replace(/[^\d]/g, "").slice(0, 5))
-                }
-                onFocus={(e) => e.currentTarget.select()}
-                onBlur={() => {
-                  if (draft === null) return; // 타이핑 안 했으면 그대로
-                  const n = parseInt(draft || "0", 10) || 0;
-                  setDraft(null);
-                  hold(n); // 담기(홀드)로 커밋 — 재고 상한 클램프·미변경 시 무동작
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    e.currentTarget.blur();
-                  }
-                }}
-                aria-label={`${p.name} 예약 수량`}
-              />
-              <button
-                className="rstep__btn"
-                disabled={pending || qty >= max}
-                onClick={() => hold(qty + 1)}
-                aria-label="담기"
-              >
-                +
-              </button>
-            </div>
-            <button
-              className="btn btn--sm btn--primary"
-              disabled={pending || qty <= 0}
-              onClick={() => run(() => confirmFlatProductAction({ productId: p.id, qty }))}
-            >
-              발주 확정{qty > 0 ? ` (${qty}${unit})` : ""}
-            </button>
-          </>
-        )}
-      </div>
-      {err && <div className="rcard__err">{err}</div>}
-    </div>
-  );
-}
-
-function renderCard(p: FlatMerchantCard) {
-  // 재고연동(단일 또는 세트 구성품) → 스테퍼 담기 카드. 수기(단일/수기전용 세트) → 수량입력 카드.
-  return p.hasLinked ? (
-    <LinkedCard key={`${p.id}:${p.myQty}:${p.myConfirmed}:${p.available}`} p={p} />
-  ) : (
-    <ManualCard key={`${p.id}:${p.myQty}:${p.myConfirmed}`} p={p} />
-  );
-}
-
-// 점주 예약발주 목록 — 검색 + (진행 중일 때만) '오늘 마감'/'마감 여유' 섹터.
-// sectioned=false(지난 예약 마감)면 이미 다 마감돼 '마감 여유'가 무의미하므로 섹터 없이 단일 리스트.
+// 점주 공산품 목록 — 마감 시각 묶음 → 그 안 출고일 → 1열 카드. 검색·'발주한 것만'은 화면 안에서 거른다.
+// −/+·직접 입력은 숫자만 바꾸고, 서버는 [발주하기]/[변경 저장]/[발주 취소] 때 한 번 부른다.
+// closedList = 마감된 공산품(최근 마감순, 수량 칸 없이 '내 발주 N개'만).
 export function FlatReservationMerchant({
   products,
-  sectioned = true,
+  myOrders,
+  closedList = false,
 }: {
   products: FlatMerchantCard[];
-  sectioned?: boolean;
+  myOrders?: FlatMyOrderRow[];
+  closedList?: boolean;
 }) {
-  const [q, setQ] = useState("");
+  const router = useRouter();
   const now = useNow();
-  const query = q.trim();
-  const shown = query ? products.filter((p) => p.name.includes(query)) : products;
+  const [q, setQ] = useState("");
+  const [mineOnly, setMineOnly] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [leave, setLeave] = useState<string | null>(null);
 
-  const todayStr = kstDateStr(now);
-  const todayList = shown.filter((p) => kstDateStr(p.closeAtMs) === todayStr);
-  const laterList = shown.filter((p) => kstDateStr(p.closeAtMs) !== todayStr);
+  const draftOf = (p: FlatMerchantCard) => {
+    const d = drafts[p.id];
+    return d && d.base === p.myQty ? d.qty : p.myQty;
+  };
+  const setDraft = (p: FlatMerchantCard, qty: number) =>
+    setDrafts((s) => ({ ...s, [p.id]: { qty, base: p.myQty } }));
+  const isDirty = (p: FlatMerchantCard) => now < p.closeAtMs && draftOf(p) !== p.myQty;
+  const dirty = !closedList && products.some(isDirty);
+
+  // 저장 안 한 숫자가 있는 채 떠나려 하면 — 새로고침·창 닫기는 브라우저 확인, 화면 안 링크(하단 메뉴 포함)는 확인 창.
+  //  링크 클릭을 React·Next Link 보다 먼저(window 캡처 단계) 받아 멈춘다.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBefore = (e: BeforeUnloadEvent) => e.preventDefault();
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!(a instanceof HTMLAnchorElement) || a.target === "_blank" || a.hasAttribute("download")) return;
+      const url = new URL(a.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setLeave(url.pathname + url.search + url.hash);
+    };
+    window.addEventListener("beforeunload", onBefore);
+    window.addEventListener("click", onClick, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBefore);
+      window.removeEventListener("click", onClick, true);
+    };
+  }, [dirty]);
+
+  const query = q.trim();
+  const shown = products.filter(
+    (p) => (!query || p.name.includes(query)) && (!mineOnly || p.myQty > 0 || isDirty(p)),
+  );
+  const groups = groupFlatByClose(shown, closedList ? "desc" : "asc");
 
   return (
     <>
-      <input
-        className="input"
-        type="search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="상품 검색"
-        style={{ marginBottom: 12 }}
-      />
-      {shown.length === 0 ? (
+      <div className="gsp-tools">
+        <input
+          className="input input--compact"
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="상품 검색"
+        />
+        <button
+          type="button"
+          className={`gsp-filter${mineOnly ? " is-on" : ""}`}
+          aria-pressed={mineOnly}
+          onClick={() => setMineOnly((v) => !v)}
+        >
+          발주한 것만
+        </button>
+      </div>
+
+      {myOrders && myOrders.length > 0 && <MyOrders rows={myOrders} />}
+
+      {groups.length === 0 ? (
         <div className="empty">
-          <p>{query ? "검색 결과가 없어요." : "예약 가능한 상품이 없어요."}</p>
+          <p>
+            {query
+              ? "검색 결과가 없어요."
+              : mineOnly
+                ? "발주한 공산품이 없어요."
+                : closedList
+                  ? "마감된 공산품이 없어요."
+                  : "지금 발주할 수 있는 공산품이 없어요."}
+          </p>
         </div>
-      ) : !sectioned ? (
-        <div className="rcardwrap">{shown.map(renderCard)}</div>
       ) : (
+        groups.map((g) => {
+          const remain = closeRemain(g.closeAtMs, now);
+          // 묶음 머리 = 규칙(5개부터·5개씩)·안내만. 규칙 없는 건 기본이라 따로 적지 않는다.
+          const common = [...(g.commonRule ? qtyRuleBadges(g.commonRule) : []), g.commonDesc ?? ""].filter(Boolean);
+          return (
+            <section className="gsp-group" key={g.closeAtMs}>
+              <div className="gsp-ghead">
+                <div className="gsp-ghead__when">
+                  <span className="gsp-ghead__at">{closeAtLabel(g.closeAtMs)} 마감</span>
+                  {!closedList && (
+                    <span className={`gsp-ghead__left is-${remain.tone}`} suppressHydrationWarning>
+                      {remain.text}
+                    </span>
+                  )}
+                </div>
+                {common.length > 0 && <div className="gsp-ghead__common">{common.join(" · ")}</div>}
+              </div>
+              {g.ships.map((s) => (
+                <div key={s.pickupDate}>
+                  <div className="gsp-ship">{labelShipment(s.pickupDate)}</div>
+                  <div className="gsp-cards">
+                    {s.items.map((p) => (
+                      <FlatCard
+                        key={p.id}
+                        p={p}
+                        now={now}
+                        draft={draftOf(p)}
+                        onDraft={(n) => setDraft(p, n)}
+                        showRule={g.commonRule === null}
+                        showDesc={g.commonDesc === null}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </section>
+          );
+        })
+      )}
+
+      {leave && (
+        <ConfirmSheet
+          title="저장 안 한 변경을 버릴까요?"
+          confirmLabel="버리고 이동"
+          onConfirm={() => router.push(leave)}
+          onClose={() => setLeave(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// 맨 위 접이식 '내 발주 N건 · 금액' — 출고일이 오늘 이후인 내 확정 줄(= 출고·계산서로 나가는 것)
+function MyOrders({ rows }: { rows: FlatMyOrderRow[] }) {
+  const [open, setOpen] = useState(false);
+  const total = rows.reduce((s, r) => s + r.qty * r.supplyPrice, 0);
+  // 서버가 출고일 → ㄱㄴㄷ 로 정렬해 준다 — 출고일 바뀌는 곳에서만 나눈다.
+  const byDate = useMemo(() => {
+    const out: { date: string; items: FlatMyOrderRow[] }[] = [];
+    for (const r of rows) {
+      const last = out[out.length - 1];
+      if (last && last.date === r.pickupDate) last.items.push(r);
+      else out.push({ date: r.pickupDate, items: [r] });
+    }
+    return out;
+  }, [rows]);
+  return (
+    <div className="gsp-mine">
+      <button type="button" className="gsp-mine__head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span>
+          내 발주 <b>{rows.length}건</b> · <b>{won(total)}원</b>
+        </span>
+        <span aria-hidden="true">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="gsp-mine__body">
+          {byDate.map((d) => (
+            <div key={d.date}>
+              <div className="gsp-mine__date">{labelShipment(d.date)}</div>
+              {d.items.map((r) => (
+                <div className="gsp-mine__row" key={`${r.productId}:${r.pickupDate}`}>
+                  <span>{r.name}</span>
+                  <span>
+                    {r.qty}
+                    {r.isSet ? "세트" : "개"} · {won(r.qty * r.supplyPrice)}원
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 상품 카드 1장 — 정보 + [−] 수량 [+] + 상태·버튼. 상태는 값만으로 정한다(서버 계약 2-3).
+function FlatCard({
+  p,
+  now,
+  draft,
+  onDraft,
+  showRule,
+  showDesc,
+}: {
+  p: FlatMerchantCard;
+  now: number;
+  draft: number;
+  onDraft: (n: number) => void;
+  showRule: boolean; // 묶음 머리에 규칙이 없을 때만 카드에 배지
+  showDesc: boolean; // 묶음 머리에 안내가 없을 때만 카드에 안내
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [err, setErr] = useState("");
+  const [typing, setTyping] = useState<string | null>(null); // 입력칸 타이핑 중 글자(빈칸 허용)
+  const [compOpen, setCompOpen] = useState(false);
+
+  const rule: FlatQtyRule = { minPerStore: p.minPerStore, qtyStep: p.qtyStep };
+  const unit = p.isSet ? "세트" : "개";
+  const closed = now >= p.closeAtMs;
+  const step = p.qtyStep > 1 ? p.qtyStep : 1;
+  // 재고 고정(연동)이면 남은 수량(내 수량 포함)까지만 — 이미 그보다 많이 넣어 둔 수량은 줄이기만.
+  const max = p.hasLinked && p.stockFixed ? Math.max(p.available, p.myQty) : 99999;
+  const badges = showRule ? qtyRuleBadges(rule) : [];
+  const stockLeft = Math.max(0, p.available - draft);
+
+  // 규칙 검사 — 기준은 지금 나가고 있는 내 수량(확정분). 몰래 고치지 않고 칸을 빨갛게 + 맞는 숫자 버튼.
+  const ruleMsg = flatQtyProblem(draft, p.myConfirmedQty, rule);
+  const over = draft > max && draft > p.myQty;
+  const problem = ruleMsg ?? (over ? `남은 수량이 부족해요 (최대 ${max}${unit})` : null);
+  const valid = (n: number) => n > 0 && n <= max && flatQtyProblem(n, p.myConfirmedQty, rule) === null;
+  const fitDown = (n: number) => (flatQtyProblem(n, p.myConfirmedQty, rule) ? stepDown(n, rule) : n);
+  const fixes = !problem
+    ? []
+    : [...new Set(ruleMsg ? [stepDown(draft, rule), stepUp(draft, rule)] : [fitDown(max)])].filter(valid);
+  const up = stepUp(draft, rule);
+  // 숫자를 다시 고르면 지난 저장 오류는 지운다.
+  const change = (n: number) => {
+    setErr("");
+    onDraft(n);
+  };
+
+  // 상태 → 칩 + 버튼
+  let chip: { text: string; tone: "ok" | "warn" | "bad" } | null = null;
+  let action: "order" | "save" | "cancel" | null = null;
+  if (closed) {
+    if (p.myConfirmedQty > 0) chip = { text: `내 발주 ${p.myConfirmedQty}${unit}`, tone: "ok" };
+  } else if (p.myQty > 0 && draft === 0) {
+    action = "cancel";
+  } else if (p.myConfirmed) {
+    if (draft === p.myQty) chip = { text: `발주됨 ${p.myQty}${unit}`, tone: "ok" };
+    else {
+      chip = { text: `저장 전 · 기존 ${p.myQty}${unit}`, tone: "warn" };
+      action = "save";
+    }
+  } else {
+    if (p.myQty > 0) chip = { text: "발주 전", tone: "bad" };
+    action = "order";
+  }
+
+  const run = () => {
+    const qty = draft;
+    setErr("");
+    start(async () => {
+      // 재고연동(단일·세트) = 담기+확정 한 번에, 수기 = 저장+확정. 0 = 발주 취소(줄 삭제).
+      const r = p.hasLinked
+        ? await holdFlatProductAction({ productId: p.id, qty, confirm: true })
+        : await confirmFlatProductAction({ productId: p.id, qty });
+      if (!r.ok) {
+        // 실패해도 새로 읽는다 — 남은 수량·마감이 바뀌었으면 카드 숫자·빠른 고침 버튼이 서버와 맞게(고른 숫자는 유지)
+        setErr(r.error ?? "저장에 실패했어요. 다시 시도해 주세요.");
+        router.refresh();
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  // 왼쪽 띠 색 — 규칙 어김(빨강) · 고른 숫자가 아직 저장 안 됨(주황) · 발주됨(초록)
+  const tone = closed
+    ? "is-closed"
+    : problem
+      ? "is-bad"
+      : draft !== p.myQty
+        ? "is-dirty"
+        : chip?.tone === "ok"
+          ? "is-on"
+          : "";
+  const cls = tone ? `gsp-card ${tone}` : "gsp-card";
+
+  return (
+    <div className={cls}>
+      <div className="gsp-card__name">
+        {p.name}
+        {p.isSet && <span className="gsp-card__tag">세트</span>}
+      </div>
+      <div className="gsp-card__price">
+        <b>{won(p.supplyPrice)}원</b>
+        {step > 1 && (
+          <>
+            {" "}· {step}
+            {unit} {won(p.supplyPrice * step)}원
+          </>
+        )}
+      </div>
+      {(badges.length > 0 || (p.hasLinked && !closed)) && (
+        <div className="gsp-card__badges">
+          {badges.map((b) => (
+            <span className="gsp-badge gsp-badge--rule" key={b}>
+              {b}
+            </span>
+          ))}
+          {p.hasLinked &&
+            !closed &&
+            (stockLeft > 0 ? (
+              <span className="gsp-badge gsp-badge--left">
+                남은 {stockLeft}
+                {unit}
+              </span>
+            ) : (
+              <span className="gsp-badge gsp-badge--out">
+                {p.stockFixed ? "재고 소진" : "재고 소진 · 발주 가능"}
+              </span>
+            ))}
+        </div>
+      )}
+      {showDesc && p.description && <div className="gsp-card__desc">{p.description}</div>}
+      {p.isSet && p.components.length > 0 && (
         <>
-          {todayList.length > 0 && (
-            <section className="rsec">
-              <div className="rsec__head rsec__head--today">오늘 마감</div>
-              <div className="rcardwrap">{todayList.map(renderCard)}</div>
-            </section>
-          )}
-          {laterList.length > 0 && (
-            <section className="rsec">
-              <div className="rsec__head">마감 여유</div>
-              <div className="rcardwrap">{laterList.map(renderCard)}</div>
-            </section>
+          <button
+            type="button"
+            className="gsp-card__compbtn"
+            aria-expanded={compOpen}
+            onClick={() => setCompOpen((v) => !v)}
+          >
+            구성품 {p.components.length}개 {compOpen ? "▲" : "▼"}
+          </button>
+          {compOpen && (
+            <div className="gsp-card__comp">
+              {p.components.map((c) => `${c.name} ×${c.qtyPerUnit}`).join(" · ")}
+            </div>
           )}
         </>
       )}
-    </>
+
+      {!closed && (
+        <div className="gsp-card__qty">
+          <div className={`gsp-step${problem ? " is-bad" : ""}`} role="group" aria-label={`${p.name} 수량`}>
+            <button
+              type="button"
+              className="gsp-step__btn"
+              aria-label="수량 줄이기"
+              disabled={pending || draft <= 0}
+              onClick={() => change(stepDown(draft, rule))}
+            >
+              −
+            </button>
+            <input
+              className="gsp-step__val"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              aria-label={`${p.name} 발주 수량`}
+              placeholder="0"
+              value={typing ?? (draft > 0 ? String(draft) : "")}
+              disabled={pending}
+              onFocus={(e) => {
+                setTyping(draft > 0 ? String(draft) : "");
+                e.currentTarget.select();
+              }}
+              onChange={(e) => {
+                const s = e.target.value.replace(/\D/g, "").slice(0, 5);
+                setTyping(s);
+                change(s ? parseInt(s, 10) : 0);
+              }}
+              onBlur={() => setTyping(null)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="gsp-step__btn"
+              aria-label="수량 늘리기"
+              disabled={pending || up > max}
+              onClick={() => change(up)}
+            >
+              +
+            </button>
+          </div>
+          {draft > 0 && <span className="gsp-card__sum">= {won(draft * p.supplyPrice)}원</span>}
+        </div>
+      )}
+
+      {!closed && problem && (
+        <div className="gsp-card__msg">
+          <div>{problem}</div>
+          {fixes.length > 0 && (
+            <div className="gsp-card__fixes">
+              {fixes.map((n) => (
+                <button type="button" className="gsp-card__fix" key={n} onClick={() => change(n)}>
+                  {n}
+                  {unit}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(chip || action) && (
+        <div className="gsp-card__foot">
+          {chip && <span className={`gsp-state gsp-state--${chip.tone}`}>{chip.text}</span>}
+          {action && (
+            <button
+              type="button"
+              className={`btn btn--sm ${action === "cancel" ? "btn--danger" : "btn--primary"}`}
+              disabled={pending || (action !== "cancel" && (draft <= 0 || !!problem))}
+              onClick={run}
+            >
+              {pending
+                ? action === "cancel"
+                  ? "취소 중…"
+                  : "저장 중…"
+                : action === "cancel"
+                  ? "발주 취소"
+                  : action === "save"
+                    ? "변경 저장"
+                    : "발주하기"}
+            </button>
+          )}
+        </div>
+      )}
+      {/* 새로 읽은 뒤 같은 내용이 위 규칙·남은 수량 안내로 뜨면 겹쳐 보이지 않게 그쪽만 */}
+      {err && !problem && <div className="gsp-card__err">{err}</div>}
+    </div>
   );
 }

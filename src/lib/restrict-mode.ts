@@ -90,7 +90,7 @@ export async function restrictModeFor(
   return restrictAppliesTo(await getRestrictConfig(), user, now);
 }
 
-/** 저장 판정(실패하면 예외). 발주 생성·수정·담기·예약 확정 같은 쓰기 경로에서 사용. */
+/** 저장 판정(실패하면 예외). 발주 생성·수정·재고현황 담기 같은 쓰기 경로에서 사용. */
 export async function restrictModeForStrict(
   user: UserLike | null | undefined,
   now: number = Date.now(),
@@ -98,7 +98,12 @@ export async function restrictModeForStrict(
   return restrictAppliesTo(await readRestrictConfig(), user, now);
 }
 
-/** 점주 메뉴 노출 — 재고현황·예약발주. 주간발주는 항상 그대로. */
+/**
+ * 점주 메뉴 노출 — 재고현황·공산품(옛 예약발주). 주간발주는 항상 그대로.
+ * · 재고현황 = 품목 제한 모드면 숨김.
+ * · 공산품 = 지점 '공산품 노출'(reservationEnabled)만 본다. 제한 모드와 상관없이 보인다
+ *   (2026-10-17~ 공구는 공산품으로만 받는다 — 제한 모드 지점은 일반발주에 공구가 없다).
+ */
 export async function merchantVisibility(
   user: (UserLike & { reservationEnabled?: boolean | null }) | null | undefined,
   now: number = Date.now(),
@@ -107,7 +112,7 @@ export async function merchantVisibility(
   return {
     restricted,
     inventory: !restricted,
-    reservations: !restricted && user?.reservationEnabled !== false,
+    reservations: user?.reservationEnabled !== false,
   };
 }
 

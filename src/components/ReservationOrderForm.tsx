@@ -68,13 +68,7 @@ export function ReservationOrderForm({
       {/* 재고현황 연동 상품 — 담는 즉시 예약(실시간 남은재고 안에서 −/+). 확정 시 잠김 */}
       {linked.length > 0 && (
         <>
-          <div className={`resv-lock${closed ? " resv-lock--closed" : ""}`}>
-            {closed
-              ? "예약이 마감되었어요."
-              : confirmed
-                ? "예약이 확정되어 잠겼어요. 수정하려면 아래 ‘수정’을 누르세요."
-                : "재고에서 담는 즉시 예약됩니다. 남은 재고 안에서 −/+ 하세요."}
-          </div>
+          {confirmed && !closed && <div className="resv-lock">발주가 확정됐어요.</div>}
           <div className="itemshead">
             <span className="itemshead__label">재고 연동 상품</span>
             <span className="itemshead__count">{linked.length}개</span>
@@ -88,7 +82,7 @@ export function ReservationOrderForm({
                   <div className="resv-item__name">{p.name}</div>
                   <div className="resv-item__price">
                     {p.pickupDate && (
-                      <span className="resv-item__pickup">픽업 {labelDate(p.pickupDate)}</span>
+                      <span className="resv-item__pickup">출고 {labelDate(p.pickupDate)}</span>
                     )}
                     남은 수량 {avail}개 · 공급가 {won(p.supplyPrice)}원
                   </div>
@@ -115,7 +109,7 @@ export function ReservationOrderForm({
       {manual.length > 0 && (
         <div style={{ marginTop: linked.length > 0 ? 22 : 0 }}>
           <div className="itemshead">
-            <span className="itemshead__label">예약 상품</span>
+            <span className="itemshead__label">상품</span>
             <span className="itemshead__count">{manual.length}개</span>
           </div>
           {manual.map((p) => {
@@ -126,7 +120,7 @@ export function ReservationOrderForm({
                   <div className="resv-item__name">{p.name}</div>
                   <div className="resv-item__price">
                     {p.pickupDate && (
-                      <span className="resv-item__pickup">픽업 {labelDate(p.pickupDate)}</span>
+                      <span className="resv-item__pickup">출고 {labelDate(p.pickupDate)}</span>
                     )}
                     공급가 {won(p.supplyPrice)}원
                   </div>
@@ -155,31 +149,26 @@ export function ReservationOrderForm({
       {/* 하단 액션 — 예약 확정(연동·수기 전체 잠금) / 수정(잠금 풀기) */}
       {closed ? (
         <div className="resv-lock resv-lock--closed" style={{ marginTop: 16 }}>
-          예약일자가 지났습니다 · 예약이 마감되었어요
+          발주가 마감됐어요.
         </div>
       ) : confirmed ? (
         <form action={unlockReservationAction} style={{ marginTop: 16 }}>
           <input type="hidden" name="batchId" value={batchId} />
           <SubmitButton className="btn btn--soft btn--block" pendingText="여는 중…">
-            수정 (잠금 풀기)
+            수정
           </SubmitButton>
         </form>
       ) : (
         <form action={confirmReservationAction} style={{ marginTop: 16 }}>
           <input type="hidden" name="batchId" value={batchId} />
           <input type="hidden" name="items" value={JSON.stringify(items)} />
-          <div className="resv-lock">
-            {totalReserved > 0
-              ? "예약 확정을 누르면 예약이 확정되고 잠깁니다. (재고 연동 상품도 함께 잠겨요)"
-              : "수량을 모두 비우고 ‘예약 비우기’를 누르면 예약이 해제됩니다."}
-          </div>
           <div className="ctabar">
             <SubmitButton
               className="btn btn--primary btn--block"
-              pendingText={totalReserved > 0 ? "확정 중…" : "비우는 중…"}
+              pendingText={totalReserved > 0 ? "저장 중…" : "취소 중…"}
               disabled={totalReserved === 0 && !hasExisting}
             >
-              {totalReserved > 0 ? `예약 확정 (${totalReserved}개)` : "예약 비우기"}
+              {totalReserved > 0 ? `발주하기 (${totalReserved}개)` : "발주 취소"}
             </SubmitButton>
           </div>
         </form>

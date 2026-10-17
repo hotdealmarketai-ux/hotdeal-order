@@ -17,7 +17,7 @@ import {
   needsPickupTime,
 } from "@/lib/constants";
 import { hasOrderWindow, ORDER_DEADLINE_LABEL } from "@/lib/deadline";
-import { kstDateOf, kstToday, shiftDate, labelDate } from "@/lib/date";
+import { kstDateOf, labelDate, labelShipment, shipmentDayOf } from "@/lib/date";
 import { orderLockOf, receivableOf } from "@/lib/receivable";
 import { orderTimeOpenForUser } from "@/lib/receivable";
 import {
@@ -25,7 +25,7 @@ import {
   effectiveChannels,
   fixedItemsByCat,
 } from "@/lib/order-flags";
-import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { getReservationLoadForShipment } from "@/lib/reservation-data";
 import { myHolds, heldByItem } from "@/lib/stock-hold";
 import { windowKeyAt } from "@/lib/schedule";
 import { OrderForm } from "@/components/OrderForm";
@@ -34,7 +34,8 @@ import { RequestCancelButton } from "@/components/RequestCancelButton";
 import { merchantVisibility, modeStamp } from "@/lib/restrict-mode";
 import { merchantPlanView, windowOrdersWhere } from "@/lib/order-plan";
 import { logError } from "@/lib/log";
-import { toPlanFormView } from "./plan-view";
+import { restrictedCategories, toPlanFormView } from "./plan-view";
+import { ShipGoodsCard } from "./ShipGoodsCard";
 import "./order-plan-form.css";
 
 export default async function OrderPage(props: {
@@ -85,14 +86,15 @@ export default async function OrderPage(props: {
   const lockedToEdit = !!existingOrderDate;
   // 빠뜨린 종류는 '발주 수정'(통합)에서 추가 — 별도 '발주 추가' 화면 폐지(#6 대체).
 
-  // 공구 자동로드 — 오늘이 '픽업 전날'인 확정 예약분(읽기전용, 단일출처). 핫딜마켓만.
-  const orderDay = kstToday();
+  // 함께 오는 공산품 — 이 발주창 출고일(토·일 발주는 월요일 출고분)의 확정 공산품(읽기전용, 단일출처). 핫딜마켓만.
+  // 꺼짐 = 공구 탭 칩 / 켜짐 = 종류 탭 위 카드 / 발주 뒤 = 수정 버튼 아래 카드. 날짜는 계산서·출고와 같은 출고일.
+  const shipDay = shipmentDayOf(planKey);
   const reservedTool =
     user.role === "MERCHANT_HOTDEAL"
-      ? await getReservationLoadForOrder(user.id, orderDay)
+      ? await getReservationLoadForShipment(user.id, shipDay)
       : [];
-  const reservedLabel =
-    reservedTool.length > 0 ? `픽업 ${labelDate(shiftDate(orderDay, 1))} 예약분` : "";
+  const reservedLabel = reservedTool.length > 0 ? labelShipment(shipDay) : "";
+  const goodsHref = vis.reservations ? "/reservations" : "";
 
   // 공구 담기 = 서버 담기원장(오늘 발주창). 발주 화면에서 바로 +/- 하도록 남은수량·공급가까지 실어보낸다.
   // 남은수량(available) = 기준재고 − 전체 담기(내 것 포함). 실시간 공유 = 모든 가맹점이 같은 값을 본다.
@@ -158,7 +160,7 @@ export default async function OrderPage(props: {
       <div className="page">
         {restricted && navNote === "restricted" && (
           <div className="notice notice--mute" style={{ marginBottom: 14 }}>
-            재고현황·예약발주는 지금 쉬고 있어요. 오늘 발주 품목에 수량만 넣어 주세요.
+            재고현황은 지금 쉬고 있어요.
           </div>
         )}
         {receivable.balance > 0 && (
@@ -228,10 +230,15 @@ export default async function OrderPage(props: {
                 <RequestCancelButton />
               </div>
             )}
+            <div style={{ marginTop: 20 }}>
+              <ShipGoodsCard shipLabel={labelDate(shipDay)} lines={reservedTool} href={goodsHref} />
+            </div>
           </>
         ) : (
           <OrderForm
-            categories={allowedCategoriesFor(user.role)}
+            categories={
+              restricted ? restrictedCategories(allowedCategoriesFor(user.role)) : allowedCategoriesFor(user.role)
+            }
             needsPickup={needsPickupTime(user.role)}
             needsFulfillment={needsFulfillment(user.role)}
             address={user.address ?? ""}
@@ -251,6 +258,8 @@ export default async function OrderPage(props: {
             restrictStamp={restricted ? modeStamp(true, planKey) : undefined}
             tofuList={tofuList}
             draftOwner={user.id}
+            shipLabel={labelDate(shipDay)}
+            goodsHref={goodsHref}
           />
         )}
       </div>

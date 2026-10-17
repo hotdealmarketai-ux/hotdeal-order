@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { VAPID_PUBLIC_KEY } from "@/lib/vapid";
 import { logError } from "@/lib/log";
 import type { Role } from "@/lib/constants";
-import { getRestrictConfig, restrictAppliesTo } from "@/lib/restrict-mode";
 
 const VAPID_SUBJECT = "mailto:hotdealmarketai@gmail.com";
 
@@ -131,26 +130,23 @@ function josaIGa(word: string): string {
   return "이";
 }
 
-// 예약발주 알림을 받을 지점 = 예약발주가 보이는 지점(지점 '예약발주 노출' 켜짐 && 품목 제한 모드 아님).
-// 시험 지점 모드가 있어 지점마다 판정하되, 설정은 한 번만 읽어 재사용한다(restrictAppliesTo).
-// 숨긴 탭으로 가는 알림(누르면 발주 화면으로 튕김)을 보내지 않기 위함.
-export async function reservationAudienceIds(now: number = Date.now()): Promise<string[]> {
-  const [cfg, users] = await Promise.all([
-    getRestrictConfig(),
-    prisma.user.findMany({
-      where: { role: "MERCHANT_HOTDEAL", status: "APPROVED", reservationEnabled: true },
-      select: { id: true, role: true },
-    }),
-  ]);
-  return users.filter((u) => !restrictAppliesTo(cfg, u, now)).map((u) => u.id);
+// 공산품(옛 예약발주) 알림을 받을 지점 = 공산품이 보이는 지점(핫딜마켓 가맹점 · 지점 '공산품 노출' 켜짐).
+// 품목 제한 모드와는 상관없다(2026-10-17~ 공구는 공산품으로만 받아서, 제한 모드 지점도 공산품 탭이 보인다).
+// 숨긴 탭으로 가는 알림(누르면 발주 화면으로 튕김)을 보내지 않기 위함. 판정은 merchantVisibility.reservations 와 같다.
+export async function reservationAudienceIds(): Promise<string[]> {
+  const users = await prisma.user.findMany({
+    where: { role: "MERCHANT_HOTDEAL", status: "APPROVED", reservationEnabled: true },
+    select: { id: true },
+  });
+  return users.map((u) => u.id);
 }
 
-// 예약발주에 상품이 새로 등록됨 → 예약발주가 보이는 핫딜마켓 점주에게 알림.
+// 공산품에 상품이 새로 올라옴 → 공산품이 보이는 핫딜마켓 점주에게 알림.
 export async function notifyMerchantsReservationProductAdded(name: string) {
   try {
     const ids = await reservationAudienceIds();
     const payload: PushPayload = {
-      title: `${name}${josaIGa(name)} 예약발주에 등록되었습니다.`,
+      title: `${name}${josaIGa(name)} 공산품에 올라왔어요.`,
       body: "",
       url: "/reservations",
       type: "system",
@@ -161,16 +157,30 @@ export async function notifyMerchantsReservationProductAdded(name: string) {
   }
 }
 
-// 예약발주 상품 마감 1시간 전 → 예약발주가 보이는 핫딜마켓 점주에게 알림(마감 임박 리마인더).
-// audience: 크론이 한 번 계산한 받는 사람 목록(상품마다 다시 읽지 않게). 없으면 여기서 계산.
+// 마감 시각 이름표(KST) — "오전 10시" · "오후 2시 30분".
+function kstClockLabel(d: Date): string {
+  const k = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const h = k.getUTCHours();
+  const m = k.getUTCMinutes();
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h < 12 ? "오전" : "오후"} ${h12}시${m > 0 ? ` ${m}분` : ""}`;
+}
+
+// 공산품 마감 1시간 전 → 공산품이 보이는 핫딜마켓 점주에게 알림(마감 임박 리마인더).
+// 같은 마감 시각 상품을 묶어 지점마다 1통 — names = 그 시각에 마감하는 상품들(크론이 묶어서 넘김).
+// audience: 크론이 한 번 계산한 받는 사람 목록(묶음마다 다시 읽지 않게). 없으면 여기서 계산.
 export async function notifyMerchantsReservationClosingSoon(
-  name: string,
+  closeAt: Date,
+  names: string[],
   audience?: string[],
 ) {
+  if (names.length === 0) return;
   try {
     const ids = audience ?? (await reservationAudienceIds());
+    // 1개면 상품 이름, 여러 개면 개수 — "공산품 발주 마감 1시간 전이에요 (오전 10시 · 14개)"
+    const what = names.length === 1 ? names[0] : `${names.length}개`;
     const payload: PushPayload = {
-      title: `${name} 예약발주 마감이 1시간 남았습니다.`,
+      title: `공산품 발주 마감 1시간 전이에요 (${kstClockLabel(closeAt)} · ${what})`,
       body: "",
       url: "/reservations",
       type: "system",
@@ -181,20 +191,21 @@ export async function notifyMerchantsReservationClosingSoon(
   }
 }
 
-// 관리자(새롭)가 지점 예약발주 수량을 수정 → 점주에게 알림(예약 상세로 딥링크).
-// url 을 넘기면 그 경로로(예: flat 예약은 배치 상세가 아니라 /reservations 목록으로) 딥링크.
+// 관리자(새롭)가 지점 공산품 수량을 수정 → 점주에게 알림(공산품 화면으로 딥링크).
+// url 을 넘기면 그 경로로(예: flat 공산품은 배치 상세가 아니라 /reservations 목록으로) 딥링크.
 export async function notifyMerchantReservationEdited(
   userId: string,
   batchId: string,
   url?: string,
 ) {
   try {
-    // 예약발주가 안 보이는 지점(품목 제한 모드·지점 예약 노출 꺼짐)은 막다른 /reservations 대신 마이페이지 지난 발주로.
-    const u = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, reservationEnabled: true } });
-    const visible = u ? u.reservationEnabled !== false && !restrictAppliesTo(await getRestrictConfig(), u) : false;
+    // 공산품이 안 보이는 지점(지점 '공산품 노출' 꺼짐)은 막다른 /reservations 대신 마이페이지 지난 발주로.
+    // 품목 제한 모드는 보지 않는다 — 제한 모드 지점도 공산품 탭이 보인다(merchantVisibility 와 같은 판정).
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { reservationEnabled: true } });
+    const visible = u ? u.reservationEnabled !== false : false;
     await sendPushToUser(userId, {
-      title: "본사가 예약을 수정했어요.",
-      body: visible ? "수정된 예약 내역을 확인해 주세요." : "마이페이지 지난 발주에서 확인해 주세요.",
+      title: "본사가 공산품 발주를 수정했어요.",
+      body: visible ? "수정한 내용을 확인해 주세요." : "마이페이지 지난 발주에서 확인해 주세요.",
       url: visible ? url ?? `/reservations/${batchId}` : "/mypage",
     });
   } catch (err) {

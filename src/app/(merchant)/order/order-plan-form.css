@@ -284,3 +284,113 @@
   color: var(--green-700);
   font-variant-numeric: tabular-nums;
 }
+
+/* 함께 출고되는 공산품 — 그 출고일 확정 공산품(읽기 전용 카드, ShipGoodsCard)
+   제한 모드 발주 폼(종류 탭 위)·발주 뒤 /order·하루 상세가 같이 쓴다. 머리 줄 전체가 공산품 화면 링크. */
+.shipgoods {
+  margin-bottom: 14px;
+  border: 1px solid var(--green-150);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.shipgoods__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 10px;
+  min-height: 52px;
+  padding: 10px 14px;
+  background: var(--green-100);
+  color: var(--fg);
+  text-decoration: none;
+  word-break: keep-all;
+}
+.shipgoods__title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.shipgoods__title b {
+  font-weight: 800;
+  color: var(--green-700);
+  font-variant-numeric: tabular-nums;
+}
+/* 제목 + 그 아래 작은 출고일 */
+.shipgoods__titlebox {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.shipgoods__sub {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-soft);
+}
+.shipgoods__go {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--green-700);
+  white-space: nowrap;
+}
+.shipgoods__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px;
+}
+.shipgoods__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.shipgoods__item:first-child {
+  border-top: 0;
+}
+.shipgoods__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1.35;
+  word-break: keep-all;
+}
+/* 모드 전에 넣은 공구 발주 줄 묶음(공산품 아님 — 링크 없음, 그대로 나감) */
+.shipgoods__head--old {
+  min-height: 44px;
+  background: var(--chip-mute-bg);
+}
+.shipgoods__list + .shipgoods__head--old {
+  border-top: 1px solid var(--line);
+}
+.shipgoods__head--old .shipgoods__title b {
+  color: var(--fg);
+}
+.shipgoods__qty {
+  flex-shrink: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--green-700);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 확인 창 맨 아래 한 줄 — 함께 출고되는 공산품 건수 */
+.shipgoods-note {
+  flex-shrink: 0;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--green-100);
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  word-break: keep-all;
+}

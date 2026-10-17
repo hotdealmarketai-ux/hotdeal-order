@@ -117,7 +117,7 @@ export function ReceiptCard(props: {
             {props.reservedItems && props.reservedItems.length > 0 && (
               <div className="receipt__section">
                 <div className="section-label" style={{ margin: "0 0 8px" }}>
-                  예약분
+                  공산품
                 </div>
                 {props.reservedItems.map((it, i) => (
                   <div className="receipt-item" key={`resv-${i}`}>

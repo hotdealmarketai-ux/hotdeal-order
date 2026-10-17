@@ -25,7 +25,7 @@ import { readRestrictConfig, setRestrictConfig } from "@/lib/restrict-mode";
 import { isWindowKey, nextWindowKey, normalizeWindowKey, upcomingWindowKey, windowKeyAt } from "@/lib/schedule";
 import { labelDate } from "@/lib/date";
 import { normalizeTax } from "@/lib/tax";
-import { lockedInventoryItemIds, minLockedPickupDate } from "@/lib/reservation-stock";
+import { lockedInventoryItemIds } from "@/lib/reservation-stock";
 import {
   normPlanName,
   relinkDrafts,
@@ -273,7 +273,7 @@ export async function saveDayPlanAction(input: SaveDayPlanInput): Promise<SaveDa
     throw e;
   }
 
-  // 공구 연동 재고(존재·미삭제·예약 진행 중) — 트랜잭션 밖에서 읽고 안에서 판정
+  // 공구 연동 재고(존재·미삭제·공산품 발주 중) — 트랜잭션 밖에서 읽고 안에서 판정
   const toolInvIds = [...new Set((clean.TOOL ?? []).map((i) => i.inventoryItemId).filter(Boolean))];
   // 수기 공구 이름 검사용 재고현황 이름(미삭제) — 계산서는 이름으로 재고를 빼는데 수기 줄은 담기원장을 안 잡는다
   const hasManualTool = (clean.TOOL ?? []).some((i) => !i.inventoryItemId);
@@ -363,7 +363,7 @@ export async function saveDayPlanAction(input: SaveDayPlanInput): Promise<SaveDa
         const keptName = new Set(keptHidden.map((g) => g.name));
         const keptMsg = (n: string) => `이미 발주가 들어간 숨긴 줄 ‘${n}’과 같아요. 그 줄을 다시 보이게 해 주세요.`;
 
-        // 공구 연동 판정 — 이름은 재고 이름으로 강제, 같은 재고 두 번 금지, 예약 진행 중 금지
+        // 공구 연동 판정 — 이름은 재고 이름으로 강제, 같은 재고 두 번 금지, 공산품 발주 중 금지
         if (cat === "TOOL") {
           const linkSeen = new Map<string, number>();
           items.forEach((it, i) => {
@@ -394,7 +394,7 @@ export async function saveDayPlanAction(input: SaveDayPlanInput): Promise<SaveDa
               it.tax = normalizeTax(inv.tax);
             }
             if (!unchangedLink && lockedSet.has(it.inventoryItemId)) {
-              throw new PlanError(`'${it.name}'은(는) 지금 예약발주가 진행 중인 재고라 공구에 연동할 수 없어요. 예약이 끝난 뒤 연동하거나 수기 공구로 넣어 주세요.`, cat, i);
+              throw new PlanError(`'${it.name}'은(는) 지금 공산품 발주 중인 재고라 공구에 연동할 수 없어요. 공산품 발주가 끝난 뒤 연동하거나 수기 공구로 넣어 주세요.`, cat, i);
             }
             const kept = keptLink.get(it.inventoryItemId);
             if (kept !== undefined) throw new PlanError(keptMsg(kept), cat, i);
@@ -555,7 +555,7 @@ export async function loadPrevPlanAction(date: string, category: AnyCat): Promis
     const locked = await lockedInventoryItemIds();
     for (const d of drafts) {
       if (d.inventoryItemId && locked.has(d.inventoryItemId)) {
-        notes.push(`'${d.name}'은(는) 지금 예약발주 진행 중인 재고라 저장 전에 연동을 풀어 주세요.`);
+        notes.push(`'${d.name}'은(는) 지금 공산품 발주 중인 재고라 저장 전에 연동을 풀어 주세요.`);
       }
     }
   }
@@ -628,7 +628,7 @@ export async function copyPlanAction(input: CopyPlanInput): Promise<CopyPlanResu
       const linkSeen = new Set<string>();
       list = r.items.filter((d) => {
         if (d.inventoryItemId && locked.has(d.inventoryItemId)) {
-          notes.push(`'${d.name}'은(는) 지금 예약발주 진행 중인 재고라 복사하지 않았어요.`);
+          notes.push(`'${d.name}'은(는) 지금 공산품 발주 중인 재고라 복사하지 않았어요.`);
           return false;
         }
         if (!d.inventoryItemId && liveNames.has(normPlanName(d.name))) {
@@ -846,19 +846,11 @@ export async function restrictPreflightAction(): Promise<PreflightResult> {
     const orders = await windowOrderCount(nowKey);
     const nextKey = await nextStartKey(now, orders);
     const keys = nowKey === nextKey ? [nowKey] : [nowKey, nextKey];
-    const nowDate = new Date(now);
-    const [st, holds, resv, merchants, cfg] = await Promise.all([
+    const [st, holds, merchants, cfg] = await Promise.all([
       windowStatuses(keys),
       prisma.stockHold.findMany({
         where: { windowDate: nowKey, source: "CART", qty: { gt: 0 } },
         select: { userId: true },
-      }),
-      prisma.reservationProduct.count({
-        where: {
-          active: true,
-          batch: { active: true },
-          OR: [{ pickupDate: { gte: minLockedPickupDate() } }, { closeAt: { gt: nowDate } }],
-        },
       }),
       prisma.user.findMany({
         where: { role: "MERCHANT_HOTDEAL", status: "APPROVED" },
@@ -874,7 +866,6 @@ export async function restrictPreflightAction(): Promise<PreflightResult> {
       windows: keys.map((k) => toPreflightWindow(k, st[k])),
       cartHolds: holds.length,
       cartStores: new Set(holds.map((h) => h.userId)).size,
-      activeReservations: resv,
       windowOrders: orders,
       merchants,
       config: { on: cfg.on, from: cfg.from, pilot: cfg.pilot },

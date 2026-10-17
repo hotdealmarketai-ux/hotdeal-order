@@ -17,6 +17,7 @@ export function HoldsBoard({ initial }: { initial: HoldsOverview }) {
   const [edits, setEdits] = useState<Record<string, number>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const editsRef = useRef(edits);
+  // eslint-disable-next-line react-hooks/refs -- 타이머·연타가 읽을 최신 편집값(화면 그리기에는 안 씀, 예전 그대로)
   editsRef.current = edits;
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   // 품목 표시 순서 — 조정 중엔 얼어붙게(행이 손밑에서 튀지 않게). 잠잠하면 서버정렬(남음 적은 순) 채택.
@@ -71,6 +72,7 @@ export function HoldsBoard({ initial }: { initial: HoldsOverview }) {
     const cur = key in editsRef.current ? editsRef.current[key] : row.qty;
     const next = Math.max(0, cur + delta);
     if (next === cur) return;
+    // eslint-disable-next-line react-hooks/purity -- 버튼을 누를 때만 도는 함수(그리기 중 아님)
     frozenUntil.current = Date.now() + 4000; // 조정 중 순서 고정(행 튐 방지)
     setEdits((e) => ({ ...e, [key]: next }));
     setErrors((e) => {
@@ -196,14 +198,14 @@ function HoldItemCard({
                 <span
                   className={`holdrow__tag ${r.type === "RESV" ? "is-resv" : "is-daily"}`}
                 >
-                  {r.type === "RESV" ? (r.setName ? "예약연동·세트" : "예약연동") : "담기"}
+                  {r.type === "RESV" ? (r.setName ? "공산품 연동·세트" : "공산품 연동") : "담기"}
                 </span>
               )}
               {r.type === "RESV" && r.setName && (
                 <span className="holdrow__pick">{r.setName}</span>
               )}
               {r.type === "RESV" && r.pickupDate && (
-                <span className="holdrow__pick">픽업 {labelDate(r.pickupDate)}</span>
+                <span className="holdrow__pick">출고 {labelDate(r.pickupDate)}</span>
               )}
               {errors[r.key] && (
                 <span className="holdrow__err">{errors[r.key]}</span>

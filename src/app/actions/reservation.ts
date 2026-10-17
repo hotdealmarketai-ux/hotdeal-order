@@ -13,11 +13,12 @@ import {
   reservationHeldByItem,
 } from "@/lib/reservation-stock";
 import { heldByItem } from "@/lib/stock-hold";
-import { kstTodayStr } from "@/lib/reservation-flat";
+import { kstTodayStr, FLAT_RESERVE_KEY } from "@/lib/reservation-flat";
+import { effectiveMin, flatQtyProblem } from "@/lib/flat-qty-rule";
 import { notifyMerchantReservationEdited } from "@/lib/push";
 import { windowKeyAt } from "@/lib/schedule";
 import { logError } from "@/lib/log";
-import { reservationWriteBlock, RESTRICTED_BOUNCE } from "@/lib/merchant-gate";
+import { reservationWriteBlock } from "@/lib/merchant-gate";
 
 export type ReservationBatchState = { ok?: boolean; error?: string };
 
@@ -54,7 +55,7 @@ export async function saveReservationBatchAction(
   }
 
   const reserveDate = String(payload.reserveDate ?? "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(reserveDate)) return { error: "예약일자를 선택하세요." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reserveDate)) return { error: "날짜를 골라 주세요." };
 
   const products = Array.isArray(payload.products) ? payload.products : [];
   const batchId = payload.batchId ? String(payload.batchId) : null;
@@ -64,7 +65,7 @@ export async function saveReservationBatchAction(
   for (const p of liveNamed) {
     const pk = String(p.pickupDate ?? "").trim();
     const v = validateBatchDates(reserveDate, pk);
-    if (!v.ok) return { error: `'${String(p.name).trim()}' — ${v.error}` };
+    if (!v.ok) return { error: `'${String(p.name).trim()}' ${v.error}` };
   }
   // 배치 pickupDate는 하위호환용 대표값(상품 픽업 중 가장 이른 날). 상품 없으면 예약일 폴백.
   const pickups = liveNamed.map((p) => String(p.pickupDate).trim());
@@ -90,7 +91,7 @@ export async function saveReservationBatchAction(
       });
       if (booked) {
         const nm = curById.get(booked.productId)?.name ?? "";
-        return { error: `‘${nm}’은(는) 이미 예약이 들어와 재고 연동을 바꿀 수 없어요. 새 상품으로 등록해 주세요.` };
+        return { error: `발주가 들어온 상품은 재고 연동을 바꿀 수 없어요 (${nm}). 새로 등록해 주세요.` };
       }
     }
   }
@@ -109,17 +110,17 @@ export async function saveReservationBatchAction(
         _count: { select: { orders: { where: { confirmed: true } } } },
       },
     });
-    if (!existing) return { error: "예약 배치를 찾을 수 없어요." };
+    if (!existing) return { error: "기록을 찾을 수 없어요." };
     // 확정 예약이 있으면 '예약일자'만 고정(마감 타이밍 보호). 상품별 픽업은 아이템 스냅샷으로
     // 보호되므로(확정분은 각자 스냅샷 픽업일을 유지) 관리자가 카탈로그 픽업을 조정해도 안전.
     const locked = existing._count.orders > 0;
     if (locked && reserveDate !== existing.reserveDate) {
-      return { error: "이미 예약이 접수된 배치는 예약일자를 바꿀 수 없어요." };
+      return { error: "발주가 들어온 기록은 날짜를 바꿀 수 없어요." };
     }
     if (!locked && reserveDate !== existing.reserveDate) {
       const dup = await prisma.reservationBatch.findUnique({ where: { reserveDate } });
       if (dup && dup.id !== batchId) {
-        if (dup.active) return { error: "그 예약일자는 이미 있어요." };
+        if (dup.active) return { error: "이미 있는 날짜예요." };
         // 숨겨진(삭제된) 예약이 그 날짜를 점유 중 → 하드 삭제해 유니크 충돌 해소.
         await prisma.reservationBatch.delete({ where: { id: dup.id } });
       }
@@ -132,7 +133,7 @@ export async function saveReservationBatchAction(
     const dup = await prisma.reservationBatch.findUnique({ where: { reserveDate } });
     if (dup) {
       if (dup.active) {
-        return { error: "그 예약일자는 이미 있어요. 기존 예약을 눌러 수정해 주세요." };
+        return { error: "이미 있는 날짜예요. 목록에서 수정해 주세요." };
       }
       // 숨겨진(삭제된) 예약이 그 날짜를 점유 중 → 하드 삭제하고 새로 만든다(유니크 충돌 해소).
       await prisma.reservationBatch.delete({ where: { id: dup.id } });
@@ -145,7 +146,7 @@ export async function saveReservationBatchAction(
     created = true;
   }
 
-  if (!targetId) return { error: "저장에 실패했어요." };
+  if (!targetId) return { error: "저장에 실패했어요. 다시 시도해 주세요." };
 
   // 상품 upsert / 소프트삭제
   const maxAgg = await prisma.reservationProduct.aggregate({
@@ -291,17 +292,24 @@ export async function purgeHiddenReservationsAction(): Promise<{
 
 // ── 점주(핫딜마켓) 예약 확정/수정 ─────────────────────────────
 
+// ⚠ 옛 날짜형 예약 액션 3개(확정·수정·담기)는 공산품(상시 묶음 FLAT_RESERVE_KEY · 상품별 closeAt) 상품을 거절한다.
+//  옛 액션은 예약일 20시 마감만 보는데 상시 묶음의 예약일 '__flat__'은 날짜가 아니라 마감되지 않고,
+//  상품별 마감·수량 규칙(최소·몇 개씩)도 보지 않아 /reservations/<상시묶음 id> 로 들어오면 그대로 우회된다.
+//  게다가 옛 확정은 그 지점 수기·세트 줄을 지우고 다시 만들며 order.confirmed=true 로 바꿔
+//  미확정 담기 줄까지 출고·계산서로 내보낸다. 공산품은 actions/reservation-flat.ts 만 쓴다.
+
+// 점주 예약 쓰기 관문(merchant-gate) — 지점 '공산품 노출' 꺼짐이면 /order 로. 품목 제한 모드는 막지 않는다.
+async function legacyWriteGate(user: Parameters<typeof reservationWriteBlock>[0]) {
+  const block = await reservationWriteBlock(user);
+  if (block) redirect("/order");
+}
+
 // 확정 = 수량 저장 + 잠금. 마감 전에만. (0 수량만 있으면 클라에서 버튼 비활성 → 항상 1개↑ 전제)
 export async function confirmReservationAction(formData: FormData) {
   const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
-  // 지점 예약발주 노출 off / 품목 제한 모드 — 직접 호출 방어(저장 판정, 설정 못 읽으면 막음)
-  {
-    const block = await reservationWriteBlock(user);
-    if (block?.kind === "hidden") redirect("/order");
-    if (block?.kind === "restricted") redirect(RESTRICTED_BOUNCE);
-    if (block) throw new Error(block.message);
-  }
+  // 지점 공산품 노출 off — 직접 호출 방어
+  await legacyWriteGate(user);
   if (needsOnboarding(user)) redirect("/onboarding");
   const batchId = String(formData.get("batchId") ?? "");
   let raw: { productId?: string; qty?: number | string }[] = [];
@@ -317,11 +325,13 @@ export async function confirmReservationAction(formData: FormData) {
       reserveDate: true,
       products: {
         where: { active: true },
-        select: { id: true, name: true, supplyPrice: true, pickupDate: true, inventoryItemId: true },
+        select: { id: true, name: true, supplyPrice: true, pickupDate: true, inventoryItemId: true, closeAt: true },
       },
     },
   });
   if (!batch) redirect("/reservations");
+  // 공산품(상시 묶음·상품별 마감)은 옛 확정으로 받지 않는다 — 공산품 화면으로.
+  if (batch.reserveDate === FLAT_RESERVE_KEY || batch.products.some((p) => p.closeAt)) redirect("/reservations");
   if (isReservationClosed(batch.reserveDate)) redirect(`/reservations/${batchId}`); // 마감 후 확정 불가
 
   // 확정 흐름은 '수기 상품'만 다룬다 — 연동(재고) 상품은 실시간 담기(holdReservationAction)가 관리.
@@ -378,19 +388,16 @@ export async function confirmReservationAction(formData: FormData) {
 export async function unlockReservationAction(formData: FormData) {
   const user = await requireMerchant(); // 로그인+APPROVED 강제(정지/미승인 점주 차단)
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
-  // 지점 예약발주 노출 off / 품목 제한 모드 — 직접 호출 방어(저장 판정, 설정 못 읽으면 막음)
-  {
-    const block = await reservationWriteBlock(user);
-    if (block?.kind === "hidden") redirect("/order");
-    if (block?.kind === "restricted") redirect(RESTRICTED_BOUNCE);
-    if (block) throw new Error(block.message);
-  }
+  // 지점 공산품 노출 off — 직접 호출 방어
+  await legacyWriteGate(user);
   const batchId = String(formData.get("batchId") ?? "");
   const batch = await prisma.reservationBatch.findFirst({
     where: { id: batchId, active: true },
-    select: { reserveDate: true },
+    select: { reserveDate: true, _count: { select: { products: { where: { closeAt: { not: null } } } } } },
   });
   if (!batch) redirect("/reservations");
+  // 공산품(상시 묶음·상품별 마감)은 옛 수정으로 확정을 풀지 않는다(마감 뒤에도 풀려 출고에서 빠지는 일 방지).
+  if (batch.reserveDate === FLAT_RESERVE_KEY || batch._count.products > 0) redirect("/reservations");
   if (!isReservationClosed(batch.reserveDate)) {
     const order = await prisma.reservationOrder.findFirst({
       where: { userId: user.id, batchId },
@@ -430,7 +437,7 @@ export async function holdReservationAction(input: {
   if (!user || user.status !== "APPROVED" || user.role !== "MERCHANT_HOTDEAL") {
     return { ok: false, error: "권한이 없어요." };
   }
-  // 지점 예약발주 노출 off('권한이 없어요.') / 품목 제한 모드 — 직접 호출 방어
+  // 지점 공산품 노출 off('권한이 없어요.') — 직접 호출 방어
   {
     const block = await reservationWriteBlock(user);
     if (block) return { ok: false, error: block.message };
@@ -452,15 +459,20 @@ export async function holdReservationAction(input: {
       supplyPrice: true,
       pickupDate: true,
       inventoryItemId: true,
+      closeAt: true,
       batch: { select: { reserveDate: true } },
     },
   });
   if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
+  // 공산품(상시 묶음·상품별 마감)은 옛 담기로 받지 않는다 — 마감·수량 규칙 우회 방지.
+  if (product.batch.reserveDate === FLAT_RESERVE_KEY || product.closeAt) {
+    return { ok: false, error: "이 상품은 공산품 화면에서 발주해 주세요." };
+  }
   if (isReservationClosed(product.batch.reserveDate)) {
-    return { ok: false, error: "예약이 마감됐어요." };
+    return { ok: false, error: "발주가 마감됐어요." };
   }
   if (!reservationLockActiveAt(product.pickupDate)) {
-    return { ok: false, error: "픽업일이 지나 담을 수 없어요." };
+    return { ok: false, error: "출고일이 지나 발주할 수 없어요." };
   }
 
   const itemId = product.inventoryItemId;
@@ -475,7 +487,7 @@ export async function holdReservationAction(input: {
         select: { qty: true, deletedAt: true },
       });
       if (!item || item.deletedAt) {
-        return { ok: false, error: "재고 품목을 찾을 수 없어요." };
+        return { ok: false, error: "연동된 재고를 찾을 수 없어요." };
       }
 
       // 전체 예약홀드(연동·픽업 10시 전·활성 배치) − 내 이 상품 현재 수량
@@ -517,7 +529,7 @@ export async function holdReservationAction(input: {
       if (qty > availableForMe) {
         return {
           ok: false,
-          error: `남은 수량이 부족해요. (담을 수 있는 최대 ${Math.max(0, availableForMe)}개)`,
+          error: `남은 수량이 부족해요 (최대 ${Math.max(0, availableForMe)}개)`,
           available: Math.max(0, availableForMe),
         };
       }
@@ -557,7 +569,7 @@ export async function holdReservationAction(input: {
     return res;
   } catch (err) {
     logError("reservation.hold", err, { batchId, productId, userId: user.id });
-    return { ok: false, error: "담기에 실패했어요. 다시 시도해 주세요." };
+    return { ok: false, error: "저장에 실패했어요. 다시 시도해 주세요." };
   }
 }
 
@@ -581,6 +593,7 @@ export async function adminEditReservationItemsAction(input: {
     where: { batchId, userId },
     select: {
       id: true,
+      batch: { select: { reserveDate: true } },
       user: { select: { storeName: true } },
       items: {
         select: {
@@ -593,7 +606,11 @@ export async function adminEditReservationItemsAction(input: {
       },
     },
   });
-  if (!order) return { ok: false, error: "예약을 찾을 수 없어요." };
+  if (!order) return { ok: false, error: "발주를 찾을 수 없어요." };
+  // 공산품(상시 묶음)은 상품 화면의 대신 고치기(adminSetReservationStoreQtyAction)로만 — 확정·수량 규칙을 같이 본다.
+  if (order.batch.reserveDate === FLAT_RESERVE_KEY) {
+    return { ok: false, error: "공산품은 상품 화면에서 지점 수량을 수정해 주세요." };
+  }
   const byId = new Map(order.items.map((it) => [it.id, it]));
 
   type Change = { item: (typeof order.items)[number]; qty: number };
@@ -604,7 +621,7 @@ export async function adminEditReservationItemsAction(input: {
     const qty = Math.max(0, Math.floor(Number(e?.qty) || 0));
     if (qty === it.qty) continue; // 변화 없음 — 건너뜀(출고 품목이어도 무해)
     if (it.stockDeductedAt)
-      return { ok: false, error: `${it.name}은(는) 이미 출고돼 수정할 수 없어요.` };
+      return { ok: false, error: `이미 출고돼 수정할 수 없어요 (${it.name}).` };
     changes.push({ item: it, qty });
   }
   if (changes.length === 0) return { ok: true };
@@ -639,7 +656,7 @@ export async function adminEditReservationItemsAction(input: {
       if (inc > left) {
         return {
           ok: false,
-          error: `${c.item.name} 재고가 부족해요(최대 ${c.item.qty + Math.max(0, left)}개).`,
+          error: `${c.item.name} 남은 수량이 부족해요 (최대 ${c.item.qty + Math.max(0, left)}개)`,
         };
       }
       pool.set(iid, left - inc);
@@ -684,7 +701,7 @@ export async function adminEditReservationItemsAction(input: {
     });
   } catch (err) {
     logError("reservation.adminEdit", err, { batchId, userId });
-    return { ok: false, error: "수정에 실패했어요. 다시 시도해 주세요." };
+    return { ok: false, error: "저장에 실패했어요. 다시 시도해 주세요." };
   }
 
   await writeAudit({
@@ -709,18 +726,21 @@ export async function adminEditReservationItemsAction(input: {
   return { ok: true };
 }
 
-// ── 관리자: flat 예약상품의 특정 점포 수량 '설정'(0 포함) ──
-// (productId, userId, qty) 로 식별 — 발주를 안 넣은 지점도 여기서 수량을 넣으면 그 점주에게 예약이 생긴다.
-// 즉, 관리자가 추가한 수량은 확정(confirmedAt) 상태로 저장돼 그 점주 화면·공구·계산서에 그대로 반영된다.
+// ── 관리자: 공산품(flat)의 특정 점포 수량 '설정'(0 포함) — 관리자 대신 고치기 ──
+// (productId, userId, qty) 로 식별 — 발주를 안 넣은 지점도 여기서 수량을 넣으면 그 점주에게 발주가 생긴다.
+// 즉, 관리자가 넣은 수량은 확정(confirmedAt) 상태로 저장돼 그 점주 화면·공구·계산서에 그대로 반영된다.
 //  · qty>기존: 연동 상품이면 재고 가용으로 캡(초과판매 방지). 신규면 주문+아이템을 확정 생성.
-//  · qty=0    : 그 예약 아이템 삭제(주문이 비면 confirmed 해제).
-//  · 픽업일 지남(지난 픽업 마감)·이미 출고(stockDeductedAt)면 수정 불가.
+//  · qty=0    : 그 줄 삭제(주문이 비면 confirmed 해제).
+//  · 출고일 지남·이미 출고(stockDeductedAt)면 수정 불가.
+//  · 수량 규칙(최소·몇 개씩)은 막지 않고 warning 으로 알려 준다(편성 대리 수정과 같은 규칙, 수량이 바뀔 때만).
+//  · 점주가 아직 확정하지 않은 줄: 마감 전엔 점주가 고르는 중이라 막고, 마감 뒤엔 관리자가 덮어쓴다
+//    (점주가 '수정'만 눌러 확정이 풀린 채 마감되면 점주도 관리자도 못 고치던 막힘을 푼다).
 // 저장 후 점주 푸시 + ReservationChangeLog 기록. ⚠ 관리자 전용(requireAdmin).
 export async function adminSetReservationStoreQtyAction(input: {
   productId: string;
   userId: string;
   qty: number;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; warning?: string }> {
   const admin = await requireAdmin();
   const productId = String(input?.productId ?? "");
   const userId = String(input?.userId ?? "");
@@ -737,25 +757,32 @@ export async function adminSetReservationStoreQtyAction(input: {
       inventoryItemId: true,
       batchId: true,
       stockFixed: true,
+      closeAt: true,
+      minPerStore: true,
+      qtyStep: true,
       _count: { select: { components: true } },
     },
   });
   if (!product) return { ok: false, error: "상품을 찾을 수 없어요." };
-  // 지난 픽업 마감(픽업일까지 지남)은 편집 불가 — 아카이브.
+  // 지난 출고 마감(출고일까지 지남)은 편집 불가 — 아카이브.
   if (product.pickupDate < kstTodayStr()) {
-    return { ok: false, error: "픽업일이 지나 수정할 수 없어요." };
+    return { ok: false, error: "출고일이 지나 수정할 수 없어요." };
   }
 
+  // 승인 안 된 지점(정지 등)은 0(지우기)만 — 남은 확정 줄이 출고·계산서로 나가고 상품 삭제를 막으므로 지울 길은 열어 둔다.
   const target = await prisma.user.findFirst({
-    where: { id: userId, role: "MERCHANT_HOTDEAL", status: "APPROVED" },
-    select: { id: true, storeName: true },
+    where: { id: userId, role: "MERCHANT_HOTDEAL" },
+    select: { id: true, storeName: true, status: true },
   });
-  if (!target) return { ok: false, error: "가맹점을 찾을 수 없어요." };
+  if (!target) return { ok: false, error: "지점을 찾을 수 없어요." };
+  if (target.status !== "APPROVED" && qty > 0) {
+    return { ok: false, error: "승인되지 않은 지점은 삭제만 할 수 있어요." };
+  }
 
   // 모든 판정·집계·쓰기를 하나의 트랜잭션 안에서. 연동 상품이면 재고행을 FOR UPDATE 로 잠가
   // 점주 담기(holdFlatProductAction)·다른 관리자 편집과 직렬화(동시 초과판매 방지).
   const iid = product.inventoryItemId;
-  let outcome: { ok: boolean; error?: string; curQty?: number; noop?: boolean };
+  let outcome: { ok: boolean; error?: string; curQty?: number; noop?: boolean; warning?: string };
   try {
     outcome = await prisma.$transaction(async (tx) => {
       // 잠금 순서: 상품 행(공유 — 관리자 상품 저장과 줄 세움) → 재고 행. 그 사이 연동·종류가 바뀌었으면
@@ -769,11 +796,15 @@ export async function adminSetReservationStoreQtyAction(input: {
           supplyPrice: true,
           pickupDate: true,
           stockFixed: true,
+          closeAt: true,
+          minPerStore: true,
+          qtyStep: true,
           active: true,
           _count: { select: { components: true } },
         },
       });
-      // 연동·종류뿐 아니라 예약 줄에 스냅샷으로 들어가는 이름·공급가·픽업일, 판정에 쓰는 재고 고정도 그대로여야 한다
+      // 연동·종류뿐 아니라 예약 줄에 스냅샷으로 들어가는 이름·공급가·출고일, 판정에 쓰는 재고 고정·마감·수량 규칙도
+      // 그대로여야 한다
       if (
         !now ||
         !now.active ||
@@ -782,16 +813,19 @@ export async function adminSetReservationStoreQtyAction(input: {
         now.name !== product.name ||
         now.supplyPrice !== product.supplyPrice ||
         now.pickupDate !== product.pickupDate ||
-        now.stockFixed !== product.stockFixed
+        now.stockFixed !== product.stockFixed ||
+        (now.closeAt?.getTime() ?? null) !== (product.closeAt?.getTime() ?? null) ||
+        now.minPerStore !== product.minPerStore ||
+        now.qtyStep !== product.qtyStep
       ) {
-        return { ok: false, error: "상품 정보가 방금 바뀌었어요. 새로고침 후 다시 해 주세요." };
+        return { ok: false, error: "상품 정보가 바뀌었어요. 새로고침해 주세요." };
       }
       if (iid) {
         await tx.$executeRaw`SELECT id FROM "InventoryItem" WHERE id = ${iid} FOR UPDATE`;
       }
       const order = await tx.reservationOrder.findUnique({
         where: { userId_batchId: { userId, batchId: product.batchId } },
-        select: { id: true },
+        select: { id: true, confirmed: true },
       });
       const existing = order
         ? await tx.reservationOrderItem.findUnique({
@@ -799,20 +833,30 @@ export async function adminSetReservationStoreQtyAction(input: {
             select: { id: true, qty: true, confirmedAt: true, stockDeductedAt: true },
           })
         : null;
-      const curQty = existing?.qty ?? 0;
+      const curQty = existing?.qty ?? 0; // 줄에 저장된 수량(미확정 포함) — 재고 캡 계산용
+      const unconfirmed = !!existing && existing.confirmedAt == null && !order?.confirmed && existing.qty > 0;
+      // 관리자 화면에 보이는 수량 = 출고·계산서로 나가는 확정 수량(미확정 줄은 0)
+      const shownQty = unconfirmed ? 0 : curQty;
 
       if (existing?.stockDeductedAt) {
-        return { ok: false, error: `${product.name}은(는) 이미 출고돼 수정할 수 없어요.` };
+        return { ok: false, error: `이미 출고돼 수정할 수 없어요 (${product.name}).` };
       }
-      // 점주가 담는 중(미확정 홀드)인 예약은 본사가 덮어쓰지 않는다 — 편집 화면엔 '담는 중'으로만 뜨고
-      // 확정수량(0)과 실제 홀드 수량이 달라 조용히 뭉개질 위험이 있어 명시적으로 막는다.
-      if (existing && existing.confirmedAt == null && existing.qty > 0) {
-        return {
-          ok: false,
-          error: "점주가 담는 중(미확정)이라 지금은 수정할 수 없어요. 점주 발주 확정 후 조정해 주세요.",
-        };
+      // 점주가 아직 확정하지 않은 줄 — 마감 전엔 점주가 고르는 중이라 본사가 덮어쓰지 않는다(편집 화면엔
+      // 확정 수량 0으로 보여 실제 줄 수량과 달라 조용히 뭉개질 수 있음). 마감 뒤엔 점주가 못 고치므로 덮어쓴다.
+      const closed = !!product.closeAt && Date.now() >= product.closeAt.getTime();
+      if (unconfirmed && !closed) {
+        return { ok: false, error: "발주 전인 지점은 마감 전에 수정할 수 없어요." };
       }
-      if (qty === curQty) return { ok: true, noop: true, curQty };
+      if (qty === shownQty && !unconfirmed) return { ok: true, noop: true, curQty };
+      // 수량 규칙 — 막지 않고 경고만(수량이 그대로면 검사 안 함). 기준은 화면에 보이던 확정 수량.
+      const rule = { minPerStore: product.minPerStore, qtyStep: product.qtyStep };
+      const problem = flatQtyProblem(qty, shownQty, rule);
+      // 경고 문구만 관리자 말로 — 직접 정한 최소에 못 미치면 최소 수량, 그 밖은 발주 단위
+      const warning = !problem
+        ? undefined
+        : (product.minPerStore ?? 0) > 1 && qty < effectiveMin(rule)
+          ? `저장했어요 · 최소 수량(${effectiveMin(rule)}개)보다 적어요.`
+          : `저장했어요 · 발주 단위(${Math.max(1, product.qtyStep)}개씩)와 달라요.`;
 
       // 연동 '증가'는 재고 가용으로 캡 — 단 '재고 고정' 상품만. 기본(초과발주 허용)은 넘어도 저장.
       if (iid && product.stockFixed && qty > curQty) {
@@ -820,7 +864,7 @@ export async function adminSetReservationStoreQtyAction(input: {
           where: { id: iid },
           select: { qty: true, deletedAt: true },
         });
-        if (!inv || inv.deletedAt) return { ok: false, error: "재고 품목을 찾을 수 없어요." };
+        if (!inv || inv.deletedAt) return { ok: false, error: "연동된 재고를 찾을 수 없어요." };
         // 이 품목에 걸린 '아직 차감 안 된' 전체 예약홀드(내 현재 수량 포함) + 일일홀드.
         const resvRows = await tx.reservationOrderItem.findMany({
           where: {
@@ -841,7 +885,7 @@ export async function adminSetReservationStoreQtyAction(input: {
         // 새 수량 최대치 = base − (내 것 제외 전체 예약홀드) − 일일홀드. resvHeld 는 curQty 포함이라 빼준다.
         const capMax = inv.qty - (resvHeld - curQty) - (dayAgg._sum.qty ?? 0);
         if (qty > capMax) {
-          return { ok: false, error: `${product.name} 재고가 부족해요(최대 ${Math.max(0, capMax)}개).` };
+          return { ok: false, error: `남은 수량이 부족해요 (최대 ${Math.max(0, capMax)}개)` };
         }
       }
 
@@ -904,11 +948,11 @@ export async function adminSetReservationStoreQtyAction(input: {
           ]),
         },
       });
-      return { ok: true, curQty };
+      return { ok: true, curQty, warning };
     });
   } catch (err) {
     logError("reservation.adminSetStoreQty", err, { productId, userId });
-    return { ok: false, error: "수정에 실패했어요. 다시 시도해 주세요." };
+    return { ok: false, error: "저장에 실패했어요. 다시 시도해 주세요." };
   }
 
   if (!outcome.ok) return { ok: false, error: outcome.error };
@@ -921,7 +965,7 @@ export async function adminSetReservationStoreQtyAction(input: {
     actorName: admin.storeName,
     targetType: "ReservationProduct",
     targetId: productId,
-    summary: `${target.storeName} · ${product.name} 예약 ${curQty}→${qty}개`,
+    summary: `${target.storeName} · ${product.name} 공산품 ${curQty}→${qty}개`,
     snapshot: [{ name: product.name, before: curQty, after: qty }],
   }).catch(() => {});
   // flat 예약분 수정 알림은 flat 목록(/reservations)으로 딥링크 — flat 배치 id 는 레거시 상세를 깨뜨림.
@@ -936,5 +980,5 @@ export async function adminSetReservationStoreQtyAction(input: {
   revalidatePath("/vendor");
   revalidatePath("/admin/hotdeal");
   revalidatePath("/admin");
-  return { ok: true };
+  return outcome.warning ? { ok: true, warning: outcome.warning } : { ok: true };
 }

@@ -41,7 +41,7 @@ export type HoldsOverview = {
 };
 
 export const PLAN_HOLD_LOCKED = "발주분이에요. 발주 수정에서 바꿔 주세요.";
-const SET_HOLD_LOCKED = "세트 예약이에요. 예약 화면에서 바꿔 주세요.";
+const SET_HOLD_LOCKED = "공산품 세트는 공산품 화면에서 수정해 주세요.";
 
 export type ResvHoldRow = {
   resvItemId: string; // 예약 주문 줄 id

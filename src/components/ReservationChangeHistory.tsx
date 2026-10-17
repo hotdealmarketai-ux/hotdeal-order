@@ -25,7 +25,7 @@ export function ReservationChangeHistory({
             <span className="revcard__time">{e.actorName || "본사"}</span>
           </div>
           {e.changes.length === 0 ? (
-            <div className="revcard__none">예약 내용이 조정되었어요.</div>
+            <div className="revcard__none">본사가 발주를 수정했어요.</div>
           ) : (
             <div className="revcard__list">
               {e.changes.map((c, i) => (

@@ -5,7 +5,7 @@ import { reservationHeldByItem } from "@/lib/reservation-stock";
 import { heldByItem } from "@/lib/stock-hold";
 import { merchantVisibility } from "@/lib/restrict-mode";
 
-// 예약발주 연동 상품 남은수량 실시간 소스(배치 단위). productId 키로 반환.
+// 공산품(옛 예약발주) 연동 상품 남은수량 실시간 소스(배치 단위). productId 키로 반환.
 // available(공개) = 재고 base − 전체 예약홀드 − 일일홀드. mine = 내 예약수량. 클라 maxForMe = available + mine.
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   if (!user || user.role !== "MERCHANT_HOTDEAL") {
     return NextResponse.json({ available: {}, mine: {} });
   }
-  // 예약발주가 이 지점에 안 보이면(지점 노출 off — 기존 구멍 막기 / 품목 제한 모드) 빈 값.
+  // 공산품이 이 지점에 안 보이면(지점 '공산품 노출' off — 기존 구멍 막기) 빈 값. 품목 제한 모드는 보지 않는다.
   if (!(await merchantVisibility(user)).reservations) {
     return NextResponse.json(
       { available: {}, mine: {} },

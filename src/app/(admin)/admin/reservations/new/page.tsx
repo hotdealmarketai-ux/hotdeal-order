@@ -8,7 +8,7 @@ export default async function NewReservationBatchPage() {
   const inventoryItems = await getInventoryPickList();
   return (
     <>
-      <Topbar backHref="/admin/reservations" title="새 예약일자" />
+      <Topbar backHref="/admin/reservations" title="새 발주 날짜" />
       <div className="page">
         <ReservationBatchEditor inventoryItems={inventoryItems} />
       </div>

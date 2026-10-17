@@ -15,8 +15,12 @@ export function reservationLoadDate(pickupDate: string): string {
 }
 
 // 지금 예약이 마감됐는가(예약일자 그날 저녁 8시 지남)
+// 예약일이 날짜가 아니면(공산품 상시 묶음 '__flat__' 등) 마감된 것으로 본다 — Invalid Date 비교는 늘 false 라
+// 그대로 두면 '영영 안 마감'이 돼 옛 날짜형 화면·액션이 공산품의 상품별 마감을 우회한다.
 export function isReservationClosed(reserveDate: string, now: number = Date.now()): boolean {
-  return now >= reservationDeadlineUtc(reserveDate).getTime();
+  const t = reservationDeadlineUtc(reserveDate).getTime();
+  if (Number.isNaN(t)) return true;
+  return now >= t;
 }
 
 // KST 자정 기준 두 날짜(YYYY-MM-DD) 사이 일수 = a - b
@@ -32,12 +36,12 @@ export function validateBatchDates(
   reserveDate: string,
   pickupDate: string,
 ): { ok: boolean; error?: string } {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(reserveDate)) return { ok: false, error: "예약일자를 선택하세요." };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) return { ok: false, error: "픽업일자를 선택하세요." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reserveDate)) return { ok: false, error: "발주 날짜를 골라 주세요." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) return { ok: false, error: "출고일을 골라 주세요." };
   if (daysBetween(pickupDate, reserveDate) < 1) {
     return {
       ok: false,
-      error: "픽업일자는 예약일자보다 뒤여야 합니다(빠르면 다음날).",
+      error: "출고일은 발주 날짜 다음 날부터 넣을 수 있어요.",
     };
   }
   return { ok: true };

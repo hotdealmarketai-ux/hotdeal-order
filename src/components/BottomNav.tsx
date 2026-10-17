@@ -69,10 +69,10 @@ export function BottomNav({
     ...(canOrderWeekly(role)
       ? [{ href: "/weekly", label: "주간발주", icon: ICONS.weekly, badge: weeklyBadge }]
       : []),
-    // 예약발주 — 핫딜마켓 가맹점 중 '예약발주 노출'이 켜진 지점만(관리자 회원관리 토글).
-    // 품목 제한 모드면 레이아웃이 false 를 넘긴다(merchantVisibility.reservations).
+    // 공산품(옛 예약발주, 주소는 /reservations 그대로) — 핫딜마켓 가맹점 중 '공산품 노출'이 켜진 지점만
+    // (관리자 회원관리 토글). 품목 제한 모드와 상관없이 보인다(merchantVisibility.reservations).
     ...(role === "MERCHANT_HOTDEAL" && reservationEnabled
-      ? [{ href: "/reservations", label: "예약발주", icon: ICONS.reserve, badge: 0 }]
+      ? [{ href: "/reservations", label: "공산품", icon: ICONS.reserve, badge: 0 }]
       : []),
     ...(canViewInventory(role) && inventoryEnabled
       ? [{ href: "/inventory", label: "재고현황", icon: ICONS.inventory, badge: 0 }]

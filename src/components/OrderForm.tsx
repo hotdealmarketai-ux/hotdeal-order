@@ -43,6 +43,7 @@ import {
   type Role,
 } from "@/lib/constants";
 import { CHAEUMCHAE_CATALOG } from "@/lib/chaeumchae";
+import { ShipGoodsCard, type ShipGoodsLine } from "@/app/(merchant)/order/ShipGoodsCard";
 
 type Row = { id: number; name: string; qty: string; note: string };
 export type ToolHold = {
@@ -94,10 +95,14 @@ type RestrictProps = {
   tofuList?: TofuChoice[];
   /** 수정 화면 시드 — 편성 품목 번호 → 이미 넣은 수량 */
   initialPlanQty?: Record<string, number>;
-  /** 수정 화면 — 편성 번호 없는 옛 줄(읽기 전용 '이전 방식 발주 · 그대로 유지') */
+  /** 수정 화면 — 편성 번호 없는 옛 줄(읽기 전용 '이전 방식 발주 · 그대로 유지'). 공구 탭이 없으면 공구 발주 줄 전부 */
   legacyRowsByCat?: Partial<Record<PlanCatKey, { name: string; qty: string }[]>>;
   /** 임시 저장 주인(지점 user.id) — 한 기기에서 다른 지점으로 바꿔 들어가면 앞 지점 수량을 되살리지 않는다. */
   draftOwner?: string;
+  /** 이 발주창 출고일 라벨("10월 20일 (화)") — '함께 출고되는 공산품' 카드 아래 출고일 */
+  shipLabel?: string;
+  /** 공산품 화면 주소(공산품이 안 보이는 지점이면 빈 값 → 링크 없음) */
+  goodsHref?: string;
 };
 
 type FreeOrderFormProps = Parameters<typeof FreeOrderForm>[0];
@@ -142,7 +147,7 @@ function FreeOrderForm({
   address?: string;
   locked?: boolean;
   role: Role;
-  /** 픽업 전날 자동 반영되는 예약분(읽기전용) — 공구에 표시만, 주문엔 복제 안 함 */
+  /** 이 발주창 출고일에 함께 오는 확정 공산품(읽기전용) — 공구에 표시만, 주문엔 복제 안 함 */
   reservedTool?: { name: string; qty: number }[];
   reservedLabel?: string;
   /** 재고 담기(서버 담기원장) — 공구에서 남은수량 보며 +/-. 발주 페이로드도 이 서버소스 기준 */
@@ -293,6 +298,7 @@ function FreeOrderForm({
                 )
               : [newRow()];
         }
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 초안 복원(마운트 때 한 번, 편성 화면과 같은 방식)
         setRowsByCat(remapped);
       }
       if (typeof d.pickup === "string") setPickup(d.pickup);
@@ -405,7 +411,7 @@ function FreeOrderForm({
     for (const g of payload) m[g.category] = g.items.length;
     return m;
   }, [payload]);
-  // 화면 표시용 건수 — 공구는 담은재고 + 예약분(읽기전용)까지 합쳐서 과일·야채처럼 건수 표시.
+  // 화면 표시용 건수 — 공구는 담은재고 + 공산품(읽기전용)까지 합쳐서 과일·야채처럼 건수 표시.
   const displayCountByCat = useMemo(() => {
     const m = { ...countByCat };
     if (reservedTool.length > 0) m.TOOL = (m.TOOL ?? 0) + reservedTool.length;
@@ -700,12 +706,12 @@ function FreeOrderForm({
             })}
           </div>
         ) : active === "TOOL" ? (
-          /* 공구 = 자유입력 불가. 담기(읽기전용) + 픽업 전날 예약분(읽기전용)만. */
+          /* 공구 = 자유입력 불가. 담기(읽기전용) + 그 출고일 공산품(읽기전용)만. */
           <div className="toolro">
             {reservedTool.length > 0 && (
               <div className="toolro__group">
                 <div className="toolro__head">
-                  <span className="chip chip--reserve">예약분</span>
+                  <span className="chip chip--reserve">공산품</span>
                   <span className="toolro__hint">
                     {reservedLabel ? `${reservedLabel} · ` : ""}수정 불가
                   </span>
@@ -769,8 +775,7 @@ function FreeOrderForm({
                   <>
                     공구는 직접 적을 수 없어요.
                     <br />
-                    재고 현황에서 ‘담기’로 담아주세요. 예약분은 픽업 전날 자동으로
-                    표시됩니다.
+                    재고 현황에서 ‘담기’로 담아주세요.
                   </>
                 )}
               </div>
@@ -1089,7 +1094,9 @@ function FreeOrderForm({
 
 // ============================================================
 //  품목 제한 모드 — 편성 발주 화면(restricted 일 때만)
-//  · 과일·야채·공구 = 관리자가 그날 편성한 품목 줄에 수량만(− [숫자] +, 정수). 비고 입력 없음(사장님 결정).
+//  · 과일·야채 = 관리자가 그날 편성한 품목 줄에 수량만(− [숫자] +, 정수). 비고 입력 없음(사장님 결정).
+//  · 공구 = 탭 없음(2026-10-17~ 공산품으로만). 그 출고일 확정 공산품·모드 전 공구 발주 줄은
+//    종류 탭 위 '함께 출고되는 공산품' 카드로 읽기 전용(확인 창 맨 아래에도 한 줄).
 //  · 채움채 = 그날 보이는 품목만(수정 화면은 이미 발주한 숨김 품목 포함). 입력·payload 형식은 기존 그대로.
 //  · 서버로는 hidden restrictStamp + planLines([{p,q}] q>0). payload 의 FRUIT/VEG/TOOL 은 비워 보낸다.
 //  · 남은 수량·최대는 useLivePlan(4초)으로 실시간 갱신. AI 정리 없음(품목명은 편성 그대로).
@@ -1147,7 +1154,6 @@ function RestrictedOrderForm({
   locked = false,
   role,
   reservedTool = [],
-  reservedLabel = "",
   editDate = "",
   initialTofuQty,
   initialPickup = "",
@@ -1158,11 +1164,16 @@ function RestrictedOrderForm({
   initialPlanQty,
   legacyRowsByCat,
   draftOwner = "",
+  shipLabel = "",
+  goodsHref = "",
 }: FreeOrderFormProps & RestrictProps) {
   const editMode = !!editDate;
   const view = planView ?? EMPTY_PLAN_VIEW;
   const windowKey = view.windowKey;
   const hasTofu = categories.includes("TOFU");
+  // 지금 받는 편성 종류 = 넘겨받은 종류(categories)로 거른 것. 서버가 공구를 빼고 넘기면 공구 탭·건수·확인 창·
+  // 이전 방식 줄 세기에서 함께 빠진다(공구 옛 줄만 남았는데 확인은 통과하고 서버가 '비었음'으로 거절하는 어긋남 방지).
+  const planCats = useMemo(() => PLAN_CAT_KEYS.filter((c) => categories.includes(c)), [categories]);
 
   const [active, setActive] = useState<Category>(categories[0]);
   const [planQty, setPlanQty] = useState<Record<string, string>>(() => {
@@ -1187,10 +1198,7 @@ function RestrictedOrderForm({
   const live = useLivePlan(true);
   const planMissing = !planView; // 편성을 못 읽음(서버 오류) — 자유 입력으로 떨어지지 않게 안내만
 
-  const allItems = useMemo(
-    () => PLAN_CAT_KEYS.filter((c) => categories.includes(c)).flatMap((c) => view.cats[c].items),
-    [view, categories],
-  );
+  const allItems = useMemo(() => planCats.flatMap((c) => view.cats[c].items), [view, planCats]);
   const itemById = useMemo(() => new Map(allItems.map((i) => [i.id, i])), [allItems]);
   const knownIds = useMemo(() => new Set(allItems.map((i) => i.id)), [allItems]);
   const lv = (it: PlanFormItem) => lineView(it, live.itemOf(it.id));
@@ -1328,8 +1336,14 @@ function RestrictedOrderForm({
   );
 
   const legacyOf = (c: Category): { name: string; qty: string }[] =>
-    c === "FRUIT" || c === "VEG" || c === "TOOL" ? legacyRowsByCat?.[c] ?? [] : [];
-  const legacyCount = PLAN_CAT_KEYS.reduce((n, c) => n + legacyOf(c).length, 0);
+    planCats.some((k) => k === c) ? legacyRowsByCat?.[c as PlanCatKey] ?? [] : [];
+  const legacyCount = planCats.reduce((n, c) => n + legacyOf(c).length, 0);
+  // 함께 출고되는 공산품 카드 — 그 출고일 확정 공산품 + (공구 탭이 없으면) 모드 전에 넣은 공구 발주 줄(그대로 나감,
+  // 공산품이 아니라 카드가 건수·링크에서 빼고 따로 묶는다)
+  const shipLines: ShipGoodsLine[] = [
+    ...reservedTool,
+    ...(planCats.includes("TOOL") ? [] : (legacyRowsByCat?.TOOL ?? []).map((r) => ({ ...r, legacy: true }))),
+  ];
 
   const countByCat = useMemo(() => {
     const m: Record<string, number> = {};
@@ -1340,9 +1354,8 @@ function RestrictedOrderForm({
     if (tofuItems.length > 0) m.TOFU = tofuItems.length;
     return m;
   }, [planLines, tofuItems, itemById]);
-  // 화면 표시용 — 공구는 예약분(읽기 전용), 각 종류는 이전 방식 줄까지 합쳐 건수 표시.
-  const shownCount = (c: Category) =>
-    (countByCat[c] ?? 0) + legacyOf(c).length + (c === "TOOL" ? reservedTool.length : 0);
+  // 화면 표시용 — 각 종류는 이전 방식 줄까지 합쳐 건수 표시(공산품은 카드에 따로, 발주 건수에 안 셈).
+  const shownCount = (c: Category) => (countByCat[c] ?? 0) + legacyOf(c).length;
   const totalItems = planLines.length + tofuItems.length + legacyCount;
 
   const multi = categories.length > 1;
@@ -1368,7 +1381,12 @@ function RestrictedOrderForm({
 
   function handleConfirmClick() {
     if (planLines.length + tofuItems.length + legacyCount === 0) {
-      setLocalError("발주할 품목의 수량을 한 개 이상 넣어 주세요.");
+      // 수정 화면은 서버(하루 수정 '비었음')와 같은 말 — 모두 빼는 길은 발주 취소 요청
+      setLocalError(
+        editMode
+          ? "발주할 품목을 한 개 이상 넣어 주세요. 모두 빼려면 ‘발주 취소 요청’으로 진행해 주세요."
+          : "발주할 품목의 수량을 한 개 이상 넣어 주세요.",
+      );
       return;
     }
     for (const l of planLines) {
@@ -1504,20 +1522,6 @@ function RestrictedOrderForm({
     const legacy = legacyOf(c);
     return (
       <div className="toolro">
-        {c === "TOOL" && reservedTool.length > 0 && (
-          <div className="toolro__group">
-            <div className="toolro__head">
-              <span className="chip chip--reserve">예약분</span>
-              <span className="toolro__hint">{reservedLabel ? `${reservedLabel} · ` : ""}수정 불가</span>
-            </div>
-            {reservedTool.map((it, i) => (
-              <div className="toolro__item" key={`rv${i}`}>
-                <span className="toolro__name">{it.name}</span>
-                <span className="toolro__qty">{it.qty}개</span>
-              </div>
-            ))}
-          </div>
-        )}
         {legacy.length > 0 && (
           <div className="toolro__group">
             <div className="toolro__head">
@@ -1602,14 +1606,13 @@ function RestrictedOrderForm({
       .map((l) => ({ l, it: itemById.get(l.p) }))
       .filter((x): x is { l: { p: string; q: number }; it: PlanFormItem } => !!x.it && x.it.category === c);
     const legacy = legacyOf(c);
-    const reserved = c === "TOOL" ? reservedTool : [];
-    if (lines.length + legacy.length + reserved.length === 0) return null;
+    if (lines.length + legacy.length === 0) return null;
     return (
       <div className="confsec">
         <div className="confsec__head">
           <span className="chip">{CATEGORIES[c].label}</span>
           <span className="confsec__dest">
-            {receiverLabel(c, role)} · {lines.length + legacy.length + reserved.length}건
+            {receiverLabel(c, role)} · {lines.length + legacy.length}건
           </span>
         </div>
         {lines.map(({ l, it }) => {
@@ -1631,15 +1634,6 @@ function RestrictedOrderForm({
               <span className="plconf__left">이전 방식 발주 · 그대로 유지</span>
             </span>
             <span className="plconf__qty">{qtyText(r.qty)}</span>
-          </div>
-        ))}
-        {reserved.map((r, i) => (
-          <div className="plconf" key={`rv${i}`}>
-            <span className="plconf__name">
-              {r.name}
-              <span className="plconf__left">예약분 · 수정 불가</span>
-            </span>
-            <span className="plconf__qty">{r.qty}개</span>
           </div>
         ))}
       </div>
@@ -1690,6 +1684,9 @@ function RestrictedOrderForm({
         {needsFulfillment && (
           <FulfillmentPicker value={fulfillment} onChange={setFulfillment} address={address} />
         )}
+
+        {/* 공구 탭 대신 — 이 출고일에 같이 나가는 공산품(읽기 전용, 수정은 공산품 화면에서) */}
+        <ShipGoodsCard shipLabel={shipLabel} lines={shipLines} href={goodsHref} />
 
         {multi && (
           <div className="cattabs cattabs--seg">
@@ -1806,6 +1803,12 @@ function RestrictedOrderForm({
               )}
 
               <div className="sheet__body">{renderConfirmCat(activeConfirm)}</div>
+
+              {reservedTool.length > 0 && (
+                <div className="shipgoods-note">
+                  함께 출고되는 공산품 {reservedTool.length}건
+                </div>
+              )}
 
               <div className="sheet__foot">
                 <div className="sheet__count">총 {totalItems}건</div>

@@ -25,18 +25,18 @@ export function AdminReservationList({
             className="card resv-card"
           >
             <div className="resv-card__main">
-              <div className="resv-card__title">예약 {labelDate(b.reserveDate)}</div>
+              <div className="resv-card__title">{labelDate(b.reserveDate)} 발주</div>
               <div className="resv-card__sub">
                 {b.pickupDates.length === 0
                   ? "상품 없음"
-                  : `픽업 ${b.pickupDates.map((d) => labelDate(d)).join(" · ")}`}
+                  : `출고 ${b.pickupDates.map((d) => labelDate(d)).join(" · ")}`}
               </div>
               <div className="resv-card__meta">
-                상품 {b.productCount}개 · 예약 {b.orderCount}건
+                상품 {b.productCount}개 · 발주 {b.orderCount}건
               </div>
             </div>
             <span className={`badge ${closed ? "badge--mute" : "badge--wait"}`}>
-              {closed ? "마감" : "예약 중"}
+              {closed ? "마감" : "진행 중"}
             </span>
           </Link>
         );

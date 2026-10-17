@@ -19,11 +19,11 @@ export default async function ReservationDetailPage(props: {
 }) {
   const user = await requireMerchant();
   if (user.role !== "MERCHANT_HOTDEAL") redirect("/order");
-  // 예약발주 노출 관문 — 레이아웃은 화면 이동 때 다시 검사하지 않으므로 페이지마다 확인.
+  // 공산품 노출 관문 — 레이아웃은 화면 이동 때 다시 검사하지 않으므로 페이지마다 확인.
   await requireReservationsVisible(user);
   const { id } = await props.params;
   const detail = await getMerchantReservation(id, user.id);
-  // 배치가 삭제/숨김되면 404 대신 예약발주 목록으로 (점주가 막다른 페이지에 갇히지 않게)
+  // 배치가 삭제/숨김되면 404 대신 공산품 목록으로 (점주가 막다른 페이지에 갇히지 않게)
   if (!detail) redirect("/reservations");
 
   const closed = isReservationClosed(detail.reserveDate);
@@ -49,7 +49,7 @@ export default async function ReservationDetailPage(props: {
 
   return (
     <>
-      <Topbar backHref="/reservations" title={`예약 ${labelDate(detail.reserveDate)}`}>
+      <Topbar backHref="/reservations" title={`${labelDate(detail.reserveDate)} 발주`}>
         <ReservationDeadlineCountdown
           reserveDate={detail.reserveDate}
           pickupDates={detail.pickupDates}

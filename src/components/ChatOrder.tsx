@@ -56,12 +56,12 @@ export function ChatOrder({
   /** 채움채 선택지 — 기본은 전체 카탈로그. 품목 제한 모드에선 그날 보이는 목록만 넘길 수 있게(방어용). */
   tofuCatalog?: ChaeumchaeProduct[];
 }) {
-  // 채움채(TOFU)=체크리스트. 공구(TOOL)=자유입력 불가(담기/예약분만). 자유입력은 과일·야채만.
+  // 채움채(TOFU)=체크리스트. 공구(TOOL)=자유입력 불가(담기/공산품만). 자유입력은 과일·야채만.
   const chatCats = categories.filter((c) => c !== "TOFU" && c !== "TOOL");
   const hasTofu = categories.includes("TOFU");
   const hasTool = categories.includes("TOOL");
   const multi = chatCats.length > 1;
-  // 미리보기 탭 — 공구는 탭에서 제외(자유입력 없음, 담기/예약분은 아래 고정 블록).
+  // 미리보기 탭 — 공구는 탭에서 제외(자유입력 없음, 담기/공산품은 아래 고정 블록).
   const tabCats = categories.filter((c) => c !== "TOOL");
   const showTabs = tabCats.length > 1;
   const uid = useRef(0);
@@ -100,7 +100,7 @@ export function ChatOrder({
       return;
     }
     if (!text.trim()) {
-      // 텍스트 없이 담기/예약분/채움채만 → 바로 미리보기(공구는 아래 고정 블록으로 표시)
+      // 텍스트 없이 담기/공산품/채움채만 → 바로 미리보기(공구는 아래 고정 블록으로 표시)
       setItems([]);
       setPreviewTab(hasTofu && tofuChecked() ? "TOFU" : tabCats[0] ?? categories[0]);
       setPhase("preview");
@@ -168,7 +168,7 @@ export function ChatOrder({
       ).map((p) => ({ name: p.name, qty: tofuQty[p.seq].trim(), note: "" }));
       if (tofuItems.length) byCat.set("TOFU", tofuItems);
     }
-    // 담기(공구)는 읽기전용이지만 발주엔 포함 — payload에 직접 추가(예약분은 단일출처라 미포함)
+    // 담기(공구)는 읽기전용이지만 발주엔 포함 — payload에 직접 추가(공산품은 단일출처라 미포함)
     if (hasTool && cartItems.length > 0) {
       const tool = cartItems
         .filter((c) => c.name.trim() && Number(c.qty) > 0)
@@ -251,14 +251,14 @@ export function ChatOrder({
     </div>
   ) : null;
 
-  // 공구(TOOL) 읽기전용 블록 — 예약분(자동) + 담은 재고. 자유입력 없음.
+  // 공구(TOOL) 읽기전용 블록 — 공산품(자동) + 담은 재고. 자유입력 없음.
   const toolBlock =
     hasTool && (reservedTool.length > 0 || cartItems.length > 0) ? (
       <div className="toolro" style={{ marginTop: 14 }}>
         {reservedTool.length > 0 && (
           <div className="toolro__group">
             <div className="toolro__head">
-              <span className="chip chip--reserve">예약분</span>
+              <span className="chip chip--reserve">공산품</span>
               <span className="toolro__hint">
                 {reservedLabel ? `${reservedLabel} · ` : ""}수정 불가
               </span>
@@ -487,7 +487,7 @@ export function ChatOrder({
           {/* 탭이 없을 때(단일 종류)만 채움채 체크리스트를 아래에 붙인다 */}
           {!showTabs && tofuList}
 
-          {/* 공구(담기·예약분) 읽기전용 — 항상 아래 고정 */}
+          {/* 공구(담기·공산품) 읽기전용 — 항상 아래 고정 */}
           {toolBlock}
 
           {needsPickup && (

@@ -28,7 +28,7 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 const KIND: Record<string, string> = {
   DAILY: "일반",
   WEEKLY: "주간",
-  RESERVATION: "예약",
+  RESERVATION: "공산품",
 };
 
 // 날짜별 계산서 — 특정 지점의 그 출고일 계산서 상세(카드). 지점 목록에서 진입.

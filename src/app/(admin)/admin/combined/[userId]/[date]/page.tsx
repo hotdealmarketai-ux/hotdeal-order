@@ -10,13 +10,14 @@ import {
   type Category,
 } from "@/lib/constants";
 import {
+  kstDateOf,
   kstDayRange,
   labelDate,
   normalizeDateStr,
+  orderRangeForShipment,
   shipmentDayOf,
-  shiftDate,
 } from "@/lib/date";
-import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { getReservationLoadForShipment } from "@/lib/reservation-data";
 import { getWeeklyItemsForStoreShipment } from "@/lib/weekly";
 import { boxWord } from "@/lib/weekly-catalog";
 import { sumQty } from "@/lib/qty";
@@ -43,20 +44,33 @@ export default async function AdminCombinedReceipt(props: {
   });
   const active = orders.filter((o) => o.status !== "CANCELLED");
 
-  // 확정 예약분(픽업 = 발주일+1)을 합본 발주서에도 읽기전용으로 표시 — 창고 준비 누락 방지.
-  // (예약분은 실제 발주 Order에 복제되지 않아 별도 조회. 점주 발주화면 공구와 같은 소스·게이트)
+  // 이 발주일의 출고일(토·일 발주 → 월요일) — 공산품·주간발주가 같은 날짜 기준.
+  const shipDay = shipmentDayOf(date);
+
+  // 월요일 출고는 발주일이 둘(토·일)이라 합본도 두 장 — 공산품·주간발주는 이 점포의 가장 이른 발주일 장에만 싣는다
+  // (전체발주 목록이 건수를 붙이는 줄과 같은 장. 두 장에 다 실으면 창고가 같은 물건을 두 번 챙긴다).
+  // 그 출고일 발주가 없는 점포(공산품·주간발주만)는 목록이 출고 전날로 링크하니 그대로 싣는다.
+  const shipRange = orderRangeForShipment(shipDay);
+  const firstOrder = await prisma.order.findFirst({
+    where: { userId, createdAt: { gte: shipRange.start, lt: shipRange.end } },
+    orderBy: { createdAt: "asc" },
+    select: { createdAt: true },
+  });
+  const carriesExtras = !firstOrder || kstDateOf(firstOrder.createdAt) === date;
+
+  // 확정 공산품(출고일 = 이 발주의 출고일)을 합본 발주서에도 읽기전용으로 표시 — 창고 준비 누락 방지.
+  // (공산품은 실제 발주 Order에 복제되지 않아 별도 조회. 점주 발주화면·본사 출고·계산서와 같은 소스·게이트)
+  // 옛 기준(발주일+1)은 토요일 발주 → 일요일을 찾아 월요일 출고 공산품이 빠졌다.
   const reservedTool =
-    merchant.role === "MERCHANT_HOTDEAL"
-      ? await getReservationLoadForOrder(userId, date)
+    merchant.role === "MERCHANT_HOTDEAL" && carriesExtras
+      ? await getReservationLoadForShipment(userId, shipDay)
       : [];
-  const reservedPickup = shiftDate(date, 1);
 
   // 주간발주 출고분 — 이 발주일의 출고일이 주간발주 출고 요일(기본 수)이면, 그 점포 주간발주도 함께 표시.
-  const weeklyShipDay = shipmentDayOf(date);
-  const weeklyItems = await getWeeklyItemsForStoreShipment(userId, weeklyShipDay);
+  const weeklyItems = carriesExtras ? await getWeeklyItemsForStoreShipment(userId, shipDay) : [];
 
-  // #9 발주취소로 전량 삭제되면(orders 0)/잔존 CANCELLED만 → 목록으로. 단 예약분·주간발주만 있는
-  // 점포(발주 없이 확정 예약분/주간발주만)는 그 내역을 보여줘야 하므로 리다이렉트하지 않는다.
+  // #9 발주취소로 전량 삭제되면(orders 0)/잔존 CANCELLED만 → 목록으로. 단 공산품·주간발주만 있는
+  // 점포(발주 없이 확정 공산품/주간발주만)는 그 내역을 보여줘야 하므로 리다이렉트하지 않는다.
   if (active.length === 0 && reservedTool.length === 0 && weeklyItems.length === 0)
     redirect("/admin/hotdeal");
 
@@ -83,7 +97,7 @@ export default async function AdminCombinedReceipt(props: {
     where: {
       userId,
       kind: "DAILY",
-      date: shipmentDayOf(date),
+      date: shipDay,
       status: { in: ["ISSUED", "PAID"] },
     },
     select: { id: true },
@@ -100,7 +114,7 @@ export default async function AdminCombinedReceipt(props: {
     <>
       <Topbar backHref="/admin/hotdeal" title="발주서" />
       <div className="page">
-        {/* #3 발주서 안 상단 발주취소(계산서는 목록으로) · #8 크게·전체폭. 예약분만 있으면 취소할 발주가 없어 숨김. */}
+        {/* #3 발주서 안 상단 발주취소(계산서는 목록으로) · #8 크게·전체폭. 공산품만 있으면 취소할 발주가 없어 숨김. */}
         {active.length > 0 && (
           <div style={{ marginBottom: 16 }}>
             <CancelStoreOrdersButton
@@ -136,7 +150,7 @@ export default async function AdminCombinedReceipt(props: {
               )}
               {reservedTool.length > 0 && (
                 <span className="badge badge--ai">
-                  예약분 {reservedTool.length}건
+                  공산품 {reservedTool.length}건
                 </span>
               )}
               {weeklyItems.length > 0 && (
@@ -180,13 +194,13 @@ export default async function AdminCombinedReceipt(props: {
             );
           })}
 
-          {/* 확정 예약분(픽업 다음날) — 실제 발주엔 없지만 창고 준비용으로 함께 표시(읽기전용) */}
+          {/* 확정 공산품(이 발주의 출고일) — 실제 발주엔 없지만 창고 준비용으로 함께 표시(읽기전용) */}
           {reservedTool.length > 0 && (
             <div className="receipt__section">
               <div className="section-label" style={{ margin: "0 0 8px" }}>
-                공구 · 예약분{" "}
+                공산품{" "}
                 <span className="muted" style={{ fontWeight: 400 }}>
-                  (픽업 {labelDate(reservedPickup)})
+                  · 출고 {labelDate(shipDay)}
                 </span>
               </div>
               {reservedTool.map((it, i) => (
@@ -211,7 +225,7 @@ export default async function AdminCombinedReceipt(props: {
               <div className="section-label" style={{ margin: "0 0 8px" }}>
                 주간발주{" "}
                 <span className="muted" style={{ fontWeight: 400 }}>
-                  (출고 {labelDate(weeklyShipDay)})
+                  (출고 {labelDate(shipDay)})
                 </span>
               </div>
               {weeklyItems.map((it, i) => (
@@ -239,7 +253,7 @@ export default async function AdminCombinedReceipt(props: {
         </div>
 
         {/* 관리자 발주 수정 — 프린트 영역 밖. 종류별로 해당 발주를 고칠 수 있어요.
-            예약분만 있는 점포(발주 없음)는 고칠 발주가 없어 숨긴다. */}
+            공산품만 있는 점포(발주 없음)는 고칠 발주가 없어 숨긴다. */}
         {active.length > 0 && (
         <div className="card card--flat" style={{ marginTop: 18 }}>
           <div className="section-label" style={{ marginBottom: 10 }}>

@@ -92,7 +92,7 @@ export async function buildStoreReceipt(
     ...orders
       .filter((o) => o.vendorRole === "ADMIN_SAEROP")
       .flatMap((o) => o.items.map(toLine)),
-    ...reserved.map((r) => ({ name: r.name, qty: String(r.qty), note: "", tag: "예약" })),
+    ...reserved.map((r) => ({ name: r.name, qty: String(r.qty), note: "", tag: "공산품" })),
   ];
   const tofuLines: ReceiptLine[] = orders
     .filter((o) => o.vendorRole === "VENDOR_CHAEUMCHAE")

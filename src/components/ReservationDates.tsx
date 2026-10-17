@@ -13,7 +13,7 @@ export function ReservationDates({
   return (
     <div className="resvdates">
       <div className="resvdates__row">
-        <span className="resvdates__k">픽업</span>
+        <span className="resvdates__k">출고</span>
         <span className="resvdates__v resvdates__v--pickup">
           {pickupDates.length === 0
             ? "상품 없음"
@@ -26,7 +26,7 @@ export function ReservationDates({
           {reservationDeadlineLabel(reserveDate)}
         </span>
       </div>
-      <div className="resvdates__reserve">예약 {labelDate(reserveDate)}</div>
+      <div className="resvdates__reserve">발주 {labelDate(reserveDate)}</div>
     </div>
   );
 }

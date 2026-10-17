@@ -51,7 +51,8 @@ export default async function OrderPlanDatePage({
   const srcDates = prevDates.filter((d): d is string => !!d);
   const st = await windowStatuses([...srcDates, ...targets]);
 
-  const prevSources = {} as Record<AnyCat, { date: string; label: string; count: number } | null>;
+  // 편성 종류에서 빠진 종류(공구)는 불러오기 출처 없음(탭이 없다)
+  const prevSources = { TOOL: null } as Record<AnyCat, { date: string; label: string; count: number } | null>;
   ALL_CATS.forEach((k, i) => {
     const d = prevDates[i];
     if (!d) {
@@ -101,7 +102,8 @@ export default async function OrderPlanDatePage({
   }));
 
   const stamp = ALL_CATS.map((k) => editorPlan[k].updatedAt ?? "-").join("|");
-  const initialTab: AnyCat = c === "VEG" || c === "TOOL" || c === "TOFU" ? c : "FRUIT";
+  // 첫 탭 — 편성 종류(ALL_CATS)에 있는 것만. 옛 주소 ?c=TOOL(공구 탭 없음)은 과일부터.
+  const initialTab: AnyCat = ALL_CATS.find((k) => k === c) ?? "FRUIT";
   const prevKey = prevWindowKey(date);
   const nextKey = nextWindowKey(date);
 

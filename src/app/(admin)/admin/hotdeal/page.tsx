@@ -57,7 +57,7 @@ export default async function AdminHotdeal(props: {
   // 전체발주: 가맹점별·날짜별로 4종을 하나의 발주서로 묶음
   const combined = sel.key === "all";
   const isToolTab = sel.key === "tool";
-  // 공구 예약분(픽업=출고일) — 전체발주(combined)·공구발주(tool)에서 발주에 합류.
+  // 확정 공산품(출고일=이 날) — 전체발주(combined)·공구발주(tool)에서 발주에 합류(계산서 공구 칸으로 감).
   const resvStores =
     combined || isToolTab ? await getReservationStoresForPickup(date) : [];
   // 주간발주 출고분(출고 요일이면) — 전체발주(combined)에서 발주 목록에 합류.
@@ -72,7 +72,7 @@ export default async function AdminHotdeal(props: {
     cancelledCount: number;
     cancelReq: boolean;
     edited: boolean;
-    resvCount: number; // 이 출고일 확정 공구 예약분 건수(발주 없이 예약만 있어도 표시)
+    resvCount: number; // 이 출고일 확정 공산품 건수(발주 없이 공산품만 있어도 표시)
     weeklyCount: number; // 이 출고일 주간발주 품목 수(발주 없이 주간발주만 있어도 표시)
   }[] = [];
   if (combined) {
@@ -107,8 +107,9 @@ export default async function AdminHotdeal(props: {
       if (o.edited && !o.confirmed && o.status !== "CANCELLED") g.edited = true;
     }
 
-    // 공구 예약분(픽업=출고일) 합류 — 발주 있는 점포엔 공구 종류·건수 추가,
-    // 예약만 있는 점포는 합본 그룹을 새로 만든다(발주일=출고일−1로 링크).
+    // 확정 공산품(출고일) 합류 — 발주 있는 점포엔 공구 종류·건수 추가,
+    // 공산품만 있는 점포는 합본 그룹을 새로 만든다(발주일=출고일−1로 링크 — 합본이 그 날의 출고일로 다시 찾음).
+    // byUser = 그 점포의 가장 이른 발주일 줄(orders 가 최신순이라 뒤 줄이 이김) — 합본도 이 장에만 공산품·주간발주를 싣는다.
     const byUser = new Map(groups.map((g) => [g.userId, g]));
     for (const s of resvStores) {
       const g = byUser.get(s.userId);
@@ -134,7 +135,7 @@ export default async function AdminHotdeal(props: {
       }
     }
 
-    // 주간발주 출고분 합류 — 발주/예약 있는 점포엔 주간발주 건수 추가,
+    // 주간발주 출고분 합류 — 발주/공산품 있는 점포엔 주간발주 건수 추가,
     // 주간발주만 있는 점포는 합본 그룹을 새로 만든다(발주일=출고일−1로 링크).
     for (const s of weeklyStores) {
       const g = byUser.get(s.userId);
@@ -163,7 +164,7 @@ export default async function AdminHotdeal(props: {
       g.cats.sort((a, b) => CATEGORY_ORDER.indexOf(a) - CATEGORY_ORDER.indexOf(b));
   }
 
-  // 공구발주 탭(개별 주문 목록): 발주 행에 예약분 표시 + 예약전용 점포는 별도 행.
+  // 공구발주 탭(개별 주문 목록): 발주 행에 공산품 표시 + 공산품만 있는 점포는 별도 행.
   const resvByUser = new Map(resvStores.map((s) => [s.userId, s]));
   const toolOrderUserIds = new Set(orders.map((o) => o.userId));
   const resvOnly = isToolTab
@@ -293,7 +294,7 @@ export default async function AdminHotdeal(props: {
                         ? ` · ${g.cats.map((c) => CATEGORIES[c].label).join("·")}`
                         : ""}
                       {g.items > 0 ? ` · 총 ${g.items}건` : ""}
-                      {g.resvCount > 0 ? ` · 공구예약 ${g.resvCount}건` : ""}
+                      {g.resvCount > 0 ? ` · 공산품 ${g.resvCount}건` : ""}
                       {g.weeklyCount > 0 ? ` · 주간발주 ${g.weeklyCount}건` : ""}
                     </div>
                   </Link>
@@ -315,13 +316,13 @@ export default async function AdminHotdeal(props: {
                     <div className="row__sub">
                       {formatKDateTime(o.createdAt)} · {cat.label} · {o._count.items}건
                       {resvRowIds.has(o.id)
-                        ? ` · 예약분 ${resvByUser.get(o.userId)!.count}건`
+                        ? ` · 공산품 ${resvByUser.get(o.userId)!.count}건`
                         : ""}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     {resvRowIds.has(o.id) && (
-                      <span className="badge badge--ai">예약</span>
+                      <span className="badge badge--ai">공산품</span>
                     )}
                     {o.status === "CANCELLED" ? (
                       <span className="badge badge--danger">취소 완료</span>
@@ -336,7 +337,7 @@ export default async function AdminHotdeal(props: {
                 </Link>
               );
             })}
-            {/* 공구 예약분만 있는 점포(공구 발주 없음) — 합본 발주서(예약분만)로 진입 */}
+            {/* 공산품만 있는 점포(공구 발주 없음) — 합본 발주서(공산품만)로 진입 */}
             {resvOnly.map((s) => (
               <Link
                 href={`/admin/combined/${s.userId}/${shiftDate(date, -1)}`}
@@ -345,9 +346,9 @@ export default async function AdminHotdeal(props: {
               >
                 <div className="row__main">
                   <div className="row__title">{s.storeName}</div>
-                  <div className="row__sub">공구 예약분 {s.count}건</div>
+                  <div className="row__sub">공산품 {s.count}건</div>
                 </div>
-                <span className="badge badge--ai">예약</span>
+                <span className="badge badge--ai">공산품</span>
               </Link>
             ))}
           </div>

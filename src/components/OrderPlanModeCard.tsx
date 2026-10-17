@@ -130,7 +130,7 @@ export function OrderPlanModeCard({ info }: { info: ModeCardInfo }) {
               {pre && (
                 <>
                   <p className="oplan-pre__lead">
-                    켜면 점주는 편성 품목만 발주해요. 재고현황·예약발주는 숨겨지고 채팅 발주는 잠겨요.
+                    켜면 점주는 편성 품목만 발주해요. 재고현황은 숨겨지고 채팅 발주는 잠겨요. 공구는 공산품에서만 받아요.
                   </p>
                   {pre.windows.map((w) => {
                     const blank = blankCats(w);
@@ -170,9 +170,6 @@ export function OrderPlanModeCard({ info }: { info: ModeCardInfo }) {
                   <ul className="oplan-pre__facts">
                     <li>
                       지금 창 재고현황 담기 <b>{pre.cartHolds}건</b>({pre.cartStores}곳)
-                    </li>
-                    <li>
-                      진행 중 예약상품 <b>{pre.activeReservations}개</b>
                     </li>
                     <li>
                       지금 창 발주 <b>{pre.windowOrders}건</b>

@@ -70,15 +70,15 @@ export function MemberEditForm({
         </div>
       )}
 
-      {/* 예약발주 노출 on/off — 핫딜마켓 가맹점만(예약발주를 보는 역할). off면 그 지점은
-          하단 네비 '예약발주' 탭과 예약발주 페이지가 아예 안 보인다. */}
+      {/* 공산품(옛 예약발주) 노출 on/off — 핫딜마켓 가맹점만(공산품을 보는 역할). off면 그 지점은
+          하단 네비 '공산품' 탭과 공산품 페이지가 아예 안 보인다. */}
       {initial.role === "MERCHANT_HOTDEAL" && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="spread" style={{ alignItems: "center" }}>
             <div>
-              <div className="row__title">예약발주 노출</div>
+              <div className="row__title">공산품 노출</div>
               <div className="row__sub">
-                현재 {initial.reservationEnabled ? "켜짐 — 예약발주 사용 가능" : "꺼짐 — 예약발주 숨김"}
+                현재 {initial.reservationEnabled ? "켜짐" : "꺼짐"}
               </div>
             </div>
             <form action={setMemberReservationEnabledAction}>
@@ -91,7 +91,7 @@ export function MemberEditForm({
               <button
                 className={`btn btn--sm ${initial.reservationEnabled ? "btn--danger" : "btn--primary"}`}
               >
-                {initial.reservationEnabled ? "예약발주 끄기" : "예약발주 켜기"}
+                {initial.reservationEnabled ? "공산품 끄기" : "공산품 켜기"}
               </button>
             </form>
           </div>

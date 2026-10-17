@@ -63,7 +63,7 @@ export default async function AdminHome() {
   const hotdealOrders = hotdealStores.length;
   const hotdealNewCount = hotdealNew.length;
   const maintOn = await maintenanceOn(); // 패치(유지보수) 모드 현재 상태 — 회원·시스템 그룹 '패치' 토글
-  // 품목 제한 모드가 켜져 있으면 이번·다음 발주창에 비어 있는 종류(과일·야채·공구) 수를 배지로.
+  // 품목 제한 모드가 켜져 있으면 이번·다음 발주창에 비어 있는 편성 종류 수를 배지로(missingPlanCount 기준).
   const restrictCfg = await getRestrictConfig();
   const planMissing = restrictCfg.on ? await missingPlanCount().catch(() => 0) : 0;
 
@@ -94,7 +94,7 @@ export default async function AdminHome() {
       items: [
         { href: "/admin/order-plan", title: "발주 시스템 관리", badge: planMissing > 0 ? planMissing : undefined },
         { href: "/admin/weekly", title: "주간발주", badge: weeklyCount > 0 ? weeklyCount : undefined },
-        { href: "/admin/calendar", title: "예약 일정" },
+        { href: "/admin/calendar", title: "공산품 출고 일정" },
         { href: "/admin/holds", title: "담기 현황" },
         { href: "/admin/shipments", title: "송장 관리" },
         { href: "/admin/sourcing", title: "상품 소싱" },

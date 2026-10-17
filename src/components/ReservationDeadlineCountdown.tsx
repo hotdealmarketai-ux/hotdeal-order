@@ -38,14 +38,14 @@ export function ReservationDeadlineCountdown({
   // 픽업이 상품별 → 여러 날짜. 칩엔 개수만 간결히(상세는 아래 날짜 블록/상품별 표기).
   const pickup =
     pickupDates.length <= 1
-      ? `픽업 ${pickupDates[0] ? labelDate(pickupDates[0]) : "-"}`
-      : `픽업 ${pickupDates.length}일`;
+      ? `출고 ${pickupDates[0] ? labelDate(pickupDates[0]) : "-"}`
+      : `출고일 ${pickupDates.length}개`;
 
   if (now === null) {
     return (
       <div className="countdown" aria-hidden>
         <div className="countdown__main">
-          <span className="countdown__pre">예약 마감까지</span>
+          <span className="countdown__pre">발주 마감까지</span>
           <span className="countdown__clock">--시간 --분 --초</span>
         </div>
         <span className="countdown__chip">{pickup}</span>
@@ -57,7 +57,7 @@ export function ReservationDeadlineCountdown({
     return (
       <div className="countdown countdown--closed">
         <div className="countdown__main">
-          <span className="countdown__pre">예약이 마감되었습니다</span>
+          <span className="countdown__pre">발주가 마감됐어요</span>
           <span className="countdown__clock" style={{ fontSize: 19 }}>
             {pickup}
           </span>
@@ -70,7 +70,7 @@ export function ReservationDeadlineCountdown({
   return (
     <div className="countdown">
       <div className="countdown__main">
-        <span className="countdown__pre">예약 마감까지</span>
+        <span className="countdown__pre">발주 마감까지</span>
         <span className="countdown__clock">{clock(deadline - now)}</span>
       </div>
       <span className="countdown__chip">{pickup}</span>

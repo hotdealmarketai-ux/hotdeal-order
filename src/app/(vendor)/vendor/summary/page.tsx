@@ -105,7 +105,7 @@ async function AggregateSection({
     const resv = await getReservationLinesForPickup(date);
     reservedCount = resv.length;
     for (const r of resv) {
-      lines.push({ store: r.store, name: r.name, qty: String(r.qty), note: "예약" });
+      lines.push({ store: r.store, name: r.name, qty: String(r.qty), note: "공산품" });
     }
   }
 
@@ -128,7 +128,7 @@ async function AggregateSection({
     <>
       <div className="notice notice--ai" style={{ marginBottom: 14 }}>
         지점 발주 {orders.length}건
-        {reservedCount > 0 ? ` + 예약분 ${reservedCount}건` : ""}을 품목{" "}
+        {reservedCount > 0 ? ` + 공산품 ${reservedCount}건` : ""}을 품목{" "}
         {agg.fruits.length}종으로 묶었어요.
       </div>
       <div className="stack">

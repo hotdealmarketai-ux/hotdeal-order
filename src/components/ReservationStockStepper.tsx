@@ -27,6 +27,7 @@ export function ReservationStockStepper({
   const [qty, setQty] = useState(mine);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 서버 수량이 바뀌면 화면 숫자를 맞춤(예전 그대로)
     setQty(mine);
   }, [mine]);
 
@@ -48,11 +49,11 @@ export function ReservationStockStepper({
   };
 
   return (
-    <div className="stepper stepper--inline" role="group" aria-label="예약 수량">
+    <div className="stepper stepper--inline" role="group" aria-label="발주 수량">
       <button
         type="button"
         className="stepper__btn"
-        aria-label="빼기"
+        aria-label="수량 줄이기"
         onClick={() => set(qty - 1)}
         disabled={disabled || pending || qty <= 0}
       >
@@ -62,7 +63,7 @@ export function ReservationStockStepper({
       <button
         type="button"
         className="stepper__btn"
-        aria-label="담기"
+        aria-label="수량 늘리기"
         onClick={() => set(qty + 1)}
         disabled={disabled || pending || qty >= maxForMe}
       >

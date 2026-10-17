@@ -324,6 +324,11 @@ model ReservationProduct {
   // 재고 고정 — true면 이 연동 상품은 재고(base)까지만 담기 가능(하드 캡, 예전 동작).
   // false(기본) = 초과발주 허용: 재고 넘어서 담기고 부족분은 관리자가 납품처에 추가 주문.
   stockFixed  Boolean          @default(false)
+  // 공산품 수량 규칙(2026-10-17) — 지점당 최소(null=없음) · 몇 개씩(배수, 1=낱개) · 점주 안내 한 줄.
+  // 점주는 수량이 바뀔 때만 검사(0=취소는 항상 허용), 관리자 대신 고치기는 경고만. 규칙 계산은 src/lib/flat-qty-rule.ts 하나.
+  minPerStore Int?
+  qtyStep     Int              @default(1)
+  description String           @default("")
   // 세트 상품 구성품 — 비어있으면 단일 상품(기존 동작), 1개 이상이면 '세트'.
   // 세트일 때 이 상품의 name=세트명, supplyPrice=구성품 합(캐시), inventoryItemId="" (연동은 구성품이 각자).
   components  ReservationProductComponent[]

@@ -740,7 +740,7 @@ function ItemRow({ setNameEl, ...p }: ItemRowProps) {
                     · 남은 <b>{remain}</b>
                   </>
                 )}
-                {p.inv?.locked && <em className="oplan-warn"> · 예약 진행 중</em>}
+                {p.inv?.locked && <em className="oplan-warn"> · 공산품 발주 중</em>}
               </span>
               {!readOnly && !(used > 0) && (
                 <button type="button" className="btn btn--xs btn--ghost" onClick={() => p.onPatch({ inventoryItemId: "" })}>
@@ -872,7 +872,7 @@ function InvPicker({
                 >
                   <span>{i.name}</span>
                   <span className="flatinv__price">
-                    {i.locked ? "예약 진행 중" : used ? "이미 연동됨" : `실재고 ${i.real}`}
+                    {i.locked ? "공산품 발주 중" : used ? "이미 연동됨" : `실재고 ${i.real}`}
                   </span>
                 </button>
               );

@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { CATEGORIES, ROLE_LABEL, type Category, type Role } from "@/lib/constants";
 import { formatKDateTime } from "@/lib/format";
 import { kstDateOf, shipmentDayOf } from "@/lib/date";
-import { getReservationLoadForOrder } from "@/lib/reservation-data";
+import { getReservationLoadForShipment } from "@/lib/reservation-data";
 import { ReceiptCard } from "@/components/ReceiptCard";
 
 export default async function AdminOrderDetail(props: {
@@ -25,15 +25,16 @@ export default async function AdminOrderDetail(props: {
 
   const cat = CATEGORIES[order.category as Category];
 
-  // 공구(TOOL) 발주서엔 그 지점의 확정 예약분(픽업=이 발주 출고일)도 함께 표시.
+  // 이 발주의 출고일(토·일 발주 → 월요일) — 계산서·공산품이 같은 날짜 기준.
+  const shipDay = shipmentDayOf(kstDateOf(order.createdAt));
+
+  // 공구(TOOL) 발주서엔 그 지점의 확정 공산품(출고일 = 이 발주 출고일)도 함께 표시.
   const reservedItems =
     order.category === "TOOL"
-      ? (
-          await getReservationLoadForOrder(
-            order.userId,
-            kstDateOf(order.createdAt),
-          )
-        ).map((r) => ({ name: r.name, qty: String(r.qty) }))
+      ? (await getReservationLoadForShipment(order.userId, shipDay)).map((r) => ({
+          name: r.name,
+          qty: String(r.qty),
+        }))
       : [];
 
   // 관리자 수정 가능 여부 — 취소분·계산서 발행분은 잠금(정합)
@@ -45,7 +46,7 @@ export default async function AdminOrderDetail(props: {
             userId: order.userId,
             kind: "DAILY",
             // Invoice.date = 출고일 기준 → 발주의 출고일로 매칭(발주일로 찾으면 하루 어긋나 오작동)
-            date: shipmentDayOf(kstDateOf(order.createdAt)),
+            date: shipDay,
             status: { in: ["ISSUED", "PAID"] },
           },
           select: { id: true },
