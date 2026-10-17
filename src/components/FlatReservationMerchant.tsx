@@ -250,7 +250,7 @@ function FlatCard({
   // 규칙 검사 — 기준은 지금 나가고 있는 내 수량(확정분). 몰래 고치지 않고 칸을 빨갛게 + 맞는 숫자 버튼.
   const ruleMsg = flatQtyProblem(draft, p.myConfirmedQty, rule);
   const over = draft > max && draft > p.myQty;
-  const problem = ruleMsg ?? (over ? `남은 수량이 부족해요 (최대 ${max}${unit})` : null);
+  const problem = ruleMsg ?? (over ? `재고가 부족해요 (최대 ${max}${unit})` : null);
   const valid = (n: number) => n > 0 && n <= max && flatQtyProblem(n, p.myConfirmedQty, rule) === null;
   const fitDown = (n: number) => (flatQtyProblem(n, p.myConfirmedQty, rule) ? stepDown(n, rule) : n);
   const fixes = !problem
@@ -332,7 +332,7 @@ function FlatCard({
               !closed &&
               (stockLeft > 0 ? (
                 <span>
-                  남은 {stockLeft}
+                  재고 {stockLeft}
                   {unit}
                 </span>
               ) : (

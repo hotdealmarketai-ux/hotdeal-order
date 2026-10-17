@@ -529,7 +529,7 @@ export async function holdReservationAction(input: {
       if (qty > availableForMe) {
         return {
           ok: false,
-          error: `남은 수량이 부족해요 (최대 ${Math.max(0, availableForMe)}개)`,
+          error: `재고가 부족해요 (최대 ${Math.max(0, availableForMe)}개)`,
           available: Math.max(0, availableForMe),
         };
       }
@@ -656,7 +656,7 @@ export async function adminEditReservationItemsAction(input: {
       if (inc > left) {
         return {
           ok: false,
-          error: `${c.item.name} 남은 수량이 부족해요 (최대 ${c.item.qty + Math.max(0, left)}개)`,
+          error: `${c.item.name} 재고가 부족해요 (최대 ${c.item.qty + Math.max(0, left)}개)`,
         };
       }
       pool.set(iid, left - inc);
@@ -885,7 +885,7 @@ export async function adminSetReservationStoreQtyAction(input: {
         // 새 수량 최대치 = base − (내 것 제외 전체 예약홀드) − 일일홀드. resvHeld 는 curQty 포함이라 빼준다.
         const capMax = inv.qty - (resvHeld - curQty) - (dayAgg._sum.qty ?? 0);
         if (qty > capMax) {
-          return { ok: false, error: `남은 수량이 부족해요 (최대 ${Math.max(0, capMax)}개)` };
+          return { ok: false, error: `재고가 부족해요 (최대 ${Math.max(0, capMax)}개)` };
         }
       }
 

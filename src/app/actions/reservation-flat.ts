@@ -884,7 +884,7 @@ export async function holdFlatProductAction(input: {
       if (product.stockFixed && qty > myThis && qty > availableForMe) {
         return {
           ok: false,
-          error: `남은 수량이 부족해요 (최대 ${Math.max(myThis, availableForMe)}개)`,
+          error: `재고가 부족해요 (최대 ${Math.max(myThis, availableForMe)}개)`,
           available: Math.max(0, availableForMe),
         };
       }
@@ -1061,7 +1061,7 @@ async function holdSetProduct(
       if (product.stockFixed && qtySets > myCurrentSets && qtySets > availableSets) {
         return {
           ok: false,
-          error: `남은 수량이 부족해요 (최대 ${Math.max(myCurrentSets, availableSets)}세트)`,
+          error: `재고가 부족해요 (최대 ${Math.max(myCurrentSets, availableSets)}세트)`,
           available: Math.max(0, availableSets),
         };
       }
